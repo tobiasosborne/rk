@@ -1,0 +1,12 @@
+{
+  "name": "rk",
+  "version": "0.0.1",
+  "description": "General-purpose research-automation tool: gates, projection, render, verification driver.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {},
+  "scripts": {
+    "test": "bun test",
+    "selftest": "bun run scripts/selftest.ts"
+  }
+}
