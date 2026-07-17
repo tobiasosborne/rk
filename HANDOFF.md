@@ -21,7 +21,13 @@ No source code yet. Design authority: `../research-workflows/{PRD,IMPLEMENTATION
   70 same, 5 differs (all rk-stricter-intended: defs-15, linker-15, linker-21, refs-07,
   provenance-11), 0 unrunnable. defs retrofitted post-premise-correction; defs-15
   (strict cited-shard provenance) added, becomes enforceable via M0.7.
-- M0.7 contract stance amendment: DISPATCHED.
+- M0.7 contract stance amendment: DONE (ef74eac). F5 strict (defs checks 8-9), triage
+  tags on all six gates' divergence sections, robustness-run defined, Authority
+  preamble, harness notes in Shared conventions. Two triage judgment calls flagged for
+  ratification (refs-07, provenance-11 as rk-stricter-intended).
+- Tier-A boundary review (Fable): IN FLIGHT — scope: M0.7 amendments + reopened-ruling
+  ratification + M0.6 quote-match slice only (per blast-radius cadence policy).
+  GREEN verdict unblocks the M0.3 fan-out (6 gates, parallel Sonnet, disjoint files).
 - M0.6 refs acquisition: DONE (7537f80, ae7c539, 5d4e791). 95 tests/163 asserts,
   selftest+purity green, compiled binary works. AISM status round-trip: full agreement.
   Divergence ledger: 2 rk-stricter-intended (path-traversal guard — fetch-refs.py:137-140
