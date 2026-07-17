@@ -1,0 +1,1 @@
+The always-tight hulls K_T(u) and K_O(u) are disjoint whenever the L1 distance between them is strictly positive, which holds for every exact signed idempotent.

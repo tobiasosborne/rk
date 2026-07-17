@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-p/externals/GT-p-1.json",
+      "message_pattern": "best matched run"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: check-refs.py PASSES this (script-verified: 'matched 70-char run', exit 0) — its longest_run_match (check-refs.py:77-98) accepts a >=40-char partial-run match as PASS even when the whole quote does not match",
+  "notes": "[ruling #3, 2026-07-17 Fable review, reaffirmed post-TJO-correction] Triage: rk-stricter-intended, zero parity cost (a full history scan of AISM finds ZERO refs-quote externals have ever existed — see gate-contracts.md Gate 3 'On the 19/19 narrative, precisely'). The genuine 70-char verbatim core is wrapped in paraphrase ('In our own words, ... is what we later call the actor hull'); rk's whole-quote-match rule correctly FAILs it as a fabrication risk. Regression probe for the rk deviation documented in gate-contracts.md Gate 3 Deviations."
+}

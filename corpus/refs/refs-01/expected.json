@@ -1,0 +1,24 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-alpha/externals/GT-alpha-1.json",
+      "message_pattern": "ABSENT"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-alpha/externals/GT-alpha-2.json",
+      "message_pattern": "ABSENT"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-beta/externals/GT-beta-1.json",
+      "message_pattern": "ABSENT"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] aism-dbq regression probe (the 19/19 false-green, at 3-external scale): every claimed refs/ payload is absent locally; ALL must FAIL, none may be classified skip. Script-verified: 3 externals, 3 failed, 0 import-skipped, 0 no-quote-skipped — the coverage-line breakdown that would have caught the pre-fix bug is exactly what this fixture pins."
+}

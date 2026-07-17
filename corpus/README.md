@@ -60,13 +60,13 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `linker-19` | argument/linker | OR-route golden case: one route fully available | aism-3ne (OR-route feature, `bdf6800`) | landed |
 | `linker-20` | argument/linker | schema-drift golden case: `routes:`-less shard, byte-identical behavior | aism-3ne backward-compat guarantee (`argument.py:77-78`) | landed |
 | `linker-21` | argument/linker | missing `id:` field on a lemma shard | real crash class (not incident-observed): `argument.py`'s `parse_registry` never defaults `id`, so `l["id"]` downstream raises an uncaught `KeyError`; found by the 2026-07-17 Fable review (F12), not a live AISM event — all AISM shards carry `id` | landed |
-| `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | planned |
-| `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | planned |
-| `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | planned |
-| `refs-04` | refs | IMPORT external golden case | class-driven (no incident on record) | planned |
-| `refs-05` | refs | no-quote external (WARN) | class-driven (no incident on record) | planned |
-| `refs-06` | refs | unparseable external JSON | class-driven (no incident on record) | planned |
-| `refs-07` | refs | ≥40-char verbatim core wrapped in paraphrase (FAIL under whole-quote-match) | class-driven (no incident on record; zero refs-quote externals have ever existed in AISM history — a full history scan of `proofs/*/externals/*.json` finds none, so this is provably parity-free per the 2026-07-17 Fable review's flagged ruling #3) | planned |
+| `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | landed |
+| `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | landed |
+| `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | landed |
+| `refs-04` | refs | IMPORT external golden case | class-driven (no incident on record) | landed |
+| `refs-05` | refs | no-quote external (WARN) | class-driven (no incident on record) | landed |
+| `refs-06` | refs | unparseable external JSON | class-driven (no incident on record) | landed |
+| `refs-07` | refs | ≥40-char verbatim core wrapped in paraphrase (FAIL under whole-quote-match) | class-driven (no incident on record; zero refs-quote externals have ever existed in AISM history — a full history scan of `proofs/*/externals/*.json` finds none, so this is provably parity-free per the 2026-07-17 Fable review's flagged ruling #3) | landed |
 | `provenance-01` [PLAN] | provenance | OVERCLAIM (registry `open` framed as proved) | class-driven; the gate's own header names this "the project's #1 guarded failure mode" (`check-provenance.py:24`) — no dated instance actually caught in AISM history, guarded preventively | planned |
 | `provenance-02` | provenance | underclaim (proved framed only `open`, WARN) | class-driven (no incident on record) | planned |
 | `provenance-03` [PLAN] | provenance | stale SHA256 (tracked source edited post-hash) | class-driven (no incident on record) | planned |
@@ -273,3 +273,4 @@ script-verified / rk-only / untested breakdown.
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, TJO strict-provenance) | 0 |
 | linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
+| refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |

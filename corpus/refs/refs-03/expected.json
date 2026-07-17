@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-y/externals/GT-y-1.json",
+      "message_pattern": "NOT found"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "Fabricated quote <40 chars (exact-whole-match-required branch, longest_run_match:86-87); script-verified FAIL."
+}

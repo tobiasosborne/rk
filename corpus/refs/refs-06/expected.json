@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-v/externals/GT-v-1.json",
+      "message_pattern": "unparseable JSON"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "Corrupt/truncated JSON is a hard FAIL, never a skip (check-refs.py:174-179); script-verified."
+}

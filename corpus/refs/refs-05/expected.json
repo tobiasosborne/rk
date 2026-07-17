@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "proofs/lem-w/externals/GT-w-1.json",
+      "message_pattern": "no refs/ locus"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "skip_noquote (WARN, never blocks the gate); script-verified exit 0."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-x/externals/GT-x-1.json",
+      "message_pattern": "NOT found"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "Fabricated quote >=40 chars with no matching run anywhere (fully disjoint from the real refs file); script-verified FAIL, message carries no run-length (no >=40-char run matched at all) per check-refs.py:154-156."
+}

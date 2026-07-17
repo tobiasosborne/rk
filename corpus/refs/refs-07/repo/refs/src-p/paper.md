@@ -1,0 +1,1 @@
+We now define K_T(u) as the convex hull of displacement vectors under the exposedness LP at u, restricted to the tight constraint family T(u).

@@ -1,0 +1,4 @@
+{
+  "name": "GT-beta-1",
+  "source": "Claim depends on refs/src-gamma/book.txt:200. VERBATIM \"some verbatim quoted text asserted here\" is what the argument relies on."
+}

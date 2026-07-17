@@ -1,0 +1,8 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "Golden IMPORT case: source names a proofs/ workspace, no refs/ locus -> skip_import, zero findings, exit 0. Script-verified. check-refs.py never verifies the imported workspace actually exists (Known limitations, no fixture needed for that separate, undefended gap)."
+}
