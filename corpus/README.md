@@ -24,20 +24,20 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 
 | fixture id | gate | violation | source incident | status |
 |---|---|---|---|---|
-| `defs-01` | defs | missing/unterminated frontmatter | class-driven (no incident on record) | planned |
-| `defs-02` | defs | frontmatter line without `:` | class-driven (no incident on record) | planned |
-| `defs-03` | defs | missing required field (id/term/kind/status) | class-driven (no incident on record) | planned |
-| `defs-04` | defs | `id` != filename stem | class-driven (no incident on record) | planned |
-| `defs-05` | defs | bad `kind` enum value | class-driven (no incident on record) | planned |
-| `defs-06` | defs | bad `status` enum value | class-driven (no incident on record) | planned |
-| `defs-07` [PLAN] | defs | duplicate alias (DRIFT) | class-driven (no incident on record; the guard is preventive per `definitions/README.md:9-10`) | planned |
-| `defs-08` | defs | `cited` shard, unknown source-id | class-driven (no incident on record) | planned |
-| `defs-09` | defs | `cited` shard, sha256 not in manifest | class-driven (no incident on record) | planned |
-| `defs-10` | defs | `cited` shard, sha under a different source (WARN) | class-driven (no incident on record) | planned |
-| `defs-11` | defs | `cited` shard, payload absent locally (WARN) | class-driven (no incident on record) | planned |
-| `defs-12` | defs | consensus/original shard missing `consensus:` | class-driven (no incident on record) | planned |
-| `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | planned |
-| `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | planned |
+| `defs-01` | defs | missing/unterminated frontmatter | class-driven (no incident on record) | landed |
+| `defs-02` | defs | frontmatter line without `:` | class-driven (no incident on record) | landed |
+| `defs-03` | defs | missing required field (id/term/kind/status) | class-driven (no incident on record) | landed |
+| `defs-04` | defs | `id` != filename stem | class-driven (no incident on record) | landed |
+| `defs-05` | defs | bad `kind` enum value | class-driven (no incident on record) | landed |
+| `defs-06` | defs | bad `status` enum value | class-driven (no incident on record) | landed |
+| `defs-07` [PLAN] | defs | duplicate alias (DRIFT) | class-driven (no incident on record; the guard is preventive per `definitions/README.md:9-10`) | landed |
+| `defs-08` | defs | `cited` shard, unknown source-id | class-driven (no incident on record) | landed |
+| `defs-09` | defs | `cited` shard, sha256 not in manifest | class-driven (no incident on record) | landed |
+| `defs-10` | defs | `cited` shard, sha under a different source (WARN) | class-driven (no incident on record) | landed |
+| `defs-11` | defs | `cited` shard, payload absent locally (WARN) | class-driven (no incident on record) | landed |
+| `defs-12` | defs | consensus/original shard missing `consensus:` | class-driven (no incident on record) | landed |
+| `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
+| `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
 | `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | planned |
 | `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | planned |
 | `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | planned |
@@ -109,3 +109,125 @@ plan's "duplicate alias" item is `defs-07`; "missing invariant" is `runs-02`. Th
 (`linker-21`, `refs-07`, `provenance-13`) were added by the 2026-07-17 Fable review of
 `docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3 respectively) — none carry
 `[PLAN]`; they are corrections to this WP's own contract, not IMPLEMENTATION_PLAN-mandated.
+
+---
+
+## Fixture directory layout (M0.2)
+
+Every fixture lives at `corpus/<gate>/<fixture-id>/`, where `<gate>` is one of `defs`, `linker`,
+`refs`, `provenance`, `runs`, `shards` (the fixture-id prefix, not the "argument/linker" or
+"report-shards" prose name used in `docs/gate-contracts.md`'s section headers). Two files:
+
+```
+corpus/<gate>/<fixture-id>/
+  repo/          a MINIMAL repo tree exhibiting the violation (or, for golden fixtures, the
+                 correct structure): only the files the target gate actually reads, nothing
+                 else. Frontmatter/shard/manifest shapes are modelled on real files read
+                 (READ-ONLY) from ../almost-idempotent-stochastic-maps; hashes are real SHA256
+                 digests computed from the fixture's own payload bytes, never placeholders,
+                 wherever the gate parses hash content.
+  expected.json  machine-readable expectation — the interface M0.3's test harness consumes.
+```
+
+## `expected.json` convention
+
+```json
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "definitions/def-x.md", "message_pattern": "DRIFT" }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "one line: what this fixture proves and how it was validated"
+}
+```
+
+Field semantics:
+
+- **`gate`** — one of `defs`, `linker`, `refs`, `provenance`, `runs`, `shards` (matches the
+  directory).
+- **`verdict`** — `"fail"` iff the gate would report ≥1 ERROR finding (equivalently `exit_code
+  == 1`, per the Shared Conventions' Exit codes rule in `docs/gate-contracts.md`); `"pass"`
+  otherwise. WARN-only and golden (zero-finding) fixtures are `"pass"`.
+- **`findings`** — the findings this fixture specifically **targets**, not necessarily an
+  exhaustive line-for-line transcript of everything the gate would emit (a fixture may
+  incidentally trigger an unrelated WARN, e.g. "manifest absent" alongside its target ERROR).
+  M0.3's harness must assert each listed finding is **present** among the gate's actual output
+  (subset match on severity + path + message substring), not that the output equals this list
+  exactly. An empty `findings` array is legal for a clean golden case with zero output beyond
+  the coverage line.
+  - `severity` — `"ERROR"` or `"WARN"`, matching the Shared Conventions finding format exactly.
+  - `path_pattern` — a repo-relative glob (`fnmatch` semantics) matched against the finding's
+    `path`; a literal path (no glob metacharacters) matches exactly.
+  - `message_pattern` — a case-sensitive substring that must appear in the finding's `message`
+    text (not the whole `SEVERITY path:line message` line).
+- **`exit_code`** — the single gate's own exit code in isolation (0 or 1; `rk check`'s
+  composed exit code is a separate concern, out of scope for a per-gate fixture).
+- **`parity`**:
+  - `"aism"` — the corresponding AISM script exhibits the same verdict on this fixture's
+    `repo/` tree. Validated per the Validation section below.
+  - `"rk-only"` — the fixture tests a documented rk deviation from AISM (e.g. `refs-07`'s
+    whole-quote rule, `linker-21`'s crash→ERROR trigger-preserving fix); AISM's own behavior on
+    this fixture is recorded in `notes` (including "AISM crashes here" where applicable) but is
+    not the target verdict.
+  - `"untested"` — the fixture could not be run against the real AISM script (a hard
+    dependency on repo-scale structure the harness could not construct standalone, e.g. a real
+    `latexmk` build or a live `bd` tracker); recorded honestly, never silently folded into
+    `"aism"`.
+- **`notes`** — one line: what the fixture proves, the exact AISM script:line(s) it exercises,
+  and how it was validated (script-verified / rk-only regression probe / untested-and-why).
+
+## Validation methodology
+
+Every `parity: "aism"` (and `"rk-only"`, for its documented AISM-side behavior) fixture was
+validated by actually **running the real AISM check logic** against `repo/` — never by
+inspection alone. One caveat, discovered while building this corpus and worth flagging for the
+next Fable review: every AISM python gate script hardcodes `ROOT =
+pathlib.Path(__file__).resolve().parent.parent` — i.e. `ROOT` is derived from the *script's own
+file location* inside the AISM checkout, not from `cwd`. Running `cd <fixture>/repo && python3
+.../check-defs.py` as this WP's brief literally describes therefore does **not** check the
+fixture — it silently re-checks the real AISM repo at whatever `ROOT` resolves to, exit code and
+all, and would have produced a false "validated" pass on every fixture. `check-report-shards.sh`
+is the sole exception (`ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`, which falls
+back to `cwd` when git can't resolve a toplevel).
+
+The validation harness (`aism_harness.py`, not committed to `corpus/` — a throwaway validation
+tool, not part of the fixture interface) instead **imports each AISM script as a module,
+read-only, and calls its own pure check functions directly** with the fixture's paths
+substituted for the module-level `ROOT`-derived globals those functions read (cited per gate
+below) — this executes the exact same AISM logic, just without going through the
+`ROOT`-hardcoded `main()`. Nothing under `../almost-idempotent-stochastic-maps` was ever written
+to.
+
+- **defs** — `check_defs(defs_dir, manifest_path)` takes both paths as parameters; no override
+  needed.
+- **linker** — `load_def_ids()`/`scan_workspaces()`/`af_introspect()` read module globals
+  `DEFS_DIR`/`PROOFS_DIR`/`ROOT` directly (argument.py:35-38,506-541); the harness patches all
+  three post-import, then replicates `main()`'s non-`--generate` composition
+  (argument.py:679-702) call-for-call. `af_introspect()` shells out to the real `af` binary
+  (present on this machine); brittleness/contract fixtures use real `af init`/`af claim`/`af
+  refine` workspaces, not stubs.
+- **refs** — `refs_file_for()` reads module global `ROOT` directly (check-refs.py:101-105); the
+  harness patches it post-import.
+- **provenance** — every sub-check is a parameterized pure function, but `run_semantic()`
+  itself binds them to `ROOT`-derived defaults; the harness re-implements `run_semantic()`'s
+  composition with the fixture's paths passed explicitly (including `git_tracked(root)` for
+  hash-freshness, which requires the fixture `repo/` to be transiently `git init`'d and
+  committed so tracked-vs-untracked is real, then the transient `.git` removed — nested repos
+  are never left behind).
+- **runs** — `check_runs(runs_dir, index_path)` takes both as parameters; no override needed.
+- **shards** (bash) — `check-report-shards.sh` run with `GIT_CEILING_DIRECTORIES` set to the rk
+  repo's own toplevel, which makes `git rev-parse --show-toplevel` fail from inside any rk
+  subdirectory so the script's own `|| pwd` fallback correctly resolves `ROOT` to the fixture's
+  `repo/` dir.
+
+## Validation results
+
+Filled in per gate as fixtures land (M0.2 commits, one per gate). See each gate's row for the
+script-verified / rk-only / untested breakdown.
+
+| gate | fixtures | script-verified (`aism`) | `rk-only` | `untested` |
+|---|---|---|---|---|
+| defs | 14/14 | 14 | 0 | 0 |

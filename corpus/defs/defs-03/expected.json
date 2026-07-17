@@ -1,0 +1,19 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-missing-term.md",
+      "message_pattern": "missing required field 'term'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-missing-status.md",
+      "message_pattern": "missing required field 'status'"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "Parametrized over term/status in one fixture (id/kind omitted per plan note, REQUIRED=[id,term,kind,status] at check-defs.py:26); script-verified."
+}

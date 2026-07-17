@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-bad-kind.md",
+      "message_pattern": "kind 'fabricated' not in"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "check-defs.py:93-94; script-verified."
+}

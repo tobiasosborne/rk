@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-cited-unknown-sha.md",
+      "message_pattern": "sha256 prefix 'deadbeefdeadbeef' not in refs manifest"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "check-defs.py:116-118; script-verified."
+}

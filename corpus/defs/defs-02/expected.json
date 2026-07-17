@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-bad-line.md",
+      "message_pattern": "frontmatter line without ':'"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "check-defs.py:45-46 per-line ERROR; script-verified."
+}

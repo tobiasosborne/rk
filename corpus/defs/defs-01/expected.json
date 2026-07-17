@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-broken.md",
+      "message_pattern": "missing/unterminated frontmatter"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "check-defs.py:33-34; text does not start with '---'; script-verified via aism_harness.py."
+}

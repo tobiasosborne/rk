@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-beta-hull.md",
+      "message_pattern": "DRIFT: name 'shared-name' claimed by both"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "[PLAN] duplicate alias/DRIFT, the core guard (check-defs.py:98-107); script-verified."
+}

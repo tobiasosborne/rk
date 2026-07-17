@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-stem-mismatch.md",
+      "message_pattern": "!= filename stem"
+    }
+  ],
+  "exit_code": 1,
+  "parity": "aism",
+  "notes": "check-defs.py:91-92; script-verified."
+}

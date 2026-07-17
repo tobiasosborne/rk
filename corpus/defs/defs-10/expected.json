@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "definitions/def-cited-source-mismatch.md",
+      "message_pattern": "not under source 'src-beta'"
+    }
+  ],
+  "exit_code": 0,
+  "parity": "aism",
+  "notes": "check-defs.py:119-122, WARN only (source valid, sha resolves under a different known source); script-verified real sha256 prefixes across two source dirs."
+}

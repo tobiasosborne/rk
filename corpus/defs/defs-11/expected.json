@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "definitions/def-cited-payload-absent.md",
+      "message_pattern": "payload absent locally"
+    }
+  ],
+  "exit_code": 0,
+  "parity": "aism",
+  "notes": "check-defs.py:123-124, WARN never ERROR; manifest lists a hash whose payload file is deliberately absent from the fixture (models a gitignored source); script-verified."
+}
