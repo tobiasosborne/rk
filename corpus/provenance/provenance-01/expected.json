@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-open-claim.md",
+      "message_pattern": "OVERCLAIM lem-open-claim"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] OVERCLAIM, the project's #1 guarded failure mode (check-provenance.py:24,293,317-319); script-verified against a real tabular tab:status parse (F2 grammar: midrule/bottomrule/&-split/\\Cref)."
+}

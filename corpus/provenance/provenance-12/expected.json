@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "absolute path"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "absolute (non-refs/-relative) source path, WARN never ERROR (check-provenance.py:390-391); script-verified. Sha is a real, well-formed 16-hex value (irrelevant to the WARN trigger, included so this fixture isn't contaminated by an unrelated 'not 16 lowercase hex' ERROR)."
+}

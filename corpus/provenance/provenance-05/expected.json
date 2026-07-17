@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-offtrack.md",
+      "message_pattern": "whitelisted in report/UNWIRED.md"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "whitelisted-unanchored, WARN; check-provenance.py:349-365; script-verified."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "Source key 'BAD-KEY' not in the source registry"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "claim-source token unresolved; check-provenance.py:270-280. Token 'BAD-KEY' fullmatches the key-candidate pattern [A-Z0-9][A-Z0-9-]* but NOT the external-citation pattern [A-Z]+[0-9]{3,} (F1 filters) so it is correctly flagged, not waved through as a citation; script-verified."
+}

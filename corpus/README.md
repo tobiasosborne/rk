@@ -67,19 +67,19 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `refs-05` | refs | no-quote external (WARN) | class-driven (no incident on record) | landed |
 | `refs-06` | refs | unparseable external JSON | class-driven (no incident on record) | landed |
 | `refs-07` | refs | ≥40-char verbatim core wrapped in paraphrase (FAIL under whole-quote-match) | class-driven (no incident on record; zero refs-quote externals have ever existed in AISM history — a full history scan of `proofs/*/externals/*.json` finds none, so this is provably parity-free per the 2026-07-17 Fable review's flagged ruling #3) | landed |
-| `provenance-01` [PLAN] | provenance | OVERCLAIM (registry `open` framed as proved) | class-driven; the gate's own header names this "the project's #1 guarded failure mode" (`check-provenance.py:24`) — no dated instance actually caught in AISM history, guarded preventively | planned |
-| `provenance-02` | provenance | underclaim (proved framed only `open`, WARN) | class-driven (no incident on record) | planned |
-| `provenance-03` [PLAN] | provenance | stale SHA256 (tracked source edited post-hash) | class-driven (no incident on record) | planned |
-| `provenance-04` [PLAN] | provenance | unwired anchor (zero labels, not on UNWIRED.md) | 2026-07-10 remediation plan item 9: the anchor whitelist "turns 107 permanently-ignored warnings back into a regression gate" (`docs/plans/2026-07-10-project-remediation-plan.md:59-61`) | planned |
-| `provenance-05` | provenance | whitelisted-unanchored (on UNWIRED.md, WARN) | same remediation item as `provenance-04` | planned |
-| `provenance-06` | provenance | forward-label dangling | class-driven (no incident on record) | planned |
-| `provenance-07` | provenance | claim-source token unresolved | class-driven (no incident on record) | planned |
-| `provenance-08` | provenance | duplicate source key (WARN) | class-driven (no incident on record) | planned |
-| `provenance-09` | provenance | reverse-label orphan (WARN) | class-driven (no incident on record) | planned |
-| `provenance-10` | provenance | coverage: report-facing result with no per-claim row (WARN) | class-driven (no incident on record) | planned |
-| `provenance-11` | provenance | hardcoded-filename regression probe | worklog.md 2026-07-04: "caught a false-green: `check-provenance.py` hard-coded the ledger filename" (`docs/worklog.md:270-272`) | planned |
-| `provenance-12` | provenance | absolute source path (WARN) | class-driven (no incident on record) | planned |
-| `provenance-13` | provenance | status-table label absent (`13_discussion.tex` present, `\label{tab:status}`/`\midrule` missing) | class-driven; same shape as `refs-01`/`defs-14` (a checker that verifies zero things while reporting green) — `status_table_rows()` returns `[]` silently on this input (`check-provenance.py:207-211`); coverage line must show `0 tab:status rows` loudly, per the 2026-07-17 Fable review (F3) | planned |
+| `provenance-01` [PLAN] | provenance | OVERCLAIM (registry `open` framed as proved) | class-driven; the gate's own header names this "the project's #1 guarded failure mode" (`check-provenance.py:24`) — no dated instance actually caught in AISM history, guarded preventively | landed |
+| `provenance-02` | provenance | underclaim (proved framed only `open`, WARN) | class-driven (no incident on record) | landed |
+| `provenance-03` [PLAN] | provenance | stale SHA256 (tracked source edited post-hash) | class-driven (no incident on record) | landed |
+| `provenance-04` [PLAN] | provenance | unwired anchor (zero labels, not on UNWIRED.md) | 2026-07-10 remediation plan item 9: the anchor whitelist "turns 107 permanently-ignored warnings back into a regression gate" (`docs/plans/2026-07-10-project-remediation-plan.md:59-61`) | landed |
+| `provenance-05` | provenance | whitelisted-unanchored (on UNWIRED.md, WARN) | same remediation item as `provenance-04` | landed |
+| `provenance-06` | provenance | forward-label dangling | class-driven (no incident on record) | landed |
+| `provenance-07` | provenance | claim-source token unresolved | class-driven (no incident on record) | landed |
+| `provenance-08` | provenance | duplicate source key (WARN) | class-driven (no incident on record) | landed |
+| `provenance-09` | provenance | reverse-label orphan (WARN) | class-driven (no incident on record) | landed |
+| `provenance-10` | provenance | coverage: report-facing result with no per-claim row (WARN) | class-driven (no incident on record) | landed |
+| `provenance-11` | provenance | hardcoded-filename regression probe | worklog.md 2026-07-04: "caught a false-green: `check-provenance.py` hard-coded the ledger filename" (`docs/worklog.md:270-272`) | landed |
+| `provenance-12` | provenance | absolute source path (WARN) | class-driven (no incident on record) | landed |
+| `provenance-13` | provenance | status-table label absent (`13_discussion.tex` present, `\label{tab:status}`/`\midrule` missing) | class-driven; same shape as `refs-01`/`defs-14` (a checker that verifies zero things while reporting green) — `status_table_rows()` returns `[]` silently on this input (`check-provenance.py:207-211`); coverage line must show `0 tab:status rows` loudly, per the 2026-07-17 Fable review (F3) | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | planned |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | planned |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | planned |
@@ -274,3 +274,4 @@ script-verified / rk-only / untested breakdown.
 | defs | 15/15 | 14 | 1 (`defs-15`, TJO strict-provenance) | 0 |
 | linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
+| provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |

@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-proved-claim.md",
+      "message_pattern": "tab:status frames it only 'open'"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "underclaim, WARN never ERROR (check-provenance.py:320-321); script-verified."
+}

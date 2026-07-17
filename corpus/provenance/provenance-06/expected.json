@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-dangling.md",
+      "message_pattern": "no \\label{lem:dangling-target} in sections/"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "forward-label dangling; check-provenance.py:242-248; script-verified. Does not double-fire the anchor check (labels_of returns the unresolved token itself, so it is non-empty even though it doesn't resolve — argument.py-independent parser quirk confirmed by running the real function)."
+}

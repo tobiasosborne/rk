@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-dropped.md",
+      "message_pattern": "dropped from the paper, or never wired in"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] unwired anchor; check-provenance.py:349-365. Real remediation-item shape (2026-07-10 plan item 9); script-verified."
+}

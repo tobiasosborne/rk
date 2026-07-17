@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "source key 'R' is defined twice"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "duplicate source key, parse integrity WARN, never a silent drop (check-provenance.py:180-181,185-186). Both rows are hashed per the docstring's own guarantee; script-verified post-commit (refs/src-r/{one,two}.tex real distinct payloads, real matching sha256 prefixes, both git-tracked)."
+}

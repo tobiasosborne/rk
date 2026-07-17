@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-uncovered.md",
+      "message_pattern": "no per-claim PROVENANCE row"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "coverage WARN; check-provenance.py:283-290; script-verified."
+}

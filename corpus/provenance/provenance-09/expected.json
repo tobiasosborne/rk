@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "report/sections/01_body.tex",
+      "message_pattern": "no registry result backing it"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "reverse-label orphan, WARN; check-provenance.py:251-259; script-verified (zero registry shards in this fixture, one thm/lem-prefixed \\label{})."
+}

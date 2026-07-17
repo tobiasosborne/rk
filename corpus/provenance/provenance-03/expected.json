@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "file edited, hash stale"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] stale SHA256 on a TRACKED source; check-provenance.py:368-404. The recorded 16-hex sha is a REAL sha256 computed from the original payload bytes; the committed refs/src-q/paper.tex holds genuinely DIFFERENT (edited) bytes, so the mismatch is real, not simulated. Script-verified post-commit against rk's own git index (git_tracked() needs the file actually git-tracked to hard-error rather than WARN-as-unverifiable; see corpus/README.md Validation methodology)."
+}
