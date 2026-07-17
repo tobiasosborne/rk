@@ -10,6 +10,7 @@
 
 import { refsDispatch } from "./cli/refs";
 import { checkCommand } from "./cli/check";
+import { doctorCommand } from "./cli/doctor";
 import type { Out } from "./cli/args";
 import { defaultOut } from "./cli/args";
 
@@ -18,12 +19,14 @@ export type { Out };
 const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = {
   refs: refsDispatch,
   check: checkCommand,
+  doctor: doctorCommand,
 };
 
 function topHelp(out: Out): number {
   out.log("rk — research-automation tool");
   out.log("  rk refs status|add|quote   ground-truth reference library (PRD C7)");
   out.log("  rk check [--root <dir>]    run all six M0 gates (docs/gate-contracts.md)");
+  out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  next: 'rk refs status' to see what's acquired in this repo.");
   return 0;
 }
