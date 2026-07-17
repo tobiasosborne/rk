@@ -25,9 +25,21 @@ No source code yet. Design authority: `../research-workflows/{PRD,IMPLEMENTATION
   tags on all six gates' divergence sections, robustness-run defined, Authority
   preamble, harness notes in Shared conventions. Two triage judgment calls flagged for
   ratification (refs-07, provenance-11 as rk-stricter-intended).
-- Tier-A boundary review (Fable): IN FLIGHT — scope: M0.7 amendments + reopened-ruling
-  ratification + M0.6 quote-match slice only (per blast-radius cadence policy).
-  GREEN verdict unblocks the M0.3 fan-out (6 gates, parallel Sonnet, disjoint files).
+- Tier-A boundary review: DONE — GREEN-WITH-CORRECTIONS
+  (docs/reviews/2026-07-17-tier-a-boundary-review.md). All rulings ratified; 10
+  corrections applied (9e8ac89 code+tests incl. the wholeQuoteMatch empty-normalized
+  false-PASS guard; ba65646 contract+fixtures). 100/100 tests.
+- M0.3 skeleton: DONE (926f9a7, 161150d, d6eecfe) — pure gate framework, RepoSnapshot,
+  config, six stubs, CLI split (cli/args|refs|check), corpus harness with
+  mutation-proved subset-matcher. 222 tests (147 pass, 75 skip), selftest green.
+- M0.3 gate wave: IN FLIGHT — six parallel Sonnet implementers, disjoint scopes
+  (each owns src/gates/<gate>.ts + test/gates/<gate>.test.ts + optional <gate>-*
+  helpers; refs gate MUST consume src/refs/quote.ts wholeQuoteMatch, never re-derive).
+- M0.4 doctor: IN FLIGHT (seventh agent; owns src/doctor.ts, src/cli/doctor.ts,
+  rk.compat.json, test/doctor.test.ts, + one dispatch case in src/cli.ts).
+- After the wave: AISM HEAD divergence-triage run + 3-tree robustness run, then the
+  M0.3 milestone Fable review (gate logic + triage ratification), then M0.5 staged
+  cutover (needs TJO's live AISM sessions).
 - M0.6 refs acquisition: DONE (7537f80, ae7c539, 5d4e791). 95 tests/163 asserts,
   selftest+purity green, compiled binary works. AISM status round-trip: full agreement.
   Divergence ledger: 2 rk-stricter-intended (path-traversal guard — fetch-refs.py:137-140
