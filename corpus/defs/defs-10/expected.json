@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 0,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "check-defs.py:119-122, WARN only (source valid, sha resolves under a different known source); script-verified real sha256 prefixes across two source dirs."
 }

@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 1,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "check-defs.py:112-115; script-verified with a real manifest (src-alpha known, src-nonexistent claimed)."
 }

@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/def-cited-no-provenance.md",
+      "message_pattern": "cited"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: check-defs.py passes silently (0 errors, 0 warnings, exit 0; script-verified) when both source: and sha256: are absent on a kind=cited shard — check-defs.py:112-118's `if src`/`if sha` guards no-op on absence (documented in gate-contracts.md Gate 1 Known-limitations, F5)",
+  "notes": "Strict per TJO premise correction 2026-07-17: a cited shard naming NEITHER source: nor sha256: is unprovenanced and must ERROR; contract update to docs/gate-contracts.md Gate 1 (checks 8-9 / F5) is pending — this fixture anticipates it. Not yet buildable against real rk (M0.3 doesn't exist); expected.json states the CONTRACT-target verdict, not AISM's."
+}

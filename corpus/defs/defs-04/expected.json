@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 1,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "check-defs.py:91-92; script-verified."
 }

@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 0,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "Manifest entirely absent -> checks 8-9 silent no-op even on a fabricated source/sha256 (check-defs.py:57-59,112-118); rk's coverage-line deviation makes the resulting 0/K cited-shard count visible instead of silently swallowed (same shape as refs-01/provenance-13); script-verified, exit 0."
 }

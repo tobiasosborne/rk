@@ -38,6 +38,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `defs-12` | defs | consensus/original shard missing `consensus:` | class-driven (no incident on record) | landed |
 | `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
 | `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
+| `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction: AISM passes this silently (check-defs.py:112-118); contract update to Gate 1 checks 8-9/F5 pending — this fixture anticipates it, not yet M0.3-enforceable | landed |
 | `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | planned |
 | `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | planned |
 | `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | planned |
@@ -100,15 +101,30 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | planned |
 
 Totals: 14 defs + 21 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **74
-fixtures** across the six M0 gates. Ten carry `[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory
-list): `defs-07` (duplicate alias), `linker-06` (dependency cycle), `linker-12` (contract
-mismatch registry↔af-root), `linker-16` (hand-edited generated file), `refs-01` (19/19
-false-green), `provenance-01` (overclaim), `provenance-03` (stale SHA256), `provenance-04`
-(unwired anchor) — plus `runs-01` (orphaned run bundle) and `runs-02` (missing invariant). The
-plan's "duplicate alias" item is `defs-07`; "missing invariant" is `runs-02`. Three fixtures
-(`linker-21`, `refs-07`, `provenance-13`) were added by the 2026-07-17 Fable review of
-`docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3 respectively) — none carry
-`[PLAN]`; they are corrections to this WP's own contract, not IMPLEMENTATION_PLAN-mandated.
+fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
+`[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory list): `defs-07` (duplicate alias), `linker-06`
+(dependency cycle), `linker-12` (contract mismatch registry↔af-root), `linker-16` (hand-edited
+generated file), `refs-01` (19/19 false-green), `provenance-01` (overclaim), `provenance-03`
+(stale SHA256), `provenance-04` (unwired anchor) — plus `runs-01` (orphaned run bundle) and
+`runs-02` (missing invariant). The plan's "duplicate alias" item is `defs-07`; "missing
+invariant" is `runs-02`. Three fixtures (`linker-21`, `refs-07`, `provenance-13`) were added by
+the 2026-07-17 Fable review of `docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3
+respectively) — none carry `[PLAN]`; they are corrections to this WP's own contract, not
+IMPLEMENTATION_PLAN-mandated.
+
+**Plus one `[TJO]` fixture** added during M0.2 build, not in `docs/gate-contracts.md`'s tables:
+`defs-15` (cited shard, `source:`/`sha256:` both entirely absent — strict ERROR), per the
+2026-07-17 TJO premise correction (below). **75 fixtures** total as of that correction.
+
+**2026-07-17 TJO premise correction (mid-M0.2).** AISM is prior art, not a golden master —
+its script behavior informs but never overrides `docs/gate-contracts.md`. `expected.json`'s
+`verdict`/`findings`/`exit_code` state what the CONTRACT requires; AISM's actual, script-verified
+behavior is recorded separately in `aism_behavior` (see the convention section below), purely as
+migration-bookkeeping data for M0.5's divergence triage. `defs-15` is the one fixture built
+*after* this correction whose target verdict deliberately diverges from AISM's own behavior and
+from the current text of Gate 1 checks 8-9 (F5): a contract amendment making cited-shard
+`source:`/`sha256:` absence strict-ERROR is pending, not yet landed in `docs/gate-contracts.md`
+— flagged for the next Fable review.
 
 ---
 
@@ -131,6 +147,17 @@ corpus/<gate>/<fixture-id>/
 
 ## `expected.json` convention
 
+**Normativity hierarchy (2026-07-17 TJO premise correction — read this before anything
+else in this section).** AISM is prior art, not a golden master: it kind-of-works, with known
+problems, and its incident history is valuable data — but its script *behavior* is never the
+spec. `docs/gate-contracts.md` (commit 77a488e) is the normative spec. Every fixture's
+`verdict`/`findings`/`exit_code` below express what **the contract** requires. AISM scripts are
+still run against every fixture where feasible (see Validation methodology) — but as
+characterization of prior art for M0.5's cutover-divergence bookkeeping, never as the arbiter of
+what a fixture's expectation should be. Where AISM's actual behavior differs from the contract's
+target verdict, that is recorded honestly in `aism_behavior`, **never** used as a reason to
+weaken the expectation to match AISM.
+
 ```json
 {
   "gate": "defs",
@@ -139,7 +166,7 @@ corpus/<gate>/<fixture-id>/
     { "severity": "ERROR", "path_pattern": "definitions/def-x.md", "message_pattern": "DRIFT" }
   ],
   "exit_code": 1,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "one line: what this fixture proves and how it was validated"
 }
 ```
@@ -148,42 +175,49 @@ Field semantics:
 
 - **`gate`** — one of `defs`, `linker`, `refs`, `provenance`, `runs`, `shards` (matches the
   directory).
-- **`verdict`** — `"fail"` iff the gate would report ≥1 ERROR finding (equivalently `exit_code
-  == 1`, per the Shared Conventions' Exit codes rule in `docs/gate-contracts.md`); `"pass"`
-  otherwise. WARN-only and golden (zero-finding) fixtures are `"pass"`.
-- **`findings`** — the findings this fixture specifically **targets**, not necessarily an
-  exhaustive line-for-line transcript of everything the gate would emit (a fixture may
-  incidentally trigger an unrelated WARN, e.g. "manifest absent" alongside its target ERROR).
-  M0.3's harness must assert each listed finding is **present** among the gate's actual output
-  (subset match on severity + path + message substring), not that the output equals this list
-  exactly. An empty `findings` array is legal for a clean golden case with zero output beyond
-  the coverage line.
+- **`verdict`** — `"fail"` iff **the contract** says the gate reports ≥1 ERROR finding on this
+  `repo/` tree (equivalently `exit_code == 1`, per the Shared Conventions' Exit codes rule in
+  `docs/gate-contracts.md`); `"pass"` otherwise. WARN-only and golden (zero-finding) fixtures are
+  `"pass"`. This is the CONTRACT's verdict, not necessarily AISM's — see `aism_behavior`.
+- **`findings`** — the findings this fixture specifically **targets** per the contract, not
+  necessarily an exhaustive line-for-line transcript of everything the gate would emit (a
+  fixture may incidentally trigger an unrelated WARN, e.g. "manifest absent" alongside its
+  target ERROR). M0.3's harness must assert each listed finding is **present** among the gate's
+  actual output (subset match on severity + path + message substring), not that the output
+  equals this list exactly. An empty `findings` array is legal for a clean golden case with zero
+  output beyond the coverage line.
   - `severity` — `"ERROR"` or `"WARN"`, matching the Shared Conventions finding format exactly.
   - `path_pattern` — a repo-relative glob (`fnmatch` semantics) matched against the finding's
     `path`; a literal path (no glob metacharacters) matches exactly.
   - `message_pattern` — a case-sensitive substring that must appear in the finding's `message`
     text (not the whole `SEVERITY path:line message` line).
-- **`exit_code`** — the single gate's own exit code in isolation (0 or 1; `rk check`'s
-  composed exit code is a separate concern, out of scope for a per-gate fixture).
-- **`parity`**:
-  - `"aism"` — the corresponding AISM script exhibits the same verdict on this fixture's
-    `repo/` tree. Validated per the Validation section below.
-  - `"rk-only"` — the fixture tests a documented rk deviation from AISM (e.g. `refs-07`'s
-    whole-quote rule, `linker-21`'s crash→ERROR trigger-preserving fix); AISM's own behavior on
-    this fixture is recorded in `notes` (including "AISM crashes here" where applicable) but is
-    not the target verdict.
-  - `"untested"` — the fixture could not be run against the real AISM script (a hard
+- **`exit_code`** — the single gate's own exit code in isolation under the contract (0 or 1;
+  `rk check`'s composed exit code is a separate concern, out of scope for a per-gate fixture).
+- **`aism_behavior`** — characterization of prior art, subordinate to `verdict`/`findings`/
+  `exit_code` above; never authoritative:
+  - `"same"` — the corresponding AISM script, run against this fixture's `repo/` tree, produces
+    the same verdict the contract requires. Validated per the Validation section below.
+  - `"differs: <one-line how>"` — AISM's actual, script-verified behavior on this fixture
+    diverges from the contract's target verdict (e.g. AISM crashes where the contract wants an
+    ERROR finding; AISM passes silently where the contract wants strict-ERROR). The one-line
+    explanation states what AISM actually does, cited to `script:line`; this is migration
+    bookkeeping for M0.5's divergence triage, not a reason to change `verdict`/`findings` above.
+  - `"unrunnable"` — the fixture could not be run against the real AISM script at all (a hard
     dependency on repo-scale structure the harness could not construct standalone, e.g. a real
     `latexmk` build or a live `bd` tracker); recorded honestly, never silently folded into
-    `"aism"`.
-- **`notes`** — one line: what the fixture proves, the exact AISM script:line(s) it exercises,
-  and how it was validated (script-verified / rk-only regression probe / untested-and-why).
+    `"same"`.
+- **`notes`** — one line: what the fixture proves, the exact AISM script:line(s)/contract
+  clause it exercises, and how it was validated (script-verified / regression probe /
+  unrunnable-and-why). Where a fixture's `verdict` anticipates a contract clause that has not
+  yet been written into `docs/gate-contracts.md` (a pending correction), say so explicitly here
+  — that fixture is not yet enforceable by M0.3 until the contract itself is amended.
 
 ## Validation methodology
 
-Every `parity: "aism"` (and `"rk-only"`, for its documented AISM-side behavior) fixture was
-validated by actually **running the real AISM check logic** against `repo/` — never by
-inspection alone. One caveat, discovered while building this corpus and worth flagging for the
+Every fixture's `aism_behavior` value was determined by actually **running the real AISM check
+logic** against `repo/` — never by inspection alone — wherever that was mechanically feasible
+(`"unrunnable"` fixtures are the honest exception). One caveat, discovered while building this
+corpus and worth flagging for the
 next Fable review: every AISM python gate script hardcodes `ROOT =
 pathlib.Path(__file__).resolve().parent.parent` — i.e. `ROOT` is derived from the *script's own
 file location* inside the AISM checkout, not from `cwd`. Running `cd <fixture>/repo && python3
@@ -228,6 +262,6 @@ to.
 Filled in per gate as fixtures land (M0.2 commits, one per gate). See each gate's row for the
 script-verified / rk-only / untested breakdown.
 
-| gate | fixtures | script-verified (`aism`) | `rk-only` | `untested` |
+| gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
-| defs | 14/14 | 14 | 0 | 0 |
+| defs | 15/15 | 14 | 1 (`defs-15`, TJO strict-provenance) | 0 |

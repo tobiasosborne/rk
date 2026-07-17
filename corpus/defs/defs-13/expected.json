@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 0,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "Golden non-error case (Fable review 'do-not-lose'): status=draft WARNs but never errors (check-defs.py:128-129); script-verified, exit 0."
 }

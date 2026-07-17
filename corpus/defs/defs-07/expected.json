@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 1,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "[PLAN] duplicate alias/DRIFT, the core guard (check-defs.py:98-107); script-verified."
 }

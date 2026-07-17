@@ -14,6 +14,6 @@
     }
   ],
   "exit_code": 1,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "Parametrized over term/status in one fixture (id/kind omitted per plan note, REQUIRED=[id,term,kind,status] at check-defs.py:26); script-verified."
 }

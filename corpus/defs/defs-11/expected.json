@@ -9,6 +9,6 @@
     }
   ],
   "exit_code": 0,
-  "parity": "aism",
+  "aism_behavior": "same",
   "notes": "check-defs.py:123-124, WARN never ERROR; manifest lists a hash whose payload file is deliberately absent from the fixture (models a gitignored source); script-verified."
 }
