@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/01_intro.tex",
+      "message_pattern": "must have 2-3 SHARD-SUMMARY lines; found 1"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:83-84; script-verified with 1 line (the 0/1/4 parametrization's under-count case)."
+}

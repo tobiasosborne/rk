@@ -87,18 +87,18 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `runs-05` | runs | missing one required field (hypothesis/command/finding/next) | class-driven (no incident on record) | landed |
 | `runs-06` | runs | stray top-level file (WARN) | class-driven (no incident on record) | landed |
 | `runs-07` | runs | empty `runs/` golden case (day-1 green) | class-driven; baseline, not a violation | landed |
-| `shards-01` | report-shards | oversized shard (>280 lines) | class-driven (no incident on record) | planned |
-| `shards-02` | report-shards | duplicate `SHARD-ID` | class-driven (no incident on record) | planned |
-| `shards-03` | report-shards | malformed `SHARD-ID` | class-driven (no incident on record) | planned |
-| `shards-04` | report-shards | wrong `SHARD-SUMMARY` count | class-driven (no incident on record) | planned |
-| `shards-05` | report-shards | orphan shard file (not `\include`d) | class-driven (no incident on record) | planned |
-| `shards-06` | report-shards | duplicate `\include` | class-driven (no incident on record) | planned |
-| `shards-07` | report-shards | `\include` outside `sections/` | class-driven (no incident on record) | planned |
-| `shards-08` | report-shards | missing `SHARD_CATALOG.md` entry | class-driven (no incident on record) | planned |
-| `shards-09` | report-shards | missing `README.md` entry | class-driven (no incident on record) | planned |
-| `shards-10` | report-shards | body-sectioning command in `main.tex` | class-driven (no incident on record) | planned |
-| `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | planned |
-| `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | planned |
+| `shards-01` | report-shards | oversized shard (>280 lines) | class-driven (no incident on record) | landed |
+| `shards-02` | report-shards | duplicate `SHARD-ID` | class-driven (no incident on record) | landed |
+| `shards-03` | report-shards | malformed `SHARD-ID` | class-driven (no incident on record) | landed |
+| `shards-04` | report-shards | wrong `SHARD-SUMMARY` count | class-driven (no incident on record) | landed |
+| `shards-05` | report-shards | orphan shard file (not `\include`d) | class-driven (no incident on record) | landed |
+| `shards-06` | report-shards | duplicate `\include` | class-driven (no incident on record) | landed |
+| `shards-07` | report-shards | `\include` outside `sections/` | class-driven (no incident on record) | landed |
+| `shards-08` | report-shards | missing `SHARD_CATALOG.md` entry | class-driven (no incident on record) | landed |
+| `shards-09` | report-shards | missing `README.md` entry | class-driven (no incident on record) | landed |
+| `shards-10` | report-shards | body-sectioning command in `main.tex` | class-driven (no incident on record) | landed |
+| `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | landed |
+| `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 
 Totals: 14 defs + 21 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **74
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
@@ -276,3 +276,5 @@ script-verified / rk-only / untested breakdown.
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
 | provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
 | runs | 7/7 | 7 | 0 | 0 |
+| shards | 12/12 | 12 | 0 | 0 |
+| **total** | **75/75** | **70** | **5** | **0** |

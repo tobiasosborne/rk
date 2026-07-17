@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/02_other.tex",
+      "message_pattern": "duplicate SHARD-ID AISM-01-INTRO"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:71-72; script-verified. The duplicate-ID branch is checked before the numeric-prefix-match branch (elif chain), so the second shard's genuine prefix mismatch (02_ vs AISM-01-) is correctly not co-reported."
+}

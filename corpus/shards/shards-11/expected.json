@@ -1,0 +1,8 @@
+{
+  "gate": "shards",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "Golden empty-scaffold case (check-report-shards.sh:31-36, exit 0 'no shards yet (empty scaffold) -- OK'); script-verified. Fable review do-not-lose list."
+}

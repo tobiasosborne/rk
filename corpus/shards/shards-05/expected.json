@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/02_orphan.tex",
+      "message_pattern": "exists but is not included by report/main.tex"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:104-109; script-verified. Per-include checks (header/README/CATALOG) never even run for an orphan file (the trailing orphan-scan is a separate loop over the whole directory), so 02_orphan.tex's own header content is inert for this fixture's target finding, included anyway for realism."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/main.tex",
+      "message_pattern": "should point under sections/"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:45-48; script-verified. Zero real files under sections/ in this fixture (the include target doesn't resolve to a real path at all), so no orphan-scan noise."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/01_intro.tex",
+      "message_pattern": "has 284 lines; target is about 200 and hard guard is 280"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:54-57; script-verified (shard genuinely has 284 real, distinct prose lines, not padding truncated for line-count only)."
+}

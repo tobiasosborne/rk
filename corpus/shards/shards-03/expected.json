@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/01_intro.tex",
+      "message_pattern": "invalid SHARD-ID 'WRONG-PREFIX-01-INTRO'"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:69; script-verified."
+}

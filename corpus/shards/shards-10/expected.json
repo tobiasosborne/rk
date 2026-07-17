@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/main.tex",
+      "message_pattern": "contains body sectioning commands"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:111-115; script-verified. Only report/main.tex is scanned for body-sectioning commands -- shard files may use \\section freely (confirmed: every other fixture's shard body uses \\section without complaint)."
+}

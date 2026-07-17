@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/01_intro.tex",
+      "message_pattern": "is included more than once"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:50; script-verified. A duplicate \\include also makes the per-include loop revisit the same shard file twice, so 'duplicate SHARD-ID AISM-01-INTRO' fires too (the second visit finds its own ID already seen) -- an incidental second finding, not a separate violation, harmless under the subset-match convention."
+}

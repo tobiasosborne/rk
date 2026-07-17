@@ -1,0 +1,19 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/README.md",
+      "message_pattern": "does not list report/sections/01_intro.tex"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/README.md",
+      "message_pattern": "does not list shard label AISM-01-INTRO"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:58-59 (path) and :87-88 (label) -- two separate README checks, both genuinely missing here since README.md mentions neither; script-verified."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/main.tex",
+      "message_pattern": "has no \\include statements but report/sections has 1 shard(s)"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-report-shards.sh:37-39; script-verified. The real shard file also gets flagged as an orphan by the trailing scan (report/sections/01_intro.tex exists but is not included) since the include list is empty -- both findings share one root cause (zero \\includes), so only the primary one is listed as the target."
+}
