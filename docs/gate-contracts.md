@@ -1,0 +1,762 @@
+<!-- ROLE: normative contract for rk's gate suite (`rk check`) — the six ported AISM gates.
+     UPDATE POLICY: authored, rewritten-whole per gate section when that gate's checks change;
+     a code change that alters check semantics without updating this doc is incomplete work
+     (CLAUDE.md Rule 7). The seventh gate (freshness) is reserved, not specified, until M2.6.
+     TRIGGER: before implementing or modifying any gate in src/gates/; before writing a corpus
+     fixture (corpus/README.md must stay in lockstep — every fixture named here has a row there). -->
+
+# Gate contracts
+
+Ground truth for this document is the AISM scripts themselves (L5 — parity before
+improvement): `../almost-idempotent-stochastic-maps/scripts/{check-defs.py, argument.py,
+check-refs.py, check-provenance.py, check-runs.py, check-report-shards.sh}`, plus the shared
+constant `scripts/af_constants.py` and the composition script `scripts/check-all.sh`. Every
+check below cites its source as `script:line-range`. Every gate's docstring/header comment is
+itself read as part of the spec — AISM's authors already named several of these gates' failure
+modes and known limitations in prose; that prose is preserved and cited, not paraphrased away.
+
+This WP specs the **six** M0 gates: defs, argument/linker, refs, provenance, runs,
+report-shards. A **seventh gate, freshness**, is created in M2 (M2.6: regenerate-and-diff
+replaces mirror-check gates once `rk render` exists) — it is reserved here, not specified.
+Two of the six gates already contain a narrow freshness-style check today (argument/linker's
+`check_generated` on its own two generated files) — that is in scope now, ported as part of the
+linker gate; it is not the general M2.6 mechanism.
+
+## Shared conventions (all six gates)
+
+**Finding format.** One line per finding: `SEVERITY path:line message`. `SEVERITY` is `ERROR`
+or `WARN`. `path` is repo-relative. `line` is 1-indexed; where the underlying check does not
+resolve to a specific source line (a JSON file, a cross-shard cycle, a whole-registry check),
+`line` defaults to `1` and is attributed to the first-mentioned path. This is a **deviation**
+from AISM's own console output, which is inconsistent across scripts — bare `<file>: <message>`
+in check-defs.py/argument.py, a tabular `[symbol] workspace  external  verdict  locus` layout in
+check-refs.py, grouped-by-check-name blocks in check-provenance.py, and bare `report shard
+check: <message>` lines in check-report-shards.sh. Justification: PRD C8 and CLAUDE.md L2
+require one stable, parseable finding format across the whole suite; AISM never needed this
+because its five formats were read by humans only. No gate's pass/fail semantics changes.
+
+**Coverage line.** Every gate emits exactly one final line: `checked <gate>: <N>/<M> <unit>
+(<E> errors, <W> warnings)`, even when `N == M == 0` (an empty corpus, e.g. `runs/` on day 1,
+is a legitimate green state and must say so explicitly — CLAUDE.md L2: "a skip is always
+visible with a count"). Where a gate has more than one countable unit (check-refs.py's
+pass/fail/skip-import/skip-noquote split), the coverage line breaks the total down by verdict
+class rather than collapsing skip reasons into one number — see the refs gate's Deviations.
+
+**Exit codes.** `0` — zero ERRORs (WARNs never fail a gate). `1` — at least one ERROR. This
+matches every AISM script's own `main()` (`return 1 if errors else 0`, uniformly). A gate's own
+CLI convenience surface (e.g. argument.py's `--show <id>` on an unknown id) may use other codes
+for usage errors; those are CLI ergonomics, not gate verdicts, and are out of this contract's
+scope.
+
+**Composition (`rk check`).** All six gates run unconditionally in one invocation; `rk check`
+exits 1 if any gate found ≥1 ERROR, and prints all six coverage lines regardless of earlier
+failures. This is a **deviation** from `scripts/check-all.sh`, which short-circuits at the first
+failing script (`fail() { ...; exit 1; }`, check-all.sh:7, invoked at lines 10,13,16,19,20,28,31,36).
+Justification: L2's coverage-reporting mandate is only meaningful if every gate actually runs
+every time; a fix-one-rerun loop hides how many gates are broken at once. No individual gate's
+internal logic changes — only the wrapper's control flow.
+
+**Per-repo parameters (this WP's scope).** Two config values are explicitly per-repo, not
+global constants, ported from AISM's hardcoded defaults:
+- **Brittleness soft cap** (linker gate): default **26** nodes, **no depth check** by default.
+  AISM's own `argument/README.md:80-81` still documents the *old* rule ("default >12 / depth
+  >3") — that prose is stale against the code (`af_constants.py:19`, `check_brittleness`'s
+  actual signature has no depth parameter at all). Ground truth per L5 is the code, not the
+  stale doc; see the linker gate section for the full incident (aism-s64).
+- **Report-shard PREFIX** ("AISM" in the source) and **MAX_LINES** (280, already an env-var
+  override in AISM) — see the report-shards gate section.
+
+---
+
+## Gate 1 — defs (`definitions/*.md`)
+
+**Purpose.** Guard the project's vocabulary against drift: no two shards may define the same
+term, or silently annex each other's alias, and every `cited` definition must be traceable to a
+hashed local source. "The core guard" per the script's own docstring (check-defs.py:6-7);
+`definitions/README.md:9-10`: "If two places define the same concept differently, the project
+drifts and is sunk."
+
+**Failure mode guarded.** Term/alias DRIFT — two shards claiming the same name, so downstream
+readers (and downstream shards) can no longer tell which definition is authoritative. No single
+dated AISM incident is on record for this specific gate (it is preventive, and no drift has
+actually occurred in AISM's history at time of reading); the corpus fixture for it is
+class-driven, not incident-driven — record this honestly rather than inventing a source
+incident.
+
+**Inputs.**
+- Glob: `definitions/*.md`, excluding `README.md`, `INDEX.md` (check-defs.py:27,80).
+- Frontmatter: flat `key: value` per line, terminated by a second `---` line (check-defs.py:30-50).
+
+| field | type | required | allowed values |
+|---|---|---|---|
+| `id` | string | yes | must equal the filename stem |
+| `term` | string | yes | canonical human name |
+| `aliases` | `;`-separated string | no | alternate names/symbols, folded into the same dedup namespace as `term` |
+| `kind` | enum | yes | `cited` \| `consensus` \| `original` |
+| `status` | enum | yes | `draft` \| `locked` |
+| `source` | string | for `kind=cited` | a `refs/manifest/SOURCES.md` source-id, or `internal` |
+| `locus` | freeform string | documented, **not machine-checked** | where in the source (informational only) |
+| `sha256` | 16-hex string or `-` | for `kind=cited` | prefix must exist in the manifest |
+| `consensus` | freeform string | for `kind∈{consensus,original}` | who agreed / where transcribed |
+
+Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `SKIP =
+{README.md, INDEX.md}` (check-defs.py:27).
+
+**Checks.**
+1. Frontmatter present and terminated ⇒ ERROR otherwise (check-defs.py:85-86).
+2. A frontmatter line without `:` ⇒ ERROR per line (check-defs.py:45-46).
+3. Required fields (`id`,`term`,`kind`,`status`) present ⇒ ERROR per missing field (check-defs.py:88-90).
+4. `id == filename stem` ⇒ ERROR otherwise (check-defs.py:91-92).
+5. `kind ∈ {cited, consensus, original}` ⇒ ERROR otherwise (check-defs.py:93-94).
+6. `status ∈ {draft, locked}` ⇒ ERROR otherwise (check-defs.py:95-96).
+7. **DEDUP/DRIFT**: `term` + every `alias` (lower-cased) forms one global name namespace across
+   all shards; a name claimed by two different shards ⇒ ERROR `DRIFT: name '<nm>' claimed by
+   both <a> and <b>` (check-defs.py:98-107).
+8. `kind=cited`: `source` must be a known refs/ source-id, checked only when the manifest
+   yielded at least one source-id ⇒ ERROR otherwise (check-defs.py:112-115).
+9. `kind=cited`: `sha256` (if present and not `-`) must be a known prefix in the manifest,
+   checked only when the manifest is non-empty ⇒ ERROR otherwise (check-defs.py:116-118).
+10. `kind=cited`: `sha256` resolves in the manifest but the resolved path is not under
+    `source/` ⇒ WARN (mismatch between claimed source and file path) (check-defs.py:119-122).
+11. `kind=cited`: `sha256` resolves but the payload file is absent on disk (gitignored) ⇒
+    WARN, never ERROR (check-defs.py:123-124).
+12. `kind ∈ {consensus, original}`: `consensus:` field must be present ⇒ ERROR otherwise
+    (check-defs.py:125-127).
+13. `status=draft` ⇒ WARN "not yet consensus-gated" (check-defs.py:128-129).
+14. Manifest file absent entirely ⇒ WARN "cannot verify cited hashes"; checks 8–9 become
+    no-ops in this case (guarded by `and source_ids` / `and prefix2path`) (check-defs.py:57-59,114,117).
+
+**Known limitations / incident history.**
+- Checks 8–9 silently no-op (not ERROR, not even counted as unverified) when the manifest is
+  absent or empty — on a fresh clone with nothing fetched into `refs/` yet, a fabricated
+  `source`/`sha256` on a brand-new `cited` shard passes with only the one generic WARN "manifest
+  absent", no count of how many cited claims went unverified. This is the same *shape* as the
+  refs gate's 19/19 false-green (a checker that verifies nothing while reporting green) at
+  smaller scale; the port's coverage line must make the count visible (see Deviations).
+- `check-defs.py` has **no staleness check** on its own generated `definitions/INDEX.md`: the
+  script only *writes* `INDEX.md` under `--generate-index`; in `--check` mode it never compares
+  an existing `INDEX.md` to a fresh render (contrast argument.py's `check_generated`, which does
+  exactly this for `argument/INDEX.md`/`DAG.md`). A hand-edited `definitions/INDEX.md` is
+  **not caught by this gate today**. This is a genuine asymmetry in AISM's own ported behavior —
+  recorded here, not silently fixed (L5: match first). The "hand-edited generated file" corpus
+  fixture (IMPLEMENTATION_PLAN M0.2, mandatory) is therefore assigned to the **linker** gate,
+  where the equivalent check genuinely exists — see linker fixture `linker-16`. Flagged for
+  Fable/orchestrator: whether `rk` should close this specific gap (a new check, not parity) is a
+  deliberate decision for a later WP, not this one.
+- No historical DRIFT incident is on record in AISM (see Failure mode guarded, above).
+
+**Deviations from AISM.**
+- Coverage line adds an explicit cited-hash sub-count: `checked defs: <N>/<N> shards, <C>/<K>
+  cited shards hash-verified` whenever `K > 0`; when the manifest is absent/empty this renders
+  as `0/<K> cited shards hash-verified — manifest absent`. Justification: L2's mandatory
+  coverage reporting — AISM's single WARN sentence (check-defs.py:58) carries no count, so a
+  reader cannot tell "we checked 0 of 12 cited shards" from "there are no cited shards." Pass/fail
+  is unchanged; this only makes the existing no-op visible.
+- Standard cross-gate finding-format change (see Shared conventions); no check's trigger
+  condition changes.
+
+**Historical schema-drift tolerance.** No frontmatter field was added to the defs schema
+mid-campaign in AISM history at time of reading (`id`/`term`/`kind`/`status`/`source`/`locus`/
+`sha256`/`consensus` are all present from the schema's first commit, per `definitions/README.md`).
+N/A for this gate; nothing to tolerate.
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `defs-01` | missing/unterminated frontmatter |
+| `defs-02` | frontmatter line without `:` |
+| `defs-03` | missing required field (parametrize over id/term/kind/status) |
+| `defs-04` | `id` != filename stem |
+| `defs-05` | `kind` not in the allowed set |
+| `defs-06` | `status` not in the allowed set |
+| `defs-07` | **duplicate alias** [PLAN-mandated] — two shards claim the same term/alias (DRIFT) |
+| `defs-08` | `cited` shard, unknown `source` |
+| `defs-09` | `cited` shard, `sha256` not in manifest |
+| `defs-10` | `cited` shard, `sha256` resolves under a different source (WARN) |
+| `defs-11` | `cited` shard, payload absent locally (WARN) |
+| `defs-12` | `consensus`/`original` shard missing `consensus:` |
+| `defs-13` | `status: draft` baseline (WARN, golden non-error case) |
+| `defs-14` | manifest file entirely absent (WARN, and checks 8–9 coverage count reads `0/K`) |
+
+---
+
+## Gate 2 — argument / linker (`argument/lemmas/*.md`)
+
+**Purpose.** The linker for Layer 1 (the module graph): enforces acyclicity, import
+resolution, contract match between the registry and the af proof, rigour-ladder-respecting
+status propagation, a brittleness signal, and orphan detection between the registry and
+`proofs/` (argument.py:1-14; `argument/README.md:7-12`, "each result is a *module* ... the
+linker ... enforces the contracts").
+
+**Failure mode guarded.** The general project failure mode — "a confident, plausible,
+WRONG-or-overclaimed result" (AISM `CLAUDE.md:34`) — made mechanical at the DAG layer: a
+non-rigorous or drifted foundation silently supporting a claim marked `af: validated` (status
+propagation), or a registry `contract` diverging from what the af workspace actually proved
+(contract drift). **Real incident**: the brittleness-threshold drift (aism-s64) —
+`argument.py`'s REFACTOR warning threshold (12 nodes) diverged from `af-orchestrate.py`'s
+balloon-abort cap (40 nodes) while actual af-validated trees in AISM ran 14–52 nodes, so the
+linker "cried REFACTOR on ~20 perfectly healthy validated trees" (`af_constants.py:5-10`),
+burying the signal in noise. Fixed by hoisting both to one shared constant,
+`af_constants.NODE_SOFT_CAP = 26`.
+
+**Inputs.**
+- Glob: `argument/lemmas/*.md`, excluding `README.md`, `INDEX.md` (argument.py:131-133).
+- Frontmatter (`argument/README.md:22-38`, argument.py:106-124):
+
+| field | type | required | allowed values / notes |
+|---|---|---|---|
+| `id` | string | yes | `lem-\|thm-\|prop-\|cor-\|op-\|obs-<slug>` convention (not machine-enforced beyond the stem check); must equal filename stem |
+| `kind` | enum | yes | `lemma` \| `proposition` \| `theorem` \| `corollary` \| `open-problem` \| `obstruction` |
+| `contract` | freeform, one line | yes (by convention; not required-field-checked) | the canonical statement; anti-drift invariant vs. the af root conjecture |
+| `defs` | `;`-list of `definitions/` ids | no | resolved against `definitions/*.md` |
+| `deps` | `;`-list of registry ids | no | unconditional prerequisites (DAG edges) |
+| `routes` | OPTIONAL structured field | no | grammar `[a; b] \| [c]` — see below; absent ⇒ `[]` |
+| `status` | enum | no (defaults absent) | `proved\|cited\|consensus\|open\|obstruction\|disproved\|stated\|proved-mod-audit\|conjecture\|heuristic\|numerical` |
+| `af` | enum | no, defaults `none` | `none\|seeded\|validated` |
+| `provenance` | freeform | no | not parsed here — see the **provenance** gate |
+| `owner` | freeform | no | not validated |
+| `workspace` | string | no (but load-bearing) | `proofs/<id>` path; used by orphan/contract/brittleness checks |
+
+`routes:` grammar (argument.py:68-90, `aism-3ne`): each bracketed group is one route (a
+*conjunction* of its members); groups are separated by `|` (the *disjunction* — any one route
+suffices). A shard may carry `deps:` and `routes:` together; `deps` are required under every
+route. `all_dep_ids(l) = deps ∪ (∪ routes)` is the edge set used for acyclicity and the
+conservative ancestor/descendant closures (argument.py:93-103).
+
+Config: `NODE_THRESHOLD = af_constants.NODE_SOFT_CAP = 26` — **per-repo parameter**, no depth
+check (af_constants.py:19; argument.py:61; confirmed by `check_brittleness`'s signature, which
+takes only `nodecounts`, never a depth argument — `argument/README.md:80-81`'s "depth>3" prose
+is stale against the code and must not be treated as ground truth).
+
+**Checks.**
+1. Frontmatter present ⇒ ERROR if missing/unterminated (argument.py: `_parse_frontmatter`
+   returns `None`; parse_registry:136-137).
+2. `id == filename stem` ⇒ ERROR (argument.py:139-140).
+3. `kind ∈ KINDS` ⇒ ERROR (argument.py:141-142).
+4. `status ∈ MATH_STATUS` ⇒ ERROR (argument.py:143-144).
+5. `af ∈ {none, seeded, validated}` ⇒ ERROR (argument.py:145-146).
+6. **Acyclic** — DFS over `all_dep_ids` (union of `deps` + every route's members) ⇒ ERROR
+   `cycle detected: a -> b -> ... -> a` (argument.py:153-176). A cycle hidden in *any* route
+   counts.
+7. **Imports resolve** — every `dep` and every route member must be a known registry id ⇒
+   ERROR per unknown id (argument.py:179-190); every `def` must be a known `definitions/` id ⇒
+   ERROR (argument.py:191-193).
+8. **Status propagation** — `af: validated` requires every unconditional `dep` **available**
+   (`af=validated` OR `status=cited`) **and** (no `routes`, or at least one route's members
+   *all* available) ⇒ ERROR listing the unmet deps (argument.py:197-236, esp. 220-229). This is
+   the mechanical form of the rigour ladder: a validated result can never rest on a
+   non-rigorous dep.
+9. **Contract match** — for every shard with `af != none` and an introspectable af workspace,
+   `normalize(af_root_statement) == normalize(registry.contract)` ⇒ ERROR "contract drift"
+   otherwise (argument.py:239-248, 684-690). Introspection is a no-op (silently unable to
+   check) when `af` or the CLI is unavailable, or the workspace field/dir doesn't resolve — see
+   Known limitations.
+10. **Orphans** — a shard with `af != none` whose `workspace` value is not among the scanned
+    `proofs/*` dirs (a dir containing a `ledger` subdir) ⇒ ERROR "workspace dir missing: <ws>";
+    a scanned `proofs/<ws>` dir declared by no registry shard ⇒ ERROR "orphan workspace"
+    (argument.py:262-273, 517-521).
+11. **Generated freshness** — committed `argument/INDEX.md` and `argument/DAG.md` must each
+    byte-equal a fresh render of the current shard set (checked only when not running with
+    `--generate`) ⇒ ERROR "... is STALE" (argument.py:632-642, 698-701).
+12. **Brittleness** (WARN only, never blocks the gate) — an af workspace's node count `>
+    NODE_THRESHOLD` (default 26) ⇒ WARN `REFACTOR: <ws> has <n> nodes (><cap>) — factor <id>
+    into sub-lemmas` (argument.py:251-259, boundary confirmed by AISM's own test suite:
+    exactly 26 does not warn, 27 does — `scripts/tests/test_argument.py:107-108`).
+
+Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
+noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set
+computation, `--show`/`--closure-min` local maps, and `--sync-beads` mirroring are CLI/reporting
+features layered on the same pure functions, not gate verdicts.
+
+**Known limitations / incident history.**
+- **aism-s64** (brittleness-cap drift): documented above; the fix hoisted both consumers (the
+  linker and `af-orchestrate.py`'s balloon guard) to one shared constant "so the two gates
+  cannot drift apart again" (af_constants.py:6-9). rk's port must preserve that property: the
+  default soft cap is defined exactly once and both the linker gate and any future balloon-style
+  guard in `rk verify` (M3.6) read the same value — no per-module duplication.
+- A `workspace:` field **absent** on an `af != none` shard produces no dedicated ERROR message —
+  `af_introspect(l.get("workspace",""))` resolves to `ROOT/""` = the repo root, `(root/"ledger")`
+  does not exist, so introspection silently returns `None` and the shard is skipped from
+  contract/brittleness checks (argument.py:686-690, no error raised at that point). It IS caught
+  downstream by `check_orphans`, whose `ws in ws_dirs` test against a `None` workspace value is
+  always false, producing `ERROR <id>: af=<af> but workspace dir missing: None` — a real message
+  quality gap (a leaked Python `None`, not an actionable path). **Real incident**: the
+  2026-07-10 remediation plan found 62 of 151 shards missing `workspace:` because
+  `seed-af-workspaces.py`'s `flip_af_seeded` omitted the field on every newly-elevated shard
+  until fixed (`docs/plans/2026-07-10-project-remediation-plan.md` Phase 0 item 2) — a real,
+  gate-breaking-on-every-elevation bug class, not hypothetical.
+- `check_brittleness` itself is defensive against a missing `workspace` key on the *dict* level
+  (falls back to `proofs/<id>` for the display path only, confirmed by AISM's own test
+  `scripts/tests/test_argument.py:109-111`) — this is a display fallback inside the WARN
+  message, not a fix for the orphan-check message above; the two code paths are independent.
+
+**Deviations from AISM.**
+- The orphan-check message for an absent `workspace` field becomes `ERROR <shard>: af=<af> but
+  workspace field is absent (cannot resolve a workspace dir)` instead of AISM's `...
+  workspace dir missing: None`. Justification: identical trigger condition, identical ERROR
+  verdict on identical inputs — only the message text is corrected to avoid a leaked `None`
+  literal; no verdict on any fixture changes.
+- Standard cross-gate finding-format change (see Shared conventions).
+
+**Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
+on historical commits (load-bearing for M0.3's 3-historical-commits parity acceptance):
+- **`routes:`** — genuinely new, added 2026-07-10 (`bdf6800`, "P0 OR-route linker support
+  (aism-3ne)"). A shard with no `routes:` line parses to `routes: []` and every check reduces
+  byte-identically to the pre-`routes` behavior (argument.py:77-78, "backward-compatible: a
+  shard with no routes behaves byte-identically to today"; `argument/README.md:61`, "A deps-only
+  shard ... behaves byte-identically to before this field existed"). rk's port must preserve
+  this: absence is not an error and not a warning on any historical commit predating `bdf6800`.
+- **`workspace:`** — present in the schema from the very first commit (`baeaccd`, 2026-07-02;
+  documented in `argument/README.md` from inception), so this is not a schema-timing drift in
+  the strict sense — but it was **inconsistently populated** by tooling (the seed-script bug
+  above), so historical commits legitimately contain `af != none` shards with no `workspace:`
+  value. The gate's behavior on that case (ERROR via `check_orphans`, message corrected per
+  Deviations above) is the correct, intended parity behavior, not a drift exemption — a missing
+  `workspace:` on an `af != none` shard is a real defect in every commit where it occurs, past
+  or present.
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `linker-01` | missing/unterminated frontmatter |
+| `linker-02` | `id` != filename stem |
+| `linker-03` | bad `kind` |
+| `linker-04` | bad `status` |
+| `linker-05` | bad `af` |
+| `linker-06` | **dependency cycle** [PLAN-mandated] |
+| `linker-07` | unknown `dep` id |
+| `linker-08` | unknown `routes` member id |
+| `linker-09` | unknown `defs` id |
+| `linker-10` | `af: validated` with an unmet unconditional dep |
+| `linker-11` | `af: validated`, `routes` present, no route fully available |
+| `linker-12` | **contract mismatch registry↔af-root** [PLAN-mandated] |
+| `linker-13` | orphan: `af != none`, declared `workspace` dir missing |
+| `linker-14` | orphan: `proofs/<ws>` dir exists, no registry entry declares it |
+| `linker-15` | `workspace:` field entirely absent on an `af != none` shard (real incident) |
+| `linker-16` | **hand-edited generated file** [PLAN-mandated] — `argument/INDEX.md` or `DAG.md` diverges from a fresh render |
+| `linker-17` | brittleness WARN at 27 nodes (just above the 26 cap) |
+| `linker-18` | brittleness boundary golden case: exactly 26 nodes, no warn |
+| `linker-19` | OR-route golden case: one route fully available, shard is ready (no error) |
+| `linker-20` | schema-drift golden case: a `routes:`-less shard behaves byte-identically (pre-`bdf6800` regression probe) |
+
+---
+
+## Gate 3 — refs (`proofs/<ws>/externals/*.json`)
+
+**Purpose.** Byte-verify every externally-claimed VERBATIM quote against its local `refs/`
+source, so an af prover cannot fabricate a quote attributed to a locus where those words do not
+appear (check-refs.py:6-9).
+
+**Failure mode guarded — THE 19/19 false-green.** Before the `aism-dbq` "UN-VACUUM" fix,
+an external whose claimed `refs/` payload was absent locally (e.g. gitignored, not yet fetched
+on a clean checkout) was classified as a **skip**, not a failure — so a clean checkout with zero
+payloads fetched locally could report "19 externals, 0 failed, 19 skipped" and exit 0: a
+fabrication gate that, per the project's own remediation plan, "verifies nothing ... and
+false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`, item
+6). **The current script already contains the fix** (check 2 below): an absent payload is now a
+hard FAIL, never a skip (check-refs.py:136-144, "a green run must never mean 'we couldn't
+look'"). This incident is PRD C7's explicitly-named canonical regression test; the port's
+mandatory fixture proves rk does not reintroduce the pre-fix behavior — not that AISM currently
+has the bug.
+
+**Inputs.**
+- Glob: `proofs/<ws>/externals/*.json` for every directory under `proofs/` (check-refs.py:168-172).
+- JSON schema per external: `{"name": string, "source": string}` — only these two keys are
+  read (check-refs.py:180-181); `name` falls back to the filename stem, `source` to `""` if
+  absent. No stricter schema is enforced (an external with neither key is legal input, simply
+  classified `skip_noquote`).
+- Config: `MIN_RUN = 40` (minimum contiguous matched-character run to count as "distinctive",
+  check-refs.py:40) — a hardcoded module constant in AISM, never varied across the project's
+  history; carried as a fixed default in the port (see Known limitations for the tuning
+  tradeoff it embeds).
+- Regexes: `refs/[A-Za-z0-9_./-]+(:[\d,-]+)?` (refs-locus, line 44); `proofs/[A-Za-z0-9_-]+`
+  (proofs-reference / IMPORT marker, line 46).
+
+**Checks.**
+1. **Classification** (check-refs.py:108-133):
+   - IMPORT external — `source` contains a `proofs/` reference and **no** refs/ locus ⇒
+     verdict `skip_import` (not an error: it imports a validated lemma, nothing to quote-check).
+   - No extractable quote — no refs/ locus, or no double-quoted text ⇒ verdict `skip_noquote`, WARN.
+   - refs-quote external — has both a refs/ locus and a quote ⇒ proceeds to checks 2–4.
+2. **Payload existence** — for a refs-quote external whose `refs/<path>` file is **not** present
+   on disk ⇒ verdict **FAIL**, never a skip: "refs file <fp> ABSENT — a claimed VERBATIM refs
+   quote cannot be byte-verified" (check-refs.py:136-144). This is the aism-dbq fix; the 19/19
+   incident is the regression this exact check guards.
+3. **Normalization** (applied to both quote and refs-file text): `\$` → `$`; drop `*`; collapse
+   whitespace runs to one space (check-refs.py:49-60). LaTeX command names and `$` are kept —
+   fabrications differ in words, not formatting.
+4. **Longest-run match** — the whole normalized quote must appear in the normalized refs text;
+   for quotes ≥ `MIN_RUN` (40) chars, if the whole quote doesn't match, the longest contiguous
+   run ≥ 40 chars is accepted instead ⇒ **PASS**; otherwise ⇒ **FAIL** "claimed VERBATIM quote
+   NOT found ... (word-level mismatch / fabrication)" (check-refs.py:77-98, 149-156). Quotes
+   shorter than 40 chars require an **exact** whole-quote match (check-refs.py:86-87) — see
+   Known limitations for the asymmetry this creates.
+5. Unparseable external JSON ⇒ **FAIL** "unparseable JSON: <error>" — a corrupt file is a hard
+   fail, never a skip (check-refs.py:174-179).
+
+**Known limitations / incident history.**
+- **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
+- `MIN_RUN=40` embeds a tuning asymmetry: a **short** quote (< 40 chars) is held to a *stricter*
+  standard (exact whole-quote match required) than a **long** quote (≥ 40 chars), which passes
+  if merely some 40+-char inner substring matches verbatim — so a long quote's outer wording
+  could in principle be paraphrased/fabricated around a genuine 40-char verbatim core and still
+  PASS. No evidence this was ever exploited in AISM's history; flagged here as a real algorithmic
+  soft spot, carried forward unchanged per L5 (not silently tightened — see report-back to
+  Fable).
+- `skip_import` trusts a bare regex match on `proofs/[A-Za-z0-9_-]+` in freeform `source` text
+  with **no verification** that the referenced workspace exists or is validated — an external
+  could claim to "import" a nonexistent or unvalidated workspace and this gate silently skips
+  it rather than failing. No historical incident on record; a real gap in the ported logic,
+  not adopted as a fix here (L5: parity first).
+
+**Deviations from AISM.**
+- Coverage line reports a four-way breakdown: `checked refs: <P>/<T> externals byte-verified,
+  <F> failed, <I> import-skipped, <Q> no-quote-skipped` — instead of AISM's `<total> externals,
+  <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which conflates two different
+  skip reasons into one number. Justification: L2, "a skip is always visible with a count" — the
+  historical incident was specifically about *which* skip reason dominated (19 unverifiable
+  quotes, not 19 legitimate imports); a single collapsed skip count cannot distinguish those
+  again. No verdict changes; both skip classes remain non-failing.
+- Standard cross-gate finding-format change: `SEVERITY proofs/<ws>/externals/<file>.json:1
+  message` (JSON has no meaningful line granularity; `refs_locus` stays in the message text).
+
+**Historical schema-drift tolerance.** N/A — the external JSON schema (`name`, `source`) has not
+changed across AISM's history at time of reading.
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `refs-01` | **19/19 false-green** [PLAN-mandated] — every external's payload absent; all must FAIL, coverage line must show `0` import/no-quote-skipped, not `N` skipped |
+| `refs-02` | fabricated quote, ≥40 chars (word-level mismatch) |
+| `refs-03` | fabricated quote, <40 chars (exact-match-required case) |
+| `refs-04` | IMPORT external golden case (skip_import, no error) |
+| `refs-05` | no-quote external (WARN, skip_noquote) |
+| `refs-06` | unparseable external JSON |
+
+---
+
+## Gate 4 — provenance (`report/` ↔ `argument/lemmas/*.md`)
+
+**Purpose.** Keep the human-readable report in sync with the machine-checked argument
+registry — "the Phase-2b 'CI for the paper'" (check-provenance.py:3) — so a renamed, validated,
+downgraded, or removed registry result cannot silently drift from what the paper claims.
+
+**Failure mode guarded.** **OVERCLAIM** — "the project's #1 guarded failure mode (a confident
+WRONG claim)" (check-provenance.py:24, 296-298): a registry `status: open` result framed as
+proved/settled in the paper's status table. **Real incidents:**
+(a) a genuine false-green in this exact gate — `check-provenance.py` had the status-table
+source filename **hard-coded** to `13_discussion.tex`; when the ledger was renumbered mid-project
+the check silently kept scanning nothing useful until caught by hand
+(`docs/worklog.md:270-272`, "caught a false-green: `check-provenance.py` hard-coded the ledger
+filename");
+(b) `lem-hx-financing-floor` (2026-07-10, `docs/LEARNINGS.md:40-62`) — a `status: proved` result
+carried a contract with an unstated quantifier bound (claimed for all reals `A`; the actual proof
+covered only `A>0`); this was **not** caught by check-provenance.py — it was caught by an af
+hostile verifier — because it is the concrete real-world instance of the gate's own documented
+#1 limitation (statement text is never compared; see below). Recorded here precisely because it
+proves the limitation is not hypothetical.
+
+**Inputs.**
+- Registry: `argument/lemmas/*.md`, re-parsed independently of the linker gate
+  (check-provenance.py:120-132); fields read: `id`, `status`, `af`, `provenance`, `kind`.
+  `provenance:` is a freeform string; the join key is a `report <label>` token embedded anywhere
+  in it, e.g. `provenance: bridge md:301-372; report lem:bridge-squarehole` (check-provenance.py:11-14,73).
+  Label grammar: `[a-z]+:[A-Za-z0-9-]+` (line 71). When a shard carries no `report <label>`
+  token, the linker falls back to the first-hyphen→colon transform of its id (`lem-P-properties`
+  → `lem:P-properties`) **iff** that label exists in the `.tex` (check-provenance.py:230-237).
+- Report: `report/sections/*.tex`, scanned for `\label{}` outside `%`-comments
+  (check-provenance.py:135-143).
+- `report/PROVENANCE.md`: two markdown sections identified by exact headers `## Ground-truth
+  source registry` and `## Per-claim ledger` (check-provenance.py:169,189). Source-registry
+  rows: `` | `KEY` | `path` | sha(6+hex) | ... `` (check-provenance.py:174-187, last-wins for
+  membership, every row hashed even on key reuse). Per-claim rows: `| label | source-cell | ... |`
+  (check-provenance.py:192-200).
+- `report/UNWIRED.md`: whitelist of registry ids as bare lines inside triple-backtick fences;
+  blank lines and `#`-comments ignored, prose outside fences ignored
+  (check-provenance.py:325-346).
+- `report/sections/13_discussion.tex` **specifically**, for the `tab:status` table — a hardcoded
+  filename in AISM (check-provenance.py:206), itself the class of bug behind incident (a) above.
+- Config: `SOURCE_ALLOW` (non-key source-cell marker tokens, line 76); `--build` flag (off by
+  default) gates an optional `latexmk` compile.
+
+**Checks** (ERROR unless marked WARN):
+1. **forward labels** — every registry `report <label>` token resolves to a `\label{}` ⇒ ERROR
+   (check-provenance.py:242-248,478).
+2. **claim labels** — every PROVENANCE.md per-claim row label resolves to a `\label{}` ⇒ ERROR
+   (check-provenance.py:262-267,479).
+3. **claim sources** — every per-claim row's Source-cell token (split on whitespace`/,/;/()/|`)
+   resolves to a source-registry key, an allow-listed marker, or an external-citation pattern
+   `[A-Z]+[0-9]{3,}` ⇒ ERROR per unresolved token (check-provenance.py:270-280,480).
+4. **hash freshness** — recompute `sha256[:16]` of every **tracked** (`git ls-files`)
+   source-registry row's path; mismatch ⇒ ERROR "file edited, hash stale"; malformed sha (not
+   16 lowercase hex) ⇒ ERROR; absolute (non-`refs/`-relative) path ⇒ WARN; untracked/absent
+   file ⇒ WARN, never ERROR (check-provenance.py:368-404,481-482).
+5. **status OVERCLAIM/underclaim** — a registry `status: open` result whose `tab:status` rows
+   never frame it as `open` ⇒ ERROR (check-provenance.py:293,317-319,483-484); a `proved`/
+   `validated` result framed *only* `open` ⇒ WARN (check-provenance.py:320-321).
+6. **anchor** — a registry result mapping to zero report labels and **not** in
+   `report/UNWIRED.md` ⇒ ERROR "dropped from the paper, or never wired in"; if whitelisted ⇒
+   WARN (check-provenance.py:349-365,485).
+7. **reverse labels** (WARN) — a `\label{}` with a result-kind prefix (`thm/lem/prop/cor/op/
+   obs/ex`) and no registry backref (check-provenance.py:251-259,487).
+8. **coverage** (WARN) — a report-facing registry result (≥1 report label) with no per-claim
+   PROVENANCE row (check-provenance.py:283-290,488).
+9. **parse integrity** (WARN) — an unparseable source-registry/per-claim data row, or a
+   duplicate source key — surfaced, never a silent drop (check-provenance.py:180-181,185-186,200,489).
+10. **build** (`--build` only) — `latexmk` must compile `main.tex` ⇒ ERROR on failure; the log
+    is scanned for "undefined references" ⇒ ERROR (promoted from a latexmk warning, since
+    `-halt-on-error` does not fail on these); undefined citations ⇒ WARN
+    (check-provenance.py:420-457,500-503). Skips cleanly with a WARN if `latexmk` is absent
+    (check-provenance.py:440-441) — same in the port, not a deviation.
+
+**Known limitations / incident history** (verbatim from the script's own header,
+check-provenance.py:38-46 — the gate's admitted false-green surface):
+- **STATEMENT TEXT is not checked.** The gate joins label↔label only; it never compares a
+  registry `contract` to the report theorem body, so a weakened hypothesis or a content change
+  (the script's own header names the class: "a `√η`↔`η` change") drifts green. Real instance:
+  `lem-hx-financing-floor`'s quantifier bug (see above) — caught by an af hostile verifier, not
+  this gate. PRD explicitly assigns statement-content drift to `rk audit` (M5.1), never `rk
+  check`; this gate's scope stays label-wiring only — not expanded here.
+- STATUS drift is seen only for results the `tab:status` table actually `\Cref`s; a flip on an
+  un-listed result is not caught (check-provenance.py:42).
+- af-validation state is not read here — that is the linker gate's job (check-provenance.py:44).
+- Hash freshness covers only in-repo (tracked) source files; gitignored/external payloads
+  (documented as ~1/3 of sources) only WARN (check-provenance.py:45-46,390-391).
+- The hardcoded `13_discussion.tex` filename (check-provenance.py:206) is a structural fragility
+  that already produced one real false-green (incident (a) above); AISM's own fix at the time
+  was manual (the file happened to stabilize under that name). See Deviations.
+
+**Deviations from AISM.**
+- The `tab:status` source file becomes a **config parameter** (default
+  `report/sections/13_discussion.tex`, overridable per-repo) instead of a hardcoded literal.
+  Justification: this exact hardcoding already caused one documented false-green in AISM's own
+  history; L5's "match first, improve second, never silently" is satisfied here in the narrowest
+  possible way — the default value is byte-identical to AISM's, only the mechanism for pointing
+  at it changes, and the change is recorded here openly rather than silently absorbed as
+  "parity."
+- Standard cross-gate finding-format change; the `--build` step remains opt-in, matching AISM's
+  own `--build` flag exactly (not a deviation, confirmed here for clarity).
+
+**Historical schema-drift tolerance.** N/A for this gate's own inputs (the registry fields it
+reads — `id`/`status`/`af`/`provenance`/`kind` — are the same set the linker gate reads, and
+none of them are `routes:`/`workspace:`; this gate never inspects those two fields).
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `provenance-01` | **OVERCLAIM** [PLAN-mandated] — registry `open` framed as proved |
+| `provenance-02` | underclaim (proved framed only `open`, WARN) |
+| `provenance-03` | **stale SHA256** [PLAN-mandated] — tracked source edited after hash recorded |
+| `provenance-04` | **unwired anchor** [PLAN-mandated] — zero report labels, not on UNWIRED.md |
+| `provenance-05` | whitelisted-unanchored (on UNWIRED.md, WARN) |
+| `provenance-06` | forward-label dangling (`report <label>` with no matching `\label{}`) |
+| `provenance-07` | claim-source token unresolved |
+| `provenance-08` | duplicate source key (parse integrity, WARN) |
+| `provenance-09` | reverse-label orphan (WARN) |
+| `provenance-10` | coverage: report-facing result with no per-claim row (WARN) |
+| `provenance-11` | hardcoded-filename regression probe — rename the status-table file; must still be scanned (proves the config-parameter deviation actually fixes incident (a)) |
+| `provenance-12` | absolute (non-`refs/`-relative) source path (WARN) |
+
+---
+
+## Gate 5 — runs (`runs/<YYYY-MM-DD>-<slug>/`)
+
+**Purpose.** Keep numerical evidence honestly quarantined below the rigour ladder: "Numerics
+are evidence, NEVER proof" (check-runs.py:6-10). Every run bundle must be reproducible (an
+exact re-run command), checkable (a declared invariant), and indexed (a reverse-lookup row).
+
+**Failure mode guarded.** An undocumented or unverifiable numerical claim entering the argument
+as if it were checkable. No single dated AISM incident is on record for this gate specifically
+(it is structural/preventive, and every `runs/` bundle inspected conforms); fixtures are
+class-driven from the script's own enumerated requirements, not incident-driven.
+
+**Inputs.**
+- Glob: `runs/*/` — only directories are bundles; a stray non-directory file at the top level
+  other than `README.md` ⇒ WARN (check-runs.py:46-50).
+- Bundle dirname: `^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$` (check-runs.py:30,54-55).
+- `runs/<bundle>/README.md`: plain markdown, **substring-search**, not a structured schema —
+  case-insensitively must contain each of `hypothesis`, `command`, `finding`, `next`
+  (check-runs.py:32,60-63), and at least one of `invariant`, `certificate`, `known value`,
+  `known-value`, `independent`, `cross-check`, `cross check`, `residual`, `tolerance`
+  (check-runs.py:34-35,64-66). A heading or an inline mention both satisfy these — see Known
+  limitations.
+- Top-level `INDEX.md`: the bundle dirname must appear as a substring of its text
+  (check-runs.py:67-68) — also substring-based, not a structured-table check.
+- `SKIP = {README.md}` at the `runs/` top level (the schema doc itself, check-runs.py:36).
+
+**Checks.**
+1. Bundle dirname matches the date-slug pattern ⇒ ERROR "bad bundle name" otherwise
+   (check-runs.py:54-55).
+2. `README.md` exists in the bundle ⇒ ERROR "missing README.md" otherwise, and the remaining
+   per-bundle checks are skipped for that bundle (check-runs.py:57-59, `continue`).
+3. `README.md` contains all four required-field substrings ⇒ ERROR listing which are missing
+   (check-runs.py:61-63).
+4. `README.md` contains at least one invariant-marker substring ⇒ ERROR "no checkable
+   invariant/certificate/known-value declared" otherwise (check-runs.py:64-66).
+5. Bundle dirname appears in top-level `INDEX.md` ⇒ ERROR "not referenced in INDEX.md"
+   otherwise (check-runs.py:67-68).
+6. A stray non-directory file at the `runs/` top level (not `README.md`) ⇒ WARN
+   (check-runs.py:49-50).
+
+**Day-1 vacuity.** An empty `runs/` directory is an explicitly valid green state
+(check-runs.py:16, "Day 1: runs/ is empty by design ⇒ the gate is green") — zero bundles is
+zero errors, not a coverage failure. The coverage line must state `0 run bundle(s)` explicitly
+per the Shared conventions' coverage-reporting rule, never omit the line.
+
+**Known limitations / incident history.**
+- Checks 3, 4, and 5 are all plain substring search, not structural (heading-based or
+  table-row-based). A README containing the literal word "hypothesis" anywhere — e.g. inside
+  "no hypothesis was tested" — satisfies check 3 regardless of context; a bundle dirname
+  mentioned in `INDEX.md` prose (not an actual index row) satisfies check 5. This is a real,
+  acknowledged looseness in AISM's own implementation (a deliberate design choice for a
+  hand-authored README, not a bug); no historical incident recorded (no evidence it was ever
+  exploited). Carried forward unchanged per L5 — not silently tightened.
+
+**Deviations from AISM.** None. This gate's logic is simple enough that L5 parity is a
+straightforward, faithful port; only the standard cross-gate finding-format change and the
+mandatory day-1 coverage line apply.
+
+**Historical schema-drift tolerance.** N/A — the `README.md` field/marker requirements have not
+changed across AISM's history at time of reading.
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `runs-01` | **orphaned run bundle** [PLAN-mandated] — not referenced in `INDEX.md` |
+| `runs-02` | **missing invariant** [PLAN-mandated] — no invariant-marker substring |
+| `runs-03` | bad bundle name (doesn't match the date-slug pattern) |
+| `runs-04` | missing `README.md` entirely |
+| `runs-05` | missing one required field (parametrize over hypothesis/command/finding/next) |
+| `runs-06` | stray top-level file (WARN) |
+| `runs-07` | empty `runs/` golden case (day-1 green baseline; asserts the coverage line still fires) |
+
+---
+
+## Gate 6 — report-shards (`report/main.tex` + `report/sections/*.tex`)
+
+**Purpose.** Enforce the sharded lab-book discipline for the LaTeX report: a single
+`report/main.tex` master forbidden from carrying body prose, every shard under
+`report/sections/` included exactly once, size-capped, carrying a machine-checkable header, and
+cross-indexed in both `report/README.md` and `report/SHARD_CATALOG.md`
+(check-report-shards.sh:2-6). Ported wholesale from `../arithmetic-quantum-mechanics`
+(check-report-shards.sh:2).
+
+**Failure mode guarded.** The report degenerating into either a monolithic, un-navigable
+`main.tex` (defeats the whole sharding discipline — the same ~200-line-target/280-line-hard-cap
+convention rk's own CLAUDE.md Rule 4 inherits), or an orphan shard file nobody indexes, silently
+invisible to readers. No single dated AISM incident is on record for this specific gate (it was
+ported already-hardened, not authored in this repo); fixtures are class-driven from the script's
+own enumerated checks.
+
+**Inputs.**
+- `MASTER = report/main.tex`; `SECTIONS_DIR = report/sections/`; `README = report/README.md`;
+  `CATALOG = report/SHARD_CATALOG.md` (check-report-shards.sh:12-15).
+- `MAX_LINES`: env override `REPORT_SHARD_MAX_LINES`, default **280** (check-report-shards.sh:16).
+- `PREFIX = "AISM"` (check-report-shards.sh:17) — a hardcoded shell variable in AISM (only ever
+  needed one value there); **per-repo parameter** in the port — see Deviations.
+- Per-shard TeX-comment header lines inside each `report/sections/NN_slug.tex`:
+
+| header | cardinality | format |
+|---|---|---|
+| `% SHARD-ID:` | exactly 1 | `^${PREFIX}-[0-9]{2}[A-Z]?-[A-Z0-9-]+$`, unique across all shards, numeric-prefix segment must match the shard filename's own leading 2 chars |
+| `% SHARD-TITLE:` | exactly 1 | freeform |
+| `% SHARD-KEYWORDS:` | exactly 1 | freeform |
+| `% SHARD-SUMMARY:` | exactly 2 or 3 | freeform, one per line |
+
+- `\include{sections/NN_slug}` lines in `main.tex`, comment-lines excluded
+  (check-report-shards.sh:28-30).
+
+**Checks.**
+1. `MASTER`, `SECTIONS_DIR`, `README`, `CATALOG` must all exist ⇒ fail per missing item
+   (check-report-shards.sh:22-25).
+2. **Empty-scaffold exemption** — zero `\include`s and zero `.tex` files under `sections/` ⇒
+   pass cleanly, exit 0 (check-report-shards.sh:31-36).
+3. Non-empty scaffold with zero includes but nonzero shard files ⇒ fail
+   (check-report-shards.sh:37-39).
+4. Every `\include` target must be under `sections/` ⇒ fail otherwise (check-report-shards.sh:45-48).
+5. No `\include` target may repeat ⇒ fail on duplicate (check-report-shards.sh:50).
+6. Every `\include` target file must exist ⇒ fail if missing (check-report-shards.sh:52).
+7. Shard line count ≤ `MAX_LINES` ⇒ fail otherwise, message states the ~200-line target and the
+   hard cap (check-report-shards.sh:54-57).
+8. `README.md` must contain the shard's file path as a backtick-quoted substring ⇒ fail
+   otherwise (check-report-shards.sh:58-59).
+9. `SHARD-ID` present (exactly one match) ⇒ fail if absent (check-report-shards.sh:67-68).
+10. `SHARD-ID` matches the required format ⇒ fail otherwise (check-report-shards.sh:69).
+11. `SHARD-ID` unique across all shards ⇒ fail on duplicate (check-report-shards.sh:71-72).
+12. `SHARD-ID`'s numeric-prefix segment matches the filename's own leading 2 chars ⇒ fail
+    otherwise (check-report-shards.sh:75-78).
+13. `SHARD-TITLE` present ⇒ fail if absent (check-report-shards.sh:81).
+14. `SHARD-KEYWORDS` present ⇒ fail if absent (check-report-shards.sh:82).
+15. `SHARD-SUMMARY` count is exactly 2 or 3 ⇒ fail otherwise (check-report-shards.sh:83-84).
+16. `README.md` must contain the shard's `SHARD-ID` as a backtick-quoted substring ⇒ fail
+    otherwise (check-report-shards.sh:87-88).
+17. `CATALOG` must contain, as a plain substring, each of `SHARD-ID`/file path/`SHARD-TITLE`/
+    `SHARD-KEYWORDS` ⇒ fail per missing item (check-report-shards.sh:90-95).
+18. `CATALOG` must contain each `SHARD-SUMMARY` line verbatim as a substring ⇒ fail otherwise
+    (check-report-shards.sh:96-99).
+19. **No orphan shard files** — every `.tex` file under `sections/` must be one of the
+    `\include`d files ⇒ fail otherwise (check-report-shards.sh:104-109).
+20. `MASTER` must contain no body-sectioning command (`\section`, `\subsection`,
+    `\subsubsection`, `\paragraph`) at line-start ⇒ fail otherwise, offending lines echoed
+    (check-report-shards.sh:111-115).
+
+**Known limitations / incident history.**
+- Checks 8, 16, 17, 18 are all `grep -F` (fixed-string) substring containment against
+  README/CATALOG — the same "loose substring, not structural" class as the runs gate; a
+  coincidental substring match could pass without the value genuinely being "listed" in a
+  meaningful sense. No historical incident on record; carried forward unchanged per L5.
+- No historical incident on record specifically for this script in AISM (it arrived already
+  hardened from a sister repo).
+- `report/README.md` and `report/SHARD_CATALOG.md` are **hand-maintained cross-indexes** in
+  AISM's model — there is no regeneration command for them (contrast `argument/INDEX.md`/
+  `DAG.md`, which genuinely are generated). The mandatory "hand-edited generated file" corpus
+  fixture (IMPLEMENTATION_PLAN M0.2) does **not** belong to this gate — it is assigned to the
+  linker gate (`linker-16`), where an actual generate/check-staleness pair exists. Recorded here
+  explicitly to prevent the wrong assignment.
+
+**Deviations from AISM.**
+- `PREFIX` ("AISM") and `MAX_LINES` (280, already env-overridable in AISM) both become explicit
+  per-repo config parameters. Justification: this is the definitional per-repo-parameterization
+  the whole rk extraction exists to perform (PRD C7/M0, "extraction ... into a maintained
+  package, no more repo-local copies") — not a behavior change, since AISM's own defaults
+  (`PREFIX=AISM`, `MAX_LINES=280`) remain byte-identical when rk is pointed at the AISM parity
+  fixture.
+- Standard cross-gate finding-format change: `SEVERITY report/sections/<file>.tex:<line>` for
+  shard-header/size findings (line resolved to the offending header comment's own line where
+  possible, else 1); `SEVERITY report/main.tex:<line>` for master-purity/include findings — vs.
+  AISM's plain `report shard check: <message>` lines to stderr with no path/line structure
+  (check-report-shards.sh:20).
+
+**Historical schema-drift tolerance.** N/A — the shard header schema (`SHARD-ID/TITLE/
+KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
+
+**Corpus fixtures required** (feeds M0.2):
+
+| id | violation |
+|---|---|
+| `shards-01` | oversized shard (>280 lines) |
+| `shards-02` | duplicate `SHARD-ID` |
+| `shards-03` | malformed `SHARD-ID` (wrong prefix/format) |
+| `shards-04` | wrong `SHARD-SUMMARY` count (0, 1, or 4 lines) |
+| `shards-05` | orphan shard file (exists, not `\include`d) |
+| `shards-06` | duplicate `\include` |
+| `shards-07` | `\include` pointing outside `sections/` |
+| `shards-08` | missing `SHARD_CATALOG.md` entry for an existing shard |
+| `shards-09` | missing `README.md` entry for an existing shard |
+| `shards-10` | body-sectioning command present in `main.tex` |
+| `shards-11` | empty-scaffold golden case (zero includes, zero shard files — must pass) |
+| `shards-12` | non-empty scaffold with zero `\include`s (shard files exist, master has none) |
+
+---
+
+## Gate 7 — freshness (reserved, M2.6)
+
+Not specified in this document. Per IMPLEMENTATION_PLAN M2.6: regenerate-and-diff replaces the
+manual mirror-check gates (INDEX/CATALOG/DAG files become build outputs of `rk render`); the
+AISM mirror files are deleted at that point. Do not implement or write fixtures against a
+seventh gate before M2 lands `rk render` (C6) — there is nothing yet to regenerate against.
