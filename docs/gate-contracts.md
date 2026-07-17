@@ -21,6 +21,28 @@ per CLAUDE.md L5 ({rk-stricter-intended | rk-bug | ambiguous → escalate}); see
 "Divergences from AISM (triage)" section. Cross-reference: PRD decision D9 ("Status of prior
 art", added 2026-07-17).
 
+**Tag taxonomy note** (stated once here, applies to every gate's Divergences section): two tags,
+`[message-only]` and `[crash-to-finding]`, appear alongside the L5 triad but are not members of
+it. Both are **verdict-neutral, trigger-preserving** subclasses — a `[message-only]` divergence
+changes only finding *text* (never a trigger condition or a verdict on any fixture); a
+`[crash-to-finding]` divergence changes an uncaught crash into a reported ERROR on the identical
+trigger condition, without altering what triggers it. Neither needs an {rk-stricter-intended |
+rk-bug | ambiguous → escalate} classification, since that triad exists to triage divergences
+that *could* flip a verdict; these two categories are defined precisely so they cannot. A
+mechanical audit of this document should not flag their absence from the triad as an omission.
+
+**Tag asymmetry, resolved once.** Two divergences look superficially identical — a hardcoded
+AISM value becomes an explicit rk config parameter — yet carry different tags: Gate 4's
+`provenance-11` (the `tab:status` source filename) is `[rk-stricter-intended]`, while Gate 6's
+`PREFIX`/`MAX_LINES` parameterization is `[message-only]`. The distinguishing question is
+whether the change alters *what gets scanned or checked*: `provenance-11`'s hardcoded filename
+already caused a real false-green (incident (a) in Gate 4) by silently pointing at a stale,
+renamed file — parameterizing it closes that scanning gap, so it is a genuine (zero-cost)
+strictness tightening. `PREFIX`/`MAX_LINES` change only *how* a value already correct for AISM's
+own repo is configured; AISM's own defaults remain byte-identical, so no tree's scan set or
+verdict ever changes — text/config-surface only, hence `[message-only]`. See each entry for the
+specific reasoning.
+
 Every check below cites its AISM source as `script:line-range` for provenance. Every gate's
 docstring/header comment is itself read as part of the spec's prior art — AISM's authors
 already named several of these gates' failure modes and known limitations in prose; that prose
@@ -137,7 +159,7 @@ incident.
 | `status` | enum | yes | `draft` \| `locked` |
 | `source` | string | **REQUIRED for `kind=cited`** (ERROR when absent — F5 reversed, M0.7) | a `refs/manifest/SOURCES.md` source-id, or `internal` |
 | `locus` | freeform string | documented, **not machine-checked** | where in the source (informational only) |
-| `sha256` | 16-hex string or `-` | **REQUIRED for `kind=cited`** (ERROR when absent — F5 reversed, M0.7) | prefix must exist in the manifest |
+| `sha256` | 16-hex string or `-` | **REQUIRED for `kind=cited`** (ERROR when absent or `-` — F5 reversed, M0.7) | prefix must exist in the manifest |
 | `consensus` | freeform string | for `kind∈{consensus,original}` | who agreed / where transcribed |
 
 Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `SKIP =
@@ -159,10 +181,10 @@ Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `S
    is present, it must be a known refs/ source-id, checked only when the manifest yielded at
    least one source-id ⇒ ERROR `cited source '<source>' not a refs/ source-id` otherwise
    (check-defs.py:112-115, value-validation logic ported unchanged).
-9. `kind=cited`: `sha256` is **REQUIRED** (absent, or bare `-`, both count as missing) ⇒ ERROR
-   `cited shard missing required 'sha256:'` otherwise (**F5 reversed, rk amendment, M0.7** —
-   AISM's check-defs.py:116-118 validates `sha256` only `if sha and sha != "-"`, never requiring
-   it; see Divergences below). When present and not `-`, `sha256` must resolve as a known prefix
+9. `kind=cited`: `sha256` is **REQUIRED** ⇒ ERROR `cited shard missing required 'sha256:'` if
+   absent/empty (absent, or bare `-`, both count as missing) (**F5 reversed, rk amendment,
+   M0.7** — AISM's check-defs.py:116-118 validates `sha256` only `if sha and sha != "-"`, never
+   requiring it; see Divergences below). When present and not `-`, `sha256` must resolve as a known prefix
    in the manifest, checked only when the manifest is non-empty ⇒ ERROR `sha256 prefix '<sha>'
    not in refs manifest` otherwise (check-defs.py:116-118, value-validation logic ported
    unchanged).
@@ -400,19 +422,34 @@ on historical commits — load-bearing for the **M0.3 robustness run** (F4, repu
 2026-07-17 Fable review addendum: this paragraph is no longer a parity bar, it is the
 definition of the robustness run itself).
 
-**The M0.3 robustness run is defined as follows.** rk's HEAD-contract gates (this document —
-not AISM's contemporaneous script versions at each historical commit) run against each of 3
-historical AISM trees (older schemas — trees predating `routes:`/`workspace:` being added or
-consistently populated, see below). Acceptance is **not verdict-parity** against AISM's own
-historical scripts or against `check-all.sh`'s combined exit code — it is: (1) no crashes on
-any of the 3 trees, (2) no finding-floods (a volume of findings that swamps genuine signal —
-the aism-s64 failure mode recurring in a new form), and (3) every divergence between rk's gates
-and AISM's historical behavior triaged per CLAUDE.md L5 ({rk-stricter-intended | rk-bug |
-ambiguous → escalate}). Findings are still compared **per-gate**, not via `check-all.sh`'s
-single exit code, since `check-all.sh` short-circuits at the first failing script (`fail()`,
-check-all.sh:7) while `rk check` always runs all six (see Shared conventions' Composition
-deviation) — a per-gate comparison is the only one well-defined under that control-flow
-difference, and the only one from which per-divergence triage is even possible.
+**The M0.3 robustness run is defined as follows.** The *candidate* under test is rk's
+HEAD-contract gates (this document — not AISM's contemporaneous script versions at each
+historical commit), run against each of 3 historical AISM trees (older schemas — trees
+predating `routes:`/`workspace:` being added or consistently populated, see below). The
+*comparison baseline* (re-pinned here; the earlier F4 rewrite dropped this sentence, leaving
+"rk's HEAD-contract gates" to silently stand in for both candidate and baseline, a category
+mix-up) is **AISM's own HEAD scripts** — `scripts/check-*.py` at AISM's current commit, never
+the contemporaneous script version that existed at each historical commit — replayed against
+the same 3 trees via the module-import harness (Shared conventions, "Fixture/harness
+invocation"), never `cd`+run. Acceptance is **not verdict-parity** against that baseline or
+against `check-all.sh`'s combined exit code — it is: (1) no crashes on any of the 3 trees, (2)
+no finding-floods (a volume of findings that swamps genuine signal — the aism-s64 failure mode
+recurring in a new form; see the operational definition below), and (3) every divergence
+between rk's gates and the AISM-HEAD-on-historical-tree baseline triaged per CLAUDE.md L5
+({rk-stricter-intended | rk-bug | ambiguous → escalate}). Findings are still compared
+**per-gate**, not via `check-all.sh`'s single exit code, since `check-all.sh` short-circuits at
+the first failing script (`fail()`, check-all.sh:7) while `rk check` always runs all six (see
+Shared conventions' Composition deviation) — a per-gate comparison is the only one well-defined
+under that control-flow difference, and the only one from which per-divergence triage is even
+possible.
+
+**Finding-flood, operationally defined** (N tunable; TJO): a single check emitting **more than
+25 findings** on one tree, or a check **erroring on a majority of its checked units**, unless
+every one of those findings/errors is attributable to a single triaged root cause (e.g. one
+schema-drift field absent across every shard in an older tree, triaged once, not per-shard).
+Either condition, un-attributed, fails robustness-run acceptance criterion (2) above — the same
+"signal buried in noise" shape as aism-s64 (a 12-node threshold crying REFACTOR on ~20 healthy
+trees), recurring at the gate-output level instead of the brittleness-check level.
 - **`routes:`** — genuinely new, added 2026-07-10 (`bdf6800`, "P0 OR-route linker support
   (aism-3ne)"). A shard with no `routes:` line parses to `routes: []` and every check reduces
   byte-identically to the pre-`routes` behavior (argument.py:77-78, "backward-compatible: a
@@ -536,7 +573,12 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    <n>/<m> chars) — word-level mismatch / fabrication, or a genuine quote wrapped in paraphrase";
    otherwise (no ≥40-char run matches at all, or the quote is < 40 chars) the verdict is **FAIL**
    "claimed VERBATIM quote NOT found (word-level mismatch / fabrication)" with no run length in
-   the message. See Divergences for why this tightening carries zero cost, not a silent one.
+   the message. See Divergences for why this tightening carries zero cost, not a silent one. An
+   **empty normalized quote never matches** ⇒ **FAIL**, unconditionally, before any substring or
+   run comparison runs (mirrors AISM's own guard, check-refs.py:84-85, `if not qn: return False,
+   None` — without it, an empty string vacuously `.includes()`-matches any refs text). This is
+   the gate-level statement of the same rule `wholeQuoteMatch` enforces in code (`src/refs/
+   quote.ts`); the gate must call that function rather than re-deriving the guard.
 5. Unparseable external JSON ⇒ **FAIL** "unparseable JSON: <error>" — a corrupt file is a hard
    fail, never a skip (check-refs.py:174-179).
 
@@ -561,6 +603,18 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   parser) and has no access to the argument/linker registry's workspace-existence/status data,
   which lives in Gate 2. Not deferred for parity cost; a bd issue tracks a future cross-gate
   join if this gap is ever exploited.
+- **Whitespace-class divergence, JS vs Python `\s`.** `normalizeQuoteText`'s `/\s+/g` (rk, V8's
+  regex engine) and `normalize`'s `re.sub(r'\s+', ' ', s)` (AISM, CPython's `re`, Unicode-mode by
+  default in Python 3) do not classify every Unicode whitespace-adjacent codepoint identically —
+  e.g. U+FEFF (BOM / zero-width no-break space) sits at the boundary of each engine's whitespace
+  table and the two engines need not agree on it. One line of Known-limitations, not a code fix:
+  a quote or refs payload carrying one of these rare codepoints could normalize slightly
+  differently between rk and AISM's script. Neither implementation performs Unicode NFC/NFD
+  normalization on quote or refs text either, so composed vs. decomposed accented characters
+  (e.g. `é` as U+00E9 vs. `e`+U+0301) can produce a false-RED (a genuine verbatim quote reported
+  as not matching) — but identically on both sides, since neither does the normalization; this is
+  a shared limitation, not an rk-introduced divergence, and is accepted as-is (no incident on
+  record from either side).
 
 **Divergences from AISM (triage).**
 - **[rk-stricter-intended] Whole-quote match required (no partial-run PASS).** AISM's
@@ -741,7 +795,9 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   AISM's own history (incident (a), above — a rename silently blinded the check). The default
   value is byte-identical to AISM's; only the mechanism for pointing at it changes, closing a
   structural false-green surface rather than tightening a check's logic. Fixture:
-  `provenance-11`.
+  `provenance-11`. (Contrast Gate 6's `PREFIX`/`MAX_LINES` parameterization, tagged
+  `[message-only]` despite the surface-level similarity — see the Authority section's "Tag
+  asymmetry, resolved once".)
 - **[message-only] Coverage line.** `checked provenance: <N> registry results, <R> claim rows,
   <S> tab:status rows (<E> errors, <W> warnings)`, with `S` rendered even when `0` (never omitted
   or folded into a generic "manifest absent"-style WARN). CLAUDE.md L2's mandatory coverage
@@ -955,7 +1011,10 @@ in AISM.
   per-repo-parameterization the whole rk extraction exists to perform (PRD C7/M0, "extraction
   ... into a maintained package, no more repo-local copies") — not a behavior change: AISM's own
   defaults (`PREFIX=AISM`, `MAX_LINES=280`) remain byte-identical when rk is pointed at AISM's
-  own repo.
+  own repo. (Contrast Gate 4's `provenance-11`, tagged `[rk-stricter-intended]` for the same
+  hardcoded-literal-to-config-parameter shape — see the Authority section's "Tag asymmetry,
+  resolved once": that one changes what gets scanned, closing a real false-green; this one does
+  not.)
 - **[message-only]** Standard cross-gate finding-format change: `SEVERITY
   report/sections/<file>.tex:<line>` for shard-header/size findings (line resolved to the
   offending header comment's own line where possible, else 1); `SEVERITY
