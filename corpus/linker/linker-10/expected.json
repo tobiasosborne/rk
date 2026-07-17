@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-validated-unmet.md",
+      "message_pattern": "af=validated but dep(s) not validated"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "argument.py:197-236 (status propagation, the rigour-ladder rule); script-verified. An incidental second ERROR (orphan check, no workspace field) also fires — harmless, not this fixture's target."
+}

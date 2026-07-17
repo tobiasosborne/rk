@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-bad-af.md",
+      "message_pattern": "af 'fabricated-af' not in"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "argument.py:145-146; script-verified. An incidental second ERROR (orphan check, 'workspace dir missing: None') also fires since af != 'none' with no workspace field — harmless per the subset-match convention, not this fixture's target."
+}

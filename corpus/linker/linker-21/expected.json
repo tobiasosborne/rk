@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-no-id.md",
+      "message_pattern": "missing required field 'id'"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: argument.py CRASHES — uncaught `KeyError: 'id'` in check_acyclic (argument.py:154, `{l[\"id\"] for l in lemmas}`) — script-verified via the harness (traceback reproduced, not simulated). parse_registry never defaults the id key (argument.py:139-140's `if fm.get(\"id\")` is a no-op when id is absent), so the shard is appended to lemmas with no 'id' key at all, and every downstream id-keyed pure function crashes the whole process instead of reporting a finding.",
+  "notes": "[F12, 2026-07-17 Fable review] rk's target: ERROR finding, gate continues checking everything else — not a crash. Triage: rk-stricter-intended (trigger-preserving fix per gate-contracts.md Deviations: same trigger — a shard lacking id: — outcome changes from 'process dies' to 'one ERROR, rest of gate still runs'). All real AISM shards carry id: (spot-checked), so this is a real crash CLASS, not a live parity issue on production data."
+}

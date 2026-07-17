@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "Golden schema-drift case (pre-bdf6800 regression probe): a routes:-less, deps-only af=validated shard behaves byte-identically to the original rule (argument.py:77-78, 'a shard with no routes behaves byte-identically to today'). Script-verified; zero findings."
+}

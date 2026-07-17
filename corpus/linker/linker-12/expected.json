@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-contract-drift.md",
+      "message_pattern": "contract drift: lem-contract-drift"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] contract mismatch registry<->af-root; argument.py:239-248. Script-verified against a REAL af workspace (af init with a deliberately different root statement), not a stub — af_introspect() genuinely ran."
+}

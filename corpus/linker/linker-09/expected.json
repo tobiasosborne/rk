@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-unknown-def.md",
+      "message_pattern": "unknown def 'def-does-not-exist'"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "argument.py:191-193; script-verified."
+}

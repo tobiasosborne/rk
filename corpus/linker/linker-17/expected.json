@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-brittle-27.md",
+      "message_pattern": "REFACTOR: proofs/lem-brittle-27 has 27 nodes (>26)"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "aism-s64 regression probe for the realigned soft cap; argument.py:251-259; script-verified against a REAL af workspace with exactly 27 nodes (1 root + 26 af refine children, confirmed via af status). WARN never blocks the gate."
+}

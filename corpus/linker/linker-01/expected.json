@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-broken.md",
+      "message_pattern": "missing/unterminated frontmatter"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "argument.py:106-112,136-137; script-verified."
+}

@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "Golden OR-route case (aism-3ne): af=validated with routes [lem-route-a]|[lem-route-b]; route A fully available (status=cited) so the shard is NOT an error despite af=validated. Script-verified against a real af workspace whose root statement matches the registry contract exactly (else contract-drift would false-positive); zero findings."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/INDEX.md",
+      "message_pattern": "is STALE"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] hand-edited generated file; argument.py:632-642,698-701; script-verified (INDEX.md hand-mutated after a correct render so it no longer byte-matches). This is the M0.2-mandatory 'hand-edited generated file' fixture; assigned to the linker gate per gate-contracts.md (defs/shards have no working staleness check for their own mirrors)."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-stem-mismatch.md",
+      "message_pattern": "!= filename stem"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "argument.py:139-140; script-verified."
+}

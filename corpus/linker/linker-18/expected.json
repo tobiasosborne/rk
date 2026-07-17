@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "Golden brittleness-boundary case (Fable do-not-lose list, matches AISM's own test_argument.py:107-108: exactly 26 does not warn). Script-verified against a REAL af workspace with exactly 26 nodes; zero findings."
+}

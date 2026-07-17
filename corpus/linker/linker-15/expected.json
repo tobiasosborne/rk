@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-no-workspace.md",
+      "message_pattern": "workspace field is absent"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: AISM's message leaks a Python None literal — 'af=seeded but workspace dir missing: None' (argument.py:269, af_introspect resolves an absent workspace field to ROOT/'' and check_orphans's `ws in ws_dirs` test on None is always false) — script-verified, same trigger and same ERROR verdict, message text only",
+  "notes": "Real incident: 2026-07-10 remediation found 62/151 shards missing workspace: after seed-af-workspaces.py's flip_af_seeded omitted it. Triage: rk-stricter-intended (message-only fix, gate-contracts.md Deviations — the leaked-None literal is corrected to a real sentence; verdict/trigger unchanged)."
+}

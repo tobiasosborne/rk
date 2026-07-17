@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-cycle-*.md",
+      "message_pattern": "cycle detected: lem-cycle-a -> lem-cycle-b -> lem-cycle-a"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] dependency cycle; argument.py:153-176; script-verified."
+}

@@ -39,27 +39,27 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
 | `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
 | `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction (CLAUDE.md L5 amendment, commit 542197c; F5 reversed in the Fable-review addendum): AISM passes this silently (check-defs.py:112-118); contract update to Gate 1 checks 8-9 is queued as M0.7, not yet landed — this fixture anticipates it, not yet M0.3-enforceable. Triage: rk-stricter-intended. | landed |
-| `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | planned |
-| `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | planned |
-| `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | planned |
-| `linker-04` | argument/linker | bad `status` enum value | class-driven (no incident on record) | planned |
-| `linker-05` | argument/linker | bad `af` enum value | class-driven (no incident on record) | planned |
-| `linker-06` [PLAN] | argument/linker | dependency cycle | class-driven (no incident on record) | planned |
-| `linker-07` | argument/linker | unknown `dep` id | class-driven (no incident on record) | planned |
-| `linker-08` | argument/linker | unknown `routes` member id | class-driven (no incident on record) | planned |
-| `linker-09` | argument/linker | unknown `defs` id | class-driven (no incident on record) | planned |
-| `linker-10` | argument/linker | `af: validated` with unmet unconditional dep | class-driven (no incident on record) | planned |
-| `linker-11` | argument/linker | `af: validated`, routes present, no route fully available | class-driven (no incident on record) | planned |
-| `linker-12` [PLAN] | argument/linker | contract mismatch registry↔af-root | class-driven (no incident on record) | planned |
-| `linker-13` | argument/linker | orphan: `af != none`, declared workspace dir missing | class-driven (no incident on record) | planned |
-| `linker-14` | argument/linker | orphan: `proofs/<ws>` dir with no registry entry | class-driven (no incident on record) | planned |
-| `linker-15` | argument/linker | `workspace:` field absent on `af != none` shard | 2026-07-10 remediation plan: `seed-af-workspaces.py`'s `flip_af_seeded` omitted `workspace:` on 62/151 shards (`docs/plans/2026-07-10-project-remediation-plan.md` Phase 0 item 2) | planned |
-| `linker-16` [PLAN] | argument/linker | hand-edited generated file (`argument/INDEX.md`/`DAG.md` stale) | class-driven (no incident on record); this is the M0.2-mandatory "hand-edited generated file" fixture, assigned here not to `defs`/`shards` — see gate-contracts.md | planned |
-| `linker-17` | argument/linker | brittleness WARN at 27 nodes | aism-s64: brittleness-cap drift (`af_constants.py:5-10`) — regression probe for the realigned cap | planned |
-| `linker-18` | argument/linker | brittleness boundary golden case: 26 nodes, no warn | aism-s64 (boundary confirmed by AISM's own `test_argument.py:107-108`) | planned |
-| `linker-19` | argument/linker | OR-route golden case: one route fully available | aism-3ne (OR-route feature, `bdf6800`) | planned |
-| `linker-20` | argument/linker | schema-drift golden case: `routes:`-less shard, byte-identical behavior | aism-3ne backward-compat guarantee (`argument.py:77-78`) | planned |
-| `linker-21` | argument/linker | missing `id:` field on a lemma shard | real crash class (not incident-observed): `argument.py`'s `parse_registry` never defaults `id`, so `l["id"]` downstream raises an uncaught `KeyError`; found by the 2026-07-17 Fable review (F12), not a live AISM event — all AISM shards carry `id` | planned |
+| `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | landed |
+| `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | landed |
+| `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | landed |
+| `linker-04` | argument/linker | bad `status` enum value | class-driven (no incident on record) | landed |
+| `linker-05` | argument/linker | bad `af` enum value | class-driven (no incident on record) | landed |
+| `linker-06` [PLAN] | argument/linker | dependency cycle | class-driven (no incident on record) | landed |
+| `linker-07` | argument/linker | unknown `dep` id | class-driven (no incident on record) | landed |
+| `linker-08` | argument/linker | unknown `routes` member id | class-driven (no incident on record) | landed |
+| `linker-09` | argument/linker | unknown `defs` id | class-driven (no incident on record) | landed |
+| `linker-10` | argument/linker | `af: validated` with unmet unconditional dep | class-driven (no incident on record) | landed |
+| `linker-11` | argument/linker | `af: validated`, routes present, no route fully available | class-driven (no incident on record) | landed |
+| `linker-12` [PLAN] | argument/linker | contract mismatch registry↔af-root | class-driven (no incident on record) | landed |
+| `linker-13` | argument/linker | orphan: `af != none`, declared workspace dir missing | class-driven (no incident on record) | landed |
+| `linker-14` | argument/linker | orphan: `proofs/<ws>` dir with no registry entry | class-driven (no incident on record) | landed |
+| `linker-15` | argument/linker | `workspace:` field absent on `af != none` shard | 2026-07-10 remediation plan: `seed-af-workspaces.py`'s `flip_af_seeded` omitted `workspace:` on 62/151 shards (`docs/plans/2026-07-10-project-remediation-plan.md` Phase 0 item 2) | landed |
+| `linker-16` [PLAN] | argument/linker | hand-edited generated file (`argument/INDEX.md`/`DAG.md` stale) | class-driven (no incident on record); this is the M0.2-mandatory "hand-edited generated file" fixture, assigned here not to `defs`/`shards` — see gate-contracts.md | landed |
+| `linker-17` | argument/linker | brittleness WARN at 27 nodes | aism-s64: brittleness-cap drift (`af_constants.py:5-10`) — regression probe for the realigned cap | landed |
+| `linker-18` | argument/linker | brittleness boundary golden case: 26 nodes, no warn | aism-s64 (boundary confirmed by AISM's own `test_argument.py:107-108`) | landed |
+| `linker-19` | argument/linker | OR-route golden case: one route fully available | aism-3ne (OR-route feature, `bdf6800`) | landed |
+| `linker-20` | argument/linker | schema-drift golden case: `routes:`-less shard, byte-identical behavior | aism-3ne backward-compat guarantee (`argument.py:77-78`) | landed |
+| `linker-21` | argument/linker | missing `id:` field on a lemma shard | real crash class (not incident-observed): `argument.py`'s `parse_registry` never defaults `id`, so `l["id"]` downstream raises an uncaught `KeyError`; found by the 2026-07-17 Fable review (F12), not a live AISM event — all AISM shards carry `id` | landed |
 | `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | planned |
 | `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | planned |
 | `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | planned |
@@ -272,3 +272,4 @@ script-verified / rk-only / untested breakdown.
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, TJO strict-provenance) | 0 |
+| linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
