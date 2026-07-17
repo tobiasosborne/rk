@@ -38,7 +38,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `defs-12` | defs | consensus/original shard missing `consensus:` | class-driven (no incident on record) | landed |
 | `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
 | `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
-| `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction: AISM passes this silently (check-defs.py:112-118); contract update to Gate 1 checks 8-9/F5 pending — this fixture anticipates it, not yet M0.3-enforceable | landed |
+| `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction (CLAUDE.md L5 amendment, commit 542197c; F5 reversed in the Fable-review addendum): AISM passes this silently (check-defs.py:112-118); contract update to Gate 1 checks 8-9 is queued as M0.7, not yet landed — this fixture anticipates it, not yet M0.3-enforceable. Triage: rk-stricter-intended. | landed |
 | `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | planned |
 | `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | planned |
 | `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | planned |
@@ -202,6 +202,13 @@ Field semantics:
     ERROR finding; AISM passes silently where the contract wants strict-ERROR). The one-line
     explanation states what AISM actually does, cited to `script:line`; this is migration
     bookkeeping for M0.5's divergence triage, not a reason to change `verdict`/`findings` above.
+    Every `"differs"` fixture's `notes` field also carries a **pre-triage tag** per CLAUDE.md
+    L5 (amended 2026-07-17): `rk-stricter-intended` (the contract deliberately tightens a known
+    AISM gap), `rk-bug` (an unintentional divergence — should not exist in a landed fixture; if
+    found, fix the fixture or escalate), or `ambiguous → escalate` (genuinely unclear, flagged
+    for the M0.3-boundary Fable ratification named in the review addendum). This is separate
+    bookkeeping from the `verdict`/`findings` fields, which always state the contract's target
+    regardless of triage tag.
   - `"unrunnable"` — the fixture could not be run against the real AISM script at all (a hard
     dependency on repo-scale structure the harness could not construct standalone, e.g. a real
     `latexmk` build or a live `bd` tracker); recorded honestly, never silently folded into
