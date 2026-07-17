@@ -2,3 +2,8 @@ dist/
 node_modules/
 .claude/
 build/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
