@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { parseLockFile } from "./lock";
 import { decideStatus } from "./lock";
 import { sha256File, sha256Bytes } from "./hash";
+import { assertSafeRelPath } from "./path-safety";
 import type { StatusRow } from "../types";
 
 export interface ComputeStatusOptions {
@@ -66,6 +67,9 @@ export async function computeStatus(
 
   const rows: StatusRow[] = [];
   for (const entry of lock.files) {
+    // rk-correct divergence from fetch-refs.py (see src/refs/path-safety.ts header): reject a
+    // traversal path in a lock entry loudly, rather than joining it blindly.
+    assertSafeRelPath(entry.path);
     const dst = join(repoRoot, "refs", entry.path);
     let presentOnDisk = false;
     if (await Bun.file(dst).exists()) {

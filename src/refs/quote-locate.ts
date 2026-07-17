@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import { locateQuote } from "./quote";
 import { parseLockFile } from "./lock";
+import { assertSafeRelPath } from "./path-safety";
 import type { QuoteResult, SourceId } from "../types";
 
 /** Locates `pattern` in the local payload(s) recorded for `sourceId` in
@@ -29,6 +30,8 @@ export async function locateQuoteInRepo(
   }
   let anyPresent = false;
   for (const entry of entries) {
+    // rk-correct divergence from fetch-refs.py (see src/refs/path-safety.ts header).
+    assertSafeRelPath(entry.path);
     const relPath = `refs/${entry.path}`;
     const absPath = join(repoRoot, relPath);
     const file = Bun.file(absPath);

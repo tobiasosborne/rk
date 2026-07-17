@@ -81,6 +81,18 @@ describe("computeStatus — the fetch-refs.py --status dry-run port", () => {
     rmSync(cacheDir2, { recursive: true, force: true });
   });
 
+  test("rejects a path-traversal entry in the lock file rather than joining it blindly (rk-correct divergence from fetch-refs.py, which has no such guard)", async () => {
+    const root = makeRepo();
+    writeFileSync(
+      join(root, "refs", "manifest", "sources.lock.json"),
+      JSON.stringify({
+        files: [{ path: "../../etc/passwd", sha256: "0".repeat(64), source_id: "evil", fetch: null }],
+      }),
+    );
+    await expect(computeStatus(root)).rejects.toThrow(/unsafe|traversal/i);
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("never writes any file (a true dry run)", async () => {
     const root = makeRepo();
     writeLock(root);

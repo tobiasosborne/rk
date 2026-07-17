@@ -50,6 +50,18 @@ describe("locateQuoteInRepo", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects a path-traversal entry rather than joining it blindly (rk-correct divergence from fetch-refs.py)", async () => {
+    const root = makeRepo();
+    writeFileSync(
+      join(root, "refs", "manifest", "sources.lock.json"),
+      JSON.stringify({
+        files: [{ path: "../../etc/passwd", sha256: "0".repeat(64), source_id: "evil", fetch: null }],
+      }),
+    );
+    await expect(locateQuoteInRepo(root, sourceId("evil"), "x")).rejects.toThrow(/unsafe|traversal/i);
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("throws a descriptive error when the source-id is known but the payload is absent locally", async () => {
     const root = makeRepo();
     mkdirSync(join(root, "refs", "manifest"), { recursive: true });

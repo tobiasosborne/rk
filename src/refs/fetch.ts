@@ -86,7 +86,7 @@ export async function fetchSpec(
     // snapshot-before-extending order (see module tests for the deviation-free property).
     const candidates: Uint8Array[] = [raw];
     try {
-      candidates.push(Bun.gunzipSync(raw));
+      candidates.push(Bun.gunzipSync(new Uint8Array(raw)));
     } catch {
       /* not gzip-compressed; fine */
     }

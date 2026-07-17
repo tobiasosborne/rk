@@ -42,7 +42,7 @@ describe("parseManifestTable", () => {
 
   test("strips backtick code-span markers from cell contents", () => {
     const rows = parseManifestTable(AISM_SOURCES_MD);
-    expect(rows[1]!.sourceId).toBe("hognas-mukherjea");
+    expect(rows[1]!.sourceId).toBe(sourceId("hognas-mukherjea"));
     expect(rows[1]!.sha16).toBe("d74844072a1b96a2");
   });
 

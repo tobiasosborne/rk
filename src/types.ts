@@ -1,7 +1,7 @@
 // ROLE: shared contracts across rk's modules (gates, graph, drive, refs). Domain-general —
 // only add a type here when >1 module needs it, or the plan names it explicitly. This file
 // grows with each milestone; M0.6 (refs) seeds it with the refs-acquisition surface.
-// PURE — no fs/network/clock (L3). Type-only + trivial constructors; never import an edge.
+// PURITY: pure — no fs/network/clock (L3). Type-only + trivial constructors; never import an edge.
 
 // ---------------------------------------------------------------------------------------
 // Identity
