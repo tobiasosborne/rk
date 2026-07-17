@@ -123,6 +123,7 @@ one. The critical-path query (M2.5) is load-bearing for batch exclusion (M3.4).
   it here.
 - Anything in the sister repos would need modifying beyond the named V/F items.
 
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 

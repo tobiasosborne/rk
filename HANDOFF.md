@@ -12,7 +12,11 @@ No source code yet. Design authority: `../research-workflows/{PRD,IMPLEMENTATION
 ## Current milestone: M0 — gate extraction
 
 - M0.1 gate contracts doc: DISPATCHED (Sonnet implementer).
-- F0 `fr version` in ../knowledge-frontier: DISPATCHED (Sonnet implementer).
+- F0 `fr version`: DONE (knowledge-frontier commit 9db2af7, 276/276 tests, not pushed).
+  NOTE: the installed ~/.local/bin/fr binary predates F0 (and all of main since Jun 22,
+  including P0 field-feedback fixes) — `fr version` will fail until a rebuild is
+  installed. Refreshing the binary touches the live AISM campaign's hooks: TJO decision.
+  rk doctor's mismatch detection will correctly flag this state (that is the feature).
 - V0 firstproof corpus: no local checkout exists (verified 2026-07-17) — recover from
   another machine/remote if possible, else strike from V1 acceptance per plan.
 - M0.2 red corpus: blocked on M0.1.
