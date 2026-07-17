@@ -7,13 +7,25 @@
 
 # Gate contracts
 
-Ground truth for this document is the AISM scripts themselves (L5 — parity before
-improvement): `../almost-idempotent-stochastic-maps/scripts/{check-defs.py, argument.py,
-check-refs.py, check-provenance.py, check-runs.py, check-report-shards.sh}`, plus the shared
-constant `scripts/af_constants.py` and the composition script `scripts/check-all.sh`. Every
-check below cites its source as `script:line-range`. Every gate's docstring/header comment is
-itself read as part of the spec — AISM's authors already named several of these gates' failure
-modes and known limitations in prose; that prose is preserved and cited, not paraphrased away.
+## Authority
+
+This contract is normative for `rk check`'s six M0 gates. AISM's scripts
+(`../almost-idempotent-stochastic-maps/scripts/{check-defs.py, argument.py, check-refs.py,
+check-provenance.py, check-runs.py, check-report-shards.sh}`, plus the shared constant
+`scripts/af_constants.py` and the composition script `scripts/check-all.sh`) are
+**characterized prior art** — cited throughout as provenance (`script:line-range`) and as the
+source of every incident this contract guards against, never as a golden master to match.
+Where this document and an AISM script disagree, this document wins. Every behavioral
+divergence between a gate's contract and its corresponding AISM script is recorded and triaged
+per CLAUDE.md L5 ({rk-stricter-intended | rk-bug | ambiguous → escalate}); see each gate's
+"Divergences from AISM (triage)" section. Cross-reference: PRD decision D9 ("Status of prior
+art", added 2026-07-17).
+
+Every check below cites its AISM source as `script:line-range` for provenance. Every gate's
+docstring/header comment is itself read as part of the spec's prior art — AISM's authors
+already named several of these gates' failure modes and known limitations in prose; that prose
+is preserved and cited as characterization of the incidents this contract guards against, not
+paraphrased away.
 
 This WP specs the **six** M0 gates: defs, argument/linker, refs, provenance, runs,
 report-shards. A **seventh gate, freshness**, is created in M2 (M2.6: regenerate-and-diff
@@ -40,7 +52,7 @@ because its five formats were read by humans only. No gate's pass/fail semantics
 is a legitimate green state and must say so explicitly — CLAUDE.md L2: "a skip is always
 visible with a count"). Where a gate has more than one countable unit (check-refs.py's
 pass/fail/skip-import/skip-noquote split), the coverage line breaks the total down by verdict
-class rather than collapsing skip reasons into one number — see the refs gate's Deviations.
+class rather than collapsing skip reasons into one number — see the refs gate's Divergences.
 
 **Exit codes.** `0` — zero ERRORs (WARNs never fail a gate). `1` — at least one ERROR. This
 matches every AISM script's own `main()` (`return 1 if errors else 0`, uniformly). A gate's own
@@ -74,6 +86,27 @@ global constants, ported from AISM's hardcoded defaults:
 - **Report-shard PREFIX** ("AISM" in the source) and **MAX_LINES** (280, already an env-var
   override in AISM) — see the report-shards gate section.
 
+**Fixture/harness invocation (read before running any AISM script against a fixture or
+historical tree).** Two harness pitfalls surfaced building the M0.2 corpus (recorded in full in
+`corpus/README.md`'s Validation methodology section); M0.3 implementers and the M0.3 robustness
+run inherit both:
+- **AISM's python gates hardcode `ROOT` from `__file__`.** Every AISM python gate script
+  (`check-defs.py`, `argument.py`, `check-refs.py`, `check-provenance.py`, `check-runs.py`) sets
+  `ROOT = pathlib.Path(__file__).resolve().parent.parent` — derived from the *script's own file
+  location* inside the AISM checkout, never from `cwd`. Running `cd <fixture-or-tree> && python3
+  .../check-defs.py` therefore does **not** check the target tree; it silently re-checks the
+  real AISM repo at whatever `ROOT` resolves to and produces a pass/fail unrelated to the
+  intended target. Fixture and historical-tree runs must instead use the **module-import
+  harness** documented in `corpus/README.md` (imports each script as a module, read-only, and
+  calls its pure check functions directly with the target's paths substituted for the
+  module-level `ROOT`-derived globals) — never `cd`+run.
+- **`check-report-shards.sh` needs `GIT_CEILING_DIRECTORIES` pinned** when the target tree lives
+  inside rk's own repo (as every M0.2 fixture, and potentially an in-repo historical-tree
+  checkout, does). Its `ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"` fallback
+  (check-report-shards.sh:9) resolves to **rk's own toplevel**, not the target directory, unless
+  `GIT_CEILING_DIRECTORIES` is set to rk's toplevel so `git rev-parse` fails from inside the
+  target and the script's own `|| pwd` fallback correctly takes over.
+
 ---
 
 ## Gate 1 — defs (`definitions/*.md`)
@@ -102,9 +135,9 @@ incident.
 | `aliases` | `;`-separated string | no | alternate names/symbols, folded into the same dedup namespace as `term` |
 | `kind` | enum | yes | `cited` \| `consensus` \| `original` |
 | `status` | enum | yes | `draft` \| `locked` |
-| `source` | string | **validated if present** (NOT required, even for `kind=cited`) | a `refs/manifest/SOURCES.md` source-id, or `internal` |
+| `source` | string | **REQUIRED for `kind=cited`** (ERROR when absent — F5 reversed, M0.7) | a `refs/manifest/SOURCES.md` source-id, or `internal` |
 | `locus` | freeform string | documented, **not machine-checked** | where in the source (informational only) |
-| `sha256` | 16-hex string or `-` | **validated if present** (NOT required, even for `kind=cited`) | prefix must exist in the manifest |
+| `sha256` | 16-hex string or `-` | **REQUIRED for `kind=cited`** (ERROR when absent — F5 reversed, M0.7) | prefix must exist in the manifest |
 | `consensus` | freeform string | for `kind∈{consensus,original}` | who agreed / where transcribed |
 
 Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `SKIP =
@@ -120,12 +153,19 @@ Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `S
 7. **DEDUP/DRIFT**: `term` + every `alias` (lower-cased) forms one global name namespace across
    all shards; a name claimed by two different shards ⇒ ERROR `DRIFT: name '<nm>' claimed by
    both <a> and <b>` (check-defs.py:98-107).
-8. `kind=cited`: **if `source` is present**, it must be a known refs/ source-id, checked only
-   when the manifest yielded at least one source-id ⇒ ERROR otherwise; `source` absent/empty is
-   not itself an error — this field is validated, not required (check-defs.py:112-115).
-9. `kind=cited`: **if `sha256` is present and not `-`**, it must be a known prefix in the
-   manifest, checked only when the manifest is non-empty ⇒ ERROR otherwise; `sha256` absent/`-`
-   is not itself an error — validated, not required (check-defs.py:116-118).
+8. `kind=cited`: `source` is **REQUIRED** ⇒ ERROR `cited shard missing required 'source:'`
+   if absent/empty (**F5 reversed, rk amendment, M0.7** — AISM's own check-defs.py:112-115
+   validates `source` only `if src`, never requiring it; see Divergences below). When `source`
+   is present, it must be a known refs/ source-id, checked only when the manifest yielded at
+   least one source-id ⇒ ERROR `cited source '<source>' not a refs/ source-id` otherwise
+   (check-defs.py:112-115, value-validation logic ported unchanged).
+9. `kind=cited`: `sha256` is **REQUIRED** (absent, or bare `-`, both count as missing) ⇒ ERROR
+   `cited shard missing required 'sha256:'` otherwise (**F5 reversed, rk amendment, M0.7** —
+   AISM's check-defs.py:116-118 validates `sha256` only `if sha and sha != "-"`, never requiring
+   it; see Divergences below). When present and not `-`, `sha256` must resolve as a known prefix
+   in the manifest, checked only when the manifest is non-empty ⇒ ERROR `sha256 prefix '<sha>'
+   not in refs manifest` otherwise (check-defs.py:116-118, value-validation logic ported
+   unchanged).
 10. `kind=cited`: `sha256` resolves in the manifest but the resolved path is not under
     `source/` ⇒ WARN (mismatch between claimed source and file path) (check-defs.py:119-122).
 11. `kind=cited`: `sha256` resolves but the payload file is absent on disk (gitignored) ⇒
@@ -137,42 +177,53 @@ Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `S
     no-ops in this case (guarded by `and source_ids` / `and prefix2path`) (check-defs.py:57-59,114,117).
 
 **Known limitations / incident history.**
-- Checks 8–9 silently no-op (not ERROR, not even counted as unverified) when the manifest is
+- Checks 8–9's *value-validation* sub-checks (does `source`/`sha256` resolve against the
+  manifest) silently no-op (not ERROR, not even counted as unverified) when the manifest is
   absent or empty — on a fresh clone with nothing fetched into `refs/` yet, a fabricated
-  `source`/`sha256` on a brand-new `cited` shard passes with only the one generic WARN "manifest
-  absent", no count of how many cited claims went unverified. This is the same *shape* as the
-  refs gate's 19/19 false-green (a checker that verifies nothing while reporting green) at
-  smaller scale; the port's coverage line must make the count visible (see Deviations).
-- **`source`/`sha256` are not actually required fields for `kind=cited`**, contrary to what a
-  naive reading of the frontmatter table might suggest: `REQUIRED = ["id","term","kind","status"]`
-  (check-defs.py:26) never includes them, and checks 8–9 only run `if src`/`if sha` — a `cited`
-  shard carrying **neither** `source:` nor `sha256:` triggers no error and no warning from either
-  check (check-defs.py:112-118). AISM currently has **zero** real `cited` shards in its registry
-  (spot-checked at time of writing), so this hole has never baked a false pass into a fixture by
-  accident — but a fixture author must not assume "missing source/sha256 on a cited shard" is
-  itself a violation; it is not, per current AISM behavior. Recorded here, not silently tightened
-  (L5: match first).
+  `source`/`sha256` on a brand-new `cited` shard passes value-validation with only the one
+  generic WARN "manifest absent", no count of how many cited claims went unverified. This is the
+  same *shape* as the refs gate's 19/19 false-green (a checker that verifies nothing while
+  reporting green) at smaller scale; the port's coverage line must make the count visible (see
+  Divergences). Note this is orthogonal to the presence requirement below: presence is checked
+  unconditionally, regardless of manifest state.
+- **AISM's own `source`/`sha256` are NOT required fields for `kind=cited`** — contrary to what a
+  naive reading of the frontmatter table might suggest, AISM's `REQUIRED =
+  ["id","term","kind","status"]` (check-defs.py:26) never includes them, and its checks 8–9 only
+  run `if src`/`if sha` — an AISM `cited` shard carrying **neither** `source:` nor `sha256:`
+  triggers no error and no warning from either check (check-defs.py:112-118). This is now a
+  **triaged divergence** (see Divergences below): rk's contract requires both fields for
+  `kind=cited` (checks 8–9, above); AISM's script does not. Triage: **rk-stricter-intended**,
+  zero cost — AISM currently has **zero** real `cited` shards in its registry (spot-checked at
+  time of writing; `definitions/README.md`'s `kind: cited` line is documentation prose, excluded
+  from the glob, not a real shard), so the tightening cannot flip any existing AISM shard's
+  verdict. Corpus fixture `defs-15` (source: and sha256: both absent on a cited shard) is now
+  contract-backed and M0.3-enforceable.
 - `check-defs.py` has **no staleness check** on its own generated `definitions/INDEX.md`: the
   script only *writes* `INDEX.md` under `--generate-index`; in `--check` mode it never compares
   an existing `INDEX.md` to a fresh render (contrast argument.py's `check_generated`, which does
   exactly this for `argument/INDEX.md`/`DAG.md`). A hand-edited `definitions/INDEX.md` is
-  **not caught by this gate today**. This is a genuine asymmetry in AISM's own ported behavior —
-  recorded here, not silently fixed (L5: match first). The "hand-edited generated file" corpus
-  fixture (IMPLEMENTATION_PLAN M0.2, mandatory) is therefore assigned to the **linker** gate,
-  where the equivalent check genuinely exists — see linker fixture `linker-16`. Flagged for
-  Fable/orchestrator: whether `rk` should close this specific gap (a new check, not parity) is a
+  **not caught by this gate today**. This is a genuine asymmetry in AISM's own characterized
+  behavior — recorded here, not silently fixed. The "hand-edited generated file" corpus fixture
+  (IMPLEMENTATION_PLAN M0.2, mandatory) is therefore assigned to the **linker** gate, where the
+  equivalent check genuinely exists — see linker fixture `linker-16`. Flagged for
+  Fable/orchestrator: whether `rk` should close this specific gap with a new check is a
   deliberate decision for a later WP, not this one.
 - No historical DRIFT incident is on record in AISM (see Failure mode guarded, above).
 
-**Deviations from AISM.**
-- Coverage line adds an explicit cited-hash sub-count: `checked defs: <N>/<N> shards, <C>/<K>
-  cited shards hash-verified` whenever `K > 0`; when the manifest is absent/empty this renders
-  as `0/<K> cited shards hash-verified — manifest absent`. Justification: L2's mandatory
-  coverage reporting — AISM's single WARN sentence (check-defs.py:58) carries no count, so a
-  reader cannot tell "we checked 0 of 12 cited shards" from "there are no cited shards." Pass/fail
-  is unchanged; this only makes the existing no-op visible.
-- Standard cross-gate finding-format change (see Shared conventions); no check's trigger
-  condition changes.
+**Divergences from AISM (triage).**
+- **[rk-stricter-intended] `source`/`sha256` REQUIRED for `kind=cited`** (F5 reversed, M0.7) —
+  checks 8–9, above; AISM's check-defs.py:112-118 validates both fields only when present, never
+  requiring them. Zero cost: AISM has zero real `cited` shards at time of writing (see Known
+  limitations). Fixture: `defs-15`.
+- **[message-only]** Coverage line adds an explicit cited-hash sub-count: `checked defs:
+  <N>/<N> shards, <C>/<K> cited shards hash-verified` whenever `K > 0`; when the manifest is
+  absent/empty this renders as `0/<K> cited shards hash-verified — manifest absent`. CLAUDE.md
+  L2's mandatory coverage reporting — AISM's single WARN sentence (check-defs.py:58) carries no
+  count, so a reader cannot tell "we checked 0 of 12 cited shards" from "there are no cited
+  shards." No check's trigger condition or verdict changes; this only makes an existing no-op
+  visible.
+- **[message-only]** Standard cross-gate finding-format change (see Shared conventions); no
+  check's trigger condition changes.
 
 **Historical schema-drift tolerance.** No frontmatter field was added to the defs schema
 mid-campaign in AISM history at time of reading (`id`/`term`/`kind`/`status`/`source`/`locus`/
@@ -197,6 +248,7 @@ N/A for this gate; nothing to tolerate.
 | `defs-12` | `consensus`/`original` shard missing `consensus:` |
 | `defs-13` | `status: draft` baseline (WARN, golden non-error case) |
 | `defs-14` | manifest file entirely absent (WARN, and checks 8–9 coverage count reads `0/K`) |
+| `defs-15` | **F5 reversed** [M0.7] — `cited` shard, `source:` and `sha256:` BOTH entirely absent ⇒ ERROR (AISM's script passes this silently, check-defs.py:112-118) |
 
 ---
 
@@ -318,16 +370,18 @@ features layered on the same pure functions, not gate verdicts.
   e.g. `check_acyclic`'s `ids = {l["id"] for l in lemmas}` (argument.py:154) — so the first such
   access raises `KeyError: 'id'` and the whole script crashes rather than reporting a finding.
   All AISM shards at time of reading carry `id:` (spot-checked across the full registry), so this
-  is not a live parity issue on any current or historical AISM fixture — but it is a real crash
-  class in the ported logic, not a hypothetical. See Deviations.
+  does not fire on any current or historical AISM fixture — but it is a real crash class in the
+  ported logic, not a hypothetical. See Divergences.
 
-**Deviations from AISM.**
-- The orphan-check message for an absent `workspace` field becomes `ERROR <shard>: af=<af> but
-  workspace field is absent (cannot resolve a workspace dir)` instead of AISM's `...
-  workspace dir missing: None`. Justification: identical trigger condition, identical ERROR
-  verdict on identical inputs — only the message text is corrected to avoid a leaked `None`
-  literal; no verdict on any fixture changes.
-- **A lemma shard missing `id:` produces an ERROR finding, not a crash**: `ERROR <path>: missing
+**Divergences from AISM (triage).**
+- **[message-only] Leaked-`None` message fix** — the orphan-check message for an absent
+  `workspace` field becomes `ERROR <shard>: af=<af> but workspace field is absent (cannot
+  resolve a workspace dir)` instead of AISM's `... workspace dir missing: None`. Identical
+  trigger condition, identical ERROR verdict on identical inputs — only the message text is
+  corrected to avoid a leaked `None` literal; no verdict on any fixture changes. Fixture:
+  `linker-15`.
+- **[crash-to-finding] A lemma shard missing `id:` produces an ERROR finding, not a crash**
+  [F12]: `ERROR <path>: missing
   required field 'id' (cannot register this shard for acyclicity/status/orphan checks)`, and the
   gate continues checking every other shard and every other check rather than aborting the whole
   run. Justification: AISM has no explicit "id is required" check at all — the current behavior
@@ -336,20 +390,29 @@ features layered on the same pure functions, not gate verdicts.
   required-field check would also need to reject. The trigger condition is unchanged (a shard
   lacking `id:`); only the outcome changes, from "the whole process dies with a Python traceback"
   to "one ERROR finding is reported and the rest of the gate still runs" — the same
-  trigger-preserving-fix shape as the leaked-`None` deviation immediately above. A shard rejected
+  trigger-preserving-fix shape as the leaked-`None` divergence immediately above. A shard rejected
   this way is excluded from every id-keyed structure (acyclicity, status propagation, orphans) for
-  the remainder of the run, so no downstream check can re-crash on it. Fixture `linker-21` is the
-  regression probe.
-- Standard cross-gate finding-format change (see Shared conventions).
+  the remainder of the run, so no downstream check can re-crash on it. Fixture: `linker-21`.
+- **[message-only]** Standard cross-gate finding-format change (see Shared conventions).
 
 **Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
-on historical commits (load-bearing for M0.3's 3-historical-commits parity acceptance). **The
-M0.3 baseline is pinned as follows:** AISM HEAD's scripts (not the historical commit's own
-contemporaneous script versions) are replayed against each historical tree's files, and findings
-are compared **per-gate** — not by comparing `check-all.sh`'s single exit code to `rk check`'s,
-since `check-all.sh` short-circuits at the first failing script (`fail()`, check-all.sh:7) while
-`rk check` always runs all six (see Shared conventions' Composition deviation); a per-gate
-comparison is the only one that is well-defined under that control-flow difference.
+on historical commits — load-bearing for the **M0.3 robustness run** (F4, repurposed per the
+2026-07-17 Fable review addendum: this paragraph is no longer a parity bar, it is the
+definition of the robustness run itself).
+
+**The M0.3 robustness run is defined as follows.** rk's HEAD-contract gates (this document —
+not AISM's contemporaneous script versions at each historical commit) run against each of 3
+historical AISM trees (older schemas — trees predating `routes:`/`workspace:` being added or
+consistently populated, see below). Acceptance is **not verdict-parity** against AISM's own
+historical scripts or against `check-all.sh`'s combined exit code — it is: (1) no crashes on
+any of the 3 trees, (2) no finding-floods (a volume of findings that swamps genuine signal —
+the aism-s64 failure mode recurring in a new form), and (3) every divergence between rk's gates
+and AISM's historical behavior triaged per CLAUDE.md L5 ({rk-stricter-intended | rk-bug |
+ambiguous → escalate}). Findings are still compared **per-gate**, not via `check-all.sh`'s
+single exit code, since `check-all.sh` short-circuits at the first failing script (`fail()`,
+check-all.sh:7) while `rk check` always runs all six (see Shared conventions' Composition
+deviation) — a per-gate comparison is the only one well-defined under that control-flow
+difference, and the only one from which per-divergence triage is even possible.
 - **`routes:`** — genuinely new, added 2026-07-10 (`bdf6800`, "P0 OR-route linker support
   (aism-3ne)"). A shard with no `routes:` line parses to `routes: []` and every check reduces
   byte-identically to the pre-`routes` behavior (argument.py:77-78, "backward-compatible: a
@@ -361,8 +424,8 @@ comparison is the only one that is well-defined under that control-flow differen
   the strict sense — but it was **inconsistently populated** by tooling (the seed-script bug
   above), so historical commits legitimately contain `af != none` shards with no `workspace:`
   value. The gate's behavior on that case (ERROR via `check_orphans`, message corrected per
-  Deviations above) is the correct, intended parity behavior, not a drift exemption — a missing
-  `workspace:` on an `af != none` shard is a real defect in every commit where it occurs, past
+  Divergences above) is the correct, intended contract behavior, not a drift exemption — a
+  missing `workspace:` on an `af != none` shard is a real defect in every commit where it occurs, past
   or present.
 
 **Corpus fixtures required** (feeds M0.2):
@@ -433,8 +496,8 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   check-refs.py:40) — a hardcoded module constant in AISM, never varied across the project's
   history; carried as a fixed default in the port. In rk, `MIN_RUN` is repurposed as the
   minimum-length threshold for the ≥40-char-partial-match **FAIL** diagnostic (see Checks item 4
-  and Deviations) rather than as a PASS threshold — AISM's own PASS-on-partial-match tuning
-  tradeoff is documented under Known limitations below as the thing rk's deviation resolves.
+  and Divergences) rather than as a PASS threshold — AISM's own PASS-on-partial-match tuning
+  tradeoff is documented under Known limitations below as the thing rk's divergence resolves.
 - Regexes: `refs/[A-Za-z0-9_./-]+(:[\d,-]+)?` (refs-locus, line 44); `proofs/[A-Za-z0-9_-]+`
   (proofs-reference / IMPORT marker, line 46).
 - **Quote extraction** (check-refs.py:63-74, `extract_quote`): prefer the double-quoted run
@@ -462,7 +525,7 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
 3. **Normalization** (applied to both quote and refs-file text): `\$` → `$`; drop `*`; collapse
    whitespace runs to one space (check-refs.py:49-60). LaTeX command names and `$` are kept —
    fabrications differ in words, not formatting.
-4. **Whole-quote match** (rk deviation from AISM's longest-run fallback — see Deviations) — the
+4. **Whole-quote match** (rk divergence from AISM's longest-run fallback — see Divergences) — the
    **entire** normalized quote must appear verbatim as a substring of the normalized refs text ⇒
    **PASS**. AISM's own logic (check-refs.py:77-98, 149-156, `longest_run_match`) instead accepts
    a PASS for quotes ≥ `MIN_RUN` (40) chars when only the longest contiguous run ≥ 40 chars
@@ -473,13 +536,13 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    <n>/<m> chars) — word-level mismatch / fabrication, or a genuine quote wrapped in paraphrase";
    otherwise (no ≥40-char run matches at all, or the quote is < 40 chars) the verdict is **FAIL**
    "claimed VERBATIM quote NOT found (word-level mismatch / fabrication)" with no run length in
-   the message. See Deviations for why this is a parity-safe tightening, not a silent one.
+   the message. See Divergences for why this tightening carries zero cost, not a silent one.
 5. Unparseable external JSON ⇒ **FAIL** "unparseable JSON: <error>" — a corrupt file is a hard
    fail, never a skip (check-refs.py:174-179).
 
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
-- **AISM's own `MIN_RUN=40` embeds a tuning asymmetry** (the thing rk's Deviations entry below
+- **AISM's own `MIN_RUN=40` embeds a tuning asymmetry** (the thing rk's Divergences entry below
   fixes, not a limitation rk carries forward): a **short** quote (< 40 chars) is held to a
   *stricter* standard (exact whole-quote match required) than a **long** quote (≥ 40 chars),
   which passes AISM's own script if merely some 40+-char inner substring matches verbatim — so in
@@ -487,26 +550,32 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   genuine 40-char verbatim core and still PASS. No evidence this was ever exploited in AISM's
   history (zero refs-quote externals have ever existed to exploit it against — see the "19/19"
   discussion above); rk closes this hole rather than carrying it forward, since the fix is
-  provably parity-free — see Deviations.
+  provably zero-cost — see Divergences.
 - `skip_import` trusts a bare regex match on `proofs/[A-Za-z0-9_-]+` in freeform `source` text
   with **no verification** that the referenced workspace exists or is validated — an external
   could claim to "import" a nonexistent or unvalidated workspace and this gate silently skips
-  it rather than failing. No historical incident on record; a real gap in the ported logic,
-  not adopted as a fix here (L5: parity first).
+  it rather than failing. No historical incident on record; a real gap in the ported logic.
+  **Deferred on architectural grounds** (ruling #4, 2026-07-17 Fable review addendum): closing
+  it needs a registry join this gate lacks by design — `check-refs.py` (and this gate's port)
+  reads only `proofs/<ws>/externals/*.json` (confirmed: it imports no other module, no registry
+  parser) and has no access to the argument/linker registry's workspace-existence/status data,
+  which lives in Gate 2. Not deferred for parity cost; a bd issue tracks a future cross-gate
+  join if this gap is ever exploited.
 
-**Deviations from AISM.**
-- **Whole-quote match required (no partial-run PASS).** AISM's `longest_run_match` (check-refs.py:
-  77-98) accepts a PASS for a quote ≥ `MIN_RUN` (40) chars when the whole quote doesn't match but
-  some contiguous run ≥ 40 chars does; rk requires the whole normalized quote to match, full stop
-  — a ≥40-char partial-run match alone is **FAIL**, with the matched-run length reported in the
-  finding (Checks item 4, above). **Zero-parity-cost evidence**: a full scan of every commit in
-  AISM's history that ever touched `proofs/*/externals/*.json` finds **no externals JSON file
-  whose `source` text ever contained a `refs/` locus** — i.e. zero refs-quote externals have ever
-  existed in this project (every external, at every commit, is `skip_import`, `skip_noquote`, or
-  parse-invalid). This tightening therefore cannot flip any historical or current AISM fixture
-  from PASS to FAIL; the M0.3 historical-parity baseline (see the linker gate's drift-tolerance
-  section) is unaffected by construction, not merely by inspection. Fixture `refs-07` (a ≥40-char
-  verbatim core wrapped in paraphrase) is the regression probe for this rule.
+**Divergences from AISM (triage).**
+- **[rk-stricter-intended] Whole-quote match required (no partial-run PASS).** AISM's
+  `longest_run_match` (check-refs.py:77-98) accepts a PASS for a quote ≥ `MIN_RUN` (40) chars
+  when the whole quote doesn't match but some contiguous run ≥ 40 chars does; rk requires the
+  whole normalized quote to match, full stop — a ≥40-char partial-run match alone is **FAIL**,
+  with the matched-run length reported in the finding (Checks item 4, above). **Zero-cost
+  evidence**: a full scan of every commit in AISM's history that ever touched
+  `proofs/*/externals/*.json` finds **no externals JSON file whose `source` text ever contained
+  a `refs/` locus** — i.e. zero refs-quote externals have ever existed in this project (every
+  external, at every commit, is `skip_import`, `skip_noquote`, or parse-invalid). This
+  tightening therefore cannot flip any historical or current AISM fixture from PASS to FAIL; the
+  M0.3 robustness run (see the linker gate's Historical schema-drift tolerance section) is
+  unaffected by construction, not merely by inspection. Fixture: `refs-07` (a ≥40-char verbatim
+  core wrapped in paraphrase).
   **`...`-splice caution**: a *legitimate* quoting convention that splices together two
   non-adjacent verbatim spans with an ellipsis (`"first span ... second span"`) would also FAIL
   whole-match under this rule, since the ellipsis text itself does not appear in the refs file.
@@ -514,15 +583,16 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   externals ever existing); a bd issue is filed for a future splice-aware grammar (segment-wise
   whole-match around `...` boundaries) only if a future repo actually needs one — not built
   speculatively here.
-- Coverage line reports a four-way breakdown: `checked refs: <P>/<T> externals byte-verified,
-  <F> failed, <I> import-skipped, <Q> no-quote-skipped` — instead of AISM's `<total> externals,
-  <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which conflates two different
-  skip reasons into one number. Justification: L2, "a skip is always visible with a count" — the
-  historical incident was specifically about *which* skip reason dominated (19 unverifiable
-  quotes, not 19 legitimate imports); a single collapsed skip count cannot distinguish those
-  again. No verdict changes; both skip classes remain non-failing.
-- Standard cross-gate finding-format change: `SEVERITY proofs/<ws>/externals/<file>.json:1
-  message` (JSON has no meaningful line granularity; `refs_locus` stays in the message text).
+- **[message-only]** Coverage line reports a four-way breakdown: `checked refs: <P>/<T>
+  externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped` — instead of
+  AISM's `<total> externals, <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which
+  conflates two different skip reasons into one number. CLAUDE.md L2, "a skip is always visible
+  with a count" — the historical incident was specifically about *which* skip reason dominated
+  (19 unverifiable quotes, not 19 legitimate imports); a single collapsed skip count cannot
+  distinguish those again. No verdict changes; both skip classes remain non-failing.
+- **[message-only]** Standard cross-gate finding-format change: `SEVERITY
+  proofs/<ws>/externals/<file>.json:1 message` (JSON has no meaningful line granularity;
+  `refs_locus` stays in the message text).
 
 **Historical schema-drift tolerance.** N/A — the external JSON schema (`name`, `source`) has not
 changed across AISM's history at time of reading.
@@ -653,7 +723,7 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   (documented as ~1/3 of sources) only WARN (check-provenance.py:45-46,390-391).
 - The hardcoded `13_discussion.tex` filename (check-provenance.py:206) is a structural fragility
   that already produced one real false-green (incident (a) above); AISM's own fix at the time
-  was manual (the file happened to stabilize under that name). See Deviations.
+  was manual (the file happened to stabilize under that name). See Divergences.
 - **Silent-skip false-green surface (status rows).** `status_table_rows()` returns `[]` — with
   no warning, no error, nothing — whenever the configured file either doesn't exist, or exists
   but lacks `\label{tab:status}` or `\midrule` (check-provenance.py:207-211). Since check 5
@@ -661,26 +731,27 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   means check 5 checks **nothing** and still reports clean. This is the same *shape* of bug as
   the refs gate's 19/19 false-green (a checker that verifies zero things while reporting green),
   and this gate is otherwise the only one of the six with no coverage unit of its own visible in
-  the finding stream — see Deviations for the fix (an explicit coverage line with `S=0` rendered
-  loudly) and fixture `provenance-13`.
+  the finding stream — see Divergences for the fix (an explicit coverage line with `S=0`
+  rendered loudly) and fixture `provenance-13`.
 
-**Deviations from AISM.**
-- The `tab:status` source file becomes a **config parameter** (default
-  `report/sections/13_discussion.tex`, overridable per-repo) instead of a hardcoded literal.
-  Justification: this exact hardcoding already caused one documented false-green in AISM's own
-  history; L5's "match first, improve second, never silently" is satisfied here in the narrowest
-  possible way — the default value is byte-identical to AISM's, only the mechanism for pointing
-  at it changes, and the change is recorded here openly rather than silently absorbed as
-  "parity."
-- **Coverage line.** `checked provenance: <N> registry results, <R> claim rows, <S> tab:status
-  rows (<E> errors, <W> warnings)`, with `S` rendered even when `0` (never omitted or folded into
-  a generic "manifest absent"-style WARN). Justification: L2's mandatory coverage reporting,
-  applied to the silent-skip surface above — AISM's script never counts or reports how many
-  `tab:status` rows it actually parsed, so a reader cannot distinguish "0 rows because nothing is
-  Cref'd yet" from "0 rows because the label/midrule markers didn't match and check 5 is
-  checking nothing." Pass/fail is unchanged; this only makes an existing silent no-op visible.
-- Standard cross-gate finding-format change; the `--build` step remains opt-in, matching AISM's
-  own `--build` flag exactly (not a deviation, confirmed here for clarity).
+**Divergences from AISM (triage).**
+- **[rk-stricter-intended] The `tab:status` source file becomes a config parameter** (default
+  `report/sections/13_discussion.tex`, overridable per-repo) instead of a hardcoded literal
+  (check-provenance.py:206). This exact hardcoding already caused one documented false-green in
+  AISM's own history (incident (a), above — a rename silently blinded the check). The default
+  value is byte-identical to AISM's; only the mechanism for pointing at it changes, closing a
+  structural false-green surface rather than tightening a check's logic. Fixture:
+  `provenance-11`.
+- **[message-only] Coverage line.** `checked provenance: <N> registry results, <R> claim rows,
+  <S> tab:status rows (<E> errors, <W> warnings)`, with `S` rendered even when `0` (never omitted
+  or folded into a generic "manifest absent"-style WARN). CLAUDE.md L2's mandatory coverage
+  reporting, applied to the silent-skip surface above — AISM's script never counts or reports how
+  many `tab:status` rows it actually parsed, so a reader cannot distinguish "0 rows because
+  nothing is Cref'd yet" from "0 rows because the label/midrule markers didn't match and check 5
+  is checking nothing." Pass/fail is unchanged; this only makes an existing silent no-op visible.
+- **[message-only]** Standard cross-gate finding-format change; the `--build` step remains
+  opt-in, matching AISM's own `--build` flag exactly (not a divergence, confirmed here for
+  clarity).
 
 **Historical schema-drift tolerance.** N/A for this gate's own inputs (the registry fields it
 reads — `id`/`status`/`af`/`provenance`/`kind` — are the same set the linker gate reads, and
@@ -700,7 +771,7 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-08` | duplicate source key (parse integrity, WARN) |
 | `provenance-09` | reverse-label orphan (WARN) |
 | `provenance-10` | coverage: report-facing result with no per-claim row (WARN) |
-| `provenance-11` | hardcoded-filename regression probe — rename the status-table file; must still be scanned (proves the config-parameter deviation actually fixes incident (a)) |
+| `provenance-11` | hardcoded-filename regression probe — rename the status-table file; must still be scanned (proves the config-parameter divergence actually fixes incident (a)) |
 | `provenance-12` | absolute (non-`refs/`-relative) source path (WARN) |
 | `provenance-13` | **status-table label absent** [F3] — `13_discussion.tex` present but no `\label{tab:status}`/`\midrule` ⇒ coverage line must show `0 tab:status rows` loudly, never a silent green |
 
@@ -758,11 +829,14 @@ per the Shared conventions' coverage-reporting rule, never omit the line.
   mentioned in `INDEX.md` prose (not an actual index row) satisfies check 5. This is a real,
   acknowledged looseness in AISM's own implementation (a deliberate design choice for a
   hand-authored README, not a bug); no historical incident recorded (no evidence it was ever
-  exploited). Carried forward unchanged per L5 — not silently tightened.
+  exploited). **Carried forward unchanged** (ruling #5, 2026-07-17 Fable review addendum):
+  accepted as deliberate looseness because M2.6's freshness gate (regenerate-and-diff) obsoletes
+  the `runs/`↔`INDEX.md` substring-matching mirror entirely — a structural fix at M2.6
+  supersedes a point-fix here. Not accepted for parity cost.
 
-**Deviations from AISM.** None. This gate's logic is simple enough that L5 parity is a
-straightforward, faithful port; only the standard cross-gate finding-format change and the
-mandatory day-1 coverage line apply.
+**Divergences from AISM (triage).** None. This gate's logic is simple enough that it is ported
+as characterized prior art with no behavioral tightening; only the standard **[message-only]**
+cross-gate finding-format change and the mandatory day-1 coverage line apply.
 
 **Historical schema-drift tolerance.** N/A — the `README.md` field/marker requirements have not
 changed across AISM's history at time of reading.
@@ -802,7 +876,7 @@ own enumerated checks.
   `CATALOG = report/SHARD_CATALOG.md` (check-report-shards.sh:12-15).
 - `MAX_LINES`: env override `REPORT_SHARD_MAX_LINES`, default **280** (check-report-shards.sh:16).
 - `PREFIX = "AISM"` (check-report-shards.sh:17) — a hardcoded shell variable in AISM (only ever
-  needed one value there); **per-repo parameter** in the port — see Deviations.
+  needed one value there); **per-repo parameter** in the port — see Divergences.
 - Per-shard TeX-comment header lines inside each `report/sections/NN_slug.tex`:
 
 | header | cardinality | format |
@@ -862,7 +936,10 @@ in AISM.
 - Checks 8, 16, 17, 18 are all `grep -F` (fixed-string) substring containment against
   README/CATALOG — the same "loose substring, not structural" class as the runs gate; a
   coincidental substring match could pass without the value genuinely being "listed" in a
-  meaningful sense. No historical incident on record; carried forward unchanged per L5.
+  meaningful sense. No historical incident on record. **Carried forward unchanged** (ruling #5,
+  2026-07-17 Fable review addendum): accepted as deliberate looseness because M2.6's freshness
+  gate (regenerate-and-diff) obsoletes these hand-maintained README/SHARD_CATALOG mirrors
+  entirely — a structural fix at M2.6 supersedes a point-fix here. Not accepted for parity cost.
 - No historical incident on record specifically for this script in AISM (it arrived already
   hardened from a sister repo).
 - `report/README.md` and `report/SHARD_CATALOG.md` are **hand-maintained cross-indexes** in
@@ -872,18 +949,18 @@ in AISM.
   linker gate (`linker-16`), where an actual generate/check-staleness pair exists. Recorded here
   explicitly to prevent the wrong assignment.
 
-**Deviations from AISM.**
-- `PREFIX` ("AISM") and `MAX_LINES` (280, already env-overridable in AISM) both become explicit
-  per-repo config parameters. Justification: this is the definitional per-repo-parameterization
-  the whole rk extraction exists to perform (PRD C7/M0, "extraction ... into a maintained
-  package, no more repo-local copies") — not a behavior change, since AISM's own defaults
-  (`PREFIX=AISM`, `MAX_LINES=280`) remain byte-identical when rk is pointed at the AISM parity
-  fixture.
-- Standard cross-gate finding-format change: `SEVERITY report/sections/<file>.tex:<line>` for
-  shard-header/size findings (line resolved to the offending header comment's own line where
-  possible, else 1); `SEVERITY report/main.tex:<line>` for master-purity/include findings — vs.
-  AISM's plain `report shard check: <message>` lines to stderr with no path/line structure
-  (check-report-shards.sh:20).
+**Divergences from AISM (triage).**
+- **[message-only] `PREFIX`/`MAX_LINES` become explicit per-repo config parameters** (`PREFIX`
+  "AISM"; `MAX_LINES` 280, already env-overridable in AISM). This is the definitional
+  per-repo-parameterization the whole rk extraction exists to perform (PRD C7/M0, "extraction
+  ... into a maintained package, no more repo-local copies") — not a behavior change: AISM's own
+  defaults (`PREFIX=AISM`, `MAX_LINES=280`) remain byte-identical when rk is pointed at AISM's
+  own repo.
+- **[message-only]** Standard cross-gate finding-format change: `SEVERITY
+  report/sections/<file>.tex:<line>` for shard-header/size findings (line resolved to the
+  offending header comment's own line where possible, else 1); `SEVERITY
+  report/main.tex:<line>` for master-purity/include findings — vs. AISM's plain `report shard
+  check: <message>` lines to stderr with no path/line structure (check-report-shards.sh:20).
 
 **Historical schema-drift tolerance.** N/A — the shard header schema (`SHARD-ID/TITLE/
 KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.

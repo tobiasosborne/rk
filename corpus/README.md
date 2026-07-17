@@ -38,7 +38,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `defs-12` | defs | consensus/original shard missing `consensus:` | class-driven (no incident on record) | landed |
 | `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
 | `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
-| `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction (CLAUDE.md L5 amendment, commit 542197c; F5 reversed in the Fable-review addendum): AISM passes this silently (check-defs.py:112-118); contract update to Gate 1 checks 8-9 is queued as M0.7, not yet landed — this fixture anticipates it, not yet M0.3-enforceable. Triage: rk-stricter-intended. | landed |
+| `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction (CLAUDE.md L5 amendment, commit 542197c; F5 reversed in the Fable-review addendum), contract amendment **landed in M0.7**: AISM's own script passes this silently (check-defs.py:112-118) — characterized prior art, not the spec; `docs/gate-contracts.md` Gate 1 checks 8-9 now require `source:`/`sha256:` for `kind=cited`, and Gate 1's "Corpus fixtures required" table now lists this fixture directly. Contract-backed and M0.3-enforceable (no longer anticipatory). Triage: rk-stricter-intended. | landed |
 | `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | landed |
 | `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | landed |
 | `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | landed |
@@ -100,31 +100,38 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | landed |
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 
-Totals: 14 defs + 21 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **74
+Totals: 15 defs + 21 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **75
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
 `[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory list): `defs-07` (duplicate alias), `linker-06`
 (dependency cycle), `linker-12` (contract mismatch registry↔af-root), `linker-16` (hand-edited
 generated file), `refs-01` (19/19 false-green), `provenance-01` (overclaim), `provenance-03`
 (stale SHA256), `provenance-04` (unwired anchor) — plus `runs-01` (orphaned run bundle) and
 `runs-02` (missing invariant). The plan's "duplicate alias" item is `defs-07`; "missing
-invariant" is `runs-02`. Three fixtures (`linker-21`, `refs-07`, `provenance-13`) were added by
-the 2026-07-17 Fable review of `docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3
-respectively) — none carry `[PLAN]`; they are corrections to this WP's own contract, not
-IMPLEMENTATION_PLAN-mandated.
+invariant" is `runs-02`. Four fixtures (`defs-15`, `linker-21`, `refs-07`, `provenance-13`) were
+added as corrections to this WP's own contract, not IMPLEMENTATION_PLAN-mandated, and none carry
+`[PLAN]`: `linker-21`, `refs-07`, and `provenance-13` by the 2026-07-17 Fable review of
+`docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3 respectively); `defs-15` by the
+same-dated TJO premise correction (below), with its corresponding contract text (F5 reversed)
+landing separately in **M0.7**.
 
-**Plus one `[TJO]` fixture** added during M0.2 build, not in `docs/gate-contracts.md`'s tables:
-`defs-15` (cited shard, `source:`/`sha256:` both entirely absent — strict ERROR), per the
-2026-07-17 TJO premise correction (below). **75 fixtures** total as of that correction.
+**`[TJO]` fixture `defs-15`** was added during M0.2 build, ahead of its own contract text: at
+build time the corresponding checks 8-9 amendment was queued but not yet landed in
+`docs/gate-contracts.md`, so the fixture's ledger row (and this section) originally described it
+as anticipatory. **M0.7 (2026-07-17) landed the contract amendment** (Gate 1 checks 8-9, F5
+reversed — `source:`/`sha256:` now REQUIRED for `kind=cited`); `defs-15` now also appears in
+`docs/gate-contracts.md`'s Gate 1 "Corpus fixtures required" table, alongside the three
+Fable-review-added fixtures above, and its row above reads "Contract-backed and
+M0.3-enforceable," not anticipatory.
 
 **2026-07-17 TJO premise correction (mid-M0.2).** AISM is prior art, not a golden master —
 its script behavior informs but never overrides `docs/gate-contracts.md`. `expected.json`'s
 `verdict`/`findings`/`exit_code` state what the CONTRACT requires; AISM's actual, script-verified
 behavior is recorded separately in `aism_behavior` (see the convention section below), purely as
-migration-bookkeeping data for M0.5's divergence triage. `defs-15` is the one fixture built
-*after* this correction whose target verdict deliberately diverges from AISM's own behavior and
-from the current text of Gate 1 checks 8-9 (F5): a contract amendment making cited-shard
-`source:`/`sha256:` absence strict-ERROR is pending, not yet landed in `docs/gate-contracts.md`
-— flagged for the next Fable review.
+migration-bookkeeping data for M0.5's divergence triage. `defs-15` was the one fixture built
+*after* this correction whose target verdict deliberately diverged from AISM's own behavior and
+from the then-current text of Gate 1 checks 8-9 (F5): the contract amendment making cited-shard
+`source:`/`sha256:` absence strict-ERROR, queued at the time this paragraph was first written,
+has since **landed as M0.7** — see the note above.
 
 ---
 
@@ -271,7 +278,7 @@ script-verified / rk-only / untested breakdown.
 
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
-| defs | 15/15 | 14 | 1 (`defs-15`, TJO strict-provenance) | 0 |
+| defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
 | linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
 | provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
