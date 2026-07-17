@@ -76,15 +76,29 @@ Not read these? STOP and read them. Do not improvise from memory of them.
     test proves it; end with the acting model's `Co-Authored-By:` line. Work is not
     done until committed.
 
-## 3. Model policy (user directive, 2026-07-17)
+## 3. Model policy (user directive, 2026-07-17; cadence amended same day)
 
 - **Implementers: Sonnet.** Generic WP implementation, ports, tests, fixtures.
-- **Logic/validity reviews: Fable, serial** — at WP boundaries and before anything
-  L6-relevant lands. Reviewer never implements the fix in the same session; findings go
-  back to an implementer.
 - **Summarisation and code queries: Sonnet.**
+- **Reviews: Fable, serial — frequency scales with blast radius**, not with commit
+  count. A bug's reach decides the cadence:
+  - **Tier A — review before landing**: validity semantics (gate pass/fail rules,
+    status propagation, provenance/staleness rules, truthful rendering), contract
+    documents, versioned schemas, and shared contracts other components consume
+    (types.ts interfaces). This is L6; no exceptions.
+  - **Tier B — batched review at milestone boundaries**: substantial implementation
+    that is already constrained by corpus/tests (gate implementations, drivers,
+    projection joins). The corpus catches behavior; Fable reviews design and logic
+    once per milestone, not per WP.
+  - **Tier C — no dedicated review**: fixtures (script-validated), CLI plumbing,
+    scaffolding, test code, docs formatting, bookkeeping. Caught incidentally at
+    milestone reviews; a bug here is cheap and local.
+  When in doubt, ask what a bug would corrupt: a wrong verdict or schema = A; a wrong
+  behavior a test would catch = B; an inconvenience = C.
+- Reviewer never implements the fix in the same session; findings go back to an
+  implementer.
 - Orchestrator dispatches and bookkeeps; it does not judge proof-of-correctness for
-  L6 changes itself — that is the reviewer's job (reviewer ≠ author, applied to us).
+  Tier A changes itself — that is the reviewer's job (reviewer ≠ author, applied to us).
 
 ## 4. Build & test
 
