@@ -80,13 +80,13 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-11` | provenance | hardcoded-filename regression probe | worklog.md 2026-07-04: "caught a false-green: `check-provenance.py` hard-coded the ledger filename" (`docs/worklog.md:270-272`) | landed |
 | `provenance-12` | provenance | absolute source path (WARN) | class-driven (no incident on record) | landed |
 | `provenance-13` | provenance | status-table label absent (`13_discussion.tex` present, `\label{tab:status}`/`\midrule` missing) | class-driven; same shape as `refs-01`/`defs-14` (a checker that verifies zero things while reporting green) — `status_table_rows()` returns `[]` silently on this input (`check-provenance.py:207-211`); coverage line must show `0 tab:status rows` loudly, per the 2026-07-17 Fable review (F3) | landed |
-| `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | planned |
-| `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | planned |
-| `runs-03` | runs | bad bundle name | class-driven (no incident on record) | planned |
-| `runs-04` | runs | missing README.md | class-driven (no incident on record) | planned |
-| `runs-05` | runs | missing one required field (hypothesis/command/finding/next) | class-driven (no incident on record) | planned |
-| `runs-06` | runs | stray top-level file (WARN) | class-driven (no incident on record) | planned |
-| `runs-07` | runs | empty `runs/` golden case (day-1 green) | class-driven; baseline, not a violation | planned |
+| `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
+| `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
+| `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
+| `runs-04` | runs | missing README.md | class-driven (no incident on record) | landed |
+| `runs-05` | runs | missing one required field (hypothesis/command/finding/next) | class-driven (no incident on record) | landed |
+| `runs-06` | runs | stray top-level file (WARN) | class-driven (no incident on record) | landed |
+| `runs-07` | runs | empty `runs/` golden case (day-1 green) | class-driven; baseline, not a violation | landed |
 | `shards-01` | report-shards | oversized shard (>280 lines) | class-driven (no incident on record) | planned |
 | `shards-02` | report-shards | duplicate `SHARD-ID` | class-driven (no incident on record) | planned |
 | `shards-03` | report-shards | malformed `SHARD-ID` | class-driven (no incident on record) | planned |
@@ -275,3 +275,4 @@ script-verified / rk-only / untested breakdown.
 | linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
 | provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
+| runs | 7/7 | 7 | 0 | 0 |

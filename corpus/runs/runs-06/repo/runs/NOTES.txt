@@ -1,0 +1,1 @@
+Loose notes that are not a bundle directory.

@@ -1,0 +1,19 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-07-15-missing-command/README.md",
+      "message_pattern": "missing required field(s): command"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-07-15-missing-next/README.md",
+      "message_pattern": "missing required field(s): next"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "Parametrized over command/next (hypothesis/finding covered structurally by every other fixture's README). Same self-revealing-title trap as runs-02, fixed the same way. Script-verified."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/not-a-date-slug",
+      "message_pattern": "bad bundle name"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-runs.py:54-55; script-verified. README is otherwise complete so this is the only finding (the bad-name check does not skip the remaining per-bundle checks, per check-runs.py's control flow, but they all pass here)."
+}

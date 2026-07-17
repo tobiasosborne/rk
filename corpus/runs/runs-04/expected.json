@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-07-15-no-readme",
+      "message_pattern": "missing README.md"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "check-runs.py:57-59; script-verified. The remaining per-bundle checks are skipped for this bundle (continue), matching the contract."
+}

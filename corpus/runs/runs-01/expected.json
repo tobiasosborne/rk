@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-07-15-orphan-example",
+      "message_pattern": "not referenced in INDEX.md"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] orphaned run bundle; check-runs.py:67-68; script-verified."
+}

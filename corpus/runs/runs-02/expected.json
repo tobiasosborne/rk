@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-07-15-missing-invariant/README.md",
+      "message_pattern": "no checkable invariant/certificate/known-value declared"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[PLAN] missing invariant; check-runs.py:64-66. First attempt at this fixture accidentally self-satisfied via its own H1 title restating the bundle dirname (which contained the word 'invariant') -- caught by running the real substring check, not by inspection; fixed by using a generic title. Script-verified."
+}

@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "runs/NOTES.txt",
+      "message_pattern": "stray file at runs/ top level"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "check-runs.py:49-50, WARN never ERROR; script-verified."
+}
