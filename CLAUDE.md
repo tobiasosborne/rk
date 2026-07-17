@@ -34,9 +34,15 @@ Not read these? STOP and read them. Do not improvise from memory of them.
   `refs`, `cli`). Enforced by grep in selftest, fr-style.
 - **L4 — Zero runtime deps.** `package.json` `dependencies` stays `{}`. Build-time
   vendoring only where the plan names it (dagre, in M2.4).
-- **L5 — Parity before improvement.** When porting an AISM gate, the python/bash script
-  is ground truth. Match behavior first (cite `script:line` in the gate contract),
-  improve second, never silently.
+- **L5 — Prior art is evidence, not canon** (amended 2026-07-17, TJO directive; the
+  original "parity before improvement" wording wrongly treated AISM as a golden
+  master). AISM and the sister repos kind-of-work and have known problems: their
+  incident histories are load-bearing data; their script behavior is NOT the spec.
+  `docs/gate-contracts.md` is normative. When porting, characterize the prior
+  implementation (cite `script:line` as provenance), record every behavioral
+  divergence in a triage ledger — {rk-stricter-intended | rk-bug | ambiguous →
+  escalate} — and default to the stricter validity semantics. Zero rk-bug divergences
+  is the bar; deliberately matching a known-wrong behavior is itself a bug.
 - **L6 — Validity semantics outrank everything.** Any change touching a validity check
   (gate logic, provenance, status propagation, verdict staleness, truthful rendering)
   gets a Fable-tier review before it lands. Cost and speed never outrank the barrier.

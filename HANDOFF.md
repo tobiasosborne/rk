@@ -11,7 +11,12 @@ No source code yet. Design authority: `../research-workflows/{PRD,IMPLEMENTATION
 
 ## Current milestone: M0 — gate extraction
 
-- M0.1 gate contracts doc: DISPATCHED (Sonnet implementer).
+- M0.1 gate contracts doc: DONE (e17bbe8) + Fable L6 review APPROVE-WITH-CORRECTIONS
+  (docs/reviews/2026-07-17-gate-contracts-fable-review.md) + corrections applied
+  (77a488e; F1-F12 + MIN_RUN whole-quote tightening; ledger now 74 fixtures; deferred
+  items filed as rk-af8/zjq/rko/t14).
+- M0.2 red corpus: DISPATCHED (Sonnet implementer).
+- M0.6 refs acquisition port: DISPATCHED (Sonnet implementer — first TS code in repo).
 - F0 `fr version`: DONE (knowledge-frontier commit 9db2af7, 276/276 tests, not pushed).
   NOTE: the installed ~/.local/bin/fr binary predates F0 (and all of main since Jun 22,
   including P0 field-feedback fixes) — `fr version` will fail until a rebuild is

@@ -87,3 +87,28 @@ totals (71 ✓).
 - Golden non-error fixtures (defs-13, linker-18/19/20, refs-04, runs-07, shards-11)
   guard false-reds; linker-20's pre-bdf6800 byte-identity probe makes the routes:
   tolerance testable.
+
+---
+
+## Addendum (2026-07-17, post-review — TJO premise correction)
+
+TJO directive: **AISM is not a canonical golden master** — it kind-of-works with many
+problems. Incident history is data; script behavior is not the spec. This review's
+verification work (citation audit, deviation neutrality, empirical history scans)
+remains valid as *characterization of prior art*. What changes:
+
+- "Parity cost" is no longer a valid veto on strictness. Affected rulings:
+  - **F5 is reversed**: `source`/`sha256` become REQUIRED for `kind: cited` shards
+    (zero cost — AISM has no cited shards; Layer 0's purpose is provenanced
+    definitions). Contract amendment queued as M0.7.
+  - **Rulings #4 (skip_import) and #5 (substring checks)**: outcomes stand, rationales
+    reframed — #4 defers on architectural grounds (needs a registry join the refs gate
+    lacks), #5 because M2.6 obsoletes the shards mirrors; not because AISM's current
+    behavior is authoritative.
+  - **F4's historical baseline** is repurposed: not a parity bar but the definition of
+    the M0.3 robustness run (no crashes/floods on older schemas, divergences triaged).
+- M0.3/M0.5 acceptance switches from parity/zero-divergence to **divergence triage**
+  (rk-stricter-intended / rk-bug / ambiguous; zero rk-bug is the bar).
+- These re-rulings await Fable ratification at the M0.3 boundary review (L6).
+
+CLAUDE.md L5 amended accordingly (same date). PRD gains decision D9.
