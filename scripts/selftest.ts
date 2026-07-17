@@ -5,13 +5,16 @@
 // legitimate green state, not a silent skip).
 //
 // Purity convention: a file opts into the check by starting with a `// PURITY: pure` comment
-// (first 5 lines) — src/refs/{checksum,lock,manifest,quote,path-safety}.ts and src/types.ts do
-// this today; src/gates and src/graph (M0.3/M2.1) will adopt the same marker rather than a new
-// mechanism. A file without the marker is never scanned (an EDGE file legitimately uses fs/
-// network/clock). Forbidden patterns: `node:` imports, `Date.`, `process.`, `Bun.`.
+// (first 5 lines) — src/refs/{checksum,lock,manifest,quote,path-safety}.ts, src/types.ts, and
+// (as of M0.3) src/gates/{framework,snapshot,config,defs,linker,refs,provenance,runs,shards}.ts
+// all do this; src/graph (M2.1) will adopt the same marker rather than a new mechanism. A file
+// without the marker is never scanned (an EDGE file legitimately uses fs/network/clock — e.g.
+// src/gates/{load,config-load,corpus-discovery}.ts). Forbidden patterns: `node:` imports,
+// `Date.`, `process.`, `Bun.`.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { totalFixtureCount } from "../src/gates/corpus-discovery";
 
 const PURITY_MARKER = "PURITY: pure";
 const PURITY_MARKER_SCAN_LINES = 5;
@@ -84,10 +87,22 @@ function main(): number {
       `(${violations.length} errors)`,
   );
 
-  // Placeholder for the corpus/gate selftest (M0.3 lands `rk check --selftest`; M0.2's fixtures
-  // land under corpus/ in a parallel WP). Reported explicitly at N=0 rather than omitted — an
-  // empty/not-yet-landed corpus check is a visible, honest state, not a silent skip (L2).
-  console.log("checked corpus: 0/0 gate fixtures (rk check --selftest not yet landed — M0.3)");
+  // Corpus fixture count (M0.3): discovers corpus/<gate>/<fixture>/ the same way
+  // test/corpus.test.ts does (both call src/gates/corpus-discovery.ts — one implementation, so
+  // the two can never silently disagree). corpus/README.md's ledger totals to 75 fixtures across
+  // the six M0 gates; a drift from that number means the corpus and its own ledger have gone out
+  // of sync, which is itself an ERROR here, not a silent skip (L2).
+  const EXPECTED_FIXTURE_COUNT = 75;
+  const corpusRoot = join(repoRoot, "corpus");
+  const fixtureTotal = totalFixtureCount(corpusRoot);
+  if (fixtureTotal !== EXPECTED_FIXTURE_COUNT) {
+    console.log(
+      `ERROR corpus: discovered ${fixtureTotal} fixtures, expected ${EXPECTED_FIXTURE_COUNT} ` +
+        `per corpus/README.md's ledger totals — corpus and ledger have drifted`,
+    );
+    errors += 1;
+  }
+  console.log(`checked corpus: ${fixtureTotal}/${EXPECTED_FIXTURE_COUNT} gate fixtures discovered`);
 
   if (errors > 0) {
     console.log(`\nrk selftest: FAILED (${errors} error(s)). Fix the purity violation(s) above.`);
