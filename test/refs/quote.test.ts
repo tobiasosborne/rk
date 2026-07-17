@@ -55,6 +55,22 @@ describe("wholeQuoteMatch — ruling #3 (whole-quote match, no partial-run pass)
   test("a short (<40 char) exact match still passes (short quotes are always held to exact match)", () => {
     expect(wholeQuoteMatch("idempotent map", "the idempotent map on X").matched).toBe(true);
   });
+
+  describe("empty-normalized-quote guard (correction 1, mirrors check-refs.py:84-85)", () => {
+    // A quote that normalizes to the empty string must NEVER match — `"".includes(...)` is
+    // vacuously true for any source, so without an explicit guard these all false-PASS.
+    test("an empty quote never matches", () => {
+      expect(wholeQuoteMatch("", "any source text at all").matched).toBe(false);
+    });
+
+    test("a quote of pure asterisks (normalizes to empty) never matches", () => {
+      expect(wholeQuoteMatch("***", "any source text at all").matched).toBe(false);
+    });
+
+    test("a quote of asterisks and whitespace only (normalizes to empty) never matches", () => {
+      expect(wholeQuoteMatch("* \n *", "any source text at all").matched).toBe(false);
+    });
+  });
 });
 
 describe("locateQuote", () => {
@@ -76,6 +92,14 @@ describe("locateQuote", () => {
 
   test("returns null when the pattern is not present", () => {
     expect(locateQuote("nothing to see here", "absent phrase")).toBeNull();
+  });
+
+  test("returns null for an empty pattern, even though indexOf('') would otherwise hit at 0 (consistency with wholeQuoteMatch's empty-normalized-quote guard)", () => {
+    expect(locateQuote("some arbitrary content", "")).toBeNull();
+  });
+
+  test("returns null for a degenerate (normalizes-to-empty) pattern like '***'", () => {
+    expect(locateQuote("some *** arbitrary content", "***")).toBeNull();
   });
 
   test("line number accounts for multiple preceding newlines", () => {
