@@ -14,13 +14,33 @@ import { join } from "node:path";
 import { provenanceGate } from "../../src/gates/provenance";
 import { labelsOf, parseProvenanceRegistry, texLabels, type RegistryShard } from "../../src/gates/provenance-parse";
 import { parseUnwired, splitSourceTokens, statusTableRows } from "../../src/gates/provenance-md";
-import { sha256Hex, sha256Hex16 } from "../../src/gates/provenance-sha256";
+import { sha256Bytes } from "../../src/refs/hash";
 import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
 import { loadSnapshot } from "../../src/gates/load";
-import type { RepoSnapshot } from "../../src/gates/snapshot";
+import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
 
-function snapshot(entries: Record<string, string>): RepoSnapshot {
-  return new Map(Object.entries(entries));
+/** First-16 sha256 of a string's UTF-8 bytes — the "sha256-16" manifest convention. Byte-exact
+ * with what the edge (src/gates/load.ts, via src/refs/hash.ts) computes for a UTF-8 text file. */
+function sha16(s: string): string {
+  return sha256Bytes(new TextEncoder().encode(s)).slice(0, 16);
+}
+
+/** Hand-built snapshot with edge-measured SnapshotFacts (rk-399): every entry is hashed from its
+ * UTF-8 bytes into `sha256` and marked `tracked` by default; `opts` overrides those facts (a
+ * raw-byte hash for a binary payload, an untracked-but-present path, a bespoke tracked set). This
+ * mirrors what `loadSnapshot` supplies at the real edge — the pure gate reads facts, not text. */
+function snapshot(
+  entries: Record<string, string>,
+  opts?: { sha256?: Record<string, string>; tracked?: string[]; dirs?: string[] },
+): RepoSnapshot {
+  const m = new Map(Object.entries(entries)) as Map<string, string> & SnapshotFacts;
+  const sha256 = new Map<string, string>();
+  for (const [k, v] of Object.entries(entries)) sha256.set(k, sha256Bytes(new TextEncoder().encode(v)));
+  for (const [k, v] of Object.entries(opts?.sha256 ?? {})) sha256.set(k, v);
+  const tracked = new Set<string>(opts?.tracked ?? [...sha256.keys()]);
+  const dirs = new Set<string>(opts?.dirs ?? []);
+  Object.assign(m, { sha256, tracked, dirs } satisfies SnapshotFacts);
+  return m;
 }
 
 function shard(fields: Record<string, string>): string {
@@ -28,8 +48,8 @@ function shard(fields: Record<string, string>): string {
   return `---\n${lines.join("\n")}\n---\nbody\n`;
 }
 
-function run(entries: Record<string, string>) {
-  return provenanceGate.run(snapshot(entries), DEFAULT_GATE_CONFIG);
+function run(entries: Record<string, string>, opts?: Parameters<typeof snapshot>[1]) {
+  return provenanceGate.run(snapshot(entries, opts), DEFAULT_GATE_CONFIG);
 }
 
 function errors(result: ReturnType<typeof run>) {
@@ -191,7 +211,7 @@ describe("provenanceGate — check 4: hash freshness", () => {
 
   test("recorded sha matches actual content: no finding", () => {
     const content = "payload bytes\n";
-    const sha = sha256Hex16(content);
+    const sha = sha16(content);
     const result = run(withSource("refs/src-q/paper.tex", sha, { "refs/src-q/paper.tex": content }));
     expect(errors(result)).toEqual([]);
     expect(warnings(result).some((f) => f.message.includes("hash-verifiable"))).toBe(false);
@@ -199,7 +219,7 @@ describe("provenanceGate — check 4: hash freshness", () => {
 
   test("recorded sha stale vs. edited content: ERROR 'file edited, hash stale'", () => {
     const content = "EDITED payload\n";
-    const staleSha = sha256Hex16("ORIGINAL payload\n");
+    const staleSha = sha16("ORIGINAL payload\n");
     const result = run(withSource("refs/src-q/paper.tex", staleSha, { "refs/src-q/paper.tex": content }));
     const e = errors(result).find((f) => f.message.includes("file edited, hash stale"));
     expect(e).toBeDefined();
@@ -218,14 +238,14 @@ describe("provenanceGate — check 4: hash freshness", () => {
   });
 
   test("absolute (non-refs/-relative) path: WARN, never ERROR", () => {
-    const sha = sha256Hex16("irrelevant");
+    const sha = sha16("irrelevant");
     const result = run(withSource("/home/researcher/paper.pdf", sha));
     expect(errors(result)).toEqual([]);
     expect(warnings(result).some((f) => f.message.includes("absolute path"))).toBe(true);
   });
 
   test("path absent from the snapshot: WARN 'not hash-verifiable', never ERROR", () => {
-    const sha = sha256Hex16("irrelevant");
+    const sha = sha16("irrelevant");
     const result = run(withSource("refs/src-q/paper.tex", sha));
     expect(errors(result)).toEqual([]);
     expect(warnings(result).some((f) => f.message.includes("not hash-verifiable"))).toBe(true);
@@ -234,8 +254,8 @@ describe("provenanceGate — check 4: hash freshness", () => {
   test("duplicate key: BOTH rows are hashed independently (one stale, one fresh)", () => {
     const entries = baseline();
     const goodContent = "good\n";
-    const goodSha = sha256Hex16(goodContent);
-    const staleSha = sha256Hex16("something else\n");
+    const goodSha = sha16(goodContent);
+    const staleSha = sha16("something else\n");
     entries["report/PROVENANCE.md"] =
       "# PROVENANCE\n\n## Ground-truth source registry\n\n" +
       `| Key | path | sha | role |\n|---|---|---|---|\n` +
@@ -247,6 +267,58 @@ describe("provenanceGate — check 4: hash freshness", () => {
     const result = run(entries);
     expect(errors(result).some((f) => f.message.includes("file edited, hash stale"))).toBe(true);
     expect(warnings(result).some((f) => f.message.includes("defined twice"))).toBe(true);
+  });
+
+  // --- rk-399 (review finding 1) : tracking + byte-faithful facts drive ERROR vs WARN ---
+
+  test("TRACKED source outside the loader include set, stale: ERROR (no untracked suffix)", () => {
+    // `notes/data.txt` is under no INCLUDE_RULE, yet git-tracked. The old include-set proxy left
+    // it absent from the snapshot => false WARN (review BLOCKER 1). The edge now hashes every
+    // tracked path, so tracked+stale ⇒ ERROR (AISM parity, gate-contracts.md:743).
+    const content = "EDITED bytes\n";
+    const staleSha = sha16("ORIGINAL bytes\n");
+    const result = run(withSource("notes/data.txt", staleSha, { "notes/data.txt": content }), {
+      tracked: ["notes/data.txt"],
+    });
+    const e = errors(result).find((f) => f.message.includes("file edited, hash stale"));
+    expect(e).toBeDefined();
+    expect(e!.message).not.toContain("rk-stricter-intended");
+  });
+
+  test("present on disk but git-UNTRACKED (gitignored), stale: ERROR [rk-stricter-intended]", () => {
+    // AISM WARNs an untracked stale payload; rk ERRORs it (stricter, documented in the contract).
+    const content = "EDITED bytes\n";
+    const staleSha = sha16("ORIGINAL bytes\n");
+    const result = run(withSource("refs/src-q/paper.tex", staleSha, { "refs/src-q/paper.tex": content }), {
+      tracked: [], // present (hashed) but not git-tracked
+    });
+    const e = errors(result).find((f) => f.message.includes("file edited, hash stale"));
+    expect(e).toBeDefined();
+    expect(e!.message).toContain("rk-stricter-intended");
+  });
+
+  test("binary / non-UTF-8 payload with a correct byte-faithful manifest hash: PASS", () => {
+    // Bytes 0xff 0xfe ... are not valid UTF-8. The edge hashes RAW bytes; a UTF-8 round-trip (the
+    // retired proxy) would have mangled them and false-ERRORed. The gate reads the byte-faithful
+    // fact and passes (review finding 1 — binary-payload fixture).
+    const rawBytes = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0xa0]);
+    const full = sha256Bytes(rawBytes);
+    const result = run(
+      withSource("refs/src-bin/blob.dat", full.slice(0, 16), { "refs/src-bin/blob.dat": "� lossy" }),
+      { sha256: { "refs/src-bin/blob.dat": full } },
+    );
+    expect(errors(result)).toEqual([]);
+    expect(warnings(result).some((f) => f.message.includes("hash-verifiable"))).toBe(false);
+  });
+
+  test("binary payload whose bytes no longer match the recorded hash: ERROR", () => {
+    const recorded = sha256Bytes(new Uint8Array([0x00, 0x01, 0x02]));
+    const actual = sha256Bytes(new Uint8Array([0xff, 0xee, 0xdd]));
+    const result = run(
+      withSource("refs/src-bin/blob.dat", recorded.slice(0, 16), { "refs/src-bin/blob.dat": "x" }),
+      { sha256: { "refs/src-bin/blob.dat": actual } },
+    );
+    expect(errors(result).some((f) => f.message.includes("file edited, hash stale"))).toBe(true);
   });
 });
 
@@ -557,19 +629,5 @@ describe("provenance-parse helpers — direct unit tests", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.statusCell).toBe("open");
     expect(rows[0]!.labels).toEqual(["lem:x"]);
-  });
-});
-
-describe("provenance-sha256 — pure SHA-256 correctness", () => {
-  test("FIPS 180-4 test vector: 'abc'", () => {
-    expect(sha256Hex("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-  });
-
-  test("FIPS 180-4 test vector: empty string", () => {
-    expect(sha256Hex("")).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-  });
-
-  test("sha256Hex16 truncates to the first 16 hex chars", () => {
-    expect(sha256Hex16("abc")).toBe("ba7816bf8f01cfea");
   });
 });

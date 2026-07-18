@@ -1,0 +1,8 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "[rk-399 finding 1] A binary / non-UTF-8 payload (`refs/src-bin/blob.dat`, bytes 0xff 0xfe ...) whose recorded sha256-16 matches a BYTE-FAITHFUL hash of the raw file bytes. The retired UTF-8-string proxy round-tripped the bytes through TextDecoder/TextEncoder (U+FFFD substitution) and would have false-ERRORed; the edge now hashes raw bytes, so this passes. Sibling ERROR case: provenance-16."
+}

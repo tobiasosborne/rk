@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "file edited, hash stale"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[rk-399 finding 1] A git-TRACKED source (`notes/data.txt`) that lies OUTSIDE every loader INCLUDE_RULE, with a stale recorded sha. The retired 'present in RepoSnapshot' proxy left this path absent from the snapshot and downgraded it to WARN (review BLOCKER 1); the edge now hashes every git-tracked file, so tracked+stale => ERROR (gate-contracts.md:743, check-provenance.py:368-404). Requires the fixture file to be git-tracked so `git ls-files` in the fixture dir lists it (corpus/README.md Validation methodology)."
+}

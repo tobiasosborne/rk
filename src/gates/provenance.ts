@@ -10,19 +10,22 @@
 // parameter (default byte-identical to AISM's hardcoded `report/sections/13_discussion.tex`,
 // check-provenance.py:206) instead of a literal — see docs/gate-contracts.md Gate 4 Divergences.
 //
-// Divergence [ambiguous -> escalate, NOT decided here]: check 4 (hash freshness) needs AISM's
-// `tracked` bit (`git ls-files`, check-provenance.py:368-404,407-415) to pick ERROR-vs-WARN on a
-// present-but-stale source. A pure gate (L3) cannot shell out to git; this port treats "present in
-// the RepoSnapshot" as verifiable (same proxy `defs.ts` uses for cited-shard payloads) — ERROR on
-// any present+mismatched file, WARN only when absent from the snapshot. STRICTER than AISM's
-// tracked-only-ERROR default (a gitignored-but-present stale file ERRORs here, WARNs there);
-// CLAUDE.md L5 defaults to the stricter reading when ambiguous, and the failure direction (an
-// extra ERROR, never a missed OVERCLAIM-class false-green) is the safe one — flagged for
-// Fable/orchestrator, not silently asserted settled, since RepoSnapshot has no git-tracked bit
-// anywhere in the M0.3 architecture and this is the first check that would want one.
+// Check 4 (hash freshness) boundary [SETTLED — M0.3 review rk-399, was "ambiguous -> escalate"]:
+// the ERROR/WARN decision needs AISM's `tracked` bit (`git ls-files`, check-provenance.py:368-404,
+// 407-415) plus a byte-faithful hash. A pure gate (L3) cannot shell out to git or read raw bytes,
+// so both are now measured at the edge (src/gates/load.ts) and supplied as SnapshotFacts: this
+// gate CONSUMES `snapshot.sha256` (byte-faithful, correct for binary payloads) and `isTracked`,
+// it never re-hashes snapshot text. Policy, per docs/gate-contracts.md Gate 4 check 4:
+//   - present on disk + hash mismatch => ERROR, whether the file is git-tracked (AISM parity) OR
+//     gitignored-but-present ([rk-stricter-intended], review provenance below);
+//   - absent from disk (no hash measured) => WARN "not hash-verifiable", never ERROR;
+//   - absolute path / malformed sha handled as before.
+// The old "present in RepoSnapshot" proxy is retired: it could not see a tracked source row OUTSIDE
+// the loader's include set (false WARN) and could not hash binary payloads (UTF-8 round-trip);
+// both were BLOCKERs in the review (findings 1 + Check-4 ruling).
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
-import type { RepoSnapshot } from "./snapshot";
+import { fileSha256, isTracked, type RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";
 import {
   forwardTokens,
@@ -40,7 +43,6 @@ import {
   type ClaimRow,
   type SourceRow,
 } from "./provenance-md";
-import { sha256Hex16 } from "./provenance-sha256";
 
 const PROVENANCE_PATH = "report/PROVENANCE.md";
 const RESULT_KINDS = new Set(["thm", "lem", "prop", "cor", "op", "obs", "ex"]);
@@ -101,8 +103,10 @@ function checkClaimSources(
   }
 }
 
-// check 4 — hash freshness (ERROR/WARN): check-provenance.py:368-404. See the file-header
-// Divergence note on the tracked/present proxy this pure port uses in place of `git ls-files`.
+// check 4 — hash freshness (ERROR/WARN): check-provenance.py:368-404. Consumes the edge's
+// byte-faithful `snapshot.sha256` fact and real `isTracked` state (see the file-header boundary
+// note) — the gate never re-hashes text. tracked+stale ⇒ ERROR (AISM parity); present-but-
+// untracked (gitignored) + stale ⇒ ERROR [rk-stricter-intended]; absent ⇒ WARN, never ERROR.
 function checkSourceHashes(sourceRows: SourceRow[], snapshot: RepoSnapshot, findings: Finding[]): void {
   const unverifiable = new Set<string>();
   for (const { key, path, sha } of sourceRows) {
@@ -118,17 +122,22 @@ function checkSourceHashes(sourceRows: SourceRow[], snapshot: RepoSnapshot, find
       });
       continue;
     }
-    const content = snapshot.get(path);
-    if (content === undefined) {
+    const full = fileSha256(snapshot, path);
+    if (full === undefined) {
+      // No byte-faithful hash measured for this path => it is absent from disk (or untracked and
+      // outside the include set). Unverifiable, WARN — never a false ERROR (contract Gate 4 ch4).
       unverifiable.add(key);
       continue;
     }
-    const actual = sha256Hex16(content);
+    const actual = full.slice(0, 16);
     if (actual !== sha) {
+      const suffix = isTracked(snapshot, path)
+        ? ""
+        : " [present on disk but git-untracked; rk-stricter-intended ERROR — see docs/gate-contracts.md Gate 4 check 4]";
       findings.push({
         severity: "ERROR",
         path: PROVENANCE_PATH,
-        message: `source '${key}': recorded ${sha} != actual ${actual} (${path}) — file edited, hash stale`,
+        message: `source '${key}': recorded ${sha} != actual ${actual} (${path}) — file edited, hash stale${suffix}`,
       });
     }
   }

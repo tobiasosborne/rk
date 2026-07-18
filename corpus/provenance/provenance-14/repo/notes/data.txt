@@ -1,0 +1,1 @@
+EDITED bytes -- notes/data.txt was changed after the recorded hash.

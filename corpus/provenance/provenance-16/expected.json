@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "file edited, hash stale"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[rk-399 finding 1] Same binary payload as provenance-15 but with a MISMATCHED recorded hash -> ERROR. Proves the byte-faithful check still fails a genuinely stale binary source (not a blanket pass on binary)."
+}
