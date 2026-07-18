@@ -805,6 +805,24 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   and this gate is otherwise the only one of the six with no coverage unit of its own visible in
   the finding stream — see Divergences for the fix (an explicit coverage line with `S=0`
   rendered loudly) and fixture `provenance-13`.
+- **Silent-skip false-green surface (registry parse), fixed 2026-07-18 (rk-v18, review finding
+  4).** `parse_registry`'s own `fm is None: continue` (check-provenance.py:128-129) drops a
+  registry shard with missing/unterminated frontmatter with no finding and no count; the port's
+  coverage line used to derive BOTH its numerator and its denominator from the surviving parsed
+  set, so one good shard + one malformed shard reported a full `1/1` — the malformed file was
+  invisible to the coverage line, not merely unflagged by a finding. The linker gate (Gate 2)
+  separately ERRORs this exact defect (`linker-01`) — that ERROR does not make THIS gate's own
+  coverage statement truthful, since `rk check` still needs to print six honest coverage lines
+  even if a reader only looks at one of them. Fixed: the denominator is now every registry file
+  discovered under `argument/lemmas/` (before the frontmatter filter), never just the survivors;
+  every excluded path is also named in a single aggregate WARN (`src/gates/
+  provenance-parse.ts::registrySkipReport`) — a WARN, not a second ERROR, since Gate 2 already
+  owns the validity failure and this gate's own duty is coverage transparency, not a duplicate
+  defect report. **[Tier-A / L6 flag]**: this WARN-vs-duplicate-ERROR choice is a validity-surface
+  decision made by the implementing session without a Fable reviewer present; it is carried
+  pending ratification at the rk-4wm milestone re-review, per CLAUDE.md L6 and the model-policy
+  Tier-A review requirement. See the Divergences entry below for the resulting coverage-line
+  wording.
 
 **Divergences from AISM (triage).**
 - **[rk-stricter-intended] The `tab:status` source file becomes a config parameter** (default
@@ -816,13 +834,18 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   `provenance-11`. (Contrast Gate 6's `PREFIX`/`MAX_LINES` parameterization, tagged
   `[message-only]` despite the surface-level similarity — see the Authority section's "Tag
   asymmetry, resolved once".)
-- **[message-only] Coverage line.** `checked provenance: <N> registry results, <R> claim rows,
-  <S> tab:status rows (<E> errors, <W> warnings)`, with `S` rendered even when `0` (never omitted
-  or folded into a generic "manifest absent"-style WARN). CLAUDE.md L2's mandatory coverage
-  reporting, applied to the silent-skip surface above — AISM's script never counts or reports how
-  many `tab:status` rows it actually parsed, so a reader cannot distinguish "0 rows because
-  nothing is Cref'd yet" from "0 rows because the label/midrule markers didn't match and check 5
-  is checking nothing." Pass/fail is unchanged; this only makes an existing silent no-op visible.
+- **[message-only] Coverage line** (amended 2026-07-18, rk-v18). `checked provenance: <N>/<M>
+  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<E> errors, <W>
+  warnings)`. `M` (the denominator) is every `argument/lemmas/*.md` file this gate discovered,
+  `N` (the numerator) is the surviving successfully-parsed set, and `X = M - N` is rendered even
+  when `0` — the same "never omitted or folded away" rule `S` already followed. Before this
+  change `N` and `M` were both derived from the parsed set alone (always `N == M`, a vacuous
+  100%-looking ratio even when files were silently excluded); see the Known-limitations entry
+  above for the incident this closes. `S` keeps its own prior rule unchanged: rendered even when
+  `0` (never omitted or folded into a generic "manifest absent"-style WARN). CLAUDE.md L2's
+  mandatory coverage reporting, applied twice over to this gate's two independent silent-skip
+  surfaces (registry parse, tab:status parse) — AISM's script counts neither. Pass/fail is
+  unchanged both times; only visibility improves.
 - **[message-only]** Standard cross-gate finding-format change; the `--build` step remains
   opt-in, matching AISM's own `--build` flag exactly (not a divergence, confirmed here for
   clarity).
@@ -1043,6 +1066,32 @@ in AISM.
   offending header comment's own line where possible, else 1); `SEVERITY
   report/main.tex:<line>` for master-purity/include findings — vs. AISM's plain `report shard
   check: <message>` lines to stderr with no path/line structure (check-report-shards.sh:20).
+- **[message-only] Coverage line, numerator semantics defined explicitly** (amended 2026-07-18,
+  rk-1tt, review finding 5). `checked shards: <N>/<M> shard(s) fully conforming (included,
+  labeled, cataloged) (<E> errors, <W> warnings)`. `M` (the denominator) is every shard identity
+  this run examined — named by an `\include` in `main.tex`, or physically present under
+  `sections/`, whichever set is larger; `N` (the numerator) means **fully conforming**: zero
+  findings against that shard from ANY of checks 5-19, not merely "was looked at". This is a
+  definition, not a behavior change — AISM's own script has no coverage line of any kind
+  (`check-report-shards.sh` only prints per-violation lines and a final pass/fail); the port added
+  this line under the same CLAUDE.md L2 mandate every gate's coverage line follows, and this entry
+  makes explicit what it always should have meant. The pre-fix implementation approximated
+  "fully conforming" by checking `finding.path === shardFile` after the fact, which silently
+  degenerated to "examined" for any check whose finding is attributed to a DIFFERENT file than
+  the shard it is about: checks 8/16 (README does not list this shard's path/label) and 17/18
+  (CATALOG does not list this shard's header/summary) attribute their ERROR to `report/README.md`
+  or `report/SHARD_CATALOG.md`, and check 6 (missing `\include` target) attributes its ERROR to
+  `report/main.tex` — so a shard that provably fails cataloging, listing, or even existing on disk
+  could still be counted "fully conforming" (fixtures `shards-08`/`shards-09`: `1/1` despite a
+  live CATALOG/README ERROR). The fix tracks non-conformance directly at each check site (a
+  `nonConforming: Set<string>` populated wherever a check fires against a specific shard,
+  regardless of which file the resulting finding names as its own `path`), never by reverse-
+  matching finding paths afterward. No shard-identity set or ERROR/WARN verdict changes; only
+  what the coverage numerator counts is now well-defined and computed consistently. **[Tier-A /
+  L6 flag]**: a coverage line's truthfulness is explicitly Tier-A per CLAUDE.md's model-policy
+  ("truthful rendering"); this fix was implemented and mutation-proven without a Fable reviewer
+  present and is carried pending ratification at the rk-4wm milestone re-review, same as Gate 4's
+  parallel fix above.
 
 **Historical schema-drift tolerance.** N/A — the shard header schema (`SHARD-ID/TITLE/
 KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
