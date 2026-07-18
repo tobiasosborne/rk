@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-amend-diverged.md",
+      "message_pattern": "contract drift: lem-amend-diverged"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "rk-co2 inverse case: node_created's statement matches the registry contract exactly (no drift at creation), but ledger/000003.json's node_amended moves node_id '1' AWAY from the contract (new_statement 'All reals A >= 0 and Lambda >= 0.' != contract 'All reals A > 0 and Lambda > 0.'). Proves the node_amended fix does not just silence check 9 — a real amendment-introduced drift must still ERROR, matching what a live `af get 1` full-replay would return post-amendment. Companion to linker-22 (which proves the reconciling direction). Ledger built from a REAL `af init` + `af amend` workspace (not hand-stubbed) -- `af get 1` on that workspace was confirmed to return the diverged statement."
+}

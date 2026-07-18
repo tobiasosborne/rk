@@ -33,10 +33,22 @@ export interface WorkspaceFacts {
 /** Reads `<workspace>/ledger/*.json` (sorted filename order = event order, zero-padded sequence
  * numbers) and reconstructs the two facts `af_introspect` reports: the root node's statement
  * (from the `node_created` event whose `node.id === "1"`, falling back to the
- * `proof_initialized` event's `conjecture` field if node "1" is somehow absent) and the total
- * node count (`node_created` event count — `nodes_claimed` and other lifecycle events are not
- * node-creating). Returns `null` when the workspace has no ledger at all (mirrors
- * `af_introspect` returning `None` when `(ws / "ledger").exists()` is false). */
+ * `proof_initialized` event's `conjecture` field if node "1" is somehow absent, and then
+ * overridden by any later `node_amended` event whose `node_id === "1"` — see below) and the
+ * total node count (`node_created` event count — `nodes_claimed` and other lifecycle events are
+ * not node-creating; `node_amended` does not change the count). Returns `null` when the
+ * workspace has no ledger at all (mirrors `af_introspect` returning `None` when
+ * `(ws / "ledger").exists()` is false).
+ *
+ * `node_amended` handling (rk-co2): AISM's `af` CLI is an event-sourced store — `af get 1`
+ * replays the FULL ledger, so a `node_amended` event supersedes the node's original
+ * `node_created` statement. A real amendment record looks like (AISM
+ * `proofs/lem-hx-financing-floor/ledger/000043.json`):
+ *   {"type":"node_amended","node_id":"1","previous_statement":"...","new_statement":"..."}
+ * — flat `node_id` (a string, not a nested `node.id`), plus `previous_statement`/
+ * `new_statement` (no nested `node` object, unlike `node_created`). Applying `new_statement`
+ * for `node_id === "1"` here makes this function mirror `af get 1`'s replay exactly, so the
+ * extracted root can no longer read a stale pre-amendment statement. */
 export function introspectWorkspace(snapshot: RepoSnapshot, workspace: string): WorkspaceFacts | null {
   const prefix = `${workspace}/ledger/`;
   const files = [...snapshot.keys()].filter((p) => p.startsWith(prefix) && p.endsWith(".json")).sort();
@@ -63,6 +75,9 @@ export function introspectWorkspace(snapshot: RepoSnapshot, workspace: string): 
       if (node && node.id === "1" && typeof node.statement === "string") {
         rootStatement = node.statement;
       }
+    }
+    if (rec.type === "node_amended" && rec.node_id === "1" && typeof rec.new_statement === "string") {
+      rootStatement = rec.new_statement;
     }
   }
   return { contract: rootStatement || conjecture, nodes };

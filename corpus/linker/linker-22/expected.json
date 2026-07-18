@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "same",
+  "notes": "rk-co2: node_amended reconciliation. node_created's statement ('All reals A, Lambda > 0.') mismatches the registry contract ('All reals A > 0 and Lambda > 0.'), but ledger/000003.json is a node_amended on node_id '1' whose new_statement equals the contract byte-for-byte (mod whitespace). AISM's af_introspect() replays the FULL ledger via `af get 1`, so the amendment is authoritative and AISM reports 0 drift. Pre-fix, introspectWorkspace ignored node_amended and read the stale node_created text, emitting a false contract-drift ERROR (the exact rk-bug behind the AISM lem-hx-financing-floor false positive, docs/reviews/2026-07-18-aism-divergence-triage.md). This fixture is RED against the pre-fix introspectWorkspace (spurious ERROR) and GREEN after applying node_amended during replay. Ledger built from a REAL `af init` + `af amend` workspace (not hand-stubbed) -- `af get 1` on that workspace was confirmed to return the amended statement, matching this fixture's expected verdict."
+}

@@ -60,6 +60,8 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `linker-19` | argument/linker | OR-route golden case: one route fully available | aism-3ne (OR-route feature, `bdf6800`) | landed |
 | `linker-20` | argument/linker | schema-drift golden case: `routes:`-less shard, byte-identical behavior | aism-3ne backward-compat guarantee (`argument.py:77-78`) | landed |
 | `linker-21` | argument/linker | missing `id:` field on a lemma shard | real crash class (not incident-observed): `argument.py`'s `parse_registry` never defaults `id`, so `l["id"]` downstream raises an uncaught `KeyError`; found by the 2026-07-17 Fable review (F12), not a live AISM event — all AISM shards carry `id` | landed |
+| `linker-22` | argument/linker | `node_amended` on root node RECONCILES a `node_created`/registry-contract mismatch — golden case, no drift | **rk-co2** / `docs/reviews/2026-07-18-aism-divergence-triage.md`: AISM's `lem-hx-financing-floor` (`proofs/lem-hx-financing-floor/ledger/000043.json`, node_id `1`) amends a stale root statement to the corrected text that matches the registry contract; pre-fix `introspectWorkspace` ignored `node_amended` and read the stale `node_created` text, emitting a false contract-drift ERROR (rk-bug — the only one from the M0.3 triage). Rebuilt as a minimal fixture (real event shape, not AISM's actual content). | landed |
+| `linker-23` | argument/linker | `node_amended` on root node BREAKS agreement with the registry contract — inverse case, drift must still fire | **rk-co2** companion (no separate AISM incident — proves the fix's other direction): `node_created` matches the contract at creation; a later `node_amended` on `node_id` `1` moves the statement away from the contract. Confirms the `node_amended` replay fix does not silence check 9 for a real post-amendment divergence. | landed |
 | `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | landed |
 | `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | landed |
 | `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | landed |
@@ -100,19 +102,22 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | landed |
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 
-Totals: 15 defs + 21 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **75
+Totals: 15 defs + 23 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **77
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
 `[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory list): `defs-07` (duplicate alias), `linker-06`
 (dependency cycle), `linker-12` (contract mismatch registry↔af-root), `linker-16` (hand-edited
 generated file), `refs-01` (19/19 false-green), `provenance-01` (overclaim), `provenance-03`
 (stale SHA256), `provenance-04` (unwired anchor) — plus `runs-01` (orphaned run bundle) and
 `runs-02` (missing invariant). The plan's "duplicate alias" item is `defs-07`; "missing
-invariant" is `runs-02`. Four fixtures (`defs-15`, `linker-21`, `refs-07`, `provenance-13`) were
-added as corrections to this WP's own contract, not IMPLEMENTATION_PLAN-mandated, and none carry
-`[PLAN]`: `linker-21`, `refs-07`, and `provenance-13` by the 2026-07-17 Fable review of
-`docs/gate-contracts.md` (findings F12, flagged ruling #3, and F3 respectively); `defs-15` by the
-same-dated TJO premise correction (below), with its corresponding contract text (F5 reversed)
-landing separately in **M0.7**.
+invariant" is `runs-02`. Six fixtures (`defs-15`, `linker-21`, `linker-22`, `linker-23`,
+`refs-07`, `provenance-13`) were added as corrections to this WP's own contract, not
+IMPLEMENTATION_PLAN-mandated, and none carry `[PLAN]`: `linker-21`, `refs-07`, and
+`provenance-13` by the 2026-07-17 Fable review of `docs/gate-contracts.md` (findings F12, flagged
+ruling #3, and F3 respectively); `defs-15` by the same-dated TJO premise correction (below), with
+its corresponding contract text (F5 reversed) landing separately in **M0.7**; `linker-22`/
+`linker-23` by the 2026-07-18 M0.3 AISM divergence triage (`docs/reviews/
+2026-07-18-aism-divergence-triage.md`, bead `rk-co2` — the sole rk-bug found, `introspectWorkspace`
+ignoring `node_amended` ledger events).
 
 **`[TJO]` fixture `defs-15`** was added during M0.2 build, ahead of its own contract text: at
 build time the corresponding checks 8-9 amendment was queued but not yet landed in
@@ -284,9 +289,14 @@ script-verified / rk-only / untested breakdown.
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
-| linker | 21/21 | 19 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
+| linker | 23/23 | 21 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
 | provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
 | runs | 7/7 | 7 | 0 | 0 |
 | shards | 12/12 | 12 | 0 | 0 |
-| **total** | **75/75** | **70** | **5** | **0** |
+| **total** | **77/77** | **72** | **5** | **0** |
+
+`linker-22`/`linker-23` (rk-co2 node_amended fix, 2026-07-18) are counted under `same`: both
+ledgers were built from a REAL `af init` + `af amend` workspace (not hand-stubbed JSON), and `af
+get 1` against each was confirmed to return the amended statement rk's fixed `introspectWorkspace`
+now also returns — verified byte-for-byte, same methodology as `linker-12`/`-17..-20`.

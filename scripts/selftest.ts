@@ -89,10 +89,10 @@ function main(): number {
 
   // Corpus fixture count (M0.3): discovers corpus/<gate>/<fixture>/ the same way
   // test/corpus.test.ts does (both call src/gates/corpus-discovery.ts — one implementation, so
-  // the two can never silently disagree). corpus/README.md's ledger totals to 75 fixtures across
+  // the two can never silently disagree). corpus/README.md's ledger totals to 77 fixtures across
   // the six M0 gates; a drift from that number means the corpus and its own ledger have gone out
   // of sync, which is itself an ERROR here, not a silent skip (L2).
-  const EXPECTED_FIXTURE_COUNT = 75;
+  const EXPECTED_FIXTURE_COUNT = 77;
   const corpusRoot = join(repoRoot, "corpus");
   const fixtureTotal = totalFixtureCount(corpusRoot);
   if (fixtureTotal !== EXPECTED_FIXTURE_COUNT) {
