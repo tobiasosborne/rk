@@ -1,3 +1,4 @@
+<!-- SUPERSEDED-BY: docs/reviews/2026-07-18-aism-divergence-triage-v2.md (rk-g68 rerun, post-fix: rk-bug count 0, flood buckets attributed). This file is pinned pre-fix at 34203ed; read v2 for the current acceptance state. -->
 <!-- ROLE: committed triage record — M0.3 acceptance run (rk-g7h). rk check on AISM HEAD +
      3-tree robustness run, every divergence triaged per CLAUDE.md L5. UPDATE POLICY:
      append-only; supersede with a new dated file if re-run. TRIGGER: read by the M0.3
