@@ -275,6 +275,22 @@ incident.
 | `sha256` | 16-hex string or `-` | **REQUIRED for `kind=cited`** (ERROR when absent or `-` — F5 reversed, M0.7) | prefix must exist in the manifest |
 | `consensus` | freeform string | for `kind∈{consensus,original}` | who agreed / where transcribed |
 
+**`status` enum, precisely** (bead rk-cvy — undocumented before this entry, discovered dogfood-1:
+a newcomer had no way to know a definition shard's `status:` uses a DIFFERENT vocabulary from
+CLAUDE.md's rigour ladder, and only found out via a gate WARN):
+- `draft` — this definition is still mutable; term/aliases/kind may still change without
+  notice. Check 13 (below) WARNs on every `draft` shard as a standing reminder, not a defect.
+- `locked` — this definition is frozen; downstream result shards (Gate 2's `defs:` field) may
+  rely on its `term`/`aliases`/`kind` staying fixed.
+
+**Relation to the rigour ladder (PRD §5).** Definition shards are never `proved` — PRD C2 Layer 0
+states plainly that "definitions are never 'proved'"; the rigour ladder
+(`cited|proved|consensus|proved-mod-audit|stated|conjecture|heuristic|numerical|open|obstruction|
+disproved`) is a Layer 1 (result-shard) concept only, checked by Gate 2's `status` field, not this
+one. `draft`/`locked` is a MUTABILITY flag on a term's definition text, not an evidence-strength
+level — the two enums are deliberately disjoint namespaces on two different layers, not two
+options within one status vocabulary.
+
 Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `SKIP =
 {README.md, INDEX.md}` (check-defs.py:27).
 
@@ -387,7 +403,7 @@ N/A for this gate; nothing to tolerate.
 
 ---
 
-## Gate 2 — argument / linker (`argument/lemmas/*.md`)
+## Gate 2 — argument / linker (`argument/**/*.md`, recursive)
 
 **Purpose.** The linker for Layer 1 (the module graph): enforces acyclicity, import
 resolution, contract match between the registry and the af proof, rigour-ladder-respecting
@@ -407,7 +423,22 @@ burying the signal in noise. Fixed by hoisting both to one shared constant,
 `af_constants.NODE_SOFT_CAP = 26`.
 
 **Inputs.**
-- Glob: `argument/lemmas/*.md`, excluding `README.md`, `INDEX.md` (argument.py:131-133).
+- Glob: `argument/**/*.md`, RECURSIVE — every depth under `argument/` (amended 2026-07-18, bead
+  rk-9pk; see Divergences below — AISM's own glob is `argument/lemmas/*.md`,
+  argument.py:131-133). **Exclusions**: a file whose BASENAME is exactly `README.md`, `INDEX.md`,
+  or `DAG.md`, at ANY depth, is treated as non-shard documentation/mirror content and never
+  parsed as a shard. Every OTHER `.md` file under `argument/` MUST parse as a shard — a file with
+  no YAML frontmatter, or with frontmatter but no `id:` line, is a parse ERROR exactly as any
+  other malformed shard (Checks 1-2 below); it is never silently skipped. Prose that is not a
+  shard belongs in a `README.md`, not a bare `.md` file under `argument/`.
+  - **Coverage line.** The linker gate's one `CoverageLine` names both the shard count and the
+    exclusion count explicitly, unconditionally (never omitted, even at zero — CLAUDE.md L2):
+    `checked linker: <checked>/<total> lemma shards (<K> non-shard files ignored[: <names>]); mirrors: ...`.
+    `<names>` is the sorted list of excluded files' paths RELATIVE TO `argument/` (so a root-level
+    `argument/README.md` reads as `README.md`, and a nested `argument/lemmas/README.md` reads as
+    `lemmas/README.md` — disambiguating same-basename files at different depths without full
+    repo-relative paths). Example: `checked linker: 3/3 lemma shards (2 non-shard files ignored:
+    README.md, INDEX.md); mirrors: INDEX absent (not adopted), DAG absent (not adopted)`.
 - Frontmatter (`argument/README.md:22-38`, argument.py:106-124):
 
 | field | type | required | allowed values / notes |
@@ -472,8 +503,9 @@ is stale against the code and must not be treated as ground truth).
     gate (`docs/memos/2026-07-18-aism-residue-audit.md` R14); a general research tool must not
     force every repo to hand-generate AISM's own markdown mirror just to pass `rk check`. Each
     file's adoption status (`present` / `absent (not adopted)`) is named explicitly in the
-    linker gate's coverage line — `checked linker: <N>/<M> lemma shards; mirrors: INDEX <status>,
-    DAG <status> (...)` — so non-adoption is always visible, never a silent skip (CLAUDE.md L2).
+    linker gate's coverage line — `checked linker: <N>/<M> lemma shards (<K> non-shard files
+    ignored[: <names>]); mirrors: INDEX <status>, DAG <status> (...)` — so non-adoption is always
+    visible, never a silent skip (CLAUDE.md L2).
     Fixture: `linker-25` (both absent, golden pass); `linker-16` (INDEX present and stale still
     ERRORs, unchanged).
 12. **Brittleness** (WARN only, never blocks the gate) — an af workspace's node count `>
@@ -553,6 +585,31 @@ features layered on the same pure functions, not gate verdicts.
   bead removes (forcing every general rk repo to adopt AISM's own transitional markdown-mirror
   convention just to pass), not a stricter baseline worth preserving — the same footing as F5's
   reversal (Gate 1). Fixture: `linker-25`.
+- **Shard discovery becomes RECURSIVE across all of `argument/`, not `argument/lemmas/*.md` only**
+  (amended 2026-07-18, bead rk-9pk — see Inputs above for the full rule). AISM's `parse_registry`
+  only ever globs `argument/lemmas/*.md` (argument.py:131-133) — the private subdirectory
+  convention every AISM shard happens to live under. rk's own stamped scaffold does not create a
+  `lemmas/` subdirectory (PRD.md:79-85 creates `argument/` only); a dogfood session (2026-07-18,
+  real user, bead rk-9pk) wrote three result shards — including the campaign's north-star theorem
+  — directly at `argument/*.md`, and `rk check` reported `checked linker: 0/0 lemma shards` with
+  zero findings and exit 0: a green run over an entirely unvalidated registry, the exact
+  silent-skip failure class CLAUDE.md L2 forbids. This IS a verdict-changing divergence — a repo
+  with shards at `argument/` root, or nested anywhere else under `argument/`, is now discovered
+  and validated where AISM's script would silently see zero shards — but it is **not** triaged
+  into the usual rk-stricter-intended / rk-bug / ambiguous triad: that triad exists to default an
+  AISM behavioral gap to the *stricter* reading, and this change goes the other way, widening
+  discovery, deliberately. AISM's `lemmas/`-only convention is the residue of a private repo
+  layout choice, not a general contract worth constraining every rk repo to — the same footing as
+  R14's mirror-presence amendment (Check 11 above) and F5's reversal (Gate 1). AISM's own tree is
+  unaffected: `argument/lemmas/*.md` is a subset of the new recursive scan, and AISM's `lemmas/`
+  directory carries zero files named `README.md`/`INDEX.md`/`DAG.md` (spot-checked
+  2026-07-18, `../almost-idempotent-stochastic-maps/argument/lemmas/`, 200 files, no basename
+  collision) — the same 200 shards resolve, byte-identically, under the new rule; the three
+  root-level `argument/{README,INDEX,DAG}.md` files that the recursive scan now walks past are
+  excluded by name (3 ignored, named on the coverage line), never mistaken for shards. Fixtures:
+  `linker-26` (root-level shards, the dogfood shape, plus a nested non-shard README ignored
+  alongside a root-level one — coverage line names both); `linker-27` (a frontmatter-less stray
+  `.md` at `argument/` root, not README/INDEX/DAG — parse ERROR, never a silent skip).
 
 **Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
 on historical commits — load-bearing for the **M0.3 robustness run** (F4, repurposed per the
@@ -631,6 +688,8 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-23` | **`node_amended` on root node BREAKS contract agreement** [rk-co2 companion] — inverse of `linker-22`: the root statement matches the `contract` at creation, a later amendment moves it away ⇒ check 9 (Contract match) "contract drift" ERROR still fires |
 | `linker-24` | **missing `kind:` field entirely** [rk-aft, finding 3] — shard frontmatter has no `kind` line at all ⇒ check 3 ERROR "missing required field 'kind'" (AISM's enum check, argument.py:141, is a no-op when `kind` is absent — no finding, shard registers clean) |
 | `linker-25` | **[R14, bead rk-1rv] mirror presence-conditional golden case** — one valid lemma shard, `argument/INDEX.md` and `argument/DAG.md` BOTH entirely absent ⇒ zero findings, coverage names both mirrors' non-adoption (AISM's `check_generated` ERRORs unconditionally on an absent mirror; rk's contract does not) |
+| `linker-26` | **[rk-9pk] recursive discovery golden case, dogfood shape** — three shards directly at `argument/*.md` root (one dep chain: `lem-a` -> `lem-b` -> `thm-main`), plus `argument/README.md` and `argument/lemmas/README.md` both present ⇒ all three parse/check cleanly, coverage line reads `3/3 lemma shards (2 non-shard files ignored: README.md, lemmas/README.md)` |
+| `linker-27` | **[rk-9pk] frontmatter-less stray file under `argument/` root** — a `.md` file with no `---` frontmatter block at all, named neither `README.md`/`INDEX.md`/`DAG.md` ⇒ ERROR "missing/unterminated frontmatter" (proves a non-excluded file is never silently skipped, only ever a shard or a parse error) |
 
 ---
 

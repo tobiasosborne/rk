@@ -1,0 +1,17 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 3,
+    "total": 3,
+    "unit_patterns": [
+      "2 non-shard files ignored: README.md, lemmas/README.md",
+      "INDEX absent (not adopted)",
+      "DAG absent (not adopted)"
+    ]
+  },
+  "aism_behavior": "differs: script-verified 2026-07-18 by importing argument.py as a module (module-import harness, corpus/README.md Validation methodology) and calling its real parse_registry(arg_dir) directly against this exact repo/argument tree -- it returns (lemmas=[], errors=[]): AISM's glob is `<arg_dir>/lemmas/*.md` only (argument.py:127-131), and this fixture's `argument/lemmas/` holds nothing but an excluded README.md, so all three real shards at `argument/*.md` root -- including the north-star `thm-main` -- are entirely invisible to it. AISM's own `main()` composition would report zero registered results and zero errors: a clean, silent pass over an unvalidated registry, the exact dogfood-1 symptom (bead rk-9pk). rk's contract now scans `argument/**/*.md` recursively (excluding README.md/INDEX.md/DAG.md at any depth), so all three shards are discovered, parsed, and checked (acyclicity/imports/status/orphans all clean), and the coverage line names both excluded non-shard files by their argument/-relative paths -- disambiguating the two same-named README.md files at different depths. This is a deliberate contract amendment (a private AISM repo-layout convention, not a general contract), not a strictness triage -- same footing as linker-25's R14 mirror-presence amendment.",
+  "notes": "rk-9pk (dogfood-1, real user, 2026-07-18): the dogfood shape -- shards written directly at argument/*.md root because the stamped scaffold creates argument/ only, no lemmas/ subdirectory (PRD.md:79-85). One dep chain (lem-a -> lem-b -> thm-main) proves discovery + dependency resolution both work at argument/ root, not just inside lemmas/. argument/README.md and argument/lemmas/README.md (same basename, different depths) are both present and both excluded, proving the ignored-file list disambiguates by argument/-relative path rather than colliding on bare basename. Mutation-proven red-first: (1) restricting the scan back to argument/lemmas/ only turns this fixture red (0/3 shards discovered, reproducing the dogfood-1 symptom exactly); (2) dropping the ignored-count/names from the coverage line turns a dedicated unit test red (test/gates/linker.test.ts); both reverted after confirming red."
+}

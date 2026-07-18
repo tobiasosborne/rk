@@ -32,17 +32,22 @@ describe("loadSnapshot", () => {
     expect(snap.has("definitions/sub/nested.md")).toBe(false);
   });
 
-  test("loads argument/{INDEX,DAG}.md and argument/lemmas/*.md, but does not double-recurse", () => {
+  test("loads argument/{INDEX,DAG}.md, argument/lemmas/*.md, root-level argument/*.md shards, " +
+    "and nested shards at any depth (recursive, bead rk-9pk)", () => {
     const root = makeTree({
       "argument/INDEX.md": "index",
       "argument/DAG.md": "dag",
       "argument/lemmas/lem-x.md": "lemma x",
+      "argument/lem-root.md": "root-level shard (dogfood-1 shape)",
+      "argument/lemmas/nested/lem-deep.md": "nested two levels deep",
     });
     dirs.push(root);
     const snap = loadSnapshot(root);
     expect(snap.get("argument/INDEX.md")).toBe("index");
     expect(snap.get("argument/DAG.md")).toBe("dag");
     expect(snap.get("argument/lemmas/lem-x.md")).toBe("lemma x");
+    expect(snap.get("argument/lem-root.md")).toBe("root-level shard (dogfood-1 shape)");
+    expect(snap.get("argument/lemmas/nested/lem-deep.md")).toBe("nested two levels deep");
   });
 
   test("loads proofs/** recursively (ledger jsons, meta.json, externals jsons)", () => {

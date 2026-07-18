@@ -1,4 +1,4 @@
-// ROLE: Gate 2 — argument/linker (argument/lemmas/*.md). Contract: docs/gate-contracts.md
+// ROLE: Gate 2 — argument/linker (argument/**/*.md, recursive). Contract: docs/gate-contracts.md
 // "Gate 2 — argument / linker". Orchestrates parseRegistry (linker-parse.ts, checks 1-5),
 // checkAcyclic/checkImports/checkStatus/checkContracts/checkOrphans/checkBrittleness +
 // af-workspace introspection (linker-graph.ts, checks 6-10, 12) and checkGenerated
@@ -7,7 +7,6 @@
 
 import type { Gate, GateResult } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
-import { listDir } from "./snapshot";
 import type { GateConfig } from "./config";
 import { loadDefIds, parseRegistry } from "./linker-parse";
 import {
@@ -25,7 +24,7 @@ import { checkGenerated } from "./linker-render";
 export const linkerGate: Gate = {
   name: "linker",
   run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
-    const { lemmas, errors: parseErrors } = parseRegistry(snapshot);
+    const { lemmas, errors: parseErrors, total, ignored } = parseRegistry(snapshot);
     const defIds = loadDefIds(snapshot);
     const wsDirs = scanWorkspaces(snapshot);
 
@@ -57,9 +56,15 @@ export const linkerGate: Gate = {
       ...checkBrittleness(lemmas, nodeCounts, config.linkerBrittlenessSoftCap),
     ];
 
-    const total = listDir(snapshot, "argument/lemmas").filter(
-      (n) => n.endsWith(".md") && n !== "README.md" && n !== "INDEX.md",
-    ).length;
+    // rk-9pk (dogfood-1): the count of README.md/INDEX.md/DAG.md files excluded from the
+    // recursive argument/**/*.md scan is always named on the coverage line, zero included — never
+    // a silent skip (CLAUDE.md L2). Names are paths relative to argument/, so a root-level file
+    // reads as its bare name ("README.md") and a nested one carries its subpath
+    // ("lemmas/README.md"), disambiguating same-named files at different depths.
+    const ignoredNote =
+      ignored.length === 0
+        ? "0 non-shard files ignored"
+        : `${ignored.length} non-shard file${ignored.length === 1 ? "" : "s"} ignored: ${ignored.join(", ")}`;
 
     // R14 (bead rk-1rv): each mirror's adoption status is always named in the coverage line,
     // present or absent — never a silent skip when a repo hasn't adopted the transitional
@@ -70,7 +75,14 @@ export const linkerGate: Gate = {
 
     return {
       findings,
-      coverage: [{ gate: "linker", unit: `lemma shards; mirrors: ${mirrorsNote}`, checked: total, total }],
+      coverage: [
+        {
+          gate: "linker",
+          unit: `lemma shards (${ignoredNote}); mirrors: ${mirrorsNote}`,
+          checked: total,
+          total,
+        },
+      ],
     };
   },
 };

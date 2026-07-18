@@ -57,5 +57,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * between this constant and corpus/README.md's own ledger is itself a bug — bump both together.
  * 90 (+2 over the previously-pinned 88): M1 addition `linker-25` + `shards-15` (beads rk-1rv /
  * rk-au6, docs/memos/2026-07-18-aism-residue-audit.md R13/R14) — the presence-conditional
- * report/ and argument/INDEX.md+DAG.md mirror guards' golden-pass fixtures. */
-export const EXPECTED_FIXTURE_COUNT = 90;
+ * report/ and argument/INDEX.md+DAG.md mirror guards' golden-pass fixtures.
+ * 92 (+2 over the then-pinned 90): M1 addition `linker-26` + `linker-27` (bead rk-9pk, dogfood-1
+ * incident) — the linker's shard glob widened from `argument/lemmas/*.md` to a recursive
+ * `argument/**\/*.md` scan; `linker-26` is the recursive-discovery golden-pass fixture (the
+ * dogfood shape: shards directly at `argument/*.md` root), `linker-27` proves a non-excluded
+ * stray file is still a parse ERROR, never silently skipped. */
+export const EXPECTED_FIXTURE_COUNT = 92;

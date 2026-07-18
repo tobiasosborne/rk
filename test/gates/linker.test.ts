@@ -153,3 +153,106 @@ describe("parseRegistry / required 'kind' field (rk-aft, 2026-07-18 M0.3 review 
     expect(lemmas[0]?.kind).toBe("lemma");
   });
 });
+
+// rk-9pk (dogfood-1, real user, 2026-07-18): the linker used to glob argument/lemmas/*.md ONLY,
+// so a shard written directly at argument/*.md (the shape rk's own stamped scaffold produces —
+// PRD.md:79-85 creates argument/, never a lemmas/ subdirectory) silently registered 0/0 with zero
+// findings and a green `rk check` over an entirely unvalidated registry, including the campaign's
+// north-star theorem. corpus/linker/linker-26 and linker-27 cover this end-to-end through the
+// corpus runner; these tests isolate parseRegistry's recursive-scan + exclusion logic and
+// linkerGate's coverage-line note directly, independent of any fixture.
+describe("parseRegistry / recursive argument/**/*.md discovery (rk-9pk)", () => {
+  test("a root-level shard (argument/*.md, the dogfood-1 shape) is discovered and parsed", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-root.md": "---\nid: lem-root\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { lemmas, errors, total, ignored } = parseRegistry(snapshot);
+    expect(errors).toHaveLength(0);
+    expect(lemmas).toHaveLength(1);
+    expect(lemmas[0]?.id).toBe("lem-root");
+    expect(lemmas[0]?.path).toBe("argument/lem-root.md");
+    expect(total).toBe(1);
+    expect(ignored).toEqual([]);
+  });
+
+  test("a shard nested two levels deep (argument/lemmas/sub/lem-y.md) is discovered", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/sub/lem-y.md": "---\nid: lem-y\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { lemmas, errors } = parseRegistry(snapshot);
+    expect(errors).toHaveLength(0);
+    expect(lemmas).toHaveLength(1);
+    expect(lemmas[0]?.id).toBe("lem-y");
+    expect(lemmas[0]?.path).toBe("argument/lemmas/sub/lem-y.md");
+  });
+
+  test("README.md/INDEX.md/DAG.md are excluded at ANY depth, named relative to argument/, and " +
+    "never counted as shard candidates", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/README.md": "prose",
+      "argument/INDEX.md": "generated",
+      "argument/DAG.md": "generated",
+      "argument/lemmas/README.md": "prose, nested",
+      "argument/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { lemmas, errors, total, ignored } = parseRegistry(snapshot);
+    expect(errors).toHaveLength(0);
+    expect(lemmas).toHaveLength(1);
+    expect(total).toBe(1);
+    expect(ignored).toEqual(["DAG.md", "INDEX.md", "README.md", "lemmas/README.md"]);
+  });
+
+  test("a frontmatter-less stray .md under argument/ (not README/INDEX/DAG) is a parse ERROR, " +
+    "never a silent skip", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/stray.md": "just some prose, no frontmatter block at all\n",
+    });
+    const { lemmas, errors, total, ignored } = parseRegistry(snapshot);
+    expect(lemmas).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.severity).toBe("ERROR");
+    expect(errors[0]?.path).toBe("argument/stray.md");
+    expect(errors[0]?.message).toContain("missing/unterminated frontmatter");
+    // The stray file is a considered CANDIDATE (it counts toward the coverage denominator) — it
+    // is emphatically not in `ignored` (that set is exact-name-only: README/INDEX/DAG).
+    expect(total).toBe(1);
+    expect(ignored).toEqual([]);
+  });
+
+  test("argument/lemmas/*.md (the pre-rk-9pk AISM-compatible layout) still discovers cleanly " +
+    "under the recursive scan — no regression on the legacy shape", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-a.md": "---\nid: lem-a\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/lemmas/README.md": "prose",
+      "argument/lemmas/INDEX.md": "generated",
+    });
+    const { lemmas, errors, total, ignored } = parseRegistry(snapshot);
+    expect(errors).toHaveLength(0);
+    expect(lemmas).toHaveLength(1);
+    expect(total).toBe(1);
+    expect(ignored).toEqual(["lemmas/INDEX.md", "lemmas/README.md"]);
+  });
+});
+
+describe("linkerGate coverage line / ignored-file count (rk-9pk)", () => {
+  test("the coverage line names the ignored-file count and their names, even when zero " +
+    "(never a silent omission, CLAUDE.md L2)", () => {
+    const zeroSnapshot = snapshotFromFiles({
+      "argument/lem-only.md": "---\nid: lem-only\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const zeroResult = linkerGate.run(zeroSnapshot, DEFAULT_GATE_CONFIG);
+    expect(zeroResult.coverage[0]!.unit).toContain("0 non-shard files ignored");
+
+    const twoIgnoredSnapshot = snapshotFromFiles({
+      "argument/lem-only.md": "---\nid: lem-only\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/README.md": "prose",
+      "argument/INDEX.md": "generated",
+    });
+    const twoResult = linkerGate.run(twoIgnoredSnapshot, DEFAULT_GATE_CONFIG);
+    expect(twoResult.coverage[0]!.unit).toContain("2 non-shard files ignored: INDEX.md, README.md");
+    // Coverage checked/total counts shard CANDIDATES only — the two ignored files never inflate
+    // the denominator.
+    expect(twoResult.coverage[0]!.checked).toBe(1);
+    expect(twoResult.coverage[0]!.total).toBe(1);
+  });
+});

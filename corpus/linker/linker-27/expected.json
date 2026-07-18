@@ -1,0 +1,19 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/stray.md",
+      "message_pattern": "missing/unterminated frontmatter"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["0 non-shard files ignored"]
+  },
+  "aism_behavior": "differs: script-verified 2026-07-18 by importing argument.py as a module (module-import harness, corpus/README.md Validation methodology) and calling its real parse_registry(arg_dir) directly against this exact repo/argument tree -- it returns (lemmas=[], errors=[]): AISM's glob is `<arg_dir>/lemmas/*.md` only (argument.py:127-131), and this fixture has no `argument/lemmas/` directory at all, so `stray.md` is never reached and produces neither a lemma nor an error -- a second, independent instance of the dogfood-1 silent-skip shape. rk's contract scans `argument/**/*.md` recursively; `stray.md` is not named README.md/INDEX.md/DAG.md, so it is a shard candidate, and since it carries no `---` frontmatter it is a parse ERROR (Check 1), never a silent skip. This is a deliberate contract amendment (a private AISM repo-layout convention, not a general contract), not a strictness triage -- same footing as linker-25's R14 mirror-presence amendment and linker-26's sibling case above.",
+  "notes": "rk-9pk companion to linker-26: proves the recursive scan's exclusion list is exact-name-only (README.md/INDEX.md/DAG.md) -- any OTHER .md under argument/ MUST parse as a shard, so a stray non-frontmatter file is a parse ERROR exactly as any other malformed shard, never a third silently-ignored class sitting between 'shard' and 'excluded documentation'. Mutation-proven red-first: making frontmatter-less files silently skip (treating a parse failure as an exclusion instead of an error) turns this fixture red (0 findings where one ERROR is expected, verdict flips to pass); reverted after confirming red."
+}

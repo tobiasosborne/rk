@@ -1,14 +1,28 @@
 // PURITY: pure — no fs/network/clock (L3). Gate 2 (linker) registry parser: reads
-// `argument/lemmas/*.md` frontmatter into `Lemma` records + parse-stage Findings (checks 1-5).
-// Ground truth: docs/gate-contracts.md "Gate 2 — argument / linker" Inputs + Checks 1-5, ported
-// from argument.py:106-148 (`_parse_frontmatter`/`parse_registry`) and `parse_routes`
-// (argument.py:68-90, aism-3ne).
+// `argument/**/*.md` frontmatter (RECURSIVE) into `Lemma` records + parse-stage Findings
+// (checks 1-5). Ground truth: docs/gate-contracts.md "Gate 2 — argument / linker" Inputs +
+// Checks 1-5, ported from argument.py:106-148 (`_parse_frontmatter`/`parse_registry`) and
+// `parse_routes` (argument.py:68-90, aism-3ne).
 //
 // Divergence [F12, crash-to-finding, linker-21]: AISM's parse_registry never defaults/validates
 // the `id` key (argument.py:139-140's `if fm.get("id")` is a no-op when id is absent), so every
 // downstream `l["id"]` bracket access crashes with an uncaught KeyError. This port instead
 // REJECTS a shard with no `id:` line outright (one ERROR finding, shard excluded from `lemmas`)
 // so no id-keyed check downstream (acyclicity/status/orphans) can ever see it.
+//
+// Divergence [rk-9pk, dogfood-1, recursive discovery, 2026-07-18]: AISM's own `parse_registry`
+// only ever globs `argument/lemmas/*.md` (argument.py:131-133) — a private subdirectory
+// convention rk's scaffold does not stamp (PRD.md:79-85 creates `argument/`, no `lemmas/`). A
+// dogfood session wrote three result shards, including the campaign's north-star theorem,
+// directly at `argument/*.md`; the old lemmas/-only glob silently reported "0/0 lemma shards"
+// and `rk check` PASSED GREEN over an entirely unvalidated registry — the exact silent-skip
+// failure class CLAUDE.md L2 forbids. rk's contract now scans `argument/**/*.md` recursively,
+// excluding `README.md`/`INDEX.md`/`DAG.md` at ANY depth (non-shard documentation/mirrors); every
+// OTHER `.md` under `argument/` MUST parse as a shard. `argument/lemmas/*.md` is a subset of this
+// recursive scan, so AISM's own tree (which has zero README/INDEX/DAG collisions inside
+// `lemmas/`) discovers byte-identical shards under the new rule — see docs/gate-contracts.md
+// Gate 2 Inputs + Divergences for the full amendment text (same footing as commit 3849eb1's
+// presence-conditional mirror amendment: a deliberate contract widening, not a strictness triage).
 
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
@@ -16,7 +30,8 @@ import { listDir, parseFrontmatter } from "./snapshot";
 
 export interface Lemma {
   id: string;
-  /** repo-relative path to this shard's own file, e.g. "argument/lemmas/lem-x.md" — used to
+  /** repo-relative path to this shard's own file, e.g. "argument/lemmas/lem-x.md" or
+   * "argument/lem-x.md" (root-level, dogfood-1 shape) — used to
    * attribute every id-keyed finding back to a real path (AISM's console output has no path at
    * all for these; the Shared conventions' uniform SEVERITY path:line format requires one). */
   path: string;
@@ -84,23 +99,68 @@ export function allDepIds(l: Lemma): string[] {
   return [...l.deps, ...l.routes.flat()];
 }
 
-const LEMMA_DIR = "argument/lemmas";
+const ARGUMENT_DIR = "argument";
 
-/** Parses every `argument/lemmas/*.md` shard (excluding README.md/INDEX.md) into `Lemma`
- * records + parse-stage Findings (Checks 1-5). A shard whose frontmatter is missing/unterminated,
- * or which carries no `id:` line at all [F12], is excluded from the returned `lemmas` array
- * entirely — every OTHER check still runs against whatever shards remain (contract's
- * trigger-preserving-fix shape, see the file header). */
-export function parseRegistry(snapshot: RepoSnapshot): { lemmas: Lemma[]; errors: Finding[] } {
+/** File basenames excluded from the shard scan at ANY depth under `argument/` — non-shard
+ * documentation/mirrors, not results (rk-9pk, docs/gate-contracts.md Gate 2 Inputs). `DAG.md` is
+ * new here vs. the pre-rk-9pk exclusion set (which only ever named README.md/INDEX.md because the
+ * old lemmas/-only glob never even reached argument/'s own root-level DAG.md/INDEX.md/README.md
+ * mirror files in the first place — the recursive scan now walks through them, so they must be
+ * excluded explicitly). */
+const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
+
+/** Every `.md` file under `argument/`, RECURSIVE, returned as paths relative to `argument/`
+ * (e.g. "lem-x.md" for a root-level shard, "lemmas/lem-y.md", "lemmas/sub/lem-z.md"), sorted
+ * lexicographically. Reads directly off the snapshot's text-map keys — `RepoSnapshot`'s only
+ * shape for "what files does this tree contain" (there is no separate recursive-listing fact;
+ * `src/gates/snapshot.ts`'s `listDir` is deliberately one-level-only for its other callers). */
+function listArgumentMdFilesRelative(snapshot: RepoSnapshot): string[] {
+  const prefix = `${ARGUMENT_DIR}/`;
+  const out: string[] = [];
+  for (const path of snapshot.keys()) {
+    if (path.startsWith(prefix) && path.endsWith(".md")) out.push(path.slice(prefix.length));
+  }
+  return out.sort();
+}
+
+export interface ParseRegistryResult {
+  lemmas: Lemma[];
+  errors: Finding[];
+  /** Total shard CANDIDATES considered this run (every non-excluded `argument/**\/*.md` file,
+   * whether it went on to parse cleanly into `lemmas` or was rejected as a structural error) —
+   * the coverage line's denominator; `checked` always equals this (every candidate is processed,
+   * never silently skipped, CLAUDE.md L2). */
+  total: number;
+  /** Paths of excluded non-shard files (`README.md`/`INDEX.md`/`DAG.md` at any depth), relative
+   * to `argument/`, sorted — surfaced on the linker gate's coverage line so a repo's mirror/
+   * documentation files are never confused with "0 shards found" (rk-9pk). */
+  ignored: string[];
+}
+
+/** Parses every `argument/**\/*.md` shard, RECURSIVE (excluding README.md/INDEX.md/DAG.md at any
+ * depth — rk-9pk, see the file header), into `Lemma` records + parse-stage Findings (Checks 1-5).
+ * A shard whose frontmatter is missing/unterminated, or which carries no `id:` line at all [F12],
+ * is excluded from the returned `lemmas` array entirely — every OTHER check still runs against
+ * whatever shards remain (contract's trigger-preserving-fix shape, see the file header). */
+export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
   const errors: Finding[] = [];
   const lemmas: Lemma[] = [];
-  const names = listDir(snapshot, LEMMA_DIR)
-    .filter((n) => n.endsWith(".md") && n !== "README.md" && n !== "INDEX.md")
-    .sort();
+  const ignored: string[] = [];
+  const candidates: string[] = [];
 
-  for (const name of names) {
-    const path = `${LEMMA_DIR}/${name}`;
-    const stem = name.slice(0, -".md".length);
+  for (const rel of listArgumentMdFilesRelative(snapshot)) {
+    const base = rel.slice(rel.lastIndexOf("/") + 1);
+    if (NON_SHARD_NAMES.has(base)) {
+      ignored.push(rel);
+      continue;
+    }
+    candidates.push(rel);
+  }
+
+  for (const rel of candidates) {
+    const path = `${ARGUMENT_DIR}/${rel}`;
+    const base = rel.slice(rel.lastIndexOf("/") + 1);
+    const stem = base.slice(0, -".md".length);
     const content = snapshot.get(path) ?? "";
     const fm = parseFrontmatter(content);
 
@@ -169,7 +229,7 @@ export function parseRegistry(snapshot: RepoSnapshot): { lemmas: Lemma[]; errors
     });
   }
 
-  return { lemmas, errors };
+  return { lemmas, errors, total: candidates.length, ignored };
 }
 
 /** `definitions/*.md` id set (excluding README.md/INDEX.md), for check 7's `defs:` resolution —

@@ -69,8 +69,19 @@ const ROOT_SKIP_DIR = ".git";
 
 /** One rule per file class docs/gate-contracts.md names as an Input across the six gates:
  * - `definitions/*.md`               — defs gate (Gate 1 Inputs)
- * - `argument/{INDEX,DAG,README}.md` — linker gate's own generated-mirror files (Gate 2 Inputs)
- * - `argument/lemmas/*.md`           — linker + provenance gates (Gate 2 / Gate 4 Inputs)
+ * - `argument/**\/*.md`               — RECURSIVE (amended 2026-07-18, bead rk-9pk — dogfood
+ *                                       incident 1: the stamped scaffold creates only `argument/`,
+ *                                       no `lemmas/` subdirectory, PRD.md:79-85; a lemmas/-only
+ *                                       glob silently 0/0'd every shard a user placed at
+ *                                       `argument/*.md`). Covers the mirror files
+ *                                       (`argument/{INDEX,DAG,README}.md`, Gate 2 Inputs — excluded
+ *                                       from the shard set by name, at any depth) and every shard,
+ *                                       root-level or nested (`argument/lemmas/*.md` and beyond —
+ *                                       Gate 2 / Gate 4 Inputs). One recursive rule replaces the
+ *                                       former two non-recursive `argument` + `argument/lemmas`
+ *                                       rules; provenance's gate-4 parse still reads only
+ *                                       `argument/lemmas/` one level deep (its own narrower
+ *                                       contract, unchanged by this widen).
  * - `proofs/**`                      — refs gate's externals JSON + linker's ledger/meta.json
  *                                       introspection targets (Gate 2 / Gate 3 Inputs)
  * - `refs/**`                        — defs gate's manifest (`refs/manifest/*`, Gate 1 Inputs:
@@ -99,8 +110,7 @@ const ROOT_SKIP_DIR = ".git";
  * ERROR), never silently WARNed as "absent". */
 const INCLUDE_RULES: IncludeRule[] = [
   { dir: "definitions", recursive: false },
-  { dir: "argument", recursive: false },
-  { dir: "argument/lemmas", recursive: false },
+  { dir: "argument", recursive: true },
   { dir: "proofs", recursive: true },
   { dir: "refs", recursive: true },
   { dir: "runs", recursive: true },

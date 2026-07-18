@@ -119,7 +119,9 @@ describe("rk check", () => {
     // Gate 2 (linker): both mirror files absent -> zero findings, visibly noted per file.
     expect(text).not.toContain("argument/INDEX.md is STALE");
     expect(text).not.toContain("argument/DAG.md is STALE");
-    expect(text).toContain("checked linker: 0/0 lemma shards; mirrors: INDEX absent (not adopted), DAG absent (not adopted) (0 errors, 0 warnings)");
+    expect(text).toContain(
+      "checked linker: 0/0 lemma shards (0 non-shard files ignored); mirrors: INDEX absent (not adopted), DAG absent (not adopted) (0 errors, 0 warnings)",
+    );
 
     expect(code).toBe(0);
     expect(text).toContain("rk check: OK");
@@ -348,7 +350,7 @@ describe("rk check", () => {
     test("a fixture failure in the corpus fails --selftest's exit code and names the fixture", async () => {
       const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-badcorpus-"));
       dirs.push(root);
-      // Copies the REAL corpus/ tree (all six gate directories, the full 90-fixture ledger
+      // Copies the REAL corpus/ tree (all six gate directories, the full 92-fixture ledger
       // total) rather than a synthetic one-fixture tree: the round-3 review follow-up 2 guard
       // below (missing/empty gate directory, ledger-count mismatch) would otherwise reject a
       // partial corpus before a single fixture ever ran, which is exactly the failure mode this
