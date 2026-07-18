@@ -26,6 +26,7 @@ function topHelp(out: Out): number {
   out.log("rk — research-automation tool");
   out.log("  rk refs status|add|quote   ground-truth reference library (PRD C7)");
   out.log("  rk check [--root <dir>]    run all six M0 gates (docs/gate-contracts.md)");
+  out.log("  rk check --selftest [--root <dir>]  run rk's own red-fixture corpus (default <root>/corpus)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  next: 'rk refs status' to see what's acquired in this repo.");
   return 0;

@@ -13,7 +13,14 @@ export type Severity = "ERROR" | "WARN";
 /** One finding, rendered `SEVERITY path:line message` per docs/gate-contracts.md's Shared
  * conventions ("Finding format"). `path` is repo-relative; `line` is 1-indexed, defaulting to 1
  * when the underlying check has no specific source line (a JSON file, a whole-registry check, a
- * cross-shard cycle) — see `formatFinding` below. */
+ * cross-shard cycle) — see `formatFinding` below.
+ *
+ * ONE blessed exception (rk-bdd, 2026-07-18 M0.3 re-review finding 9): the synthetic ERROR
+ * `src/cli/check.ts`'s `runGateSafely` crash boundary emits when a gate itself throws is not
+ * attributable to any repo-relative source path, so it uses the sentinel `<gate:NAME>` instead —
+ * never a bare gate name (which could misread as a truncated real path, or coincidentally collide
+ * with an actual file in the checked repo). See docs/gate-contracts.md's Finding format section
+ * for the same note. */
 export interface Finding {
   severity: Severity;
   path: string;

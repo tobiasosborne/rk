@@ -6,6 +6,8 @@ import { run } from "../src/cli";
 import { GATES } from "../src/gates/index";
 import { renderDag, renderIndex } from "../src/gates/linker-render";
 
+const RK_REPO_ROOT = join(import.meta.dir, "..");
+
 // Gates are ported from the M0.3 skeleton state (docs/cli/check.ts header, "M0.3 skeleton
 // state: every gate is currently a stub") to real implementations one at a time; at the time of
 // writing only `provenance` remains notImplemented. This file must keep passing regardless of
@@ -162,6 +164,64 @@ describe("rk check", () => {
     expect(lines.join("\n")).toContain("rk check");
   });
 
+  // rk-bdd (2026-07-18 M0.3 re-review finding 7): IMPLEMENTATION_PLAN.md:76 (M0.2 acceptance)
+  // names `rk check --selftest` as the interface that runs the red corpus — these three tests
+  // must run BEFORE the `mock.module` test below (its own comment explains why it must run LAST:
+  // it patches "../src/gates/index" file-wide with no restore, and `--selftest`'s corpus runner
+  // reads that same GATES registry via src/corpus/run.ts).
+  describe("rk check --selftest (rk-bdd finding 7)", () => {
+    test("runs the real corpus against the rk repo's own corpus/ tree and exits 0", async () => {
+      const { out, lines } = capture();
+      const code = await run(["check", "--selftest", "--root", RK_REPO_ROOT], { out });
+      const text = lines.join("\n");
+
+      // Same runner, same report shape as `bun run selftest` (src/corpus/report.ts).
+      expect(text).toMatch(/^checked corpus\/defs: \d+\/\d+ fixtures passed$/m);
+      expect(text).toMatch(/^checked corpus-run: \d+\/\d+ fixtures passed$/m);
+      expect(text).toContain("rk check --selftest: OK");
+      expect(code).toBe(0);
+    });
+
+    test("a --root with no corpus/ directory is a loud ERROR, never a silent pass (L2)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-nocorpus-"));
+      dirs.push(root);
+      // Deliberately no corpus/ directory under root at all.
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--selftest", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR no corpus directory found");
+      expect(text).toContain(join(root, "corpus"));
+      // Never the silent-pass shape a missing/empty corpus could otherwise print.
+      expect(text).not.toContain("rk check --selftest: OK");
+      expect(code).toBe(1);
+    });
+
+    test("a fixture failure in the corpus fails --selftest's exit code and names the fixture", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-badcorpus-"));
+      dirs.push(root);
+      // A minimal one-fixture corpus whose expected.json deliberately mismatches the real defs
+      // gate's verdict on an empty repo/ (day-1 vacuity is a PASS, per test/gates/defs.test.ts and
+      // the golden-scaffold test above) — this fixture wrongly expects a FAIL.
+      const fixtureDir = join(root, "corpus", "defs", "wrong-01");
+      mkdirSync(join(fixtureDir, "repo"), { recursive: true });
+      writeFileSync(
+        join(fixtureDir, "expected.json"),
+        JSON.stringify({ gate: "defs", verdict: "fail", findings: [], exit_code: 1 }),
+      );
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--selftest", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR corpus/defs/wrong-01:");
+      expect(text).toContain("verdict mismatch");
+      expect(text).toContain("rk check --selftest: FAILED");
+      expect(code).toBe(1);
+    });
+  });
+
   // rk-6r3 / M0.3 review finding 7, second half: cli/check.ts:25 had no per-gate exception
   // boundary, so one gate's unexpected throw (e.g. the refs.ts:138 null-external bug this same
   // finding fixes on the gate side, corpus/refs/refs-08) killed every later gate's coverage line
@@ -196,8 +256,11 @@ describe("rk check", () => {
     const text = lines.join("\n");
 
     // The crash becomes a loud synthetic ERROR finding for the crashed gate, never an uncaught
-    // exception that kills the process.
-    expect(text).toContain("ERROR defs:1 gate 'defs' CRASHED");
+    // exception that kills the process. rk-bdd finding 9: the synthetic finding's path is the
+    // `<gate:NAME>` sentinel, never a bare gate name — framework.ts's Finding.path contract is a
+    // real repo-relative path, and a bare name like `defs` could both misread as a truncated real
+    // path and coincidentally collide with an actual file named `defs` in the checked repo.
+    expect(text).toContain("ERROR <gate:defs>:1 gate 'defs' CRASHED");
     expect(text).toContain("boom: simulated gate crash");
 
     // The crashed gate's own coverage line reads unambiguously as a crash, never a silent

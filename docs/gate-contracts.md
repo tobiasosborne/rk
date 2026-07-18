@@ -69,6 +69,16 @@ check: <message>` lines in check-report-shards.sh. Justification: PRD C8 and CLA
 require one stable, parseable finding format across the whole suite; AISM never needed this
 because its five formats were read by humans only. No gate's pass/fail semantics changes.
 
+**Exception: the crash-boundary sentinel** (rk-bdd, 2026-07-18 M0.3 re-review finding 9). `rk
+check`'s per-gate exception boundary (`src/cli/check.ts`'s `runGateSafely`, "Composition" below)
+synthesizes one ERROR finding when a gate itself throws — a defense-in-depth path, never a normal
+finding. That finding's `path` is the sentinel `<gate:NAME>` (e.g. `<gate:defs>`), not a
+repo-relative path: a crash cannot be attributed to any specific file in the checked repo, and a
+bare gate name (e.g. `defs`) would both misread as a malformed real path and could coincidentally
+collide with an actual repo-relative path if the checked repo happened to have a file literally
+named `defs`. Angle brackets never appear in a real repo-relative path, so this is the one path
+shape in the whole suite deliberately not repo-relative.
+
 **Coverage line.** Every gate emits exactly one final line: `checked <gate>: <N>/<M> <unit>
 (<E> errors, <W> warnings)`, even when `N == M == 0` (an empty corpus, e.g. `runs/` on day 1,
 is a legitimate green state and must say so explicitly — CLAUDE.md L2: "a skip is always
