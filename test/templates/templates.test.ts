@@ -66,6 +66,8 @@ describe("templates / sanity", () => {
         "HANDOFF.md.tmpl",
         "PRD.md.tmpl",
         "docs/worklog.md.tmpl",
+        "definitions/README.md.tmpl",
+        "argument/README.md.tmpl",
       ].sort(),
     );
   });
@@ -193,5 +195,63 @@ describe("templates / (d) manifest.json", () => {
     const agents = manifest.stamped.find((e: { path: string }) => e.path === "AGENTS.md");
     expect(claude.template).toBe(agents.template);
     expect(claude.template).toBe("CLAUDE.md.tmpl");
+  });
+
+  // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
+  // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
+  test("template_version was bumped to 1.1.0 for the shard-schema template addition (rk-o1y)", () => {
+    expect(manifest.template_version).toBe("1.1.0");
+  });
+
+  test("definitions/README.md and argument/README.md are stamped, rewritten-whole (rk-o1y)", () => {
+    for (const [path, template] of [
+      ["definitions/README.md", "definitions/README.md.tmpl"],
+      ["argument/README.md", "argument/README.md.tmpl"],
+    ]) {
+      const entry = manifest.stamped.find((e: { path: string }) => e.path === path);
+      expect(entry).toBeDefined();
+      expect(entry.template).toBe(template);
+      expect(entry.classification).toBe("rewritten-whole");
+    }
+  });
+});
+
+// rk-o1y: the stamped schema docs must be derived from docs/gate-contracts.md Gates 1-2 — field
+// names and allowed enums cited precisely — with one complete minimal example shard each, so a
+// newcomer can author a first shard without reverse-engineering the gates via iterative WARNs.
+describe("templates / (e) shard schema docs (rk-o1y)", () => {
+  const defsReadme = read("definitions/README.md.tmpl");
+  const argReadme = read("argument/README.md.tmpl");
+
+  test("definitions/README.md.tmpl cites every Gate 1 frontmatter field and enum value", () => {
+    for (const token of [
+      "id", "term", "aliases", "kind", "status", "source", "locus", "sha256", "consensus",
+      "cited", "consensus", "original", // kind enum
+      "draft", "locked", // status enum
+    ]) {
+      expect(defsReadme).toContain(token);
+    }
+    // one complete, fenced, generic example shard — not real campaign content
+    expect(defsReadme).toContain("def-widget");
+    expect(defsReadme).toMatch(/```markdown\n---\nid: def-widget/);
+  });
+
+  test("argument/README.md.tmpl cites every Gate 2 frontmatter field and enum value", () => {
+    for (const token of [
+      "id", "kind", "contract", "defs", "deps", "routes", "status", "af", "provenance", "owner", "workspace",
+      "lemma", "proposition", "theorem", "corollary", "open-problem", "obstruction", // kind enum
+      "none", "seeded", "validated", // af enum
+    ]) {
+      expect(argReadme).toContain(token);
+    }
+    expect(argReadme).toContain("lem-widget-bound");
+    expect(argReadme).toMatch(/```markdown\n---\nid: lem-widget-bound/);
+  });
+
+  test("neither schema doc carries campaign-flavored content (generic widget example only)", () => {
+    for (const forbidden of ["idempotent", "stochastic", "conjecture C", "af-orchestrate"]) {
+      expect(defsReadme.toLowerCase()).not.toContain(forbidden.toLowerCase());
+      expect(argReadme.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
   });
 });

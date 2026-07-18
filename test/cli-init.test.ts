@@ -7,8 +7,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initCommand } from "../src/cli/init";
+import { initCommand, initHelp } from "../src/cli/init";
 import { TEMPLATE_MANIFEST } from "../src/scaffold/templates-embed";
+import { buildPreCommitHookScript } from "../src/scaffold/hooks";
 
 function capture() {
   const lines: string[] = [];
@@ -100,6 +101,73 @@ describe("rk init: required argument", () => {
     expect(code).toBe(2);
     expect(lines[0]).toContain("missing required");
     expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+});
+
+// rk-1r6: `rk init --help` (or `-h`) must never stamp a scaffold, and must never let the flag
+// itself become the north-star contract. The `run()` dispatcher (src/cli.ts) intercepts --help
+// before ever calling initCommand; these tests exercise initHelp/initCommand directly (the unit
+// under this WP's scope) to prove BOTH layers refuse to write.
+describe("rk init: -h/--help handling (rk-1r6)", () => {
+  test("initHelp prints usage and exits 0, never touches the filesystem", () => {
+    const { out, lines } = capture();
+    const code = initHelp(out);
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("rk init");
+    expect(lines.join("\n").toLowerCase()).toContain("usage");
+  });
+
+  test("a north-star contract starting with '-' is refused (never stamped as the literal flag)", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await initCommand(["--help", "--root", root], out, noSpawnDeps());
+    expect(code).toBe(2);
+    expect(lines[0]).toContain("refusing north-star contract");
+    expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+
+  test("any flag-shaped positional (not just --help) is refused the same way", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await initCommand(["--typo-flag", "--root", root], out, noSpawnDeps());
+    expect(code).toBe(2);
+    expect(lines[0]).toContain("refusing north-star contract");
+    expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+});
+
+describe("rk init: PATH guidance for the pre-commit hook (rk-e8v)", () => {
+  test("success output names the PATH requirement and the resolved binary path", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".git"), { recursive: true }); // hook only installed when .git exists
+    const { out, lines } = capture();
+    const deps = { ...noSpawnDeps(), resolveBinaryPath: () => "/opt/rk/bin/rk" };
+    const code = await initCommand(["North star", "--root", root], out, deps);
+    expect(code).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("PATH");
+    expect(text).toContain("/opt/rk/bin/rk");
+  });
+
+  test("no PATH line when no git repo (no hook installed)", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await initCommand(["North star", "--root", root], out, noSpawnDeps());
+    expect(code).toBe(0);
+    expect(lines.some((l) => l.includes("PATH:"))).toBe(false);
+  });
+});
+
+describe("pre-commit hook: rk-not-on-PATH fallback (rk-e8v)", () => {
+  test("the hook script checks for rk on PATH and prints an actionable error before exec", () => {
+    const script = buildPreCommitHookScript();
+    expect(script).toContain("command -v rk");
+    expect(script).toContain("not found on PATH");
+    expect(script).toContain("exec rk check");
   });
 });
 

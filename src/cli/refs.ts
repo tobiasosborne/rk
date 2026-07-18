@@ -102,7 +102,7 @@ const REFS_COMMANDS: Record<string, SubHandler> = {
   quote: refsQuote,
 };
 
-function refsHelp(out: Out): number {
+export function refsHelp(out: Out): number {
   out.log("rk refs — ground-truth reference library (PRD C7)");
   out.log("  rk refs status              present/fetchable/cache/missing per source");
   out.log("  rk refs add <locator>       fetch/hash/install + update the manifest");

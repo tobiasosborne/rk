@@ -36,3 +36,11 @@ export function extractFlag(args: string[], flag: string): { rest: string[]; val
   }
   return { rest, value };
 }
+
+/** True iff `-h` or `--help` appears anywhere in `args` (rk-1r6). Every subcommand checks this
+ * BEFORE doing any real work (fs writes, subprocess spawns, gate runs) so `--help` is always
+ * side-effect-free and never mistaken for a positional argument (e.g. `rk init --help` must
+ * print usage, not stamp a scaffold whose north-star contract is the literal string "--help"). */
+export function hasHelpFlag(args: string[]): boolean {
+  return args.includes("-h") || args.includes("--help");
+}

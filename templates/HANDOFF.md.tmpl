@@ -23,7 +23,20 @@ it here.
 
 ## Audit cycle counter
 
+<!-- Constitutional (process) trigger in M1: this counter and log are maintained by hand, per
+     CLAUDE.md §6's session-close ritual. `rk audit` (arrives in a later rk release, not in this
+     binary — run `rk --help` for what exists today) is expected to mechanize the read-back, and
+     possibly this bookkeeping, in M5. Until then an agent following CLAUDE.md §6 IS the
+     mechanism — define cycle := one orchestrator session. -->
+
 - Cycles-since-last-audit: **0**
-- Last `rk audit` at cycle: **0**
-- Audit cadence: {{RK_SLOT_AUDIT_CADENCE}} cycles (session close is blocked when
-  cycles-since-last-audit exceeds this; see `CLAUDE.md` §6).
+- Audit cadence: {{RK_SLOT_AUDIT_CADENCE}} cycles (session close is BLOCKED when
+  cycles-since-last-audit >= cadence; see `CLAUDE.md` §6).
+
+### Audit log
+
+Newest first. Recording a manual audit pass means appending one dated line here AND resetting
+"Cycles-since-last-audit" to 0 above, in the same session-close edit (`CLAUDE.md` §6 step 2).
+
+<!-- e.g.: "- [YYYY-MM-DD] cycle N: manual audit pass (overclaim / convention-drift / wandering
+     reviewed). Notes: <one line>." -->

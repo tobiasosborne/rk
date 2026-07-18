@@ -44,11 +44,21 @@ export function buildClaudeSettings(): ClaudeSettings {
 }
 
 /** The git `pre-commit` hook script content: runs `rk check` and propagates its exit code, so a
- * failing gate blocks the commit (CLAUDE.md Rule 5: "pre-commit hook once gates exist"). */
+ * failing gate blocks the commit (CLAUDE.md Rule 5: "pre-commit hook once gates exist").
+ *
+ * rk-e8v: `rk init`'s own success output is invisible by the time a LATER session's commit hits
+ * this hook, so the hook cannot rely on the user remembering that one-time line — when `rk` is
+ * not on PATH, this script prints its own one-line, actionable error naming the PATH requirement
+ * (never the shell's raw, unexplained "command not found"), and fails the commit deliberately
+ * (exit 1) rather than papering over a broken gate by letting the commit through. */
 export function buildPreCommitHookScript(): string {
   return (
     "#!/bin/sh\n" +
     "# Installed by `rk init` (M1.2, PRD C1). Runs the single local gate before every commit.\n" +
+    "if ! command -v rk >/dev/null 2>&1; then\n" +
+    '  echo "pre-commit: \'rk\' not found on PATH. rk must be on PATH for this hook to run \'rk check\' (see the PATH line \'rk init\' printed at setup). Commit blocked." >&2\n' +
+    "  exit 1\n" +
+    "fi\n" +
     "exec rk check\n"
   );
 }

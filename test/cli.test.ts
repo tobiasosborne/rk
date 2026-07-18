@@ -137,3 +137,44 @@ describe("rk refs add", () => {
     expect(lines.join("\n")).toContain("--id");
   });
 });
+
+// rk-1r6: `-h`/`--help` must be handled at the bare dispatcher AND at every subcommand, always
+// side-effect-free (exit 0, never falls through to the command's real logic).
+describe("rk cli — -h/--help handling (rk-1r6)", () => {
+  test("bare 'rk --help' prints the top-level help and exits 0", async () => {
+    const { out, lines } = capture();
+    const code = await run(["--help"], { out });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("rk refs");
+  });
+
+  test("bare 'rk -h' prints the top-level help and exits 0", async () => {
+    const { out, lines } = capture();
+    const code = await run(["-h"], { out });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("rk refs");
+  });
+
+  test.each([
+    ["refs", "rk refs"],
+    ["check", "rk check"],
+    ["doctor", "rk doctor"],
+    ["phase", "rk phase"],
+    ["init", "rk init"],
+    ["upgrade", "rk upgrade"],
+  ])("'rk %s --help' prints that subcommand's usage and exits 0, no side effects", async (verb, expectedText) => {
+    const { out, lines } = capture();
+    const code = await run([verb, "--help"], { out });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain(expectedText);
+  });
+
+  test("'rk check -h' exits 0 without touching the filesystem (never reaches checkCommand)", async () => {
+    // A bogus --root that would make a real checkCommand invocation throw/loudly fail on snapshot
+    // load — proves --help short-circuits before checkCommand ever runs.
+    const { out, lines } = capture();
+    const code = await run(["check", "-h", "--root", "/does/not/exist/at/all"], { out });
+    expect(code).toBe(0);
+    expect(lines.join("\n").toLowerCase()).not.toContain("snapshot");
+  });
+});

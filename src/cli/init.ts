@@ -20,6 +20,22 @@ import { TEMPLATE_MANIFEST, TEMPLATE_TEXT } from "../scaffold/templates-embed";
 
 const UNSET_MARKER = "UNSET — fill in before first session";
 
+const USAGE_LINES = [
+  'usage: rk init "<north-star contract>" [--root <dir>] [--force] [--shard-prefix X]',
+  "         [--audit-cadence N] [--brittleness-soft-cap N] [--budget TEXT] [--model-policy TEXT] [--goal TEXT]",
+];
+
+/** rk-1r6: shared by both `rk init --help` and the missing-argument error path below, so the two
+ * can never silently drift apart about what the usage line says. */
+export function initHelp(out: Out): number {
+  out.log('rk init "<north-star contract>" — stamp a fresh rk scaffold (M1.2, PRD C1)');
+  for (const l of USAGE_LINES) out.log(`  ${l}`);
+  out.log('  <north-star contract> must not start with "-" — that is almost certainly a mistyped flag.');
+  out.log("  Side-effect-free: this help text never touches the filesystem.");
+  out.log('  next: rk init "My conjecture" to stamp a fresh repo in the current directory.');
+  return 0;
+}
+
 export type Which = (bin: string) => string | null;
 export type SpawnFn = (bin: string, args: string[], cwd: string) => Promise<{ exitCode: number; stderr: string }>;
 
@@ -38,6 +54,11 @@ async function defaultSpawn(bin: string, args: string[], cwd: string): Promise<{
 export interface InitCommandDeps {
   which?: Which;
   spawn?: SpawnFn;
+  /** rk-e8v: the path this invocation of `rk` resolved as (`process.execPath` for a compiled
+   * binary) — printed in the success output so a newcomer whose stamped `.git/hooks/pre-commit`
+   * runs bare `rk check` knows what to put on PATH. Injectable so tests never depend on the real
+   * process's own path. */
+  resolveBinaryPath?: () => string;
 }
 
 /** Validates a `--flag`-supplied positive integer; returns `undefined` (use the default) when the
@@ -51,6 +72,7 @@ function parsePositiveInt(raw: string | undefined, flagName: string): { value?: 
 export async function initCommand(argv: string[], out: Out, deps: InitCommandDeps = {}): Promise<number> {
   const which = deps.which ?? defaultWhich;
   const spawn = deps.spawn ?? defaultSpawn;
+  const resolveBinaryPath = deps.resolveBinaryPath ?? (() => process.execPath);
 
   const { rest: r0, root } = extractRoot(argv);
   const force = r0.includes("--force");
@@ -65,8 +87,16 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
   const northStar = r7[0];
   if (!northStar) {
     out.log("rk init: missing required <north-star contract> argument.");
-    out.log('  usage: rk init "<north-star contract>" [--root <dir>] [--force] [--shard-prefix X]');
-    out.log("           [--audit-cadence N] [--brittleness-soft-cap N] [--budget TEXT] [--model-policy TEXT] [--goal TEXT]");
+    for (const l of USAGE_LINES) out.log(`  ${l}`);
+    return 2;
+  }
+  if (northStar.startsWith("-")) {
+    // rk-1r6: a positional argument that starts with "-" is almost certainly a mistyped flag
+    // (e.g. `rk init --help` before -h/--help was handled above ever reaching here, or any other
+    // typo'd flag) — never let it become the north-star contract stamped into every template.
+    out.log(`rk init: refusing north-star contract '${northStar}' — it starts with '-', which is almost certainly a mistyped flag.`);
+    for (const l of USAGE_LINES) out.log(`  ${l}`);
+    out.log("  next: if you really mean a north-star starting with '-', there is currently no escape hatch — rephrase it.");
     return 2;
   }
 
@@ -177,6 +207,16 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
 
   const fileCount = plan.files.length + 4; // + .rk/config.json, .rk/oracles.json, .rk/template-version, .claude/settings.json
   out.log(`rk init: stamped ${fileCount} files, ${plan.dirs.length} directories, ${hooksInstalled} hooks; fr: ${frStatus}; bd: ${bdStatus}`);
+  if (hooksInstalled === 5) {
+    // rk-e8v: the installed .git/hooks/pre-commit hook execs bare `rk check` — if `rk` is not on
+    // PATH every commit fails. Name the requirement AND the resolved path this invocation used,
+    // so a newcomer running the binary by full path knows exactly what to add to PATH.
+    out.log(
+      `  PATH: this invocation resolved to '${resolveBinaryPath()}'. The pre-commit hook runs bare ` +
+        "'rk check' — put this binary's directory on PATH (or symlink it as 'rk' somewhere on PATH), " +
+        "or every commit will fail at the hook.",
+    );
+  }
   out.log("  next: 'rk check --root " + root + "' to verify the fresh scaffold, then start an orchestrator session.");
   return 0;
 }

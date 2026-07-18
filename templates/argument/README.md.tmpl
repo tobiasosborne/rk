@@ -1,0 +1,67 @@
+<!-- ROLE: the schema contract for argument/lemmas/*.md — mirrors docs/gate-contracts.md Gate 2
+     (argument / linker) exactly: the frontmatter fields the gate checks, their allowed values,
+     and one complete minimal example shard. Read this before authoring the first registry shard.
+     UPDATE POLICY: rewritten-whole. This file is a contract mirror of the gate spec, upgraded
+     with the tool — when the gate's frontmatter contract changes, this file is rewritten to
+     match, never appended to.
+     TRIGGER: docs/gate-contracts.md Gate 2's Inputs/Checks section changes, or an `rk upgrade`
+     that ships a revised copy. -->
+
+# argument/lemmas/ — schema
+
+One result, one registry shard, per file (CLAUDE.md L4). `rk check`'s linker gate
+(docs/gate-contracts.md Gate 2) enforces this file format and the module graph it describes; a
+violation is an ERROR or WARN reported by `rk check`, not a style preference. Shards live under
+`argument/lemmas/`.
+
+## Frontmatter
+
+Flat `key: value` lines between two `---` lines, at the top of the file.
+
+| field | required | allowed values |
+|---|---|---|
+| `id` | yes | must equal the filename stem; convention `lem-`\|`thm-`\|`prop-`\|`cor-`\|`op-`\|`obs-<slug>` (not machine-enforced beyond the stem match) |
+| `kind` | yes | one of `lemma`, `proposition`, `theorem`, `corollary`, `open-problem`, `obstruction` |
+| `contract` | by convention (not required-field-checked) | one-line canonical statement; the anti-drift invariant against the af root conjecture |
+| `defs` | no | `;`-list of `definitions/` ids this shard depends on |
+| `deps` | no | `;`-list of registry ids that are unconditional prerequisites (DAG edges) |
+| `routes` | no | OPTIONAL grouped-OR prerequisite sets, grammar `[a; b] \| [c]` — each bracketed group is one route (a conjunction of its members); groups are separated by `\|` (any one route suffices); absent means `[]` |
+| `status` | no | one of `proved`, `cited`, `consensus`, `open`, `obstruction`, `disproved`, `stated`, `proved-mod-audit`, `conjecture`, `heuristic`, `numerical` |
+| `af` | no, defaults `none` | one of `none`, `seeded`, `validated` |
+| `provenance` | no | freeform; not parsed by this gate (see the provenance gate) |
+| `owner` | no | freeform; not validated |
+| `workspace` | no, but load-bearing when `af != none` | `proofs/<id>` path — required for the orphan/contract/brittleness checks to find the af workspace |
+
+Rules the gate enforces: the dependency graph (`deps` union every `routes` member) must be
+acyclic; every `dep`/`routes` member must resolve to a known registry id, and every `defs` member
+to a known `definitions/` id; `af: validated` requires every unconditional `dep` to be available
+(`af: validated` or `status: cited`) and, if `routes` is present, at least one full route
+available; a workspace whose node count exceeds the brittleness soft cap (`.rk/config`'s
+`linkerBrittlenessSoftCap`) WARNs — never blocks — to factor the tree into sub-lemmas.
+
+## Example — a complete minimal shard
+
+A file named `lem-widget-bound.md`:
+
+```markdown
+---
+id: lem-widget-bound
+kind: lemma
+contract: every widget's gadget-count is bounded by its weight.
+defs: def-widget
+deps:
+status: conjecture
+af: none
+---
+
+Statement and (eventually) proof sketch go here, after the frontmatter's closing `---`.
+```
+
+A shard ready for `af` validation additionally needs `workspace:` — e.g. replacing the last two
+frontmatter lines above with:
+
+```
+status: proved
+af: validated
+workspace: proofs/lem-widget-bound
+```

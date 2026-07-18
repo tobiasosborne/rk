@@ -1,0 +1,62 @@
+<!-- ROLE: the schema contract for definitions/*.md — mirrors docs/gate-contracts.md Gate 1
+     (defs) exactly: the frontmatter fields the gate checks, their allowed values, and one
+     complete minimal example shard. Read this before authoring the first definition shard.
+     UPDATE POLICY: rewritten-whole. This file is a contract mirror of the gate spec, upgraded
+     with the tool — when the gate's frontmatter contract changes, this file is rewritten to
+     match, never appended to.
+     TRIGGER: docs/gate-contracts.md Gate 1's Inputs/Checks section changes, or an `rk upgrade`
+     that ships a revised copy. -->
+
+# definitions/ — schema
+
+One term, defined exactly once, per file (CLAUDE.md L2). `rk check`'s defs gate
+(docs/gate-contracts.md Gate 1) enforces this file format; a violation is an ERROR or WARN
+reported by `rk check`, not a style preference.
+
+## Frontmatter
+
+Flat `key: value` lines between two `---` lines, at the top of the file.
+
+| field | required | allowed values |
+|---|---|---|
+| `id` | yes | must equal the filename stem (no `.md`) |
+| `term` | yes | canonical human name for the concept |
+| `aliases` | no | `;`-separated alternate names/symbols; folded into the same no-collision namespace as `term` |
+| `kind` | yes | one of `cited`, `consensus`, `original` |
+| `status` | yes | one of `draft`, `locked` |
+| `source` | **required when `kind: cited`** | a source-id from `refs/manifest/SOURCES.md`, or `internal` |
+| `locus` | no | where in the source (informational only; not machine-checked) |
+| `sha256` | **required when `kind: cited`** | a hex-prefix present in `refs/manifest/checksums.sha256` |
+| `consensus` | **required when `kind` is `consensus` or `original`** | who agreed, or where it was transcribed |
+
+Rules the gate enforces: `id` must match the filename stem; `term` (plus every `alias`,
+case-folded) must be globally unique across every shard in this directory — two shards claiming
+the same name is DRIFT, an ERROR; a `cited` shard without both `source` and `sha256` is an ERROR
+(no unverifiable citations); a `status: draft` shard passes but WARNs "not yet consensus-gated".
+
+## Example — a complete minimal shard
+
+A file named `def-widget.md`:
+
+```markdown
+---
+id: def-widget
+term: widget
+aliases: gadget
+kind: original
+status: draft
+consensus: agreed in session 2026-07-18, see docs/worklog.md
+---
+
+A widget is ... (the actual definition prose goes here, after the frontmatter's closing `---`).
+```
+
+A `kind: cited` shard additionally needs `source:` and `sha256:` — e.g. replacing the last three
+frontmatter lines above with:
+
+```
+kind: cited
+status: draft
+source: some-source-id
+sha256: 0123456789abcdef
+```

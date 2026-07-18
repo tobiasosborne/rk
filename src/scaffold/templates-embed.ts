@@ -20,6 +20,8 @@ import handoffTmpl from "../../templates/HANDOFF.md.tmpl" with { type: "text" };
 import conventionsTmpl from "../../templates/CONVENTIONS.md.tmpl" with { type: "text" };
 import findingsTmpl from "../../templates/FINDINGS.md.tmpl" with { type: "text" };
 import worklogTmpl from "../../templates/docs/worklog.md.tmpl" with { type: "text" };
+import definitionsReadmeTmpl from "../../templates/definitions/README.md.tmpl" with { type: "text" };
+import argumentReadmeTmpl from "../../templates/argument/README.md.tmpl" with { type: "text" };
 
 import type { Manifest } from "./manifest-types";
 
@@ -39,4 +41,6 @@ export const TEMPLATE_TEXT: Record<string, string> = {
   "CONVENTIONS.md.tmpl": conventionsTmpl,
   "FINDINGS.md.tmpl": findingsTmpl,
   "docs/worklog.md.tmpl": worklogTmpl,
+  "definitions/README.md.tmpl": definitionsReadmeTmpl,
+  "argument/README.md.tmpl": argumentReadmeTmpl,
 };
