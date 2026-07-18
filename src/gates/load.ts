@@ -15,6 +15,15 @@
 // receives a hash fact — the pure gate then distinguishes "present + stale ⇒ ERROR" from "absent ⇒
 // WARN" (docs/gate-contracts.md Gate 4 check 4). Only TEXT content stays bounded to the include
 // rules (the six gates' declared Inputs); the hash+dirs FACTS span the whole tree.
+//
+// rk-bdd (2026-07-18 M0.3 re-review, finding 6) assessed this file for the same relocation as
+// src/gates/{corpus-run,corpus-discovery}.ts (moved to src/corpus/ that same session — both were
+// impure files silently exempt from the purity grep inside a PURE directory). Deliberately NOT
+// moved in that pass: this file has a much larger fan-out (src/cli/check.ts, several test files)
+// AND is cited by path in prose across Tier-A files (framework.ts, docs/gate-contracts.md) and
+// two immutable review records, whose citations could not be corrected without violating the
+// review-record immutability convention. A correctly-scoped move needs its own WP with time for
+// the full doc sweep, not a same-session tack-on. Filed as rk-7uc.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

@@ -167,7 +167,7 @@ corpus/<gate>/<fixture-id>/
 ```
 
 A fixture's `repo/` may carry its own `.rk/config.json` (same shape/path convention a real repo
-uses, `src/gates/config-load.ts`); the corpus runner (`src/gates/corpus-run.ts`'s `runFixture`,
+uses, `src/gates/config-load.ts`); the corpus runner (`src/corpus/run.ts`'s `runFixture`,
 shared by `test/corpus.test.ts` and `bun run selftest`) loads it per-fixture and merges it over
 `DEFAULT_GATE_CONFIG` before running the gate. Absent file: unchanged default-config behavior.
 
@@ -240,7 +240,7 @@ Field semantics:
 - **`coverage`** (OPTIONAL; rk-6vw, 2026-07-18 M0.3 milestone review finding 6) — an exact
   expectation on the gate's own `CoverageLine` (`src/gates/framework.ts`; every one of the six
   gates emits exactly one per run, per `docs/gate-contracts.md`'s "Coverage line" shared
-  convention). When present, the runner (`src/gates/corpus-run.ts`) asserts it — never merely
+  convention). When present, the runner (`src/corpus/run.ts`) asserts it — never merely
   reports it:
   - `checked`/`total` — matched EXACTLY against `coverage[0].checked`/`coverage[0].total`.
   - `unit_patterns` (optional array) — every string must appear as a case-sensitive substring of
@@ -325,16 +325,27 @@ Before 2026-07-18, `scripts/selftest.ts` only called `totalFixtureCount` — it 
 *directories*, never ran a single one through its gate, contradicting this file's own line 13
 above ("`rk check --selftest` runs the corpus"), a guard-the-guards truthfulness gap (2026-07-18
 M0.3 milestone review, finding 6). The per-fixture run/assert logic that used to live only inside
-`test/corpus.test.ts` is now `src/gates/corpus-run.ts`'s `runFixture`/`runAllFixtures` — an EDGE
+`test/corpus.test.ts` is now `src/corpus/run.ts`'s `runFixture`/`runAllFixtures` — an EDGE
 module (reads `repo/`, `.rk/config.json`, and `expected.json` off disk, so it is never marked
-`PURITY: pure` and is exempt from the L3 purity grep, same as `load.ts`/`config-load.ts`/
-`corpus-discovery.ts`). Both `test/corpus.test.ts` (per-fixture `test()`/`expect()`, for readable
-red output under `bun test`) and `scripts/selftest.ts` (aggregated per-gate pass counts, for a
-fast whole-corpus sanity check under `bun run selftest`) call this SAME function — one
-implementation, so the two entry points can never silently disagree about what "the corpus
-passes" means. `bun run selftest`'s corpus-execution step runs in well under a second (84
-in-memory gate runs against small fixture trees); the whole script, purity grep included, is
-comfortably under CLAUDE.md's `<10s` bar.
+`PURITY: pure` and is exempt from the L3 purity grep, same as `src/gates/load.ts`/
+`src/gates/config-load.ts`). `runFixture`/`runAllFixtures` (and their fixture-discovery sibling,
+`discoverAllFixtures`) originally landed at `src/gates/corpus-run.ts`/`src/gates/
+corpus-discovery.ts` — fs-using files inside `src/gates/`, which CLAUDE.md §5 and
+IMPLEMENTATION_PLAN.md §0 both classify PURE; the marker-based grep silently exempted them rather
+than flagging the misplacement, an architecture-law regression caught by the 2026-07-18 re-review
+(finding 6) and fixed by relocating both to `src/corpus/` (edge territory, same tier as
+`src/drive`/`src/refs`/`src/cli`) — `scripts/selftest.ts`'s own `checkGatesDirImpureAllowlist`
+now fails loudly if a future impure file lands directly in `src/gates/` again undocumented.
+
+Three callers now share this ONE runner, so none can silently disagree about what "the corpus
+passes" means: `test/corpus.test.ts` (per-fixture `test()`/`expect()`, for readable red output
+under `bun test`), `scripts/selftest.ts` (aggregated per-gate pass counts under `bun run
+selftest`), and — since 2026-07-18, rk-bdd finding 7 — the actual `rk check --selftest` CLI flag
+(`src/cli/check.ts`) this section's title refers to, which was unwired until then (only the
+`bun run selftest` package script existed). All three format their report the same way
+(`src/corpus/report.ts`'s `formatCorpusRunReport`). `bun run selftest`'s corpus-execution step
+runs in well under a second (84 in-memory gate runs against small fixture trees); the whole
+script, purity grep included, is comfortably under CLAUDE.md's `<10s` bar.
 
 ## Empty-directory fixtures (rk-399)
 
