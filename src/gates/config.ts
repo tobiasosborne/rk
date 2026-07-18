@@ -1,7 +1,7 @@
 // PURITY: pure — no fs/network/clock (L3). GateConfig: the per-repo parameters
 // docs/gate-contracts.md carves out explicitly (Shared conventions, "Per-repo parameters (this
 // WP's scope)"; Gate 4's provenance-11 divergence; Gate 6's PREFIX/MAX_LINES divergence).
-// src/gates/config-load.ts is the impure edge that reads `.rk/config.json` and merges it over
+// src/store/config-load.ts is the impure edge that reads `.rk/config.json` and merges it over
 // DEFAULT_GATE_CONFIG via `mergeGateConfig` below — kept in a separate file so this one stays
 // purity-grep clean (scripts/selftest.ts).
 
@@ -44,7 +44,7 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
 /** Merges a partial config (typically parsed from `.rk/config.json`) over the defaults — every
  * key independently optional; unknown keys are ignored (forwards-compatible with a future config
  * schema; docs/gate-contracts.md names no "unknown key" error for this file). Pure: takes and
- * returns plain data, never touches fs itself — see src/gates/config-load.ts for the edge that
+ * returns plain data, never touches fs itself — see src/store/config-load.ts for the edge that
  * reads the file and calls this. */
 export function mergeGateConfig(overrides: Partial<GateConfig> | undefined | null): GateConfig {
   if (!overrides) return { ...DEFAULT_GATE_CONFIG };

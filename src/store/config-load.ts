@@ -5,15 +5,17 @@
 //
 // rk-bdd (2026-07-18 M0.3 re-review, finding 6) assessed this file for the same relocation as
 // src/gates/{corpus-run,corpus-discovery}.ts (moved to src/corpus/ that same session — both were
-// impure files silently exempt from the purity grep inside a PURE directory). Deliberately NOT
-// moved in that pass: this file (and load.ts) is imported by more real call sites (src/cli/
-// check.ts, several test files) AND cited by path in prose across Tier-A files (framework.ts,
-// docs/gate-contracts.md) and two immutable review records — a correctly-scoped move needs its
-// own WP with time for the full doc sweep, not a same-session tack-on. Filed as rk-7uc.
+// impure files silently exempt from the purity grep inside a PURE directory). Deferred to its own
+// WP at the time (fan-out + Tier-A prose citations + two immutable review records citing the old
+// path by line number). rk-7uc (2026-07-18) carried out that move: this file relocated from
+// src/gates/config-load.ts to src/store/config-load.ts, `loadGateConfig`'s name unchanged, every
+// real import site updated; the two immutable review records under docs/reviews/ still cite the
+// old src/gates/config-load.ts path (frozen by their own UPDATE POLICY, never corrected). The
+// src/gates/ purity allowlist that carried this file's exemption is now empty.
 
 import { join } from "node:path";
-import type { GateConfig } from "./config";
-import { mergeGateConfig } from "./config";
+import type { GateConfig } from "../gates/config";
+import { mergeGateConfig } from "../gates/config";
 
 export async function loadGateConfig(root: string): Promise<GateConfig> {
   const path = join(root, ".rk", "config.json");

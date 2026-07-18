@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSnapshot } from "../src/gates/load";
-import { fileSha256 } from "../src/gates/snapshot";
+import { loadSnapshot } from "../../src/store/snapshot-load";
+import { fileSha256 } from "../../src/gates/snapshot";
 
 function makeTree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "rk-load-test-"));

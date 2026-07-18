@@ -6,7 +6,7 @@
 //    tests (extraction preference order, locus selection, skip classification, coverage split).
 //  - the "corpus fixtures" describe block at the bottom loads each corpus/refs/<id>/repo/ tree
 //    with a LOCAL, full-tree recursive reader defined in this file (`loadFullSnapshot`), not
-//    src/gates/load.ts's `loadSnapshot`. This is intentional, not a style choice: `loadSnapshot`'s
+//    src/store/snapshot-load.ts's `loadSnapshot`. This is intentional, not a style choice: `loadSnapshot`'s
 //    INCLUDE_RULES currently has no rule for generic `refs/<source-id>/*` payload files (only
 //    `refs/manifest/*`), so `test/corpus.test.ts` (which uses `loadSnapshot`) silently drops
 //    refs-02/refs-03/refs-07's `refs/src-*/paper.md` payload from the snapshot and misreports
@@ -422,7 +422,7 @@ describe("refsGate — coverage line (four-way split, never merged)", () => {
 
 // ---------------------------------------------------------------------------------------------
 // Corpus fixtures — corpus/refs/refs-01..07, loaded directly (see file header: this bypasses
-// src/gates/load.ts's current refs/<source-id>/* payload gap so refs.ts's own correctness is
+// src/store/snapshot-load.ts's current refs/<source-id>/* payload gap so refs.ts's own correctness is
 // verified 7/7 independent of that shared-file issue).
 // ---------------------------------------------------------------------------------------------
 

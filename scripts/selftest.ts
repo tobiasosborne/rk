@@ -27,8 +27,11 @@
 // src/refs/src/cli. `checkGatesDirImpureAllowlist` below closes the hole that let this regression
 // stay silent: any future non-pure file landing directly in src/gates/ now fails loudly unless
 // it is in the allowlist, instead of just never being scanned by `checkPurity`.
-// src/gates/{load,config-load}.ts remain the only fs-using files still inside src/gates/ — see
-// their own module doc comments for why they were not moved in this pass (bd rk follow-up).
+// rk-7uc (2026-07-18): src/gates/{load,config-load}.ts — the last two fs-using files still inside
+// src/gates/ — are now relocated to src/store/{snapshot-load,config-load}.ts, so
+// GATES_DIR_IMPURE_ALLOWLIST below is EMPTY. src/gates/ is fully pure-or-test, with zero
+// allowlist exceptions; the allowlist mechanism itself stays (a future misplaced edge file must
+// still fail loudly, not silently grow this list back).
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -129,8 +132,10 @@ export function violatingFileCount(violations: PurityViolation[]): number {
  * by never opting in, rather than visibly flagged as out of place. Keep this list short — the
  * fix for a new impure gate-adjacent module is almost always to relocate it (src/corpus/ or
  * another edge directory), the way corpus-run.ts/corpus-discovery.ts were relocated, not to grow
- * this allowlist. */
-const GATES_DIR_IMPURE_ALLOWLIST = new Set(["load.ts", "config-load.ts"]);
+ * this allowlist. EMPTY as of rk-7uc (2026-07-18): load.ts/config-load.ts, the last two entries,
+ * are relocated to src/store/{snapshot-load,config-load}.ts — every non-test .ts file directly in
+ * src/gates/ must now be either PURITY-marked or absent; there is no remaining excuse. */
+const GATES_DIR_IMPURE_ALLOWLIST = new Set<string>([]);
 
 export interface GatesDirViolation {
   file: string;
@@ -184,9 +189,10 @@ async function main(): Promise<number> {
   );
 
   // rk-bdd (finding 6): src/gates/ is a PURE directory (CLAUDE.md §5) — any non-test .ts file
-  // there that is neither PURITY-marked nor a documented allowlisted edge (load.ts,
-  // config-load.ts) is a silent-exemption regression, the same class corpus-run.ts/
-  // corpus-discovery.ts were before this WP relocated them to src/corpus/.
+  // there that is neither PURITY-marked nor a documented allowlisted edge is a silent-exemption
+  // regression, the same class corpus-run.ts/corpus-discovery.ts were before that WP relocated
+  // them to src/corpus/, and load.ts/config-load.ts were before rk-7uc relocated them to
+  // src/store/. The allowlist is now empty (rk-7uc) — every file here must be PURITY-marked.
   const { checked: gatesDirChecked, violations: gatesDirViolations } = checkGatesDirImpureAllowlist(repoRoot);
   for (const v of gatesDirViolations) {
     console.log(

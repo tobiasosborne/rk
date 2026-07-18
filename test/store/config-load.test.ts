@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../src/gates/config";
-import { loadGateConfig } from "../src/gates/config-load";
+import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
+import { loadGateConfig } from "../../src/store/config-load";
 
 describe("mergeGateConfig (pure)", () => {
   test("undefined/null overrides yield an untouched copy of the defaults", () => {

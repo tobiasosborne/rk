@@ -3,7 +3,7 @@
 // CryptoHasher) — verified against shared test vectors in test/gates/sha256.test.ts, including NIST
 // "abc" and the empty string. It exists ONLY so the pure test/probe builder `snapshotFromFiles`
 // (src/gates/snapshot.ts) can synthesize a COHERENT snapshot — every modeled-present file carries
-// a hash fact, exactly as the real edge `loadSnapshot` guarantees — without importing the native
+// a hash fact, exactly as the real edge `loadSnapshot` (src/store/snapshot-load.ts) guarantees — without importing the native
 // crypto primitive a `PURITY: pure` module is forbidden to touch (the purity grep, being a dumb
 // line scanner, rejects the native-hasher call by name even inside a comment, so this file names
 // it only obliquely).

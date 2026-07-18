@@ -150,17 +150,23 @@ describe("checkGatesDirImpureAllowlist (rk-bdd finding 6)", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("load.ts / config-load.ts are allowlisted (documented, deliberate edges, not yet relocated)", () => {
+  // rk-7uc (2026-07-18): load.ts/config-load.ts were the last two allowlist entries; they are
+  // now relocated to src/store/{snapshot-load,config-load}.ts and the allowlist is EMPTY. A file
+  // reusing either old name inside src/gates/ must be flagged like any other unmarked edge file —
+  // this is the regression guard that the allowlist never silently grows back.
+  test("a file named load.ts (or config-load.ts) landing in src/gates/ is flagged — the allowlist is empty, not just missing those two names", () => {
     const root = makeTree({
       "src/gates/load.ts": "// EDGE — fs.\nimport { readFileSync } from 'node:fs';\n",
       "src/gates/config-load.ts": "// EDGE — fs.\nimport { readFileSync } from 'node:fs';\n",
     });
     const { violations } = checkGatesDirImpureAllowlist(root);
-    expect(violations).toEqual([]);
+    expect(violations.map((v) => v.file.split("/").pop())).toEqual(
+      expect.arrayContaining(["load.ts", "config-load.ts"]),
+    );
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("the real src/gates/ tree is currently clean: every file is either PURITY-marked or allowlisted (regression guard for the corpus-run.ts/corpus-discovery.ts placement bug this WP fixed)", () => {
+  test("the real src/gates/ tree is currently clean: every file is either PURITY-marked or absent — zero allowlist entries remain (regression guard for the corpus-run.ts/corpus-discovery.ts placement bug this WP fixed, and rk-7uc's load.ts/config-load.ts relocation)", () => {
     const { checked, violations } = checkGatesDirImpureAllowlist(join(import.meta.dir, ".."));
     expect(checked.length).toBeGreaterThan(0);
     expect(violations).toEqual([]);

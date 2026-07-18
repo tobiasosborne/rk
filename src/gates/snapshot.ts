@@ -1,5 +1,5 @@
 // PURITY: pure — no fs/network/clock (L3). RepoSnapshot: the in-memory view of a repo tree every
-// M0.3 gate reads from (never fs directly — src/gates/load.ts is the impure edge that builds
+// M0.3 gate reads from (never fs directly — src/store/snapshot-load.ts is the impure edge that builds
 // one). Also hosts the flat-frontmatter YAML-subset parser shared by every gate that reads a
 // `---`-delimited `key: value` header — ground truth: docs/gate-contracts.md Gate 1 Inputs
 // ("Frontmatter: flat key: value per line, terminated by a second `---` line",
@@ -9,7 +9,7 @@ import { sha256Hex } from "./sha256";
 
 /** Edge-supplied facts a pure gate cannot compute itself (git state, raw-byte hashes,
  * empty-directory existence). Every field is a *fact measured at the impure edge*
- * (src/gates/load.ts), never a guess: the pure gate consumes them, it does not re-derive them.
+ * (src/store/snapshot-load.ts), never a guess: the pure gate consumes them, it does not re-derive them.
  * REQUIRED on every RepoSnapshot (no longer `Partial` — review N2): a Map-only snapshot silently
  * carried DIFFERENT validity semantics through the same `RepoSnapshot` type (provenance stale ⇒
  * WARN instead of ERROR, an empty run bundle invisible, an existing-but-empty sections directory

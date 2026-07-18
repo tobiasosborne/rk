@@ -17,10 +17,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GATES } from "../gates/index";
-import { loadSnapshot } from "../gates/load";
+import { loadSnapshot } from "../store/snapshot-load";
 import { mergeGateConfig } from "../gates/config";
 import type { GateConfig } from "../gates/config";
-import { loadGateConfig } from "../gates/config-load";
+import { loadGateConfig } from "../store/config-load";
 import { unmatchedExpectations } from "../gates/subset-match";
 import type { ExpectedFinding } from "../gates/subset-match";
 import type { CoverageLine } from "../gates/framework";

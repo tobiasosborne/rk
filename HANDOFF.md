@@ -47,7 +47,7 @@ structurally (check-6 WARN aggregation, 139→2 WARNs on AISM, zero verdict chan
 
 ## Architecture notes for next session
 
-- Snapshot edge: `loadSnapshot` (src/gates/load.ts) supplies REQUIRED SnapshotFacts
+- Snapshot edge: `loadSnapshot` (src/store/snapshot-load.ts) supplies REQUIRED SnapshotFacts
   {sha256 (every present file, raw bytes), tracked (git ls-files), dirs (incl. empty)}.
   lstat policy: symlinks content-invisible. Load failure → `<snapshot-load>` ERROR,
   never an uncaught exit. Pure test builder: snapshotFromFiles (hashes via pure
@@ -55,8 +55,9 @@ structurally (check-6 WARN aggregation, 139→2 WARNs on AISM, zero verdict chan
 - Corpus infra: src/corpus/{run,discovery,report}.ts (edge). EXPECTED_FIXTURE_COUNT
   single source of truth in discovery.ts (=87). Fixtures may carry repo/.rk/config.json
   ONLY with a matching expected.json config_override declaration.
-- src/gates is pure (marker-scanned, full leading comment block) EXCEPT allowlisted
-  load.ts/config-load.ts — relocation debt filed as rk-7uc; do not grow the allowlist.
+- src/gates is fully pure (marker-scanned, full leading comment block), zero allowlist
+  exceptions: load.ts/config-load.ts relocated to src/store/{snapshot-load,config-load}.ts
+  (rk-7uc, 2026-07-18); do not grow the allowlist back.
 
 ## Next steps (in order)
 

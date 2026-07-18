@@ -16,7 +16,7 @@
 // Check 4 (hash freshness) boundary [SETTLED — M0.3 review rk-399, was "ambiguous -> escalate"]:
 // the ERROR/WARN decision needs AISM's `tracked` bit (`git ls-files`, check-provenance.py:368-404,
 // 407-415) plus a byte-faithful hash. A pure gate (L3) cannot shell out to git or read raw bytes,
-// so both are now measured at the edge (src/gates/load.ts) and supplied as SnapshotFacts: this
+// so both are now measured at the edge (src/store/snapshot-load.ts) and supplied as SnapshotFacts: this
 // gate CONSUMES `snapshot.sha256` (byte-faithful, correct for binary payloads) and `isTracked`,
 // it never re-hashes snapshot text. Policy, per docs/gate-contracts.md Gate 4 check 4:
 //   - present on disk + hash mismatch => ERROR, whether the file is git-tracked (AISM parity) OR

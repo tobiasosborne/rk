@@ -91,7 +91,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-16` | provenance | check 4: same binary payload, MISMATCHED recorded hash ⇒ ERROR | **rk-399** finding 1: guards against a "blanket-pass binary" mutation — proves the byte-faithful check still fails a genuinely stale binary source. Not corpus-red on its own (pre-fix source also ERRORs, for the wrong reason: string re-encode mismatch); its red-first partner is the `test/gates/provenance.test.ts` "binary payload whose bytes no longer match" mutation test. | landed |
 | `provenance-17` | provenance | registry-parse frontmatter-invalid > 0: one valid lemma + one lemma with NO frontmatter at all ⇒ Gate 4's aggregate WARN naming the excluded path, coverage denominator honest (`checked` < `total`) | **rk-v18** / **rk-4uw** (N4, 2026-07-18 M0.3 re-review finding 4): the corpus fixture this ledger previously deferred — see `registrySkipReport` (`provenance-parse.ts:79-107`). Mutation-proven red-first: temporarily reverting `registrySkipReport` to its pre-fix shape (denominator collapsed to the surviving parsed set, no WARN emitted) fails this fixture on both the missing aggregate WARN and the coverage mismatch (`checked=1/1` instead of `1/2`); reverted immediately after confirming red. `aism_behavior`: differs — `check-provenance.py`'s `parse_registry` (check-provenance.py:120-132) silently drops the malformed shard with no finding and no visible count; its `main()` summary (check-provenance.py:514) prints only the surviving count. Triage: rk-stricter-intended. | landed |
 | `provenance-18` | provenance | check 6: THREE whitelisted-unanchored shards ⇒ ONE aggregate WARN (the flood shape) | **review ruling f** (overturned in re-review): per-item whitelist WARNs reached 96/118/138 on real AISM historical trees — a finding-flood under the contract's own >25 threshold. The gate now aggregates them into one WARN naming the count + sorted ids (mirrors the ratified frontmatter-invalid aggregate, ruling b). Red against pre-fix source (3 per-item WARNs, no aggregate finding), green after. Non-whitelisted unanchored shards stay per-item ERRORs (`test/gates/provenance.test.ts`). `[rk-stricter-intended]` vs AISM's per-shard console lines. (Id `-18` avoids collision with `provenance-17`, rk-4uw's frontmatter-invalid fixture, landed the same wave.) | landed |
-| `provenance-19` | provenance | check 4: stale source payload shadowed by a coincidental VCS-named parent (`notes/.svn/payload.bin`) ⇒ ERROR (the loader-skip-set false-WARN) | **round-3 landing-blocker 1** (docs/reviews/2026-07-18-m0.3-review3-codex.md): the old `loadSnapshot` skip-set skipped every directory basenamed `.git`/`node_modules`/`.hg`/`.svn` ANYWHERE in the tree, so a present-on-disk source under such a parent got no hash and Gate 4 read it as genuinely absent ⇒ WARN false-pass (contradicting present-stale ⇒ ERROR). The skip is now anchored to the repo root and narrowed to `.git` alone. Mutation-proven red-first: restoring the skip-anywhere behavior fails this fixture (no ERROR, verdict flips to pass); reverted after confirming red. `.svn` is not gitignored (unlike `node_modules`), so a `.svn`-shadowed payload is the corpus-expressible witness; the `node_modules`/nested-`.git` cases are covered by the load-edge unit test (`test/load.test.ts`, "blocker 1: a NESTED directory named like a VCS/dep dir"). `aism_behavior`: same (AISM's raw-byte hash check also ERRORs an edited tracked source). | landed |
+| `provenance-19` | provenance | check 4: stale source payload shadowed by a coincidental VCS-named parent (`notes/.svn/payload.bin`) ⇒ ERROR (the loader-skip-set false-WARN) | **round-3 landing-blocker 1** (docs/reviews/2026-07-18-m0.3-review3-codex.md): the old `loadSnapshot` skip-set skipped every directory basenamed `.git`/`node_modules`/`.hg`/`.svn` ANYWHERE in the tree, so a present-on-disk source under such a parent got no hash and Gate 4 read it as genuinely absent ⇒ WARN false-pass (contradicting present-stale ⇒ ERROR). The skip is now anchored to the repo root and narrowed to `.git` alone. Mutation-proven red-first: restoring the skip-anywhere behavior fails this fixture (no ERROR, verdict flips to pass); reverted after confirming red. `.svn` is not gitignored (unlike `node_modules`), so a `.svn`-shadowed payload is the corpus-expressible witness; the `node_modules`/nested-`.git` cases are covered by the load-edge unit test (`test/store/snapshot-load.test.ts`, "blocker 1: a NESTED directory named like a VCS/dep dir"). `aism_behavior`: same (AISM's raw-byte hash check also ERRORs an edited tracked source). | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
@@ -180,7 +180,7 @@ corpus/<gate>/<fixture-id>/
 ```
 
 A fixture's `repo/` may carry its own `.rk/config.json` (same shape/path convention a real repo
-uses, `src/gates/config-load.ts`); the corpus runner (`src/corpus/run.ts`'s `runFixture`,
+uses, `src/store/config-load.ts`); the corpus runner (`src/corpus/run.ts`'s `runFixture`,
 shared by `test/corpus.test.ts` and `bun run selftest`) loads it per-fixture and merges it over
 `DEFAULT_GATE_CONFIG` before running the gate. Absent file: unchanged default-config behavior.
 
@@ -347,8 +347,8 @@ above ("`rk check --selftest` runs the corpus"), a guard-the-guards truthfulness
 M0.3 milestone review, finding 6). The per-fixture run/assert logic that used to live only inside
 `test/corpus.test.ts` is now `src/corpus/run.ts`'s `runFixture`/`runAllFixtures` — an EDGE
 module (reads `repo/`, `.rk/config.json`, and `expected.json` off disk, so it is never marked
-`PURITY: pure` and is exempt from the L3 purity grep, same as `src/gates/load.ts`/
-`src/gates/config-load.ts`). `runFixture`/`runAllFixtures` (and their fixture-discovery sibling,
+`PURITY: pure` and is exempt from the L3 purity grep, same as `src/store/snapshot-load.ts`/
+`src/store/config-load.ts` — both relocated out of `src/gates/` by rk-7uc, 2026-07-18). `runFixture`/`runAllFixtures` (and their fixture-discovery sibling,
 `discoverAllFixtures`) originally landed at `src/gates/corpus-run.ts`/`src/gates/
 corpus-discovery.ts` — fs-using files inside `src/gates/`, which CLAUDE.md §5 and
 IMPLEMENTATION_PLAN.md §0 both classify PURE; the marker-based grep silently exempted them rather
@@ -372,12 +372,12 @@ script, purity grep included, is comfortably under CLAUDE.md's `<10s` bar.
 Git cannot store an empty directory, but two contract checks turn on directory existence
 independent of any file inside: an empty run bundle must still ERROR on a missing README
 (`gate-contracts.md:862`), and `report/sections/` must exist as a directory
-(`gate-contracts.md:956`, `check-report-shards.sh:23`). `src/gates/load.ts` measures directory
+(`gate-contracts.md:956`, `check-report-shards.sh:23`). `src/store/snapshot-load.ts` measures directory
 existence (empty ones included) into the `dirs` SnapshotFact by walking the tree with
 `readdirSync`, and the gates consume it via `dirExists`/`childDirs` (`src/gates/snapshot.ts`).
 
 Convention: a fixture that needs a genuinely-empty directory to survive a `git clone` places a
-single **`.gitkeep`** file in it. `load.ts` records the containing directory in `dirs` but
+single **`.gitkeep`** file in it. `snapshot-load.ts` records the containing directory in `dirs` but
 **excludes `.gitkeep` from all content facts** — it is never added to the text map, never hashed,
 never counted as bundle/shard content. So `runs/<bundle>/.gitkeep` is an *empty bundle* (ERROR:
 missing README), and `report/sections/.gitkeep` is an *existing-but-empty* sections dir (Check 1
@@ -395,7 +395,7 @@ git cannot commit. `shards-13` (directory *absent*) and `provenance-14`/`-15` ar
 
 Gate 4 check 4 must treat a source payload **present on disk but git-untracked** (a gitignored
 payload) and stale as a `[rk-stricter-intended]` ERROR, distinct from a genuinely-absent source
-(WARN). `src/gates/load.ts` now hashes **every file present on disk** (full-tree walk, `.git`
+(WARN). `src/store/snapshot-load.ts` now hashes **every file present on disk** (full-tree walk, `.git`
 etc. skipped), so `fileSha256(snapshot, path) !== undefined` iff the file is present — the pure
 gate distinguishes present-stale from absent mechanically (review N1).
 

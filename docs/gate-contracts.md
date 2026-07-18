@@ -101,7 +101,7 @@ every time; a fix-one-rerun loop hides how many gates are broken at once. No ind
 internal logic changes — only the wrapper's control flow.
 
 **Snapshot loading** (round-3 landing-blocker 3). `rk check` builds the in-memory `RepoSnapshot`
-(`src/gates/load.ts`) once, BEFORE the per-gate exception boundary. Two rules keep that
+(`src/store/snapshot-load.ts`) once, BEFORE the per-gate exception boundary. Two rules keep that
 precondition from silently defeating composition:
 
 - **Symlink policy.** The loader `lstat`s every entry and treats a symbolic link as
@@ -777,7 +777,7 @@ proves the limitation is not hypothetical.
    floods false ERRORs on ordinary mixed-case/lowercase citation text already present in AISM
    HEAD's source cells.
 4. **hash freshness** — compare each source-registry row's recorded `sha256[:16]` against a
-   **byte-faithful** sha256 of the file's raw bytes, measured at the edge (`src/gates/load.ts`);
+   **byte-faithful** sha256 of the file's raw bytes, measured at the edge (`src/store/snapshot-load.ts`);
    the gate never re-hashes snapshot text (a UTF-8 round-trip that corrupts non-UTF-8/binary
    payloads). Boundary (settled 2026-07-18, rk-399 — was "ambiguous → escalate"; provenance
    `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 + Check-4 ruling):

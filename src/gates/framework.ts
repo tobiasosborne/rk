@@ -2,8 +2,8 @@
 // M0.3 gate implements. Ground truth: docs/gate-contracts.md "Shared conventions (all six
 // gates)" — finding format, coverage-line format, exit-code rule. Gates are pure: they consume
 // an in-memory RepoSnapshot (src/gates/snapshot.ts) and a resolved GateConfig
-// (src/gates/config.ts), never touch fs/network/clock themselves — src/gates/load.ts and
-// src/gates/config-load.ts are the impure edges that produce those inputs.
+// (src/gates/config.ts), never touch fs/network/clock themselves — src/store/snapshot-load.ts and
+// src/store/config-load.ts are the impure edges that produce those inputs.
 
 import type { RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";

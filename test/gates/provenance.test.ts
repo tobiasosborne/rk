@@ -16,12 +16,12 @@ import { labelsOf, parseProvenanceRegistry, texLabels, type RegistryShard } from
 import { parseUnwired, splitSourceTokens, statusTableRows } from "../../src/gates/provenance-md";
 import { sha256Bytes } from "../../src/refs/hash";
 import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
-import { loadSnapshot } from "../../src/gates/load";
+import { loadSnapshot } from "../../src/store/snapshot-load";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 
 /** First-16 sha256 of a string's UTF-8 bytes — the "sha256-16" manifest convention. Byte-exact
- * with what the edge (src/gates/load.ts, via src/refs/hash.ts) computes for a UTF-8 text file. */
+ * with what the edge (src/store/snapshot-load.ts, via src/refs/hash.ts) computes for a UTF-8 text file. */
 function sha16(s: string): string {
   return sha256Bytes(new TextEncoder().encode(s)).slice(0, 16);
 }

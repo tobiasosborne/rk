@@ -1,5 +1,5 @@
-// EDGE — fs (via src/gates/load.ts + src/gates/config-load.ts, and — for `--selftest` — src/
-// corpus/{discovery,run,report}.ts). `rk check`: runs all six M0 gates in one invocation. Ground
+// EDGE — fs (via src/store/snapshot-load.ts + src/store/config-load.ts, and — for `--selftest` —
+// src/corpus/{discovery,run,report}.ts). `rk check`: runs all six M0 gates in one invocation. Ground
 // truth: docs/gate-contracts.md's Shared conventions, "Composition (`rk check`)" — all six gates
 // run unconditionally (no short-circuit, a deviation from AISM's own check-all.sh, which
 // `fail()`s at the first broken script), every coverage line prints regardless of earlier
@@ -21,8 +21,8 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { loadSnapshot } from "../gates/load";
-import { loadGateConfig } from "../gates/config-load";
+import { loadSnapshot } from "../store/snapshot-load";
+import { loadGateConfig } from "../store/config-load";
 import { GATES } from "../gates/index";
 import { formatFinding } from "../gates/framework";
 import type { Gate, GateResult } from "../gates/framework";
@@ -152,7 +152,7 @@ async function runSelftest(root: string, out: Out): Promise<number> {
  * becomes a single loud ERROR under the `<snapshot-load>` sentinel path (the same angle-bracket,
  * never-a-real-path convention as `<gate:NAME>`), plus a crash-marked coverage line for every
  * registered gate, plus exit 1 — never a silent pass-shaped `0/0` and never an uncaught process
- * exit. The lstat-based symlink policy (src/gates/load.ts) makes the loader effectively total, so
+ * exit. The lstat-based symlink policy (src/store/snapshot-load.ts) makes the loader effectively total, so
  * this is defense-in-depth (like `runGateSafely`), not a license for the loader to throw. */
 function emitSnapshotLoadFailure(root: string, e: unknown, out: Out): number {
   const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
