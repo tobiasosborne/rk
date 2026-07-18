@@ -322,6 +322,7 @@ all 86 fixtures, and not by itself a reason to assert on it). By that criterion:
 | `provenance-13` | status-table label absent ⇒ coverage line must show `0 tab:status rows` loudly (F3); the SAME coverage line also carries the rk-v18 registry-skip fix's `0 frontmatter-invalid` sub-count, so this one fixture's `unit_patterns` pins both deviations at once | Gate 4 fixture table + Gate 4 Divergences (rk-v18) |
 | `provenance-17` | registry-parse frontmatter-invalid > 0 (one malformed shard among two) ⇒ coverage `checked`/`total` must show the honest raw-inputs denominator (`1/2`), not a silently-collapsed `1/1`; closes the gap this section used to flag as a known follow-up (rk-v18, N4) | Gate 4 fixture table + Gate 4 Divergences (rk-v18) |
 | `runs-07` | empty `runs/` day-1 golden case, explicitly "asserts the coverage line still fires" | Gate 5 fixture table |
+| `shards-07` | invalid `\include` target ⇒ the non-conforming shard identity counts in the denominator, never the numerator (`0/1`, not the pre-N3 `0/0`) | Gate 6 fixture table (N3) |
 | `shards-08`, `shards-09` | coverage numerator must mean "fully conforming", not "examined" — a live CATALOG/README ERROR must still exclude the shard from `checked` (rk-1tt) | Gate 6 Divergences |
 
 **Known gap CLOSED (rk-4uw, 2026-07-18, N4).** This section previously flagged that
@@ -332,7 +333,7 @@ corpus fixture driving `skipped.length > 0` — a live L2 gap (2026-07-18 M0.3 r
 closes it: one valid lemma plus one lemma with no frontmatter at all, asserting both the aggregate
 WARN and the honest `1/2` coverage denominator end-to-end through the corpus runner.
 
-Every other fixture (the remaining 79 = 86 total − 7 with an asserted `coverage` expectation) is a
+Every other fixture (the remaining 78 = 86 total − 8 with an asserted `coverage` expectation) is a
 purely finding-shaped fixture per this criterion and carries no `coverage` field — its
 `checked`/`total` values are whatever the gate happens to produce, asserted nowhere, same as
 before this WP.

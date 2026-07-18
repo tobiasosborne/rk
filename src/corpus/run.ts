@@ -23,6 +23,7 @@ import type { GateConfig } from "../gates/config";
 import { loadGateConfig } from "../gates/config-load";
 import { unmatchedExpectations } from "../gates/subset-match";
 import type { ExpectedFinding } from "../gates/subset-match";
+import type { CoverageLine } from "../gates/framework";
 import { GATE_DIRS, discoverAllFixtures } from "./discovery";
 import type { GateDir } from "./discovery";
 
@@ -53,6 +54,47 @@ export interface ExpectedJson {
    * weaken what a golden fixture proves about the DEFAULT_GATE_CONFIG boundary (review finding
    * 10's exact concern) without any visible trace in the fixture's own expectation file. */
   config_override?: Partial<GateConfig>;
+}
+
+/** rk-6vw (review finding 6) + M0.3 round-3 follow-up 1 (run.ts:134): pure, directly-testable
+ * assertion over a gate's emitted `CoverageLine[]` (no fs, no fixture directory — just data),
+ * used by `runFixture` below. The shape/name checks are UNCONDITIONAL — every non-stub fixture
+ * asserts them, whether or not `expected` (the fixture's optional `ExpectedCoverage`) is present
+ * — so a gate that stops emitting a coverage line, or emits one under the wrong gate name, fails
+ * loudly even for the 78 of 86 fixtures that carry no `coverage` field in expected.json (all 24
+ * linker fixtures included). Exact numeric/unit checks stay conditional on `expected`, unchanged
+ * from before this fix. */
+export function assertCoverageLine(gate: GateDir, coverage: CoverageLine[], expected: ExpectedCoverage | undefined): string[] {
+  const errors: string[] = [];
+  if (coverage.length !== 1) {
+    errors.push(
+      `coverage shape mismatch: gate emitted ${coverage.length} CoverageLine entries, expected ` +
+        `exactly 1 (docs/gate-contracts.md's Coverage line convention: "every gate emits exactly ` +
+        `one final line") — this assertion is unconditional, not opt-in`,
+    );
+    return errors;
+  }
+
+  const cov = coverage[0]!;
+  if (cov.gate !== gate) {
+    errors.push(`coverage gate-name mismatch: gate emitted a CoverageLine named '${cov.gate}', expected '${gate}'`);
+  }
+
+  if (expected) {
+    if (cov.checked !== expected.checked || cov.total !== expected.total) {
+      errors.push(
+        `coverage mismatch: gate emitted checked=${cov.checked}/${cov.total}, expected.json says ` +
+          `checked=${expected.checked}/${expected.total}`,
+      );
+    }
+    for (const pat of expected.unit_patterns ?? []) {
+      if (!cov.unit.includes(pat)) {
+        errors.push(`coverage unit_pattern mismatch: '${pat}' not found in emitted unit text '${cov.unit}'`);
+      }
+    }
+  }
+
+  return errors;
 }
 
 export interface FixtureRunResult {
@@ -131,33 +173,11 @@ export async function runFixture(corpusRoot: string, gate: GateDir, fixtureId: s
       errors.push(`exit_code mismatch: gate implies ${expectedExitFromError}, expected.json says exit_code=${expected.exit_code}`);
     }
 
-    // rk-6vw (review finding 6): the OPTIONAL coverage expectation. Every gate in this suite
-    // emits exactly one CoverageLine per run (docs/gate-contracts.md "Coverage line": "every gate
-    // emits exactly one final line") — asserted here rather than assumed, so a future gate that
-    // starts emitting more than one line fails loudly instead of silently comparing against the
-    // wrong entry.
-    if (expected.coverage) {
-      if (result.coverage.length !== 1) {
-        errors.push(
-          `coverage shape mismatch: expected.json declares a coverage expectation, but the gate ` +
-            `emitted ${result.coverage.length} CoverageLine entries (exactly 1 expected per ` +
-            `docs/gate-contracts.md's Coverage line convention)`,
-        );
-      } else {
-        const cov = result.coverage[0]!;
-        if (cov.checked !== expected.coverage.checked || cov.total !== expected.coverage.total) {
-          errors.push(
-            `coverage mismatch: gate emitted checked=${cov.checked}/${cov.total}, expected.json ` +
-              `says checked=${expected.coverage.checked}/${expected.coverage.total}`,
-          );
-        }
-        for (const pat of expected.coverage.unit_patterns ?? []) {
-          if (!cov.unit.includes(pat)) {
-            errors.push(`coverage unit_pattern mismatch: '${pat}' not found in emitted unit text '${cov.unit}'`);
-          }
-        }
-      }
-    }
+    // M0.3 round-3 follow-up 1 (run.ts:134): the universal shape/name assertion plus the opt-in
+    // exact-numeric assertion, both in `assertCoverageLine` above — pulled out to a pure function
+    // so the "gate silently stops emitting a coverage line" / "wrong gate name" failure modes are
+    // directly unit-testable without needing a fixture directory or a faked GATES registry.
+    errors.push(...assertCoverageLine(gate, result.coverage, expected.coverage));
 
     return { gate, fixtureId, notImplemented: false, errors };
   } catch (e) {

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/cli";
@@ -201,23 +201,81 @@ describe("rk check", () => {
     test("a fixture failure in the corpus fails --selftest's exit code and names the fixture", async () => {
       const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-badcorpus-"));
       dirs.push(root);
-      // A minimal one-fixture corpus whose expected.json deliberately mismatches the real defs
-      // gate's verdict on an empty repo/ (day-1 vacuity is a PASS, per test/gates/defs.test.ts and
-      // the golden-scaffold test above) — this fixture wrongly expects a FAIL.
-      const fixtureDir = join(root, "corpus", "defs", "wrong-01");
-      mkdirSync(join(fixtureDir, "repo"), { recursive: true });
+      // Copies the REAL corpus/ tree (all six gate directories, the full 86-fixture ledger
+      // total) rather than a synthetic one-fixture tree: the round-3 review follow-up 2 guard
+      // below (missing/empty gate directory, ledger-count mismatch) would otherwise reject a
+      // partial corpus before a single fixture ever ran, which is exactly the failure mode this
+      // test predates and must not accidentally trip.
+      const corpusRoot = join(root, "corpus");
+      cpSync(join(RK_REPO_ROOT, "corpus"), corpusRoot, { recursive: true });
+      // Deliberately corrupt one real fixture's expected.json so it disagrees with what the real
+      // defs gate actually produces on its own repo/ — flipping verdict/exit_code guarantees a
+      // verdict mismatch regardless of that fixture's specific findings.
+      const mutatedExpectedPath = join(corpusRoot, "defs", "defs-01", "expected.json");
+      const original = JSON.parse(readFileSync(mutatedExpectedPath, "utf8"));
       writeFileSync(
-        join(fixtureDir, "expected.json"),
-        JSON.stringify({ gate: "defs", verdict: "fail", findings: [], exit_code: 1 }),
+        mutatedExpectedPath,
+        JSON.stringify({ ...original, verdict: "pass", exit_code: 0 }),
       );
 
       const { out, lines } = capture();
       const code = await run(["check", "--selftest", "--root", root], { out });
       const text = lines.join("\n");
 
-      expect(text).toContain("ERROR corpus/defs/wrong-01:");
+      expect(text).toContain("ERROR corpus/defs/defs-01:");
       expect(text).toContain("verdict mismatch");
       expect(text).toContain("rk check --selftest: FAILED");
+      expect(code).toBe(1);
+    });
+
+    // M0.3 round-3 review follow-up 2 (check.ts:89): an existing-but-empty/incomplete corpus/
+    // used to pass silently (a missing gate directory becomes an empty fixture list, reported as
+    // a pass-shaped "0/0 fixtures passed"). These two tests pin the loud-failure fix.
+    test("an existing corpus/ missing one of the six gate directories entirely is a loud ERROR, never a silent 0/0 pass", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-missinggatedir-"));
+      dirs.push(root);
+      // Only 'defs' exists; 'linker', 'refs', 'provenance', 'runs', 'shards' are entirely absent.
+      const fixtureDir = join(root, "corpus", "defs", "defs-01");
+      mkdirSync(join(fixtureDir, "repo"), { recursive: true });
+      writeFileSync(
+        join(fixtureDir, "expected.json"),
+        JSON.stringify({ gate: "defs", verdict: "pass", findings: [], exit_code: 0 }),
+      );
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--selftest", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR corpus/ exists");
+      expect(text).toContain("absent or empty");
+      for (const g of ["linker", "refs", "provenance", "runs", "shards"]) {
+        expect(text).toContain(`corpus/${g}`);
+      }
+      expect(text).not.toContain("rk check --selftest: OK");
+      expect(code).toBe(1);
+    });
+
+    test("an existing corpus/ where every gate directory exists but one is empty is a loud ERROR, never a silent 0/0 pass for that gate", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-emptygatedir-"));
+      dirs.push(root);
+      for (const g of ["defs", "linker", "refs", "provenance", "runs", "shards"]) {
+        mkdirSync(join(root, "corpus", g), { recursive: true });
+      }
+      // Every directory exists, but 'runs' has zero fixture subdirectories inside it.
+      const fixtureDir = join(root, "corpus", "defs", "defs-01");
+      mkdirSync(join(fixtureDir, "repo"), { recursive: true });
+      writeFileSync(
+        join(fixtureDir, "expected.json"),
+        JSON.stringify({ gate: "defs", verdict: "pass", findings: [], exit_code: 0 }),
+      );
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--selftest", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR corpus/ exists");
+      expect(text).toContain("corpus/runs");
+      expect(text).not.toContain("rk check --selftest: OK");
       expect(code).toBe(1);
     });
   });

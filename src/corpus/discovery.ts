@@ -49,3 +49,10 @@ export function totalFixtureCount(corpusRoot: string): number {
   const all = discoverAllFixtures(corpusRoot);
   return GATE_DIRS.reduce((sum, g) => sum + all[g]!.length, 0);
 }
+
+/** corpus/README.md's ledger total across the six M0 gates. One shared home (M0.3 round-3
+ * review follow-up 2, check.ts:89): `bun run selftest` (scripts/selftest.ts) and `rk check
+ * --selftest` (src/cli/check.ts) both enforce this exact number against `totalFixtureCount`, so
+ * the two entry points can never drift apart on what "the corpus" is expected to contain. A drift
+ * between this constant and corpus/README.md's own ledger is itself a bug — bump both together. */
+export const EXPECTED_FIXTURE_COUNT = 86;

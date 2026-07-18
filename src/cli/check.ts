@@ -30,6 +30,7 @@ import type { RepoSnapshot } from "../gates/snapshot";
 import type { GateConfig } from "../gates/config";
 import { runAllFixtures } from "../corpus/run";
 import { formatCorpusRunReport } from "../corpus/report";
+import { discoverAllFixtures, EXPECTED_FIXTURE_COUNT, GATE_DIRS } from "../corpus/discovery";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
 
@@ -84,7 +85,17 @@ function runGateSafely(gate: Gate, snapshot: RepoSnapshot, config: GateConfig): 
  * research repo, when running this flag) — an absent corpus directory is a loud ERROR, never a
  * silent pass (L2): running `--selftest` against a directory that isn't an rk checkout (or an rk
  * checkout with its corpus/ moved/deleted) must fail loudly, not report "0/0 passed" as if the
- * corpus were merely empty. */
+ * corpus were merely empty.
+ *
+ * M0.3 round-3 review follow-up 2 (check.ts:89): an existing-but-empty (or partially-deleted)
+ * corpus/ used to pass silently — a missing gate subdirectory becomes an empty fixture list
+ * (src/corpus/discovery.ts's `discoverFixtures` swallows ENOENT), so `formatCorpusRunReport`
+ * reported a pass-shaped `0/0 fixtures passed` for that gate with zero errors. Two checks below
+ * close that hole before any fixture runs: every one of the six gate corpus directories must
+ * discover at least one fixture, and the grand total must equal `EXPECTED_FIXTURE_COUNT`
+ * (src/corpus/discovery.ts — the SAME constant `bun run selftest`, scripts/selftest.ts, enforces,
+ * so the two entry points can never silently drift apart on what "the corpus" is expected to
+ * contain). */
 async function runSelftest(root: string, out: Out): Promise<number> {
   const corpusRoot = join(root, "corpus");
   if (!existsSync(corpusRoot)) {
@@ -93,6 +104,28 @@ async function runSelftest(root: string, out: Out): Promise<number> {
         `--selftest runs rk's own red-fixture corpus and requires --root to point at an rk repo ` +
         `checkout that has one (docs/gate-contracts.md, corpus/README.md) — this is a loud failure, ` +
         `not a silent pass (CLAUDE.md L2).`,
+    );
+    return 1;
+  }
+
+  const perGate = discoverAllFixtures(corpusRoot);
+  const emptyGates = GATE_DIRS.filter((g) => perGate[g]!.length === 0);
+  if (emptyGates.length > 0) {
+    out.log(
+      `rk check --selftest: ERROR corpus/ exists at ${corpusRoot} but the following gate ` +
+        `director${emptyGates.length === 1 ? "y is" : "ies are"} absent or empty: ` +
+        `${emptyGates.map((g) => `corpus/${g}`).join(", ")}. An existing-but-incomplete corpus ` +
+        `must fail loudly, never report a pass-shaped 0/0 for a missing gate (CLAUDE.md L2).`,
+    );
+    return 1;
+  }
+
+  const fixtureTotal = GATE_DIRS.reduce((sum, g) => sum + perGate[g]!.length, 0);
+  if (fixtureTotal !== EXPECTED_FIXTURE_COUNT) {
+    out.log(
+      `rk check --selftest: ERROR discovered ${fixtureTotal} fixtures under ${corpusRoot}, ` +
+        `expected ${EXPECTED_FIXTURE_COUNT} per corpus/README.md's ledger total (the same count ` +
+        `'bun run selftest' enforces) — the corpus and its own ledger have drifted.`,
     );
     return 1;
   }

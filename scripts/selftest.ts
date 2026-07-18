@@ -32,7 +32,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { totalFixtureCount } from "../src/corpus/discovery";
+import { EXPECTED_FIXTURE_COUNT, totalFixtureCount } from "../src/corpus/discovery";
 import { runAllFixtures } from "../src/corpus/run";
 import { formatCorpusRunReport } from "../src/corpus/report";
 
@@ -111,6 +111,17 @@ export function checkPurity(repoRoot: string): { checked: string[]; violations: 
   return { checked, violations };
 }
 
+/** Unique violating-FILE count for the "pure files clean" coverage numerator (M0.3 round-3
+ * review follow-up 4, selftest.ts:163): one file can produce several `PurityViolation` entries
+ * (one per forbidden-pattern match), but must only ever subtract once from `checked.length` — a
+ * file is either clean or it isn't; it does not get "more unclean" per extra matching line.
+ * `checkPurity`'s own `violations.length` stays the per-line diagnostic count (unchanged, still
+ * printed one `ERROR ...` line per match, still what `errors` accumulates for the exit code); this
+ * is a distinct, smaller number used only for the ratio's numerator. */
+export function violatingFileCount(violations: PurityViolation[]): number {
+  return new Set(violations.map((v) => v.file)).size;
+}
+
 /** Non-test .ts files directly under src/gates/ that are known, deliberate, fs-using edges
  * (documented `// EDGE —` header, never marked `PURITY: pure`) and therefore legitimately absent
  * from `checkPurity`'s scan. Any OTHER unmarked file appearing in src/gates/ is the exact
@@ -160,8 +171,15 @@ async function main(): Promise<number> {
     console.log(`ERROR ${relative(repoRoot, v.file)}:${v.line} forbidden pattern '${v.pattern}' in a PURITY: pure file — ${v.text}`);
   }
   errors += violations.length;
+  // M0.3 round-3 review follow-up 4 (selftest.ts:163): the numerator must count unique
+  // VIOLATING FILES, not raw violation lines — `checked.length - violations.length` treated one
+  // file with N forbidden matches as N files, understating (or, past `checked.length` matches,
+  // going negative on) the "files clean" count while every individual file only ever contributes
+  // once to `checked`. Every per-line diagnostic above is unchanged; only this ratio's numerator
+  // moves to a per-file count.
+  const uniqueViolatingFiles = violatingFileCount(violations);
   console.log(
-    `checked purity: ${checked.length - violations.length}/${checked.length} pure files clean ` +
+    `checked purity: ${checked.length - uniqueViolatingFiles}/${checked.length} pure files clean ` +
       `(${violations.length} errors)`,
   );
 
@@ -185,12 +203,12 @@ async function main(): Promise<number> {
 
   // Corpus fixture count (M0.3): discovers corpus/<gate>/<fixture>/ the same way
   // test/corpus.test.ts does (both call src/corpus/discovery.ts — one implementation, so
-  // the two can never silently disagree). corpus/README.md's ledger totals to 86 fixtures across
-  // the six M0 gates (rk-4uw, N4+N5: +2 since the 84-count was last pinned — `provenance-17`,
-  // the previously-deferred frontmatter-invalid>0 fixture, and `provenance-18`, ruling f's
-  // whitelisted-unanchored aggregate fixture); a drift from that number means the corpus and its
-  // own ledger have gone out of sync, which is itself an ERROR here, not a silent skip (L2).
-  const EXPECTED_FIXTURE_COUNT = 86;
+  // the two can never silently disagree). `EXPECTED_FIXTURE_COUNT` (M0.3 round-3 review follow-up
+  // 2) now lives in src/corpus/discovery.ts, the one shared home `rk check --selftest`
+  // (src/cli/check.ts) also imports, so this script and the CLI can never enforce two different
+  // numbers. corpus/README.md's ledger must match it; a drift from that number means the corpus
+  // and its own ledger have gone out of sync, which is itself an ERROR here, not a silent skip
+  // (L2).
   const corpusRoot = join(repoRoot, "corpus");
   const fixtureTotal = totalFixtureCount(corpusRoot);
   if (fixtureTotal !== EXPECTED_FIXTURE_COUNT) {

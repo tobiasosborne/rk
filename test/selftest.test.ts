@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkGatesDirImpureAllowlist, checkPurity } from "../scripts/selftest";
+import { checkGatesDirImpureAllowlist, checkPurity, violatingFileCount } from "../scripts/selftest";
+import type { PurityViolation } from "../scripts/selftest";
 
 function makeTree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "rk-selftest-test-"));
@@ -83,6 +84,49 @@ describe("checkPurity", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0]!.pattern).toContain("node:");
     rmSync(root, { recursive: true, force: true });
+  });
+
+  // M0.3 round-3 review follow-up 4 (selftest.ts:163): a file with MULTIPLE forbidden-pattern
+  // matches must still only ever count as ONE unclean file for the "pure files clean" numerator
+  // — the pre-fix arithmetic (`checked.length - violations.length`) treated N matches in one
+  // file as N unclean files, understating (or driving negative) the reported count.
+  test("checkPurity + violatingFileCount: one file with multiple forbidden-pattern matches counts as exactly one violating file", () => {
+    const root = makeTree({
+      "src/refs/multi-violation.ts":
+        "// PURITY: pure — no fs/network/clock (L3).\n" +
+        "import { readFileSync } from 'node:fs';\n" +
+        "const now = Date.now();\n" +
+        "console.log(process.env.FOO);\n",
+      "src/refs/clean.ts": "// PURITY: pure — no fs/network/clock (L3).\nexport const x = 1;\n",
+    });
+    const { checked, violations } = checkPurity(root);
+    expect(checked).toHaveLength(2);
+    // Three separate forbidden-pattern matches (node:, Date., process.), all in the same file.
+    expect(violations.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(violations.map((v) => v.file)).size).toBe(1);
+
+    // The pre-fix numerator (`checked.length - violations.length` = 2 - 3 = -1) was already
+    // wrong/negative here; the fixed numerator counts unique files: 2 checked - 1 violating = 1.
+    const filesClean = checked.length - violatingFileCount(violations);
+    expect(filesClean).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("violatingFileCount: pure function over a synthetic PurityViolation[] — empty input, single file, multi-file", () => {
+    expect(violatingFileCount([])).toBe(0);
+
+    const oneFileThreeHits: PurityViolation[] = [
+      { file: "a.ts", line: 1, pattern: "node:", text: "" },
+      { file: "a.ts", line: 2, pattern: "Date.", text: "" },
+      { file: "a.ts", line: 3, pattern: "process.", text: "" },
+    ];
+    expect(violatingFileCount(oneFileThreeHits)).toBe(1);
+
+    const twoFiles: PurityViolation[] = [
+      { file: "a.ts", line: 1, pattern: "node:", text: "" },
+      { file: "b.ts", line: 1, pattern: "node:", text: "" },
+    ];
+    expect(violatingFileCount(twoFiles)).toBe(2);
   });
 });
 
