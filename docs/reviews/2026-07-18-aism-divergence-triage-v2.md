@@ -1,3 +1,4 @@
+<!-- SUPERSEDED-BY: docs/reviews/2026-07-18-aism-divergence-triage-v3.md (rk-88o rerun, post round-2 repairs). This file's §"Flood attribution" was OVERTURNED by the round-2 codex re-review (docs/reviews/2026-07-18-m0.3-rereview-codex.md, ruling f): per-item whitelist WARNs sharing a message template are NOT one causal root, so the 96/118 historical buckets exceeded the >25/check threshold without a valid exception. v3 re-evaluates the flood criterion under the check-6 aggregation fix (50793c4) that landed since — whitelist WARNs now emit ONE finding per tree. Read v3 for the current acceptance state; rk-bug count remains 0. -->
 <!-- ROLE: committed triage record — M0.3 acceptance RERUN (rk-g68), post-fix. SUPERSEDES
      docs/reviews/2026-07-18-aism-divergence-triage.md (that file's UPDATE POLICY:
      "append-only; supersede with a new dated file if re-run" — this is that file).
