@@ -3,80 +3,84 @@
 
 # HANDOFF
 
-## State (2026-07-18, session close)
+## State (2026-07-18, session close — M1 orchestration session)
 
-**M0 is functionally complete. M0.3 ACCEPTED** (bd rk-4wm close note has the full basis).
-Tree: 489 tests / 0 fail / 1 env-gated skip; `bun run selftest` OK (purity 26 files,
-corpus 87/87 executed); `rk check --selftest --root .` OK; compiled binary builds.
-No git remote configured — all commits local (tell orchestrator if one should be added).
+**M1 is functionally complete and review-round done; NOT yet accepted.** All five WPs
+(M1.1–M1.5 sessions 1–2) landed; the single boundary review returned 5 landing-blockers
+(below). Per the anti-Zeno cap the next session runs ONE repair wave, verifies fixes
+mechanically against the review's file:line claims, runs dogfood session 3, and closes
+the milestone — no re-review.
+Tree: 671 tests / 0 fail / 1 skip; `bun run selftest` OK (92/92 fixtures, purity clean,
+gates-dir allowlist now EMPTY); compiled binary current at dist/rk.
+No git remote configured — all commits local (TJO: add one if pushing is wanted).
 
 ## Milestone scorecard
 
-- M0.1 contracts, M0.2 corpus, M0.4 doctor, M0.6 refs, M0.7 amendment: DONE (prior).
-- M0.3 six gates + `rk check`: DONE + ACCEPTED this session. All six gates implemented
-  (provenance was the last stub), corpus grown 75→87 fixtures, AISM HEAD live-fire
-  0 ERRORs with rk's findings verified strictly stronger than AISM's own gates.
-- M0.5 AISM cutover: **DEFERRED INDEFINITELY** (TJO directive, see below). Not an rk goal.
+- M1.1 templates (rk-b8p), M1.2 init (rk-9ir), M1.3 phase (rk-oom), M1.4 upgrade stub
+  (rk-cg9): DONE. Templates embedded in binary; residue bar is a grep test.
+- M1.5 dogfood (rk-bi4, OPEN): sessions 1–2 done on the K6 campaign at
+  ../rk-dogfood-1 (SC1 PASS 3.2 min; audit trigger fired/blocked/reset live;
+  upgrade 1.0.0→1.1.0 followed for real). Session 3 = post-repair verification.
+- Residue work: rk-hq9 audit DONE (memo docs/memos/2026-07-18-aism-residue-audit.md);
+  R12 "AISM" default removed; presence-conditional amendments landed (3849eb1);
+  recursive linker discovery landed (936aa54). rk-au6 remains open (M2 scope).
+- Wave-1 extras: rk-7uc relocation DONE (src/store/); rk-8ux fr refresh DONE.
 
-## Governance changes this session (all TJO-ratified, in CLAUDE.md==AGENTS.md + bd memory)
+## M1 boundary review (docs/reviews/2026-07-18-m1-milestone-review-codex.md)
 
-1. **Reviews: codex gpt-5.6-sol via `codex exec`** (xhigh for Tier A, high for Tier B).
-   Fable reviews only with explicit TJO permission. Invocation pattern in CLAUDE.md §3.
-2. **Two-list reviews**: landing-blockers (BLOCKER/MAJOR on validity semantics) vs
-   follow-ups (beads, batched, non-gating). Repair rigor follows the finding's tier.
-3. **Anti-Zeno cap**: ONE review round + ONE repair wave per milestone, hard stop.
-   Orchestrator verifies repairs mechanically; no hostile re-review of repairs.
-   (M0.3 ran 3 rounds before this rule existed — do not repeat.)
-4. **AISM stance (strongest form)**: AISM is a case study in what NOT to do. rk must
-   serve ANY theoretical campaign (SC7 is the vision core). AISM permissible only as
-   incident-history seed + read-only crash-test corpus. Plan note filed at
-   `../research-workflows/NOTES-2026-07-18-aism-role.md`; M2/M3/M4 AISM touchpoints
-   need explicit TJO calls at those boundaries.
-5. Orchestration model: Fable orchestrates + bookkeeps; Sonnet/Opus subagents implement
-   (disjoint file scopes, explicit-path commits); codex reviews.
+codex gpt-5.6-sol at HIGH (TJO relaxed xhigh this session), ONE round. 12/15 flags
+ratified. **Landing-blockers, all orchestrator-verified at cited lines — this is the
+next session's repair wave, plus rk-wc3:**
 
-## Review-cycle outcome (M0.3, 3 rounds — pre-cap)
+1. rk-xbm (P1): .rk/config.json values unvalidated — `phase:"typo"` silently demotes
+   (phase.ts:40 treats non-"consolidation" as exploration); bad shardsMaxLines
+   false-greens shards.ts:152.
+2. rk-2t8 (P1): Gate 4 provenance still hardcodes argument/lemmas
+   (provenance-parse.ts:17,58) — root-level shards escape the OVERCLAIM check.
+3. rk-sj6 (P1): duplicate registry ids across recursive discovery collapse silently
+   (linker-parse.ts:217 / linker-graph.ts:35); duplicates are structural per contract.
+4. rk-huq (P1): `rk phase consolidation` writes no fr event (plan M1.3 acceptance +
+   stamped constitution both promise it).
+5. rk-19i (P1): stamped constitution promises a build/ freshness check that ships M2.6.
+6. rk-wc3 (P1, dogfood-2, NOT visible to the review): multi-line YAML `deps:`/`defs:`
+   silently parse empty (parseList is single-line `;`-grammar) — DAG/unknown-id checks
+   run on an edgeless graph with zero diagnostic.
 
-Review records: docs/reviews/2026-07-18-m0.3-{milestone-review,rereview,review3}-codex.md.
-Acceptance chain: aism-divergence-triage{,-v2,-v3}.md (v3 final: rk-bug 0, flood PASS
-by ratified per-check count). Highlights fixed along the way: stale-source false-PASS
-paths, optional-facts semantic split, coverage-line lies, a purity grep that never
-scanned 5 of 6 gate files, refs crash on null externals, symlink crash-before-boundary.
-Six reviewer rulings ratified (a-e + aggregate-flood), one overturned and fixed
-structurally (check-6 WARN aggregation, 139→2 WARNs on AISM, zero verdict change).
-
-## Architecture notes for next session
-
-- Snapshot edge: `loadSnapshot` (src/store/snapshot-load.ts) supplies REQUIRED SnapshotFacts
-  {sha256 (every present file, raw bytes), tracked (git ls-files), dirs (incl. empty)}.
-  lstat policy: symlinks content-invisible. Load failure → `<snapshot-load>` ERROR,
-  never an uncaught exit. Pure test builder: snapshotFromFiles (hashes via pure
-  src/gates/sha256.ts, byte-identical to edge hasher).
-- Corpus infra: src/corpus/{run,discovery,report}.ts (edge). EXPECTED_FIXTURE_COUNT
-  single source of truth in discovery.ts (=87). Fixtures may carry repo/.rk/config.json
-  ONLY with a matching expected.json config_override declaration.
-- src/gates is fully pure (marker-scanned, full leading comment block), zero allowlist
-  exceptions: load.ts/config-load.ts relocated to src/store/{snapshot-load,config-load}.ts
-  (rk-7uc, 2026-07-18); do not grow the allowlist back.
+Follow-ups (batched, non-gating): rk-gvx + rk-mdx (schema READMEs teach wrong
+path/field — truthfulness, do with repair wave), rk-ax5 (init overwrites hooks
+without --force), rk-czv (upgrade marks slot-filled files safe to overwrite), rk-ssu,
+rk-6l2, rk-dh0. Review follow-up F5 (stale HANDOFF) fixed by this rewrite.
 
 ## Next steps (in order)
 
-1. **M1 scaffold** (plan M1.1–M1.5): template set, `rk init`, `rk phase`, `rk upgrade`
-   stub, dogfood 1 on a fresh small conjecture. This is the generality-defining
-   milestone — dispatch parallel Sonnet implementers, ONE codex review at the boundary.
-2. **rk-hq9 (P2): AISM-residue audit** — at the M1 boundary, justify/configure/remove
-   every AISM-derived assumption in gate contracts + defaults (candidate list in bead).
-   Natural companion to M1.1 template design.
-3. **rk-7uc (P2)**: relocate load.ts/config-load.ts out of src/gates (batch with M1).
-4. Backlog P3s: rk-fdl (refs test cleanup), rk-rko, rk-t14, rk-zjq, rk-w91 (V0
-   firstproof recovery-or-strike decision), rk-8ux (fr binary refresh — TJO decision,
-   de-prioritized with AISM work).
+1. **Repair wave** (single wave, then mechanical verification — NO re-review): rk-xbm,
+   rk-2t8, rk-sj6, rk-huq, rk-19i, rk-wc3; batch rk-gvx/rk-mdx/rk-czv/rk-ax5 alongside
+   (same territories). Repair rigor per finding tier; red fixture per validity fix.
+2. **Dogfood session 3** on ../rk-dogfood-1: verify repairs as the user (multi-line
+   deps now loud/accepted, upgrade instructions safe, constitution honest), then close
+   rk-bi4 and mark M1 ACCEPTED (bd + worklog entry).
+3. **M2 entry** (projection + render): schedule V4 (`af export --graph json`) in
+   ../vibefeld FIRST (plan sequencing); M2.1 graph schema; rk-au6 report-decoupling
+   lands here; AISM touchpoints need explicit TJO calls (2026-07-18 stance memory).
+4. Backlog: rk-ssu, rk-6l2, rk-dh0 (fr versioning), rk-fdl, rk-rko, rk-t14, rk-zjq,
+   rk-w91, plus dogfood P3s rk-uon, rk-i2o, rk-610, rk-8r9.
+
+## Governance this session (TJO directives, in bd memory)
+
+- Reviews at gpt-5.6-sol HIGH suffice (xhigh no longer default).
+- Breaking changes to fr are acceptable; af/fr work unrestricted for rk's needs.
+- Vision restated: rk serves ANY academic theoretical-research campaign — generality
+  is the acceptance lens (drove the residue audit + all template decisions).
 
 ## Standing cautions
 
 - Shared working tree for parallel agents: disjoint file scopes, explicit-path commits
-  only (never `git add -A`), re-read shared files (corpus/README.md) before editing.
-- codex exec can hang at startup (0 CPU, no session file in ~/.codex/sessions) — the
-  health-check pattern: after launch, wait ≤3 min for the rollout file; relaunch if
-  absent. Log the full stream to a file; never pipe through `tail`.
-- CLAUDE.md==AGENTS.md byte-identity: every CLAUDE.md edit must `cp` to AGENTS.md.
+  only, hold commits while a codex review is reading the tree.
+- bd `update --notes` REPLACES the field (a dossier was nearly lost). Append manually.
+- A `pgrep -f` watcher matches its own command line — use a distinctive token or
+  pattern that cannot appear in the watcher (cost: 1.5 h this session).
+- codex exec: health-check via ~/.codex/sessions rollout file; ~17 min for an M1-sized
+  diff review at high; log to file, never pipe through tail.
+- CLAUDE.md==AGENTS.md byte-identity applies to the TEMPLATE too (stamped repos).
+- Campaign repo ../rk-dogfood-1 is live dogfood state — read-only unless a dogfood
+  session owns it.
