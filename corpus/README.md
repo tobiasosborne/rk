@@ -65,6 +65,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `linker-22` | argument/linker | `node_amended` on root node RECONCILES a `node_created`/registry-contract mismatch — golden case, no drift | **rk-co2** / `docs/reviews/2026-07-18-aism-divergence-triage.md`: AISM's `lem-hx-financing-floor` (`proofs/lem-hx-financing-floor/ledger/000043.json`, node_id `1`) amends a stale root statement to the corrected text that matches the registry contract; pre-fix `introspectWorkspace` ignored `node_amended` and read the stale `node_created` text, emitting a false contract-drift ERROR (rk-bug — the only one from the M0.3 triage). Rebuilt as a minimal fixture (real event shape, not AISM's actual content). | landed |
 | `linker-23` | argument/linker | `node_amended` on root node BREAKS agreement with the registry contract — inverse case, drift must still fire | **rk-co2** companion (no separate AISM incident — proves the fix's other direction): `node_created` matches the contract at creation; a later `node_amended` on `node_id` `1` moves the statement away from the contract. Confirms the `node_amended` replay fix does not silence check 9 for a real post-amendment divergence. | landed |
 | `linker-24` | argument/linker | lemma shard with NO `kind:` line at all (required field entirely absent, not just an invalid enum value) | **rk-aft** / 2026-07-18 M0.3 milestone review (codex gpt-5.6-sol) finding 3: `linker-parse.ts:125` validated `kind` only when truthy (`if (kind && !KINDS.has(kind))`), so an absent/empty `kind` short-circuited the check entirely and the lemma registered with zero findings and 1/1 coverage despite `gate-contracts.md:303` marking `kind` required (same required-field row shape as `id`). Fixed by adding a presence check ahead of the enum check, ERROR message `missing required field 'kind' (must be one of [...])`, mirroring the `id` required-field check's message convention; unlike absent `id` ([F12]), absent `kind` does NOT exclude the shard from `lemmas` — `kind` stays optional on the `Lemma` type and every other check still runs. Sanity-checked against AISM (`../almost-idempotent-stochastic-maps`, `bun run src/cli.ts check`): before/after outputs are byte-identical (200/200 lemma shards, 0 linker errors) — no live AISM shard lacks `kind:`, so this is a real gap class, not an observed production divergence. | landed |
+| `linker-25` | argument/linker | `argument/INDEX.md` + `DAG.md` mirror BOTH entirely absent on an otherwise-valid lemma shard ⇒ golden pass, coverage names both mirrors' non-adoption | **R14** / bead rk-1rv (M1, `docs/memos/2026-07-18-aism-residue-audit.md` section R14): the markdown mirror is AISM's transitional view format, superseded by the M2.4 HTML render + M2.6 regenerate-and-diff gate. Check 11 is now presence-conditional PER FILE — absent means "not adopted", never a finding; `linker.ts`'s coverage line names each mirror's status visibly (`mirrors: INDEX absent (not adopted), DAG absent (not adopted)`), never a silent skip (L2). Fresh-scaffold-shaped fixture: an orchestrator live-fire (2026-07-18) found a fresh `rk init` + `rk phase consolidation` repo failing `rk check` on exactly this state. `aism_behavior: differs` — `argument.py`'s `check_generated` always ERRORs an absent mirror (`have = "" if not path.exists()`); this is the AISM residue the bead removes, not a stricter baseline, so it is not triaged into the usual rk-stricter-intended/rk-bug/ambiguous triad. Mutation-proven red-first (inverting the presence guard so `checkGenerated` always compares against the fresh render turns this fixture red; reverted after confirming). Sibling: `shards-15`. | landed |
 | `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | landed |
 | `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | landed |
 | `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | landed |
@@ -114,12 +115,17 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 | `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
 | `shards-14` | report-shards | no `shardsPrefix` configured, a real shard needs SHARD-ID validation ⇒ config-missing ERROR | **R12** / bead rk-psm (M1 landing-blocker, `docs/memos/2026-07-18-aism-residue-audit.md` section R12): `src/gates/config.ts`'s `shardsPrefix` default `"AISM"` deleted — a general tool must never default a shard-id prefix to a specific campaign name. `shardsPrefix` is now required-when-consumed: the shards gate emits ONE loud, counted ERROR (`path: ".rk/config.json"`) the first time it needs to validate a SHARD-ID header without a configured prefix, never a silent AISM-shaped default and never a crash. This is the L2 red fixture for the new failure mode; mutation-proven red-first (temporarily making the gate silently accept on missing prefix turns this fixture red; reverted after confirming). | landed |
+| `shards-15` | report-shards | `report/` ROOT directory entirely absent (fresh-scaffold-shaped repo with a real `argument/lemmas` shard) ⇒ golden pass, coverage names the non-adoption | **R13** / bead rk-au6 (M1, `docs/memos/2026-07-18-aism-residue-audit.md` section R13): the `report/` LaTeX layout is not in rk's scaffold (PRD.md:79-85) — a general research tool must not force every repo to hand-create it. Every check in `shards.ts` is now bound only when `report/` (the ROOT directory) exists; absence is "not adopted", never a finding, surfaced in the coverage line (`report/: absent (not adopted)`), never a silent skip (L2). This is the incident fixture: an orchestrator live-fire (2026-07-18) found a fresh `rk init` + `rk phase consolidation` repo failing `rk check` on exactly this state (6 ERRORs: 4 from this gate, 2 from `linker-25`'s sibling case). `aism_behavior: differs` — `check-report-shards.sh:22-25` requires `MASTER`/`SECTIONS_DIR`/`README`/`CATALOG` unconditionally, with no report/-absent no-op; this is the AISM residue the bead removes, not a stricter baseline, so it is not triaged into the usual rk-stricter-intended/rk-bug/ambiguous triad. Mutation-proven red-first (inverting the root guard so Check 1 runs unconditionally turns this fixture red — four missing-file/dir ERRORs; reverted after confirming). Sibling: `linker-25`. | landed |
 
-Totals: 15 defs + 24 argument/linker + 8 refs + 19 provenance + 8 runs + 14 report-shards = **88
+Totals: 15 defs + 25 argument/linker + 8 refs + 19 provenance + 8 runs + 15 report-shards = **90
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. `shards-14`
-(+1 over the previously-pinned 87) is the M1 addition: bead rk-psm / audit landing-blocker R12
+(+1 over the previously-pinned 87) is the M1 R12 addition: bead rk-psm / audit landing-blocker R12
 (`docs/memos/2026-07-18-aism-residue-audit.md`), removing `shardsPrefix`'s `"AISM"` default — see
 its own row above and `docs/gate-contracts.md` Gate 6's updated Inputs/Divergences sections.
+`linker-25` + `shards-15` (+2 over the then-pinned 88) are the M1 R13/R14 addition: beads
+rk-au6/rk-1rv, making the `report/` root and the `argument/INDEX.md`/`DAG.md` mirror checks
+presence-conditional — see their own rows above and `docs/gate-contracts.md` Gate 2 Check 11 /
+Gate 6 Check 1's updated text.
 (Recounted 2026-07-18, rk-4uw N4+N5, at 87: `provenance-17`, this WP's new frontmatter-invalid>0
 fixture landed below, and `provenance-18`, ruling f's whitelisted-unanchored aggregate fixture,
 which had already landed on disk with its own ledger row above but was not yet reflected in the
@@ -318,7 +324,7 @@ brittle noise unrelated to what the fixture proves. The criterion: a fixture get
 expectation iff its own row in `docs/gate-contracts.md`'s "Corpus fixtures required" table, or
 a named Divergences entry, explicitly frames the fixture's POINT as the coverage line's
 truthfulness or visibility — not merely "the gate happens to also emit a coverage line" (true of
-all 87 fixtures, and not by itself a reason to assert on it). By that criterion:
+all 90 fixtures, and not by itself a reason to assert on it). By that criterion:
 
 | fixture | why | `docs/gate-contracts.md` anchor |
 |---|---|---|
@@ -329,6 +335,8 @@ all 87 fixtures, and not by itself a reason to assert on it). By that criterion:
 | `runs-07` | empty `runs/` day-1 golden case, explicitly "asserts the coverage line still fires" | Gate 5 fixture table |
 | `shards-07` | invalid `\include` target ⇒ the non-conforming shard identity counts in the denominator, never the numerator (`0/1`, not the pre-N3 `0/0`) | Gate 6 fixture table (N3) |
 | `shards-08`, `shards-09` | coverage numerator must mean "fully conforming", not "examined" — a live CATALOG/README ERROR must still exclude the shard from `checked` (rk-1tt) | Gate 6 Divergences |
+| `linker-25` | both argument/INDEX.md + DAG.md mirrors absent ⇒ coverage line must name each mirror's non-adoption visibly, never a silent skip (R14) | Gate 2 fixture table + Gate 2 Check 11 |
+| `shards-15` | `report/` ROOT absent ⇒ coverage line must name the non-adoption visibly, never a silent skip (R13) | Gate 6 fixture table + Gate 6 Check 1 |
 
 **Known gap CLOSED (rk-4uw, 2026-07-18, N4).** This section previously flagged that
 `registrySkipReport`'s frontmatter-invalid-registry-shard path (rk-v18) had red-first proof only
@@ -338,7 +346,7 @@ corpus fixture driving `skipped.length > 0` — a live L2 gap (2026-07-18 M0.3 r
 closes it: one valid lemma plus one lemma with no frontmatter at all, asserting both the aggregate
 WARN and the honest `1/2` coverage denominator end-to-end through the corpus runner.
 
-Every other fixture (the remaining 79 = 87 total − 8 with an asserted `coverage` expectation) is a
+Every other fixture (the remaining 80 = 90 total − 10 with an asserted `coverage` expectation) is a
 purely finding-shaped fixture per this criterion and carries no `coverage` field — its
 `checked`/`total` values are whatever the gate happens to produce, asserted nowhere, same as
 before this WP.
@@ -468,12 +476,12 @@ script-verified / rk-only / untested breakdown.
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
-| linker | 24/24 | 21 | 3 (`linker-15` message-only, `linker-21` crash→ERROR, `linker-24` missing-`kind` no-op — confirmed rk-stricter-intended by empirical harness run, rk-4uw, see below) | 0 |
+| linker | 25/25 | 21 | 4 (`linker-15` message-only, `linker-21` crash→ERROR, `linker-24` missing-`kind` no-op — confirmed rk-stricter-intended by empirical harness run, rk-4uw, see below; `linker-25` mirror-presence-conditional, contract amendment not a strictness triage, R14/rk-1rv) | 0 |
 | refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
 | provenance | 19/19 | 16 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
-| shards | 14/14 | 13 | 1 (`shards-14`, rk-stricter-intended, R12 shardsPrefix requiredness) | 0 |
-| **total** | 88 (all script-validated) | 78 | 10 | 0 |
+| shards | 15/15 | 13 | 2 (`shards-14`, rk-stricter-intended, R12 shardsPrefix requiredness; `shards-15` report/-root-presence-conditional, contract amendment not a strictness triage, R13/rk-au6) | 0 |
+| **total** | 90 (all script-validated) | 78 | 12 | 0 |
 
 `shards-14` (R12, bead rk-psm) was script-validated 2026-07-18: `check-report-shards.sh` run
 directly against `corpus/shards/shards-14/repo` (`GIT_CEILING_DIRECTORIES` pinned to rk's own

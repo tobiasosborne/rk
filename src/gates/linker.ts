@@ -44,6 +44,8 @@ export const linkerGate: Gate = {
       }
     }
 
+    const { findings: generatedFindings, mirrorStatus } = checkGenerated(snapshot, lemmas);
+
     const findings = [
       ...parseErrors,
       ...checkAcyclic(lemmas),
@@ -51,7 +53,7 @@ export const linkerGate: Gate = {
       ...checkStatus(lemmas),
       ...checkContracts(lemmas, wsContracts),
       ...checkOrphans(lemmas, wsDirs),
-      ...checkGenerated(snapshot, lemmas),
+      ...generatedFindings,
       ...checkBrittleness(lemmas, nodeCounts, config.linkerBrittlenessSoftCap),
     ];
 
@@ -59,9 +61,16 @@ export const linkerGate: Gate = {
       (n) => n.endsWith(".md") && n !== "README.md" && n !== "INDEX.md",
     ).length;
 
+    // R14 (bead rk-1rv): each mirror's adoption status is always named in the coverage line,
+    // present or absent — never a silent skip when a repo hasn't adopted the transitional
+    // markdown mirror (docs/gate-contracts.md Gate 2 Check 11).
+    const mirrorsNote = mirrorStatus
+      .map((m) => `${m.label} ${m.present ? "present" : "absent (not adopted)"}`)
+      .join(", ");
+
     return {
       findings,
-      coverage: [{ gate: "linker", unit: "lemma shards", checked: total, total }],
+      coverage: [{ gate: "linker", unit: `lemma shards; mirrors: ${mirrorsNote}`, checked: total, total }],
     };
   },
 };

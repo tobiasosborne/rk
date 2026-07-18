@@ -37,6 +37,47 @@ const SCAFFOLD_FILES = {
   "report/SHARD_CATALOG.md": "# catalog\n",
 };
 
+// R13 (bead rk-au6, docs/memos/2026-07-18-aism-residue-audit.md): the report/ LaTeX layout is
+// NOT in rk's scaffold (PRD:79-85) -- a general research tool must not force every repo to
+// hand-create it just to pass `rk check`. corpus/shards/shards-15 covers this end-to-end through
+// the corpus runner (a fresh-scaffold-shaped repo with no report/ at all); these tests isolate
+// the gate's own root-presence guard directly, including the "root present, deeper item absent
+// still ERRORs" boundary the guard must NOT blur.
+describe("shardsGate — R13: report/ ROOT presence gates every check (rk-au6)", () => {
+  test("report/ entirely absent: zero findings, coverage notes 'report/: absent (not adopted)', never a silent skip", () => {
+    const result = shardsGate.run(snapshotFromFiles({}), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toEqual([]);
+    expect(result.coverage).toEqual([
+      {
+        gate: "shards",
+        unit: "shard(s) fully conforming (included, labeled, cataloged); report/: absent (not adopted)",
+        checked: 0,
+        total: 0,
+      },
+    ]);
+  });
+
+  test("report/ absent even when OTHER project content exists (argument/lemmas present): still zero shards findings", () => {
+    const result = shardsGate.run(
+      snapshotFromFiles({ "argument/lemmas/lem-x.md": "---\nid: lem-x\nkind: lemma\n---\n" }),
+      DEFAULT_GATE_CONFIG,
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.coverage[0]!.unit).toContain("report/: absent (not adopted)");
+  });
+
+  test("report/ ROOT present but a deeper item absent (empty report/ dir, nothing under it): still ERRORs -- root presence never blurs into deeper-item leniency", () => {
+    const result = shardsGate.run(snap({}, ["report"]), DEFAULT_GATE_CONFIG);
+    expect(errors(result).map((f) => f.path).sort()).toEqual([
+      "report/README.md",
+      "report/SHARD_CATALOG.md",
+      "report/main.tex",
+      "report/sections",
+    ]);
+    expect(result.coverage[0]!.unit).toContain("report/: present");
+  });
+});
+
 describe("shardsGate — Check 1: report/sections/ directory existence (rk-399 finding 2)", () => {
   test("sections/ ABSENT (empty scaffold otherwise): ERROR, not a clean empty-scaffold pass", () => {
     const result = shardsGate.run(snap({ ...SCAFFOLD_FILES }, ["report"]), DEFAULT_GATE_CONFIG);
@@ -87,7 +128,12 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
     const result = shardsGate.run(tree(), CONFIG_WITH_PREFIX);
     expect(errors(result)).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "shards", unit: "shard(s) fully conforming (included, labeled, cataloged)", checked: 1, total: 1 },
+      {
+        gate: "shards",
+        unit: "shard(s) fully conforming (included, labeled, cataloged); report/: present",
+        checked: 1,
+        total: 1,
+      },
     ]);
   });
 

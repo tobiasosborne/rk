@@ -4,6 +4,21 @@
 // corpus fixture (linker-17..-20) were produced by the REAL AISM script and this check requires
 // an EXACT byte match against a fresh render — any formatting drift here false-positives a
 // spurious STALE on every clean fixture, not just the intentionally-stale one (linker-16).
+//
+// PRESENCE-CONDITIONAL (M1, bead rk-1rv; docs/memos/2026-07-18-aism-residue-audit.md R14).
+// argument/INDEX.md and argument/DAG.md are AISM's transitional markdown mirror of the DAG,
+// superseded by the M2.4 HTML render + M2.6 regenerate-and-diff gate. A general research tool
+// must not force every repo to hand-create these mirrors just to pass `rk check`: each of the
+// two files is checked ONLY when it is already present in the repo. Absence is never a finding —
+// it means the mirror convention has not been adopted here, and that non-adoption is surfaced
+// via `mirrorStatus` (consumed by linker.ts's coverage line), never silently. A PRESENT file that
+// is stale still ERRORs exactly as before (byte-for-byte, unchanged). `aism_behavior: differs` —
+// AISM's own `check_generated` (argument.py:632-642, `path.exists() else ""`) always treats an
+// absent file as maximally stale and ERRORs; that behavior is the AISM residue this bead removes,
+// not a stricter baseline to preserve, so it is not triaged into the usual rk-stricter-intended /
+// rk-bug / ambiguous triad — a deliberate contract amendment, same footing as F5's reversal.
+// Fixture: linker-25 (mirrors absent, golden pass). linker-16 (mirrors present, one stale) proves
+// the presence-guard inversion would go red — see corpus/README.md.
 
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
@@ -112,13 +127,34 @@ const GENERATED_FILES: Array<[string, (lemmas: Lemma[]) => string]> = [
   ["argument/DAG.md", renderDag],
 ];
 
-/** Check 11 — generated freshness (argument.py:632-642,698-701): the committed generated file
- * must byte-equal a fresh render of the current shard set. An absent committed file also counts
- * as stale (compares against `""`). */
-export function checkGenerated(snapshot: RepoSnapshot, lemmas: Lemma[]): Finding[] {
+/** One mirror file's adoption status, for the linker gate's coverage line (R14: absence must be
+ * visible, never a silent skip — CLAUDE.md L2). `label` is the bare filename stem ("INDEX",
+ * "DAG"). */
+export interface MirrorStatus {
+  path: string;
+  label: string;
+  present: boolean;
+}
+
+export interface GeneratedCheckResult {
+  findings: Finding[];
+  mirrorStatus: MirrorStatus[];
+}
+
+/** Check 11 — generated freshness (argument.py:632-642,698-701), PRESENCE-CONDITIONAL per file
+ * (R14, bead rk-1rv — see this file's header comment). A mirror file absent from the snapshot is
+ * read as "convention not adopted": no finding, `mirrorStatus` records it for the coverage line.
+ * A PRESENT mirror file must still byte-equal a fresh render of the current shard set — unchanged
+ * from the pre-R14 contract. */
+export function checkGenerated(snapshot: RepoSnapshot, lemmas: Lemma[]): GeneratedCheckResult {
   const findings: Finding[] = [];
+  const mirrorStatus: MirrorStatus[] = [];
   for (const [path, render] of GENERATED_FILES) {
-    const have = snapshot.get(path) ?? "";
+    const present = snapshot.has(path);
+    const label = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    mirrorStatus.push({ path, label, present });
+    if (!present) continue; // R14: absent mirror = not adopted, never a finding.
+    const have = snapshot.get(path)!;
     if (have !== render(lemmas)) {
       findings.push({
         severity: "ERROR",
@@ -127,5 +163,5 @@ export function checkGenerated(snapshot: RepoSnapshot, lemmas: Lemma[]): Finding
       });
     }
   }
-  return findings;
+  return { findings, mirrorStatus };
 }

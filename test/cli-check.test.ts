@@ -94,27 +94,62 @@ describe("rk check", () => {
     expect(text).toContain("rk check: OK");
   });
 
-  test("a literally bare tree (no scaffold files at all) is NOT a legitimate day-1-vacuity state: gate 6's unconditional master/README/catalog existence check and gate 2's generated-freshness check both fire real ERRORs, so rk check exits 1", async () => {
+  // M1 (beads rk-au6/rk-1rv; docs/memos/2026-07-18-aism-residue-audit.md R13/R14): a literally
+  // bare tree used to fail this exact way -- a live incident (orchestrator live-fire,
+  // 2026-07-18): a freshly `rk init`-stamped, consolidation-phase repo failed `rk check` with 6
+  // ERRORs demanding AISM's own transitional report/ LaTeX skeleton and argument/INDEX.md+DAG.md
+  // markdown mirror, neither of which rk's own scaffold ever stamps (PRD.md:79-85). Gate 6's
+  // report/-root-existence checks and Gate 2's argument/INDEX.md+DAG.md freshness check are now
+  // PRESENCE-CONDITIONAL: absent means "convention not adopted", not a violation, and a bare tree
+  // is a legitimate day-1-vacuity state like every other gate's empty-corpus case.
+  test("a literally bare tree (no scaffold files at all) IS a legitimate day-1-vacuity state: gate 6's report/-root guard and gate 2's mirror-presence guard both no-op, visibly, and rk check exits 0", async () => {
     const root = mkdtempSync(join(tmpdir(), "rk-check-bare-"));
     dirs.push(root);
-    // Deliberately nothing written under root at all.
+    // Deliberately nothing written under root at all -- the incident's exact repro shape.
 
     const { out, lines } = capture();
     const code = await run(["check", "--root", root], { out });
     const text = lines.join("\n");
 
-    // Gate 6 (shards) Check 1: report/main.tex, report/README.md, report/SHARD_CATALOG.md are
-    // required unconditionally, independent of the empty-scaffold exemption (which only applies
-    // once those files exist and name zero shards).
+    // Gate 6 (shards): report/ ROOT absent -> zero findings, visibly noted (never a silent skip).
+    expect(text).not.toContain("missing master report/main.tex");
+    expect(text).not.toContain("missing report map report/README.md");
+    expect(text).not.toContain("missing shard catalog report/SHARD_CATALOG.md");
+    expect(text).toContain("checked shards: 0/0 shard(s) fully conforming (included, labeled, cataloged); report/: absent (not adopted) (0 errors, 0 warnings)");
+    // Gate 2 (linker): both mirror files absent -> zero findings, visibly noted per file.
+    expect(text).not.toContain("argument/INDEX.md is STALE");
+    expect(text).not.toContain("argument/DAG.md is STALE");
+    expect(text).toContain("checked linker: 0/0 lemma shards; mirrors: INDEX absent (not adopted), DAG absent (not adopted) (0 errors, 0 warnings)");
+
+    expect(code).toBe(0);
+    expect(text).toContain("rk check: OK");
+  });
+
+  // The incident class Gate 6 exists to catch (task precision requirement 3) is NOT the same as
+  // report/'s total absence: once a repo starts adopting report/ (the ROOT directory exists), a
+  // still-missing deeper item (main.tex/README/CATALOG) must keep ERRORing exactly as before --
+  // root-level presence-conditionality must never blur into deeper-item leniency. Same shape for
+  // Gate 2: a PRESENT, stale mirror file still ERRORs.
+  test("report/ ROOT present but incomplete, and a PRESENT-but-stale argument/INDEX.md: both still ERROR (presence-conditionality never masks a real adopted-but-broken repo)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-check-partial-adopt-"));
+    dirs.push(root);
+    mkdirSync(join(root, "report"), { recursive: true }); // adopted the ROOT, nothing under it yet
+    mkdirSync(join(root, "argument"), { recursive: true });
+    writeFileSync(join(root, "argument", "INDEX.md"), "hand-edited, not a real render\n");
+
+    const { out, lines } = capture();
+    const code = await run(["check", "--root", root], { out });
+    const text = lines.join("\n");
+
     expect(text).toContain("ERROR report/main.tex:1 missing master report/main.tex");
     expect(text).toContain("ERROR report/README.md:1 missing report map report/README.md");
     expect(text).toContain("ERROR report/SHARD_CATALOG.md:1 missing shard catalog report/SHARD_CATALOG.md");
-    // Gate 2 (linker) Check 11: an absent committed generated file counts as stale (compares
-    // against "").
+    expect(text).toContain("ERROR report/sections:1 missing sections directory report/sections/");
     expect(text).toContain("argument/INDEX.md is STALE");
-    expect(text).toContain("argument/DAG.md is STALE");
+    // DAG.md was never adopted at all -- absent, not stale, no finding for it.
+    expect(text).not.toContain("argument/DAG.md is STALE");
+    expect(text).toContain("mirrors: INDEX present, DAG absent (not adopted)");
 
-    // Shared conventions "Exit codes": 0 ERRORs -> 0, >=1 ERROR -> 1. This tree has several.
     expect(code).toBe(1);
     expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
   });
@@ -313,7 +348,7 @@ describe("rk check", () => {
     test("a fixture failure in the corpus fails --selftest's exit code and names the fixture", async () => {
       const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-badcorpus-"));
       dirs.push(root);
-      // Copies the REAL corpus/ tree (all six gate directories, the full 87-fixture ledger
+      // Copies the REAL corpus/ tree (all six gate directories, the full 90-fixture ledger
       // total) rather than a synthetic one-fixture tree: the round-3 review follow-up 2 guard
       // below (missing/empty gate directory, ledger-count mismatch) would otherwise reject a
       // partial corpus before a single fixture ever ran, which is exactly the failure mode this

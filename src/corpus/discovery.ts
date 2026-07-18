@@ -54,5 +54,8 @@ export function totalFixtureCount(corpusRoot: string): number {
  * review follow-up 2, check.ts:89): `bun run selftest` (scripts/selftest.ts) and `rk check
  * --selftest` (src/cli/check.ts) both enforce this exact number against `totalFixtureCount`, so
  * the two entry points can never drift apart on what "the corpus" is expected to contain. A drift
- * between this constant and corpus/README.md's own ledger is itself a bug — bump both together. */
-export const EXPECTED_FIXTURE_COUNT = 88;
+ * between this constant and corpus/README.md's own ledger is itself a bug — bump both together.
+ * 90 (+2 over the previously-pinned 88): M1 addition `linker-25` + `shards-15` (beads rk-1rv /
+ * rk-au6, docs/memos/2026-07-18-aism-residue-audit.md R13/R14) — the presence-conditional
+ * report/ and argument/INDEX.md+DAG.md mirror guards' golden-pass fixtures. */
+export const EXPECTED_FIXTURE_COUNT = 90;

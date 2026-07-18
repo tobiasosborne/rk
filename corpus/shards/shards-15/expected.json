@@ -1,0 +1,13 @@
+{
+  "gate": "shards",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": ["report/: absent (not adopted)"]
+  },
+  "aism_behavior": "differs: script-verified 2026-07-18 by running the real check-report-shards.sh directly against corpus/shards/shards-15/repo (GIT_CEILING_DIRECTORIES pinned to rk's own toplevel per the Validation methodology below) -- it prints four 'report shard check: missing ...' failures (main.tex, sections directory, README.md, SHARD_CATALOG.md; check-report-shards.sh:22-25) and exits 1. check-report-shards.sh has no equivalent of a report/-absent no-op -- MASTER/SECTIONS_DIR/README/CATALOG are required unconditionally. rk's contract (R13, bead rk-au6, docs/memos/2026-07-18-aism-residue-audit.md) makes every check in this gate conditional on the report/ ROOT directory's existence: a general research tool must not force every repo to hand-create AISM's own LaTeX report skeleton just to pass. This is a deliberate contract amendment, not a strictness triage.",
+  "notes": "Fresh-scaffold-shaped fixture: a real, valid argument/lemmas shard (a repo that has genuinely started consolidation), but report/ is entirely ABSENT -- the incident's exact repro shape (orchestrator live-fire, 2026-07-18: a fresh `rk init` + `rk phase consolidation` repo failed `rk check` demanding report/main.tex/README.md/SHARD_CATALOG.md, none of which rk's own scaffold stamps, PRD.md:79-85). Proves Gate 6's report/-root guard: zero findings, coverage line names the non-adoption visibly (never a silent skip, CLAUDE.md L2). Sibling fixture: linker-25 (same story for Gate 2's argument/INDEX.md+DAG.md mirrors). Mutation-proven red-first: inverting the guard so Check 1 runs unconditionally (the pre-R13 behavior) turns this fixture red (four missing-file/dir ERRORs); reverted after confirming."
+}

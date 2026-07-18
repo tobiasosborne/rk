@@ -19,6 +19,23 @@
 // fixture exercises this combination; rk's port does NOT suppress existence errors on an
 // empty-scaffold tree (existence findings always surface), per L5's "default to the stricter
 // validity semantics" when the contract text and the script's literal control flow disagree.
+//
+// PRESENCE-CONDITIONAL ON report/ ITSELF (M1, bead rk-au6; docs/memos/2026-07-18-aism-residue-
+// audit.md R13). The report/ LaTeX-paper layout this whole gate scans is NOT in rk's scaffold
+// (PRD.md:79-85) — rk's render target is HTML (M2.4), and M2.6's regenerate-and-diff supersedes
+// this hand-maintained mirror gate entirely. A general research tool must not force every repo
+// to hand-create AISM's report/ skeleton just to enter consolidation: every check in this file is
+// now bound ONLY when the `report/` ROOT directory exists on disk. Absence is not a violation —
+// it means the report/ convention has not been adopted yet — and is surfaced via the coverage
+// line's "report/: absent (not adopted)" note (CLAUDE.md L2: never a silent skip), never a
+// finding. This keys on the ROOT artifact only: `report/` existing with any deeper item missing
+// (main.tex, sections/, README.md, SHARD_CATALOG.md) still ERRORs exactly as before — that
+// partial-adoption case is the exact incident class this gate exists to catch (shards-13, the
+// existing shards-01..12/14 fixtures). `aism_behavior: differs` — check-report-shards.sh:22-25
+// requires MASTER/SECTIONS_DIR/README/CATALOG unconditionally, with no equivalent of a
+// report/-absent no-op; that behavior is the AISM residue this bead removes, not a stricter
+// baseline to preserve, so it is not triaged into the rk-stricter-intended / rk-bug / ambiguous
+// triad — a deliberate contract amendment, same footing as F5's reversal. Fixture: shards-15.
 
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
@@ -30,12 +47,25 @@ const MASTER = "report/main.tex";
 const SECTIONS_DIR = "report/sections";
 const README = "report/README.md";
 const CATALOG = "report/SHARD_CATALOG.md";
+const REPORT_ROOT = "report";
+// R13 (bead rk-au6): base coverage unit text, always suffixed with the report/-root adoption
+// status ("present" or "absent (not adopted)") — visible on every code path, never a silent skip.
+const SHARDS_UNIT = "shard(s) fully conforming (included, labeled, cataloged)";
 
 function mkErr(path: string, line: number, message: string): Finding {
   return { severity: "ERROR", path, line, message };
 }
 
 function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
+  // R13 (bead rk-au6): the report/ ROOT directory gates every check in this file. Its absence is
+  // "convention not adopted", not a violation — see the header comment above.
+  if (!dirExists(snapshot, REPORT_ROOT)) {
+    return {
+      findings: [],
+      coverage: [{ gate: "shards", unit: `${SHARDS_UNIT}; report/: absent (not adopted)`, checked: 0, total: 0 }],
+    };
+  }
+
   const findings: Finding[] = [];
 
   // Check 1 (check-report-shards.sh:22-25). SECTIONS_DIR existence is now enforced via the `dirs`
@@ -54,7 +84,7 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
   if (includes.length === 0 && shardFiles.length === 0) {
     return {
       findings,
-      coverage: [{ gate: "shards", unit: "shard(s) fully conforming (included, labeled, cataloged)", checked: 0, total: 0 }],
+      coverage: [{ gate: "shards", unit: `${SHARDS_UNIT}; report/: present`, checked: 0, total: 0 }],
     };
   }
 
@@ -239,7 +269,7 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     coverage: [
       {
         gate: "shards",
-        unit: "shard(s) fully conforming (included, labeled, cataloged)",
+        unit: `${SHARDS_UNIT}; report/: present`,
         checked,
         total: shardIdentities.size,
       },

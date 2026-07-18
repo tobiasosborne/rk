@@ -1,0 +1,13 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["INDEX absent (not adopted)", "DAG absent (not adopted)"]
+  },
+  "aism_behavior": "differs: script-verified 2026-07-18 by importing argument.py as a module and calling its real parse_registry()/check_generated(lemmas, arg_dir=<fixture>/argument) directly (module-import harness, corpus/README.md Validation methodology) -- against this exact repo/ tree it returns two errors: ['INDEX.md is STALE -- run `python3 scripts/argument.py --generate` ...', 'DAG.md is STALE -- run ...'] (argument.py:632-642, `have = \"\" if not path.exists()`, ERRORs unconditionally). AISM's own repo always has these mirrors generated, so this state does not occur there in practice. rk's contract (R14, bead rk-1rv, docs/memos/2026-07-18-aism-residue-audit.md) makes the check presence-conditional: a repo that has not adopted the transitional markdown mirror is not a violation. This is a deliberate contract amendment, not a strictness triage.",
+  "notes": "Fresh-scaffold-shaped fixture: one valid, fully-conforming lemma shard, argument/INDEX.md and argument/DAG.md both entirely ABSENT (never generated). Proves Gate 2's mirror-presence guard: zero findings from checkGenerated, coverage line names both mirrors' non-adoption visibly (never a silent skip, CLAUDE.md L2). Sibling fixture: shards-15 (same story for Gate 6's report/ root). Mutation-proven red-first: inverting the presence guard so checkGenerated always compares against the fresh render (the pre-R14 behavior) turns this fixture red (both mirrors would ERROR STALE); reverted after confirming."
+}

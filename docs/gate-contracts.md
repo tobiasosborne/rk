@@ -462,9 +462,20 @@ is stale against the code and must not be treated as ground truth).
     `proofs/*` dirs (a dir containing a `ledger` subdir) ⇒ ERROR "workspace dir missing: <ws>";
     a scanned `proofs/<ws>` dir declared by no registry shard ⇒ ERROR "orphan workspace"
     (argument.py:262-273, 517-521).
-11. **Generated freshness** — committed `argument/INDEX.md` and `argument/DAG.md` must each
-    byte-equal a fresh render of the current shard set (checked only when not running with
-    `--generate`) ⇒ ERROR "... is STALE" (argument.py:632-642, 698-701).
+11. **Generated freshness, PRESENCE-CONDITIONAL per file** (amended 2026-07-18, R14, bead
+    rk-1rv) — checked independently for `argument/INDEX.md` and `argument/DAG.md`: a file present
+    in the repo must byte-equal a fresh render of the current shard set (checked only when not
+    running with `--generate`) ⇒ ERROR "... is STALE" (argument.py:632-642, 698-701), unchanged
+    from the pre-amendment contract. A file ABSENT from the repo is read as "the markdown-mirror
+    convention has not been adopted here" — never a finding — because these two files are AISM's
+    transitional view format, superseded by the M2.4 HTML render and M2.6's regenerate-and-diff
+    gate (`docs/memos/2026-07-18-aism-residue-audit.md` R14); a general research tool must not
+    force every repo to hand-generate AISM's own markdown mirror just to pass `rk check`. Each
+    file's adoption status (`present` / `absent (not adopted)`) is named explicitly in the
+    linker gate's coverage line — `checked linker: <N>/<M> lemma shards; mirrors: INDEX <status>,
+    DAG <status> (...)` — so non-adoption is always visible, never a silent skip (CLAUDE.md L2).
+    Fixture: `linker-25` (both absent, golden pass); `linker-16` (INDEX present and stale still
+    ERRORs, unchanged).
 12. **Brittleness** (WARN only, never blocks the gate) — an af workspace's node count `>
     NODE_THRESHOLD` (default 26) ⇒ WARN `REFACTOR: <ws> has <n> nodes (><cap>) — factor <id>
     into sub-lemmas` (argument.py:251-259, boundary confirmed by AISM's own test suite:
@@ -529,6 +540,19 @@ features layered on the same pure functions, not gate verdicts.
   this way is excluded from every id-keyed structure (acyclicity, status propagation, orphans) for
   the remainder of the run, so no downstream check can re-crash on it. Fixture: `linker-21`.
 - **[message-only]** Standard cross-gate finding-format change (see Shared conventions).
+- **Check 11 becomes PRESENCE-CONDITIONAL per mirror file** (amended 2026-07-18, R14, bead
+  rk-1rv — see Check 11 above for the full rule). AISM's `check_generated` (argument.py:632-642)
+  treats an absent `argument/INDEX.md`/`DAG.md` as maximally stale (`have = "" if not
+  path.exists()`) and ERRORs unconditionally; script-verified 2026-07-18 against fixture
+  `linker-25`'s `repo/` tree via the module-import harness (`parse_registry` +
+  `check_generated(lemmas, arg_dir=...)` called directly) — it reports both files STALE. This IS
+  a verdict-changing divergence — a repo with neither mirror generated now passes where AISM's
+  script would fail — but it is **not** triaged into the usual rk-stricter-intended / rk-bug /
+  ambiguous triad: that triad exists to default an AISM behavioral gap to the *stricter* reading,
+  and this change goes the other way, deliberately. The AISM behavior here IS the residue this
+  bead removes (forcing every general rk repo to adopt AISM's own transitional markdown-mirror
+  convention just to pass), not a stricter baseline worth preserving — the same footing as F5's
+  reversal (Gate 1). Fixture: `linker-25`.
 
 **Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
 on historical commits — load-bearing for the **M0.3 robustness run** (F4, repurposed per the
@@ -606,6 +630,7 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-22` | **`node_amended` on root node RECONCILES a contract mismatch** [rk-co2] — a later ledger amendment corrects the root statement to match the registry `contract` ⇒ check 9 (Contract match) stays clean, golden case, no drift ERROR |
 | `linker-23` | **`node_amended` on root node BREAKS contract agreement** [rk-co2 companion] — inverse of `linker-22`: the root statement matches the `contract` at creation, a later amendment moves it away ⇒ check 9 (Contract match) "contract drift" ERROR still fires |
 | `linker-24` | **missing `kind:` field entirely** [rk-aft, finding 3] — shard frontmatter has no `kind` line at all ⇒ check 3 ERROR "missing required field 'kind'" (AISM's enum check, argument.py:141, is a no-op when `kind` is absent — no finding, shard registers clean) |
+| `linker-25` | **[R14, bead rk-1rv] mirror presence-conditional golden case** — one valid lemma shard, `argument/INDEX.md` and `argument/DAG.md` BOTH entirely absent ⇒ zero findings, coverage names both mirrors' non-adoption (AISM's `check_generated` ERRORs unconditionally on an absent mirror; rk's contract does not) |
 
 ---
 
@@ -1107,6 +1132,23 @@ invisible to readers. No single dated AISM incident is on record for this specif
 ported already-hardened, not authored in this repo); fixtures are class-driven from the script's
 own enumerated checks.
 
+**Gate-level presence guard: `report/` ROOT presence-conditional** (amended 2026-07-18, R13, bead
+rk-au6). `report/` — the whole LaTeX-paper layout this gate scans — is NOT in rk's scaffold
+(PRD.md:79-85; rk's render target is the M2.4 HTML site, and M2.6's regenerate-and-diff gate
+supersedes this hand-maintained mirror entirely). A general research tool must not force every
+repo to hand-create AISM's own report skeleton just to enter consolidation, so EVERY check below
+(1-20) is bound ONLY when the `report/` **ROOT directory** exists on disk (the `dirs`
+SnapshotFact, `dirExists(snapshot, "report")`). Absent `report/` ⇒ zero findings; the coverage
+line names the non-adoption explicitly — `checked shards: 0/0 shard(s) fully conforming
+(included, labeled, cataloged); report/: absent (not adopted) (...)` — never a silent skip
+(CLAUDE.md L2). This keys on the ROOT artifact only: once `report/` exists at all, every check
+below runs exactly as documented, including Check 1's own missing-`main.tex`/`README.md`/
+`SHARD_CATALOG.md`/`sections/` ERRORs — a repo that has started adopting `report/` but left it
+incomplete is the incident class this gate exists to catch (fixture `shards-13`), and root-level
+presence-conditionality must never blur into that deeper-item leniency. Present-and-populated
+`report/` runs unchanged; the coverage line then reads "...; report/: present". Fixture:
+`shards-15` (root absent, golden pass) — see Divergences.
+
 **Inputs.**
 - `MASTER = report/main.tex`; `SECTIONS_DIR = report/sections/`; `README = report/README.md`;
   `CATALOG = report/SHARD_CATALOG.md` (check-report-shards.sh:12-15).
@@ -1141,14 +1183,16 @@ in AISM.
 - `\include{sections/NN_slug}` lines in `main.tex`, comment-lines excluded
   (check-report-shards.sh:28-30).
 
-**Checks.**
+**Checks.** (Checks 1-20 below all run only when `report/` itself exists — see the "Gate-level
+presence guard" above.)
 1. `MASTER`, `README`, `CATALOG` (files) and `SECTIONS_DIR` (the `report/sections/`
    **directory** itself) must all exist ⇒ fail per missing item (check-report-shards.sh:22-25).
    The directory-existence half is enforced via the `dirs` SnapshotFact (`src/gates/snapshot.ts`),
    which represents an empty directory that git cannot store — resolving the rk-399 review's
    finding-2 gap where an absent `report/sections/` used to green-light as an empty scaffold. The
    missing-directory finding is surfaced *before* the empty-scaffold exemption below, so an absent
-   `sections/` always fails even when there are no shards yet.
+   `sections/` always fails even when there are no shards yet (provided `report/` itself exists —
+   R13, above).
 2. **Empty-scaffold exemption** — the `report/sections/` directory exists (Check 1) but has zero
    `\include`s and zero `.tex` files under it ⇒ pass cleanly, exit 0 (check-report-shards.sh:31-36).
 3. Non-empty scaffold with zero includes but nonzero shard files ⇒ fail
@@ -1232,8 +1276,22 @@ in AISM.
   offending header comment's own line where possible, else 1); `SEVERITY
   report/main.tex:<line>` for master-purity/include findings — vs. AISM's plain `report shard
   check: <message>` lines to stderr with no path/line structure (check-report-shards.sh:20).
+- **`report/` ROOT presence-conditional gate guard** (amended 2026-07-18, R13, bead rk-au6 — see
+  the gate-level "Gate-level presence guard" note above for the full rule). `check-report-
+  shards.sh:22-25` requires `MASTER`/`SECTIONS_DIR`/`README`/`CATALOG` unconditionally — no
+  report/-absent no-op exists in the script. Script-verified 2026-07-18 by running
+  `check-report-shards.sh` directly against fixture `shards-15`'s `repo/` tree
+  (`GIT_CEILING_DIRECTORIES` pinned per the Validation methodology): it prints four `report shard
+  check: missing ...` failures and exits 1. This IS a verdict-changing divergence — a repo with no
+  `report/` at all now passes where AISM's script would fail four times — but, like the parallel
+  Gate 2 Check 11 divergence, it is **not** triaged into the rk-stricter-intended / rk-bug /
+  ambiguous triad: the AISM behavior here is the residue this bead removes (forcing every general
+  rk repo to hand-create AISM's own `report/` LaTeX skeleton just to pass), not a stricter
+  baseline worth preserving — the same footing as F5's reversal (Gate 1). Fixture: `shards-15`.
 - **[message-only] Coverage line, numerator semantics defined explicitly** (amended 2026-07-18,
-  rk-1tt, review finding 5). `checked shards: <N>/<M> shard(s) fully conforming (included,
+  rk-1tt, review finding 5; unit text extended 2026-07-18 by the R13 guard immediately above to
+  append `; report/: present` or `; report/: absent (not adopted)`, itself the point of the R13
+  entry, not this one). `checked shards: <N>/<M> shard(s) fully conforming (included,
   labeled, cataloged) (<E> errors, <W> warnings)`. `M` (the denominator) is every shard identity
   this run examined — named by an `\include` in `main.tex` (**including an `\include` whose target
   lies outside `sections/`**, which resolves to no `sections/X.tex` file but is itself a
@@ -1285,6 +1343,7 @@ KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
 | `shards-12` | non-empty scaffold with zero `\include`s (shard files exist, master has none) |
 | `shards-13` | **absent `report/sections/` directory** [rk-399, finding 2 BLOCKER] — check 1 must ERROR via the `dirs` SnapshotFact rather than green-lighting as an empty scaffold; golden "exists but empty" counterpart is `shards-11` |
 | `shards-14` | **`shardsPrefix` unconfigured, a real shard needs SHARD-ID validation** [R12, bead rk-psm, M1 landing-blocker] — a fully-conforming golden shard tree (same shape as `shards-01`..`10`'s content) with NO `repo/.rk/config.json` ⇒ one loud, counted config-missing ERROR at `.rk/config.json:1`, never a silent AISM-shaped default and never a crash |
+| `shards-15` | **[R13, bead rk-au6] `report/` ROOT presence-conditional golden case** — a fresh-scaffold-shaped repo (a real `argument/lemmas` shard, no `report/` anywhere) ⇒ zero findings, coverage names the non-adoption (AISM's script fails four times unconditionally on the same tree; rk's contract does not) |
 
 ---
 

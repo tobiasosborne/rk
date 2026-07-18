@@ -14,8 +14,11 @@
 import { describe, expect, test } from "bun:test";
 import { introspectWorkspace } from "../../src/gates/linker-workspace";
 import { parseRegistry } from "../../src/gates/linker-parse";
+import { linkerGate } from "../../src/gates/linker";
+import { checkGenerated } from "../../src/gates/linker-render";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
+import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 
 function snapshotOf(workspace: string, events: unknown[]): RepoSnapshot {
   const m = new Map<string, string>();
@@ -67,6 +70,44 @@ describe("introspectWorkspace / node_amended replay (rk-co2)", () => {
     ]);
     const facts = introspectWorkspace(snapshot, "proofs/lem-x");
     expect(facts?.contract).toBe("created statement");
+  });
+});
+
+// R14 (bead rk-1rv, docs/memos/2026-07-18-aism-residue-audit.md): argument/INDEX.md and DAG.md
+// are AISM's transitional markdown mirror, superseded by M2.4's HTML render + M2.6's
+// regenerate-and-diff gate. corpus/linker/linker-25 covers this end-to-end through the corpus
+// runner (a real lemma shard, neither mirror file present); these tests isolate checkGenerated's
+// own presence guard and the coverage-line note it feeds.
+describe("checkGenerated / linkerGate — R14: argument/INDEX.md + DAG.md are presence-conditional", () => {
+  const LEMMA_FILES = { "argument/lemmas/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n" };
+
+  test("both mirrors absent: zero findings from checkGenerated, mirrorStatus records both absent", () => {
+    const snapshot = snapshotFromFiles(LEMMA_FILES);
+    const { lemmas } = parseRegistry(snapshot);
+    const { findings, mirrorStatus } = checkGenerated(snapshot, lemmas);
+    expect(findings).toEqual([]);
+    expect(mirrorStatus).toEqual([
+      { path: "argument/INDEX.md", label: "INDEX", present: false },
+      { path: "argument/DAG.md", label: "DAG", present: false },
+    ]);
+  });
+
+  test("linkerGate's coverage line names both mirrors' adoption status visibly (L2: never a silent skip)", () => {
+    const result = linkerGate.run(snapshotFromFiles(LEMMA_FILES), DEFAULT_GATE_CONFIG);
+    expect(result.findings.filter((f) => f.path.startsWith("argument/INDEX") || f.path.startsWith("argument/DAG"))).toEqual([]);
+    expect(result.coverage[0]!.unit).toContain("INDEX absent (not adopted)");
+    expect(result.coverage[0]!.unit).toContain("DAG absent (not adopted)");
+  });
+
+  test("a PRESENT mirror that is stale still ERRORs exactly as before (presence-conditionality never weakens a real STALE finding)", () => {
+    const snapshot = snapshotFromFiles({ ...LEMMA_FILES, "argument/INDEX.md": "hand-edited, not a real render\n" });
+    const { lemmas } = parseRegistry(snapshot);
+    const { findings, mirrorStatus } = checkGenerated(snapshot, lemmas);
+    expect(findings).toEqual([
+      { severity: "ERROR", path: "argument/INDEX.md", message: expect.stringContaining("is STALE") },
+    ]);
+    expect(mirrorStatus.find((m) => m.label === "INDEX")?.present).toBe(true);
+    expect(mirrorStatus.find((m) => m.label === "DAG")?.present).toBe(false);
   });
 });
 
