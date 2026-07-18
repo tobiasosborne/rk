@@ -89,6 +89,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-14` | provenance | check 4: git-TRACKED source outside every loader include rule, stale hash ⇒ ERROR | **rk-399** / `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 (BLOCKER) + Check-4 ruling: the retired "present in RepoSnapshot" proxy left a tracked path outside the include set absent from the snapshot and downgraded it to WARN, contradicting `gate-contracts.md:743`. The edge now hashes every `git ls-files` path; tracked+stale ⇒ ERROR. Red against pre-fix source (WARN, no ERROR), green after. | landed |
 | `provenance-15` | provenance | check 4: binary / non-UTF-8 payload with a CORRECT byte-faithful hash ⇒ PASS | **rk-399** finding 1: the retired UTF-8-string proxy round-tripped bytes through TextDecoder/TextEncoder and false-ERRORed non-UTF-8 payloads; the edge now hashes raw bytes. Red against pre-fix source (false ERROR), green after. Sibling ERROR case: `provenance-16`. | landed |
 | `provenance-16` | provenance | check 4: same binary payload, MISMATCHED recorded hash ⇒ ERROR | **rk-399** finding 1: guards against a "blanket-pass binary" mutation — proves the byte-faithful check still fails a genuinely stale binary source. Not corpus-red on its own (pre-fix source also ERRORs, for the wrong reason: string re-encode mismatch); its red-first partner is the `test/gates/provenance.test.ts` "binary payload whose bytes no longer match" mutation test. | landed |
+| `provenance-18` | provenance | check 6: THREE whitelisted-unanchored shards ⇒ ONE aggregate WARN (the flood shape) | **review ruling f** (overturned in re-review): per-item whitelist WARNs reached 96/118/138 on real AISM historical trees — a finding-flood under the contract's own >25 threshold. The gate now aggregates them into one WARN naming the count + sorted ids (mirrors the ratified frontmatter-invalid aggregate, ruling b). Red against pre-fix source (3 per-item WARNs, no aggregate finding), green after. Non-whitelisted unanchored shards stay per-item ERRORs (`test/gates/provenance.test.ts`). `[rk-stricter-intended]` vs AISM's per-shard console lines. (Id `-18` avoids collision with the concurrently-landing `provenance-17`, rk-4uw's frontmatter-invalid fixture.) | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
@@ -370,6 +371,26 @@ coincidentally already saw the `.gitkeep` as a file and flagged the missing READ
 is the `test/gates/runs.test.ts` unit test that builds a `dirs`-fact snapshot with an empty
 bundle and **no** file at all — the only faithful model of a real on-disk empty directory, which
 git cannot commit. `shards-13` (directory *absent*) and `provenance-14`/`-15` are corpus-red-first.
+
+## Untracked-but-present sources (review N1) — why there is no committed corpus fixture
+
+Gate 4 check 4 must treat a source payload **present on disk but git-untracked** (a gitignored
+payload) and stale as a `[rk-stricter-intended]` ERROR, distinct from a genuinely-absent source
+(WARN). `src/gates/load.ts` now hashes **every file present on disk** (full-tree walk, `.git`
+etc. skipped), so `fileSha256(snapshot, path) !== undefined` iff the file is present — the pure
+gate distinguishes present-stale from absent mechanically (review N1).
+
+This failure mode **cannot** be reproduced by a committed corpus fixture. `loadSnapshot` runs
+`git ls-files` from the fixture's `repo/` dir, and every file committed to rk's own repo is
+returned as *tracked* from that vantage — a committed file is tracked by construction, so
+"untracked-but-present" is unrepresentable in a clone-safe committed tree (a `.gitignore` inside
+`repo/` does not untrack an already-committed file, and an uncommitted file would not survive a
+clone). The faithful red-first proof is therefore the **load-edge unit test**
+(`test/load.test.ts`, "hashes every present file, including untracked ones outside the include
+rules"): `makeTree` builds a throwaway **non-git** directory, so `git ls-files` returns nothing
+and every file is genuinely untracked — the exact gap. It is red against pre-fix source (the file
+outside the include rules received no hash) and green after. The corpus-expressible half —
+a *tracked* source outside the loader include rules, stale ⇒ ERROR — is `provenance-14`.
 
 ## Validation methodology
 

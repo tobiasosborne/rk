@@ -776,8 +776,19 @@ proves the limitation is not hypothetical.
    never frame it as `open` ⇒ ERROR (check-provenance.py:293,317-319,483-484); a `proved`/
    `validated` result framed *only* `open` ⇒ WARN (check-provenance.py:320-321).
 6. **anchor** — a registry result mapping to zero report labels and **not** in
-   `report/UNWIRED.md` ⇒ ERROR "dropped from the paper, or never wired in"; if whitelisted ⇒
-   WARN (check-provenance.py:349-365,485).
+   `report/UNWIRED.md` ⇒ ERROR "dropped from the paper, or never wired in" (per-item, actionable);
+   if whitelisted ⇒ WARN (check-provenance.py:349-365,485). The whitelisted-unanchored WARNs are
+   **aggregated into a single finding** (amended 2026-07-18, review ruling f): `<N> registry
+   result(s) unanchored but whitelisted in report/UNWIRED.md (off paper-track): <sorted ids>`,
+   attributed to the first sorted id's shard path. Rationale: a per-item WARN per whitelisted
+   shard produced 96/118/138 WARNs on real historical AISM trees — a finding-flood under this
+   document's own >25 threshold (see "Finding-flood, operationally defined"). This mirrors the
+   ratified frontmatter-invalid aggregate (ruling b): one honest WARN naming the count and every
+   id, denominator unchanged. `[rk-stricter-intended]` vs AISM's per-shard console lines
+   (check-provenance.py:349-365): the flood-suppression is deliberate, and the aggregate loses no
+   information (every id is named). Non-whitelisted (real) unanchored shards remain per-item ERRORs.
+   Corpus: `provenance-05` (single, degenerate aggregate of one), `provenance-18` (three ⇒ one
+   aggregate, the flood shape).
 7. **reverse labels** (WARN) — a `\label{}` with a result-kind prefix (`thm/lem/prop/cor/op/
    obs/ex`) and no registry backref (check-provenance.py:251-259,487).
 8. **coverage** (WARN) — a report-facing registry result (≥1 report label) with no per-claim

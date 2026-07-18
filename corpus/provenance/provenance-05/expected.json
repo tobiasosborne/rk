@@ -10,5 +10,5 @@
   ],
   "exit_code": 0,
   "aism_behavior": "same",
-  "notes": "whitelisted-unanchored, WARN; check-provenance.py:349-365; script-verified."
+  "notes": "whitelisted-unanchored, WARN; check-provenance.py:349-365; script-verified. Post-ruling-f (2026-07-18): the whitelist WARNs are aggregated into one finding; with a single whitelisted shard this is the degenerate '1 registry result(s) ... : lem-offtrack' aggregate, attributed to that shard's own path — the message still contains 'whitelisted in report/UNWIRED.md'. The multi-shard flood shape is provenance-18."
 }

@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-offtrack-a.md",
+      "message_pattern": "3 registry result(s) unanchored but whitelisted in report/UNWIRED.md"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "divergent [rk-stricter-intended]",
+  "notes": "ruling f (re-review, overturned): the 3 whitelisted-unanchored shards collapse into ONE aggregate WARN (count + sorted ids), attributed to the first sorted id's path — mirrors the ratified frontmatter-invalid aggregate (ruling b). Before the fix this emitted 3 per-item WARNs; on real AISM historical trees the same per-item pattern reached 96/118/138 WARNs, an unusable flood under the contract's own >25 threshold (docs/gate-contracts.md Finding-flood). AISM's check-provenance.py:349-365 emits one console line per whitelisted shard (per-item); rk aggregates [rk-stricter-intended: flood-suppression, findings stay honest — count+ids named, denominator unchanged]. Non-whitelisted unanchored shards remain per-item ERRORs (see provenance-anchor unit tests)."
+}

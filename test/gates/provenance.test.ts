@@ -458,6 +458,44 @@ describe("provenanceGate — check 6: anchor", () => {
     expect(errors(result).some((f) => f.message.includes("dropped from the paper"))).toBe(false);
     expect(warnings(result).some((f) => f.message.includes("whitelisted"))).toBe(false);
   });
+
+  // ruling f (overturned in re-review): 100+ per-item whitelist advisory WARNs on a real tree
+  // (AISM historical trees: 96/118/138) are an unusable flood under the contract's own >25
+  // threshold. Apply the ratified aggregate-WARN pattern (ruling b, frontmatter-invalid): collapse
+  // the whitelist WARNs into ONE aggregate carrying the count + ids. Non-whitelisted (real ERROR)
+  // findings stay per-item; the denominator is unchanged.
+  test("multiple whitelisted-unanchored shards collapse into ONE aggregate WARN, not N per-item WARNs (ruling f)", () => {
+    const entries: Record<string, string> = {
+      "argument/lemmas/lem-a.md": shard({ id: "lem-a", kind: "lemma", status: "stated", af: "none" }),
+      "argument/lemmas/lem-b.md": shard({ id: "lem-b", kind: "lemma", status: "stated", af: "none" }),
+      "argument/lemmas/lem-c.md": shard({ id: "lem-c", kind: "lemma", status: "stated", af: "none" }),
+      "report/PROVENANCE.md": "# PROVENANCE\n\n## Ground-truth source registry\n\n## Per-claim ledger\n\n",
+      "report/UNWIRED.md": "# UNWIRED\n```\nlem-a\nlem-b\nlem-c\n```\n",
+    };
+    const result = run(entries);
+    const wl = warnings(result).filter((f) => f.message.includes("whitelisted in report/UNWIRED.md"));
+    expect(wl).toHaveLength(1); // ONE aggregate, not three per-item
+    expect(wl[0]!.message).toContain("3"); // the count
+    for (const id of ["lem-a", "lem-b", "lem-c"]) expect(wl[0]!.message).toContain(id);
+    // Attributed to the first (sorted-by-id) shard's own path, mirroring ruling b's aggregate.
+    expect(wl[0]!.path).toBe("argument/lemmas/lem-a.md");
+    expect(errors(result)).toEqual([]);
+  });
+
+  test("a non-whitelisted unanchored shard stays a per-item ERROR even amid whitelisted ones (ruling f)", () => {
+    const entries: Record<string, string> = {
+      "argument/lemmas/lem-a.md": shard({ id: "lem-a", kind: "lemma", status: "stated", af: "none" }),
+      "argument/lemmas/lem-real.md": shard({ id: "lem-real", kind: "lemma", status: "stated", af: "none" }),
+      "report/PROVENANCE.md": "# PROVENANCE\n\n## Ground-truth source registry\n\n## Per-claim ledger\n\n",
+      "report/UNWIRED.md": "# UNWIRED\n```\nlem-a\n```\n",
+    };
+    const result = run(entries);
+    // lem-real is NOT whitelisted -> per-item ERROR (unchanged); lem-a -> the aggregate WARN.
+    const e = errors(result).filter((f) => f.message.includes("dropped from the paper, or never wired in"));
+    expect(e).toHaveLength(1);
+    expect(e[0]!.path).toBe("argument/lemmas/lem-real.md");
+    expect(warnings(result).filter((f) => f.message.includes("whitelisted in report/UNWIRED.md"))).toHaveLength(1);
+  });
 });
 
 describe("provenanceGate — check 7: reverse labels (orphan)", () => {

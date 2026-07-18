@@ -107,15 +107,18 @@ function checkClaimSources(
 }
 
 // check 6 — anchor (ERROR) / whitelisted-unanchored (WARN): check-provenance.py:349-365.
+// The whitelisted-unanchored advisory WARNs are AGGREGATED into a single finding (ruling f,
+// overturned in re-review): a per-item WARN per whitelisted shard produced 96/118/138 WARNs on
+// real historical AISM trees — an unusable flood under the contract's own >25 threshold
+// (docs/gate-contracts.md "Finding-flood"). This mirrors the ratified frontmatter-invalid aggregate
+// (ruling b, provenance-parse.ts registrySkipReport): ONE WARN naming the count and the ids, the
+// denominator unchanged. Non-whitelisted (real, actionable) unanchored shards stay per-item ERRORs.
 function checkAnchor(shards: RegistryShard[], tex: TexLabels, whitelist: Set<string>, findings: Finding[]): void {
+  const whitelisted: RegistryShard[] = [];
   for (const s of shards) {
     if (labelsOf(s, tex).size > 0) continue;
     if (whitelist.has(s.id)) {
-      findings.push({
-        severity: "WARN",
-        path: s.path,
-        message: `${s.id}: unanchored but whitelisted in report/UNWIRED.md (off paper-track)`,
-      });
+      whitelisted.push(s);
     } else {
       findings.push({
         severity: "ERROR",
@@ -125,6 +128,17 @@ function checkAnchor(shards: RegistryShard[], tex: TexLabels, whitelist: Set<str
           `(dropped from the paper, or never wired in — anchor it or whitelist it)`,
       });
     }
+  }
+  if (whitelisted.length > 0) {
+    const sorted = [...whitelisted].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const ids = sorted.map((s) => s.id);
+    findings.push({
+      severity: "WARN",
+      path: sorted[0]!.path,
+      message:
+        `${whitelisted.length} registry result(s) unanchored but whitelisted in report/UNWIRED.md ` +
+        `(off paper-track): ${ids.join(", ")}`,
+    });
   }
 }
 
