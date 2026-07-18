@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lemmas/lem-no-kind.md",
+      "message_pattern": "missing required field 'kind'"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: argument.py's parse_registry only validates `kind` when `fm.get(\"kind\")` is truthy (argument.py:141-142 style `if kind and kind not in KINDS`), so a shard with no `kind:` line at all registers with zero findings — the same class of gap the review (rk-aft, finding 3) identified in this port's linker-parse.ts:125-127 before the fix. Not script-verified against a real AISM shard: all AISM lemma shards carry `kind:` (spot-checked, see notes).",
+  "notes": "[rk-aft, 2026-07-18 M0.3 milestone review finding 3] gate-contracts.md:303 marks `kind` required (`yes`), matching `id`'s required-field row. Pre-fix, linker-parse.ts:125-126 gated the enum check on `if (kind && !KINDS.has(kind))`, so an ABSENT (or empty-string) `kind` short-circuited the condition and produced zero findings — the lemma still registered (1/1 coverage) with a fully consistent generated INDEX/DAG (kind renders as `?` via linker-render.ts:57, same as any other missing-optional-field cell). Fix mirrors the 'id' required-field check's message convention (missing required field 'X') while keeping the existing enum-check's allowed-list phrasing for a present-but-invalid value; unlike missing `id` (which excludes the shard from `lemmas` entirely, per the file header's [F12] divergence), a missing `kind` does NOT exclude the shard — `kind` is optional on the `Lemma` type and every other check must still see this shard, matching how invalid-but-present `status`/`af` do not exclude either. Sanity-checked against AISM (`../almost-idempotent-stochastic-maps`): no live shard lacks `kind:`, so this is a real gap class, not an observed production divergence."
+}

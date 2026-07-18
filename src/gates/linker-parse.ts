@@ -122,8 +122,19 @@ export function parseRegistry(snapshot: RepoSnapshot): { lemmas: Lemma[]; errors
       errors.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'` });
     }
 
+    // [rk-aft, 2026-07-18 review finding 3] `kind` is required (gate-contracts.md:303, same row
+    // shape as `id`). The old `if (kind && ...)` gate skipped validation entirely when `kind` was
+    // absent/empty, so a kind-less shard registered with zero findings (corpus/linker/linker-24).
+    // Absent `kind` does NOT exclude the shard from `lemmas` (unlike absent `id`, [F12] above) —
+    // `kind` stays optional on the `Lemma` type and every other check must still see this shard.
     const kind = fm.fields.kind;
-    if (kind && !KINDS.has(kind)) {
+    if (!kind) {
+      errors.push({
+        severity: "ERROR",
+        path,
+        message: `missing required field 'kind' (must be one of ${pyListRepr([...KINDS].sort())})`,
+      });
+    } else if (!KINDS.has(kind)) {
       errors.push({ severity: "ERROR", path, message: `kind '${kind}' not in ${pyListRepr([...KINDS].sort())}` });
     }
     const status = fm.fields.status;
