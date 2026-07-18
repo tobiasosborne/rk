@@ -28,6 +28,7 @@ import { formatFinding } from "../gates/framework";
 import type { Gate, GateResult } from "../gates/framework";
 import type { RepoSnapshot } from "../gates/snapshot";
 import type { GateConfig } from "../gates/config";
+import { applyPhase } from "../gates/phase";
 import { runAllFixtures } from "../corpus/run";
 import { formatCorpusRunReport } from "../corpus/report";
 import { discoverAllFixtures, EXPECTED_FIXTURE_COUNT, GATE_DIRS } from "../corpus/discovery";
@@ -63,6 +64,9 @@ function runGateSafely(gate: Gate, snapshot: RepoSnapshot, config: GateConfig): 
           severity: "ERROR",
           path: `<gate:${gate.name}>`,
           message: `gate '${gate.name}' CRASHED (unexpected exception, never a valid gate verdict): ${message}`,
+          // structural (M1.3 phase matrix): a gate crash is a defense-in-depth boundary firing,
+          // never a normal finding — it must never silently soften to advisory in exploration.
+          structural: true,
         },
       ],
       coverage: [
@@ -200,10 +204,15 @@ export async function checkCommand(
       continue;
     }
 
-    for (const f of result.findings) out.log(formatFinding(f));
+    // M1.3 (`rk phase exploration|consolidation`): the ONE composition-layer point that applies
+    // the fixed phase matrix (src/gates/phase.ts). A no-op in consolidation (the default) — every
+    // pre-M1.3 fixture/test stays byte-identical. Coverage (`result.coverage`) is untouched by
+    // construction: it comes from the gate's own checked/total bookkeeping, never from `findings`.
+    const findings = applyPhase(result.findings, config.phase);
+    for (const f of findings) out.log(formatFinding(f));
 
-    const errors = result.findings.filter((f) => f.severity === "ERROR").length;
-    const warnings = result.findings.filter((f) => f.severity === "WARN").length;
+    const errors = findings.filter((f) => f.severity === "ERROR").length;
+    const warnings = findings.filter((f) => f.severity === "WARN").length;
     for (const c of result.coverage) {
       out.log(`checked ${c.gate}: ${c.checked}/${c.total} ${c.unit} (${errors} errors, ${warnings} warnings)`);
     }

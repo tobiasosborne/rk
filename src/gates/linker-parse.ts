@@ -104,8 +104,11 @@ export function parseRegistry(snapshot: RepoSnapshot): { lemmas: Lemma[]; errors
     const content = snapshot.get(path) ?? "";
     const fm = parseFrontmatter(content);
 
+    // M1.3 phase matrix (docs/gate-contracts.md "Phase matrix"): frontmatter parse failure,
+    // missing id, and an id/filename mismatch are all structural — they break this shard's own
+    // cross-referenceable identity, which acyclicity/status/orphan/import-resolution all key on.
     if (!fm.present || !fm.terminated) {
-      errors.push({ severity: "ERROR", path, message: "missing/unterminated frontmatter" });
+      errors.push({ severity: "ERROR", path, message: "missing/unterminated frontmatter", structural: true });
       continue;
     }
 
@@ -115,11 +118,12 @@ export function parseRegistry(snapshot: RepoSnapshot): { lemmas: Lemma[]; errors
         severity: "ERROR",
         path,
         message: "missing required field 'id' (cannot register this shard for acyclicity/status/orphan checks)",
+        structural: true,
       });
       continue;
     }
     if (id !== stem) {
-      errors.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'` });
+      errors.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'`, structural: true });
     }
 
     // [rk-aft, 2026-07-18 review finding 3] `kind` is required (gate-contracts.md:303, same row

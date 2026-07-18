@@ -47,10 +47,12 @@ export function checkAcyclic(lemmas: Lemma[]): Finding[] {
       if (vs === 1) {
         const idx = stack.indexOf(v);
         const cyc = [...stack.slice(idx), v];
+        // structural: dependency cycle (docs/gate-contracts.md "Phase matrix").
         errors.push({
           severity: "ERROR",
           path: byId.get(cyc[0]!)!.path,
           message: `cycle detected: ${cyc.join(" -> ")}`,
+          structural: true,
         });
         return true;
       }
@@ -72,12 +74,16 @@ export function checkAcyclic(lemmas: Lemma[]): Finding[] {
 // Check 7 — imports resolve (argument.py:179-194)
 // ---------------------------------------------------------------------------------------
 
+// structural: broken cross-shard reference (docs/gate-contracts.md "Phase matrix") — every ERROR
+// below.
 export function checkImports(lemmas: Lemma[], defIds: Set<string>): Finding[] {
   const ids = new Set(lemmas.map((l) => l.id));
   const errors: Finding[] = [];
   for (const l of lemmas) {
     for (const d of l.deps) {
-      if (!ids.has(d)) errors.push({ severity: "ERROR", path: l.path, message: `unknown dep '${d}' (not a registry id)` });
+      if (!ids.has(d)) {
+        errors.push({ severity: "ERROR", path: l.path, message: `unknown dep '${d}' (not a registry id)`, structural: true });
+      }
     }
     l.routes.forEach((route, ri) => {
       for (const m of route) {
@@ -86,12 +92,15 @@ export function checkImports(lemmas: Lemma[], defIds: Set<string>): Finding[] {
             severity: "ERROR",
             path: l.path,
             message: `unknown route member '${m}' (route ${ri + 1}, not a registry id)`,
+            structural: true,
           });
         }
       }
     });
     for (const df of l.defs) {
-      if (!defIds.has(df)) errors.push({ severity: "ERROR", path: l.path, message: `unknown def '${df}' (not in definitions/)` });
+      if (!defIds.has(df)) {
+        errors.push({ severity: "ERROR", path: l.path, message: `unknown def '${df}' (not in definitions/)`, structural: true });
+      }
     }
   }
   return errors;

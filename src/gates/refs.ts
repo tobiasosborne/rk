@@ -128,10 +128,12 @@ export const refsGate: Gate = {
         parsed = JSON.parse(ext.raw);
       } catch (e) {
         failed++;
+        // structural: parse error (docs/gate-contracts.md "Phase matrix").
         findings.push({
           severity: "ERROR",
           path: ext.path,
           message: `unparseable JSON: ${(e as Error).message}`,
+          structural: true,
         });
         continue;
       }
@@ -142,10 +144,13 @@ export const refsGate: Gate = {
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         failed++;
         const shape = parsed === null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed;
+        // structural: parse error (docs/gate-contracts.md "Phase matrix") — same class as the
+        // unparseable-JSON branch just above.
         findings.push({
           severity: "ERROR",
           path: ext.path,
           message: `malformed external: expected a JSON object, got ${shape}`,
+          structural: true,
         });
         continue;
       }

@@ -26,6 +26,15 @@ export interface Finding {
   path: string;
   line?: number;
   message: string;
+  /** M1.3 (`rk phase exploration|consolidation`, src/gates/phase.ts): true iff this finding
+   * belongs to the STRUCTURAL check class — parse errors, dependency cycles, duplicate ids/
+   * aliases, broken cross-shard references (docs/gate-contracts.md "Phase matrix"). Structural
+   * findings block in both phases; every other ERROR (default, field omitted or false —
+   * completeness/provenance/freshness-class checks) demotes to advisory WARN in exploration.
+   * Never read by a gate's own corpus-fixture assertions (src/corpus/run.ts calls `gate.run`
+   * directly, never through the phase layer) — set here only for `src/gates/phase.ts`'s
+   * `applyPhase`, invoked from `src/cli/check.ts`. */
+  structural?: boolean;
 }
 
 /** One coverage-line entry. Most gates emit exactly one per run (docs/gate-contracts.md: "every

@@ -16,7 +16,38 @@ describe("mergeGateConfig (pure)", () => {
   test("a partial override replaces only the named keys", () => {
     const merged = mergeGateConfig({ linkerBrittlenessSoftCap: 40 });
     expect(merged.linkerBrittlenessSoftCap).toBe(40);
-    expect(merged.shardsPrefix).toBe(DEFAULT_GATE_CONFIG.shardsPrefix);
+    expect(merged.shardsMaxLines).toBe(DEFAULT_GATE_CONFIG.shardsMaxLines);
+  });
+});
+
+describe("phase (M1.3) defaulting — CLAUDE.md L2: a fresh clone must never silently run loose", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  test("mergeGateConfig(undefined) resolves phase to consolidation, the strictest default", () => {
+    expect(mergeGateConfig(undefined).phase).toBe("consolidation");
+  });
+
+  test("an explicit phase override is honored", () => {
+    expect(mergeGateConfig({ phase: "exploration" }).phase).toBe("exploration");
+  });
+
+  test("loadGateConfig: absent .rk/config.json resolves phase to consolidation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    const cfg = await loadGateConfig(root);
+    expect(cfg.phase).toBe("consolidation");
+  });
+
+  test("loadGateConfig: a present .rk/config.json with phase:exploration is honored", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+    const cfg = await loadGateConfig(root);
+    expect(cfg.phase).toBe("exploration");
   });
 });
 

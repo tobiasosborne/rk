@@ -82,16 +82,27 @@ export function checkShard(
   aliasOwner: Map<string, string>,
   findings: Finding[],
 ): { cited: boolean; hashVerified: boolean } {
+  // M1.3 phase matrix (docs/gate-contracts.md "Phase matrix"): a missing `id:` breaks this
+  // shard's own cross-referenceable identity (other shards/gates address it by filename-derived
+  // id) — structural. term/kind/status are schema completeness, non-structural (demoted in
+  // exploration — PRD "lazy convention-fixing").
   for (const field of REQUIRED_FIELDS) {
     if (isMissing(fields[field])) {
-      findings.push({ severity: "ERROR", path, message: `missing required field '${field}'` });
+      findings.push({
+        severity: "ERROR",
+        path,
+        message: `missing required field '${field}'`,
+        structural: field === "id",
+      });
     }
   }
 
   const id = fields.id;
   const stem = path.slice(path.lastIndexOf("/") + 1, -".md".length);
   if (!isMissing(id) && id !== stem) {
-    findings.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'` });
+    // structural: an id/filename mismatch breaks the same cross-referenceable identity as a
+    // missing id (above) — every other gate/shard addresses this shard by its filename stem.
+    findings.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'`, structural: true });
   }
 
   const kind = fields.kind;
@@ -110,7 +121,13 @@ export function checkShard(
     const key = nm.toLowerCase();
     const owner = aliasOwner.get(key);
     if (owner !== undefined && owner !== path) {
-      findings.push({ severity: "ERROR", path, message: `DRIFT: name '${nm}' claimed by both ${owner} and ${path}` });
+      // structural: duplicate ids/aliases (docs/gate-contracts.md "Phase matrix").
+      findings.push({
+        severity: "ERROR",
+        path,
+        message: `DRIFT: name '${nm}' claimed by both ${owner} and ${path}`,
+        structural: true,
+      });
     }
     aliasOwner.set(key, path);
   }
@@ -206,13 +223,21 @@ export const defsGate: Gate = {
       // unterminated block: malformed-line scanning below never ran to produce any lines to
       // report in that case (parse_frontmatter returns None before the line loop starts).
       if (!fm.present || !fm.terminated) {
-        findings.push({ severity: "ERROR", path, message: "missing/unterminated frontmatter" });
+        // structural: parse error (docs/gate-contracts.md "Phase matrix").
+        findings.push({ severity: "ERROR", path, message: "missing/unterminated frontmatter", structural: true });
         continue;
       }
 
-      // check 2: a line with no ':' inside an otherwise well-terminated block.
+      // check 2: a line with no ':' inside an otherwise well-terminated block. structural: parse
+      // error.
       for (const lineNo of fm.malformedLines) {
-        findings.push({ severity: "ERROR", path, line: lineNo, message: "frontmatter line without ':'" });
+        findings.push({
+          severity: "ERROR",
+          path,
+          line: lineNo,
+          message: "frontmatter line without ':'",
+          structural: true,
+        });
       }
 
       const { cited, hashVerified } = checkShard(path, fm.fields, manifest, snapshot, aliasOwner, findings);

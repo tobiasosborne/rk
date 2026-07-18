@@ -204,6 +204,78 @@ describe("rk check", () => {
     expect(lines.join("\n")).toContain("rk check");
   });
 
+  // M1.3 (`rk phase exploration|consolidation`, docs/gate-contracts.md "Phase matrix"): end-to-end
+  // proof that `rk check` applies the fixed phase matrix through the real CLI composition path
+  // (src/cli/check.ts calling src/gates/phase.ts's applyPhase), not just the pure unit tests in
+  // test/gates/phase.test.ts / phase-classification.test.ts. Must also run BEFORE the
+  // `mock.module` test below, same reason as `--selftest` just below it.
+  describe("rk check — M1.3 phase matrix", () => {
+    test("default (no .rk/config.json): consolidation, full set blocks — byte-identical to pre-M1.3 behavior", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-phase-default-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      mkdirSync(join(root, "definitions"), { recursive: true });
+      // Non-structural (schema completeness) ERROR — would demote in exploration, must NOT here.
+      writeFileSync(join(root, "definitions", "bad.md"), "---\nid: bad\n---\n");
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR definitions/bad.md:1 missing required field 'term'");
+      expect(code).toBe(1);
+      expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
+    });
+
+    test("exploration: a non-structural ERROR (missing required field) demotes to WARN and rk check exits 0", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-phase-explore-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      mkdirSync(join(root, ".rk"), { recursive: true });
+      writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+      mkdirSync(join(root, "definitions"), { recursive: true });
+      writeFileSync(join(root, "definitions", "bad.md"), "---\nid: bad\n---\n");
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--root", root], { out });
+      const text = lines.join("\n");
+
+      // Demoted: printed as WARN, carrying the advisory-phase suffix, message content preserved.
+      expect(text).toContain("WARN definitions/bad.md:1 missing required field 'term' [advisory in exploration phase");
+      expect(text).not.toContain("ERROR definitions/bad.md:1 missing required field 'term'");
+      // L2: still counted, never a silent skip — the defs coverage line's warning count reflects it.
+      expect(text).toMatch(/checked defs: \d+\/\d+ .*\(0 errors, \d+ warnings\)/);
+      expect(code).toBe(0);
+      expect(text).toContain("rk check: OK");
+    });
+
+    test("exploration: a STRUCTURAL ERROR (DRIFT, duplicate alias) still blocks — only non-structural findings are advisory", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-phase-explore-structural-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      mkdirSync(join(root, ".rk"), { recursive: true });
+      writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+      mkdirSync(join(root, "definitions"), { recursive: true });
+      writeFileSync(
+        join(root, "definitions", "a.md"),
+        "---\nid: a\nterm: Same\nkind: original\nstatus: locked\nconsensus: x\n---\n",
+      );
+      writeFileSync(
+        join(root, "definitions", "b.md"),
+        "---\nid: b\nterm: Same\nkind: original\nstatus: locked\nconsensus: x\n---\n",
+      );
+
+      const { out, lines } = capture();
+      const code = await run(["check", "--root", root], { out });
+      const text = lines.join("\n");
+
+      expect(text).toContain("ERROR definitions/b.md:1 DRIFT: name 'Same' claimed by both");
+      expect(text).not.toContain("WARN definitions/b.md:1 DRIFT");
+      expect(code).toBe(1);
+      expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
+    });
+  });
+
   // rk-bdd (2026-07-18 M0.3 re-review finding 7): IMPLEMENTATION_PLAN.md:76 (M0.2 acceptance)
   // names `rk check --selftest` as the interface that runs the red corpus — these three tests
   // must run BEFORE the `mock.module` test below (its own comment explains why it must run LAST:

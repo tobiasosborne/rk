@@ -163,6 +163,83 @@ run inherit both:
 
 ---
 
+## Phase matrix (M1.3 — `rk phase exploration|consolidation`)
+
+**Purpose.** PRD sec. 2 names two first-class phases with an explicit gated transition:
+"Exploration phase: cheap, fast, lightly logged... Consolidation phase: contract-shaped claims,
+eager definitions, af hard tier, generated report." The failure mode this guards against is named
+explicitly in the PRD, proved by a real prior campaign (cft-anyons v1): **mandatory-everywhere
+ceremony kills exploratory motion.** "Every gate binds at a promotion boundary, never on
+exploratory motion." M1.3 makes that mechanical: one config field, `phase`, selects between
+exactly two FIXED severity policies. There are no per-gate override flags — PRD's own resolved
+question 4 settles this: "Fixed matrix; escape valve is a committed, logged config edit only. A
+mis-phased gate is a template bug fixed upstream via D6." The "escape valve" is therefore a
+reviewed, committed change to THIS document and the classification it drives
+(`src/gates/phase.ts`) — never a runtime flag a session can flip unilaterally.
+
+**Mechanism.** Every finding a gate constructs may carry `structural: true`
+(`src/gates/framework.ts`'s `Finding.structural`). A finding is STRUCTURAL iff it belongs to one
+of four classes: **parse errors**, **dependency cycles**, **duplicate ids/aliases**, or **broken
+cross-shard references** — the checks that keep the underlying registry/graph itself coherent
+enough for every OTHER check to even run meaningfully. Every other ERROR (the default — the field
+omitted, or explicitly `false`) is completeness/provenance/freshness-class: schema fields being
+filled in, byte-verification of claimed quotes, report cross-referencing, generated-file
+staleness. `src/gates/phase.ts`'s `applyPhase(findings, phase)` is the ONE place that reads the
+flag: in `consolidation` it is the identity function (today's behavior, byte-identical — every
+pre-M1.3 fixture and test assumes consolidation and is unaffected by construction, since the
+corpus runner calls `gate.run()` directly and never passes through this layer); in `exploration`
+it rewrites every non-structural ERROR to WARN, appending a `[advisory in exploration phase --
+would ERROR in consolidation]` clause to the message so a reader can tell a phase-demoted WARN
+from an ordinary advisory one. `src/cli/check.ts` calls it exactly once per gate result, AFTER the
+gate has computed its findings and BEFORE printing/counting — a demoted finding is still computed,
+still printed, still counted in the coverage line's `(<E> errors, <W> warnings)` suffix (CLAUDE.md
+L2: "a skip is always visible with a count" — a demotion is never a skip). The `checked`/`total`
+pair in each gate's `CoverageLine` is untouched by construction: it comes from the gate's own
+bookkeeping, never from `findings`, so a phase switch never changes what a coverage line's
+numerator/denominator mean, only which findings block. The crash-boundary sentinel
+(`src/cli/check.ts`'s `runGateSafely`, `<gate:NAME>` — "Composition" above) is itself marked
+`structural: true`: a gate crashing is a defense-in-depth boundary firing, never a normal finding,
+and must never silently soften in exploration.
+
+**Default.** A `.rk/config.json` with no `phase` field, or no `.rk/config.json` at all, resolves
+to **`consolidation`** (`src/gates/phase.ts`'s `DEFAULT_PHASE`) — the strictest state, and the one
+every pre-M1.3 repo has always run under. CLAUDE.md L2: "a fresh clone without config must never
+silently run loose." `rk phase` (no args) prints the current resolved phase; `rk phase
+exploration|consolidation` writes it. The consolidation-ward transition (`exploration ->
+consolidation`) is a deliberate act per PRD C1 ("The transition consolidation-> is a logged,
+deliberate act"): `src/cli/phase.ts` prepends one dated entry to `docs/worklog.md` (after the
+`## Sessions` heading, matching that template's own "newest first" convention) if the file exists,
+and always prints a notice either way — never a silent touch of an authored doc, never a silent
+skip when it is absent. Any OTHER transition (into exploration, or consolidation-to-consolidation)
+is not itself "the consolidation-ward transition" and is not logged to the worklog.
+
+**Per-gate classification.**
+
+| gate | structural (blocks in both phases) | non-structural (demoted to WARN in exploration) | rationale |
+|---|---|---|---|
+| **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
+| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class |
+| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed |
+| **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
+| **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
+| **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
+
+Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
+ids/aliases" class, and Gate 2's Check 12 (brittleness) and Gate 1's Checks 10-11/13-14 are
+already WARN-only in both phases (nothing to demote) — noted here so their absence from the tables
+above reads as a deliberate, considered call, not an oversight: the WHOLE-GATE non-structural
+classification for Gates 4-6 is a deliberate policy choice (their subject matter is inherently
+consolidation-shaped), not a per-check omission.
+
+**Mutation-proof discipline.** A change to this table is a validity-semantics change (CLAUDE.md
+L6) — it moves a check between "always blocks" and "advisory during exploration." Any edit here
+must be paired with the corresponding `structural` flag flip in the gate source (or a matrix edit
+in `src/gates/phase.ts`) AND the classification tests in `test/gates/phase-classification.test.ts`
+updated in the same commit; a bare doc edit with no code change (or vice versa) is incomplete work
+per Rule 7.
+
+---
+
 ## Gate 1 — defs (`definitions/*.md`)
 
 **Purpose.** Guard the project's vocabulary against drift: no two shards may define the same
