@@ -13,8 +13,43 @@ import { loadSnapshot } from "../gates/load";
 import { loadGateConfig } from "../gates/config-load";
 import { GATES } from "../gates/index";
 import { formatFinding } from "../gates/framework";
+import type { Gate, GateResult } from "../gates/framework";
+import type { RepoSnapshot } from "../gates/snapshot";
+import type { GateConfig } from "../gates/config";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
+
+/** rk-6r3 / M0.3 review finding 7: gate-contracts.md:85's "unconditional composition" promise
+ * ("all six gates run unconditionally ... every coverage line prints regardless of earlier
+ * failures") is only real if ONE gate's own bug can never take the rest of `rk check` down with
+ * it. A gate is supposed to never throw (pure core, L3) — this boundary is defense-in-depth for
+ * when that guarantee is violated anyway, not a license for gates to throw. An unexpected
+ * exception becomes a loud synthetic ERROR finding + a coverage line that reads as a crash (never
+ * a silent, pass-shaped "0/0"), and every remaining gate still runs. */
+function runGateSafely(gate: Gate, snapshot: RepoSnapshot, config: GateConfig): GateResult {
+  try {
+    return gate.run(snapshot, config);
+  } catch (e) {
+    const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    return {
+      findings: [
+        {
+          severity: "ERROR",
+          path: gate.name,
+          message: `gate '${gate.name}' CRASHED (unexpected exception, never a valid gate verdict): ${message}`,
+        },
+      ],
+      coverage: [
+        {
+          gate: gate.name,
+          checked: 0,
+          total: 0,
+          unit: "GATE CRASHED — see the ERROR finding above (defense-in-depth boundary, gate-contracts.md:85)",
+        },
+      ],
+    };
+  }
+}
 
 export async function checkCommand(args: string[], out: Out): Promise<number> {
   const { root } = extractRoot(args);
@@ -23,7 +58,7 @@ export async function checkCommand(args: string[], out: Out): Promise<number> {
 
   let anyError = false;
   for (const gate of GATES) {
-    const result = gate.run(snapshot, config);
+    const result = runGateSafely(gate, snapshot, config);
 
     if (result.notImplemented) {
       out.log(`gate ${gate.name}: NOT IMPLEMENTED`);

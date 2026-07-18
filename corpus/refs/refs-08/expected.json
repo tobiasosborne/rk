@@ -1,0 +1,14 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-n/externals/GT-n-null.json",
+      "message_pattern": "malformed external"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: check-refs.py's check_refs (check-refs.py:180, `name = d.get(\"name\", f.stem)`) CRASHES with AttributeError ('NoneType' object has no attribute 'get') on a syntactically-valid `null` external — its try/except at check-refs.py:172-178 wraps only json.loads, not the field-access lines just below it. Script-verified directly against this fixture's repo/ (spec-loaded check-refs.py, called check_refs(proofs_dir=<fixture>/proofs) to route around the ROOT-hardcoding caveat in this file's Validation methodology section): raises uncaught, taking the whole script down (and, pre-fix, the whole composed rk check with it) instead of reporting one failed external.",
+  "notes": "rk-6r3 / 2026-07-18 M0.3 milestone review (docs/reviews/2026-07-18-m0.3-milestone-review-codex.md) finding 7: refs.ts:138 cast a parsed-JSON external without an object/null guard before reading obj.source, so a syntactically-valid non-object payload (null, an array, ...) threw and killed the entire composed `rk check` (cli/check.ts:25 had no per-gate exception boundary either -- see the companion cli-check.test.ts boundary test for that half of the finding). Triage: rk-stricter-intended -- AISM's own script has the identical bug class (see aism_behavior) and simply crashes; rk's contract requires the malformed external to become one ERROR finding, counted in coverage, with the sibling valid (skip_import) external in the same repo/ tree proving coverage stays >0 and the rest of the gate keeps running. Mutation-proof: removing refs.ts's object/null guard makes this fixture (and test/gates/refs.test.ts's 'malformed external shape' describe block) throw instead of asserting a finding."
+}

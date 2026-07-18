@@ -1,4 +1,5 @@
-// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 7 fixtures.
+// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 8 fixtures
+// (refs-08 added by rk-6r3, M0.3 review finding 7: malformed non-object JSON externals).
 //
 // Two fixture-loading paths are used deliberately:
 //  - "hand-built snapshot" tests construct a RepoSnapshot Map directly — these are the true unit
@@ -11,7 +12,7 @@
 //    refs-02/refs-03/refs-07's `refs/src-*/paper.md` payload from the snapshot and misreports
 //    those three fixtures. That gap lives in a shared EDGE file outside this gate's write scope
 //    (src/gates/refs.ts + this file) — see the session report for the full writeup. This file's
-//    own fixture tests route around it so refs.ts's correctness is verified 7/7 regardless of
+//    own fixture tests route around it so refs.ts's correctness is verified 8/8 regardless of
 //    when/whether that shared-file gap gets fixed.
 
 import { describe, expect, test } from "bun:test";
@@ -265,6 +266,54 @@ describe("refsGate — checks 1-5", () => {
     expect(result.findings[0]!.message).toContain("unparseable JSON");
   });
 
+  test("check 5b (rk-6r3, M0.3 review finding 7): a syntactically-valid `null` external is a hard FAIL 'malformed external', never a throw", () => {
+    const s = snap({
+      "proofs/lem-n/externals/GT-n-null.json": "null",
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("malformed external");
+    expect(result.findings[0]!.message).toContain("null");
+  });
+
+  test("check 5b: a JSON array external is a hard FAIL 'malformed external', never a throw", () => {
+    const s = snap({
+      "proofs/lem-n/externals/GT-n-array.json": "[1, 2]",
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("malformed external");
+    expect(result.findings[0]!.message).toContain("array");
+  });
+
+  test("check 5b: a bare JSON string external is a hard FAIL 'malformed external', never a throw", () => {
+    const s = snap({
+      "proofs/lem-n/externals/GT-n-string.json": '"just a string"',
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("malformed external");
+    expect(result.findings[0]!.message).toContain("string");
+  });
+
+  test("check 5b: coverage still counts a malformed external in `total`/`failed`, never a silent drop", () => {
+    const s = snap({
+      "proofs/lem-n/externals/GT-n-null.json": "null",
+      "proofs/lem-n/externals/GT-n-1.json": JSON.stringify({
+        name: "GT-n-1",
+        source: "Imports the already-validated result at proofs/lem-other-validated; no new quote needed.",
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.coverage).toHaveLength(1);
+    expect(formatCoverageLine(result.coverage[0]!)).toBe(
+      "checked refs: 0/2 externals byte-verified, 1 failed, 1 import-skipped, 0 no-quote-skipped",
+    );
+  });
+
   test("check 4, ruling #3: a >=40-char verbatim core wrapped in paraphrase FAILs whole-quote-match with the n/m diagnostic", () => {
     const s = snap({
       "proofs/lem-p/externals/GT-p-1.json": JSON.stringify({
@@ -400,9 +449,18 @@ interface ExpectedJson {
   exit_code: number;
 }
 
-describe("corpus fixtures — refs-01..07 (direct-load)", () => {
+describe("corpus fixtures — refs-01..08 (direct-load)", () => {
   const CORPUS_REFS = join(import.meta.dir, "..", "..", "corpus", "refs");
-  const FIXTURE_IDS = ["refs-01", "refs-02", "refs-03", "refs-04", "refs-05", "refs-06", "refs-07"];
+  const FIXTURE_IDS = [
+    "refs-01",
+    "refs-02",
+    "refs-03",
+    "refs-04",
+    "refs-05",
+    "refs-06",
+    "refs-07",
+    "refs-08",
+  ];
 
   for (const id of FIXTURE_IDS) {
     test(id, () => {

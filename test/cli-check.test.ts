@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -158,5 +158,63 @@ describe("rk check", () => {
     const code = await run([], { out });
     expect(code).toBe(0);
     expect(lines.join("\n")).toContain("rk check");
+  });
+
+  // rk-6r3 / M0.3 review finding 7, second half: cli/check.ts:25 had no per-gate exception
+  // boundary, so one gate's unexpected throw (e.g. the refs.ts:138 null-external bug this same
+  // finding fixes on the gate side, corpus/refs/refs-08) killed every later gate's coverage line
+  // too, violating "unconditional composition" (gate-contracts.md:85). This test injects a fake
+  // gate that always throws — via Bun's `mock.module`, which retroactively overrides the already
+  // statically-imported "../src/gates/index" binding `checkCommand` reads (verified: Bun resolves
+  // the specifier to an absolute module and patches live bindings for modules that imported it
+  // before this call too, not just future imports) — since GATES is a fixed top-level array with
+  // no other production seam for fault injection. `mock.module` has file-wide effect and does not
+  // auto-restore, so this test deliberately runs LAST in this file/describe block, after every
+  // other test that reads the real `GATES` array.
+  test("per-gate exception boundary: an unexpected throw in one gate becomes a loud synthetic ERROR (never a silent pass), its coverage line reads as a crash, and every other gate still runs (defense-in-depth, gate-contracts.md:85)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-check-boundary-"));
+    dirs.push(root);
+    writeGoldenScaffold(root);
+
+    const realOtherGates = GATES.filter((g) => g.name !== "defs");
+    mock.module("../src/gates/index", () => ({
+      GATES: [
+        {
+          name: "defs",
+          run: () => {
+            throw new Error("boom: simulated gate crash (fault injection, not a real defs bug)");
+          },
+        },
+        ...realOtherGates,
+      ],
+    }));
+
+    const { out, lines } = capture();
+    const code = await run(["check", "--root", root], { out });
+    const text = lines.join("\n");
+
+    // The crash becomes a loud synthetic ERROR finding for the crashed gate, never an uncaught
+    // exception that kills the process.
+    expect(text).toContain("ERROR defs:1 gate 'defs' CRASHED");
+    expect(text).toContain("boom: simulated gate crash");
+
+    // The crashed gate's own coverage line reads unambiguously as a crash, never a silent
+    // pass-shaped "0/0 ... (0 errors, 0 warnings)" (a bare 0/0 elsewhere in this contract IS a
+    // legitimate day-1-vacuity pass, so the crash must not merely resemble one).
+    expect(text).toContain("checked defs: 0/0 GATE CRASHED");
+    expect(text).not.toMatch(/checked defs: 0\/0 .*\(0 errors, 0 warnings\)/);
+    expect(text).toMatch(/checked defs: 0\/0 GATE CRASHED.*\(1 errors, 0 warnings\)/);
+
+    // No short-circuit: every other registered (non-stub) gate still ran and printed its own
+    // coverage line, exactly as the composition contract requires.
+    for (const gate of realOtherGates) {
+      const isStub = text.includes(`gate ${gate.name}: NOT IMPLEMENTED`);
+      if (isStub) continue;
+      expect(text).toMatch(coverageRegex(gate.name));
+    }
+
+    // A crashed gate's synthetic ERROR still fails the composed exit code, same as any real one.
+    expect(code).toBe(1);
+    expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
   });
 });

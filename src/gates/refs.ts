@@ -135,6 +135,20 @@ export const refsGate: Gate = {
         });
         continue;
       }
+      // rk-6r3 / M0.3 review finding 7: a syntactically-valid JSON document that isn't an object
+      // (`null`, an array, a bare string/number/boolean) must never reach the `obj.source` access
+      // below uncast — same hard-FAIL treatment as the unparseable-JSON branch just above (never a
+      // skip, never a thrown exception that would kill the rest of the composed `rk check`).
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        failed++;
+        const shape = parsed === null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed;
+        findings.push({
+          severity: "ERROR",
+          path: ext.path,
+          message: `malformed external: expected a JSON object, got ${shape}`,
+        });
+        continue;
+      }
       const obj = parsed as { source?: unknown };
       const src = typeof obj.source === "string" ? obj.source : "";
 
