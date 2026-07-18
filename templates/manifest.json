@@ -1,0 +1,35 @@
+{
+  "template_version": "1.0.0",
+  "slot_syntax": "{{RK_SLOT_<NAME>}}",
+  "unfilled_slot_grep": "\\{\\{RK_SLOT_",
+  "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure).",
+  "slots": [
+    { "name": "RK_SLOT_PROJECT_NAME", "description": "Short campaign/repo name.", "unique": false },
+    { "name": "RK_SLOT_GOAL", "description": "One-paragraph mission statement.", "unique": true },
+    { "name": "RK_SLOT_NORTH_STAR", "description": "The north-star contract: the single target result, one line.", "unique": true },
+    { "name": "RK_SLOT_COMPUTE_BUDGET", "description": "Compute/token budget for the campaign.", "unique": true },
+    { "name": "RK_SLOT_MODEL_POLICY", "description": "Backend/model/effort policy by role and tier.", "unique": true },
+    { "name": "RK_SLOT_PHASE", "description": "Current phase: exploration or consolidation.", "unique": true },
+    { "name": "RK_SLOT_AUDIT_CADENCE", "description": "Audit cadence in cycles; session close blocks past it.", "unique": true },
+    { "name": "RK_SLOT_BRITTLENESS_SOFT_CAP", "description": "Linker brittleness soft cap in nodes. Conservative inherited starting value 26; tune per campaign.", "unique": true },
+    { "name": "RK_SLOT_SHARD_PREFIX", "description": "Per-repo shard-id prefix. Stamped from the project; never defaults to any campaign name (audit R12/rk-psm).", "unique": true }
+  ],
+  "stamped": [
+    { "path": "CLAUDE.md", "template": "CLAUDE.md.tmpl", "classification": "rewritten-whole" },
+    { "path": "AGENTS.md", "template": "CLAUDE.md.tmpl", "classification": "rewritten-whole" },
+    { "path": "PRD.md", "template": "PRD.md.tmpl", "classification": "rewritten-whole" },
+    { "path": "HANDOFF.md", "template": "HANDOFF.md.tmpl", "classification": "rewritten-whole" },
+    { "path": "CONVENTIONS.md", "template": "CONVENTIONS.md.tmpl", "classification": "authored-append-only" },
+    { "path": "FINDINGS.md", "template": "FINDINGS.md.tmpl", "classification": "authored-append-only" },
+    { "path": "docs/worklog.md", "template": "docs/worklog.md.tmpl", "classification": "authored-append-only" },
+    { "path": "definitions/", "template": null, "classification": "directory" },
+    { "path": "argument/", "template": null, "classification": "directory" },
+    { "path": "proofs/", "template": null, "classification": "directory" },
+    { "path": "runs/", "template": null, "classification": "directory" },
+    { "path": "refs/", "template": null, "classification": "directory" },
+    { "path": "build/", "template": null, "classification": "directory" },
+    { "path": ".rk/", "template": null, "classification": "directory" },
+    { "path": ".frontier/", "template": null, "classification": "directory" },
+    { "path": ".beads/", "template": null, "classification": "directory" }
+  ]
+}

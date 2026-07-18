@@ -1,0 +1,29 @@
+<!-- ROLE: the current-state handoff — where the campaign is right now, the current work item, the
+     next steps, and the audit-cycle counter. The first thing the next session reads after
+     CLAUDE.md. Not a history: history lives in git and docs/worklog.md.
+     UPDATE POLICY: rewritten-whole, at every session close. Rewrite, do not append; keep it short
+     (a target of ~150 lines). A stale HANDOFF is worse than none.
+     TRIGGER: session close, or any change that makes the "current work" line untrue. -->
+
+# HANDOFF — {{RK_SLOT_PROJECT_NAME}}
+
+## State
+
+One-paragraph snapshot: what is established, what is in flight, what is blocked. Cite the
+north-star contract's current status on the rigour ladder.
+
+## Current work
+
+The single work item in flight (with its `bd` id). What is done, what remains.
+
+## Next steps
+
+The concrete next actions, in order. File anything larger as a `bd` issue rather than describing
+it here.
+
+## Audit cycle counter
+
+- Cycles-since-last-audit: **0**
+- Last `rk audit` at cycle: **0**
+- Audit cadence: {{RK_SLOT_AUDIT_CADENCE}} cycles (session close is blocked when
+  cycles-since-last-audit exceeds this; see `CLAUDE.md` §6).
