@@ -3,68 +3,79 @@
 
 # HANDOFF
 
-## State (2026-07-17)
+## State (2026-07-18, session close)
 
-Repo bootstrapped: CLAUDE.md/AGENTS.md constitution, package skeleton, license, dirs.
-No source code yet. Design authority: `../research-workflows/{PRD,IMPLEMENTATION_PLAN}.md`
-(both v2, review-hardened).
+**M0 is functionally complete. M0.3 ACCEPTED** (bd rk-4wm close note has the full basis).
+Tree: 489 tests / 0 fail / 1 env-gated skip; `bun run selftest` OK (purity 26 files,
+corpus 87/87 executed); `rk check --selftest --root .` OK; compiled binary builds.
+No git remote configured — all commits local (tell orchestrator if one should be added).
 
-## Current milestone: M0 — gate extraction
+## Milestone scorecard
 
-- M0.1 gate contracts doc: DONE (e17bbe8) + Fable L6 review APPROVE-WITH-CORRECTIONS
-  (docs/reviews/2026-07-17-gate-contracts-fable-review.md) + corrections applied
-  (77a488e; F1-F12 + MIN_RUN whole-quote tightening; ledger now 74 fixtures; deferred
-  items filed as rk-af8/zjq/rko/t14).
-- M0.2 red corpus: DONE (75/75 fixtures, 7 commits 1498933..2d579b3). All
-  script-validated via module-import harness (AISM gates hardcode ROOT from __file__ —
-  cd+run silently re-checks AISM; documented in corpus/README.md). aism_behavior:
-  70 same, 5 differs (all rk-stricter-intended: defs-15, linker-15, linker-21, refs-07,
-  provenance-11), 0 unrunnable. defs retrofitted post-premise-correction; defs-15
-  (strict cited-shard provenance) added, becomes enforceable via M0.7.
-- M0.7 contract stance amendment: DONE (ef74eac). F5 strict (defs checks 8-9), triage
-  tags on all six gates' divergence sections, robustness-run defined, Authority
-  preamble, harness notes in Shared conventions. Two triage judgment calls flagged for
-  ratification (refs-07, provenance-11 as rk-stricter-intended).
-- Tier-A boundary review: DONE — GREEN-WITH-CORRECTIONS
-  (docs/reviews/2026-07-17-tier-a-boundary-review.md). All rulings ratified; 10
-  corrections applied (9e8ac89 code+tests incl. the wholeQuoteMatch empty-normalized
-  false-PASS guard; ba65646 contract+fixtures). 100/100 tests.
-- M0.3 skeleton: DONE (926f9a7, 161150d, d6eecfe) — pure gate framework, RepoSnapshot,
-  config, six stubs, CLI split (cli/args|refs|check), corpus harness with
-  mutation-proved subset-matcher. 222 tests (147 pass, 75 skip), selftest green.
-- M0.3 gate wave: IN FLIGHT — six parallel Sonnet implementers, disjoint scopes
-  (each owns src/gates/<gate>.ts + test/gates/<gate>.test.ts + optional <gate>-*
-  helpers; refs gate MUST consume src/refs/quote.ts wholeQuoteMatch, never re-derive).
-- M0.4 doctor: IN FLIGHT (seventh agent; owns src/doctor.ts, src/cli/doctor.ts,
-  rk.compat.json, test/doctor.test.ts, + one dispatch case in src/cli.ts).
-- After the wave: AISM HEAD divergence-triage run + 3-tree robustness run, then the
-  M0.3 milestone Fable review (gate logic + triage ratification), then M0.5 staged
-  cutover (needs TJO's live AISM sessions).
-- M0.6 refs acquisition: DONE (7537f80, ae7c539, 5d4e791). 95 tests/163 asserts,
-  selftest+purity green, compiled binary works. AISM status round-trip: full agreement.
-  Divergence ledger: 2 rk-stricter-intended (path-traversal guard — fetch-refs.py:137-140
-  joins lock paths unvalidated; whole-quote rule), 1 ambiguous deferred (fetchSpec
-  catch-all→null), 0 rk-bug. Fable review of this code pending at the pre-M0.3 boundary.
-- ORCHESTRATION NOTE: agents share this working tree — orchestrator commits must use
-  explicit paths, never `git add -A` (542197c swept an in-flight M0.6 snapshot; verified
-  clean by the agent, no damage — do not repeat).
-- F0 `fr version`: DONE (knowledge-frontier commit 9db2af7, 276/276 tests, not pushed).
-  NOTE: the installed ~/.local/bin/fr binary predates F0 (and all of main since Jun 22,
-  including P0 field-feedback fixes) — `fr version` will fail until a rebuild is
-  installed. Refreshing the binary touches the live AISM campaign's hooks: TJO decision.
-  rk doctor's mismatch detection will correctly flag this state (that is the feature).
-- V0 firstproof corpus: no local checkout exists (verified 2026-07-17) — recover from
-  another machine/remote if possible, else strike from V1 acceptance per plan.
-- M0.2 red corpus: blocked on M0.1.
-- M0.3 gates implementation: blocked on M0.1/M0.2.
-- M0.4 doctor: blocked on F0.
-- M0.5 AISM staged cutover: blocked on M0.3.
-- M0.6 refs acquisition port: unblocked, not yet dispatched.
+- M0.1 contracts, M0.2 corpus, M0.4 doctor, M0.6 refs, M0.7 amendment: DONE (prior).
+- M0.3 six gates + `rk check`: DONE + ACCEPTED this session. All six gates implemented
+  (provenance was the last stub), corpus grown 75→87 fixtures, AISM HEAD live-fire
+  0 ERRORs with rk's findings verified strictly stronger than AISM's own gates.
+- M0.5 AISM cutover: **DEFERRED INDEFINITELY** (TJO directive, see below). Not an rk goal.
 
-## Next steps
+## Governance changes this session (all TJO-ratified, in CLAUDE.md==AGENTS.md + bd memory)
 
-1. Harvest M0.1 + F0; Fable review of the gate contracts doc (L6: it defines validity
-   semantics) before M0.2 fixtures are built against it.
-2. Dispatch M0.2, then M0.3 (parallel by gate, disjoint files), Fable review at the
-   M0.3 boundary.
-3. bd init (prefix rk-) — not yet done.
+1. **Reviews: codex gpt-5.6-sol via `codex exec`** (xhigh for Tier A, high for Tier B).
+   Fable reviews only with explicit TJO permission. Invocation pattern in CLAUDE.md §3.
+2. **Two-list reviews**: landing-blockers (BLOCKER/MAJOR on validity semantics) vs
+   follow-ups (beads, batched, non-gating). Repair rigor follows the finding's tier.
+3. **Anti-Zeno cap**: ONE review round + ONE repair wave per milestone, hard stop.
+   Orchestrator verifies repairs mechanically; no hostile re-review of repairs.
+   (M0.3 ran 3 rounds before this rule existed — do not repeat.)
+4. **AISM stance (strongest form)**: AISM is a case study in what NOT to do. rk must
+   serve ANY theoretical campaign (SC7 is the vision core). AISM permissible only as
+   incident-history seed + read-only crash-test corpus. Plan note filed at
+   `../research-workflows/NOTES-2026-07-18-aism-role.md`; M2/M3/M4 AISM touchpoints
+   need explicit TJO calls at those boundaries.
+5. Orchestration model: Fable orchestrates + bookkeeps; Sonnet/Opus subagents implement
+   (disjoint file scopes, explicit-path commits); codex reviews.
+
+## Review-cycle outcome (M0.3, 3 rounds — pre-cap)
+
+Review records: docs/reviews/2026-07-18-m0.3-{milestone-review,rereview,review3}-codex.md.
+Acceptance chain: aism-divergence-triage{,-v2,-v3}.md (v3 final: rk-bug 0, flood PASS
+by ratified per-check count). Highlights fixed along the way: stale-source false-PASS
+paths, optional-facts semantic split, coverage-line lies, a purity grep that never
+scanned 5 of 6 gate files, refs crash on null externals, symlink crash-before-boundary.
+Six reviewer rulings ratified (a-e + aggregate-flood), one overturned and fixed
+structurally (check-6 WARN aggregation, 139→2 WARNs on AISM, zero verdict change).
+
+## Architecture notes for next session
+
+- Snapshot edge: `loadSnapshot` (src/gates/load.ts) supplies REQUIRED SnapshotFacts
+  {sha256 (every present file, raw bytes), tracked (git ls-files), dirs (incl. empty)}.
+  lstat policy: symlinks content-invisible. Load failure → `<snapshot-load>` ERROR,
+  never an uncaught exit. Pure test builder: snapshotFromFiles (hashes via pure
+  src/gates/sha256.ts, byte-identical to edge hasher).
+- Corpus infra: src/corpus/{run,discovery,report}.ts (edge). EXPECTED_FIXTURE_COUNT
+  single source of truth in discovery.ts (=87). Fixtures may carry repo/.rk/config.json
+  ONLY with a matching expected.json config_override declaration.
+- src/gates is pure (marker-scanned, full leading comment block) EXCEPT allowlisted
+  load.ts/config-load.ts — relocation debt filed as rk-7uc; do not grow the allowlist.
+
+## Next steps (in order)
+
+1. **M1 scaffold** (plan M1.1–M1.5): template set, `rk init`, `rk phase`, `rk upgrade`
+   stub, dogfood 1 on a fresh small conjecture. This is the generality-defining
+   milestone — dispatch parallel Sonnet implementers, ONE codex review at the boundary.
+2. **rk-hq9 (P2): AISM-residue audit** — at the M1 boundary, justify/configure/remove
+   every AISM-derived assumption in gate contracts + defaults (candidate list in bead).
+   Natural companion to M1.1 template design.
+3. **rk-7uc (P2)**: relocate load.ts/config-load.ts out of src/gates (batch with M1).
+4. Backlog P3s: rk-fdl (refs test cleanup), rk-rko, rk-t14, rk-zjq, rk-w91 (V0
+   firstproof recovery-or-strike decision), rk-8ux (fr binary refresh — TJO decision,
+   de-prioritized with AISM work).
+
+## Standing cautions
+
+- Shared working tree for parallel agents: disjoint file scopes, explicit-path commits
+  only (never `git add -A`), re-read shared files (corpus/README.md) before editing.
+- codex exec can hang at startup (0 CPU, no session file in ~/.codex/sessions) — the
+  health-check pattern: after launch, wait ≤3 min for the rollout file; relaunch if
+  absent. Log the full stream to a file; never pipe through `tail`.
+- CLAUDE.md==AGENTS.md byte-identity: every CLAUDE.md edit must `cp` to AGENTS.md.
