@@ -109,7 +109,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 | `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
 
-Totals: 15 defs + 23 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **77
+Totals: 15 defs + 24 argument/linker + 8 refs + 16 provenance + 8 runs + 13 report-shards = **84
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
 `[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory list): `defs-07` (duplicate alias), `linker-06`
 (dependency cycle), `linker-12` (contract mismatch registry↔af-root), `linker-16` (hand-edited
@@ -320,12 +320,12 @@ script-verified / rk-only / untested breakdown.
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
-| linker | 23/23 | 21 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
-| refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
+| linker | 24/24 | 21 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 (`linker-24` pending script validation, see rk-rzn) |
+| refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
 | provenance | 16/16 | 15 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
 | shards | 13/13 | 13 | 0 | 0 |
-| **total** | reconciled at wave end | — | 5 | 0 |
+| **total** | 84 (83 script-validated + `linker-24` pending) | — | 6 | 0 |
 
 `linker-22`/`linker-23` (rk-co2 node_amended fix, 2026-07-18) are counted under `same`: both
 ledgers were built from a REAL `af init` + `af amend` workspace (not hand-stubbed JSON), and `af
