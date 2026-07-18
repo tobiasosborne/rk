@@ -99,7 +99,10 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
 
   // Check 2 — empty-scaffold exemption (check-report-shards.sh:31-36).
   if (includes.length === 0 && shardFiles.length === 0) {
-    return { findings, coverage: [{ gate: "shards", unit: "shard(s) included, labeled, cataloged", checked: 0, total: 0 }] };
+    return {
+      findings,
+      coverage: [{ gate: "shards", unit: "shard(s) fully conforming (included, labeled, cataloged)", checked: 0, total: 0 }],
+    };
   }
 
   // Check 3 (check-report-shards.sh:37-39).
@@ -112,6 +115,14 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
   const seenIds = new Set<string>();
   const readmeContent = snapshot.get(README) ?? "";
   const catalogContent = snapshot.get(CATALOG) ?? "";
+  // rk-1tt (review finding 5): coverage numerator means FULLY CONFORMING — included, labeled, AND
+  // cataloged — so every shard with ANY finding against it must be excluded, even when that
+  // finding's own `path` is a cross-file document (README/CATALOG/MASTER) rather than the shard
+  // file itself. Tracked directly at each check site below instead of reverse-matching
+  // finding.path afterward, which missed cross-file findings entirely (shards-08/09: a CATALOG/
+  // README finding never matched `f.path === file`) and even missed a wholly nonexistent shard
+  // (check 6's ERROR names MASTER, not the missing file).
+  const nonConforming = new Set<string>();
 
   for (const { target, line } of includes) {
     // Check 4 (check-report-shards.sh:45-48).
@@ -123,12 +134,18 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
 
     // Check 5 (check-report-shards.sh:50) — duplicate include, attributed to the shard file
     // itself (script-verified, shards-06: not a master-purity finding).
-    if (seenFiles.has(file)) findings.push(mkErr(file, 1, `${file} is included more than once`));
+    if (seenFiles.has(file)) {
+      findings.push(mkErr(file, 1, `${file} is included more than once`));
+      nonConforming.add(file);
+    }
     seenFiles.add(file);
 
-    // Check 6 (check-report-shards.sh:52).
+    // Check 6 (check-report-shards.sh:52). The ERROR is attributed to MASTER (the offending
+    // \include line), but the nonexistent file is unambiguously not "included, labeled, cataloged"
+    // — mark it non-conforming here, not by later matching finding.path against `file`.
     if (!hasPath(snapshot, file)) {
       findings.push(mkErr(MASTER, line, `\\include{${target}} points to missing ${file}`));
+      nonConforming.add(file);
       continue;
     }
 
@@ -137,9 +154,13 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const lineCount = (content.match(/\n/g) ?? []).length;
     if (lineCount > config.shardsMaxLines) {
       findings.push(mkErr(file, 1, `${file} has ${lineCount} lines; target is about 200 and hard guard is ${config.shardsMaxLines}`));
+      nonConforming.add(file);
     }
-    // Check 8 (check-report-shards.sh:58-59).
-    if (!readmeContent.includes(`\`${file}\``)) findings.push(mkErr(README, 1, `${README} does not list ${file}`));
+    // Check 8 (check-report-shards.sh:58-59) — cross-file finding, attributed to README.
+    if (!readmeContent.includes(`\`${file}\``)) {
+      findings.push(mkErr(README, 1, `${README} does not list ${file}`));
+      nonConforming.add(file);
+    }
 
     const idHit = firstHeader(content, "SHARD-ID");
     const titleHit = firstHeader(content, "SHARD-TITLE");
@@ -151,51 +172,68 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     // prefix-mismatch that would otherwise also apply to the second shard).
     if (!idHit) {
       findings.push(mkErr(file, 1, `${file} is missing SHARD-ID header`));
+      nonConforming.add(file);
     } else if (!idFormatRe.test(idHit.value)) {
       findings.push(mkErr(file, idHit.line, `${file} has invalid SHARD-ID '${idHit.value}'`));
+      nonConforming.add(file);
     } else if (seenIds.has(idHit.value)) {
       findings.push(mkErr(file, idHit.line, `duplicate SHARD-ID ${idHit.value}`));
+      nonConforming.add(file);
     } else {
       seenIds.add(idHit.value);
       const filePrefix = file.split("/").pop()!.slice(0, 2);
       const expectedPrefix = `${config.shardsPrefix}-${filePrefix}-`;
       if (!idHit.value.startsWith(expectedPrefix)) {
         findings.push(mkErr(file, idHit.line, `${file} has SHARD-ID ${idHit.value}, expected prefix ${expectedPrefix}`));
+        nonConforming.add(file);
       }
     }
 
     // Checks 13-15 (check-report-shards.sh:81-84).
-    if (!titleHit) findings.push(mkErr(file, 1, `${file} is missing SHARD-TITLE header`));
-    if (!keywordsHit) findings.push(mkErr(file, 1, `${file} is missing SHARD-KEYWORDS header`));
+    if (!titleHit) {
+      findings.push(mkErr(file, 1, `${file} is missing SHARD-TITLE header`));
+      nonConforming.add(file);
+    }
+    if (!keywordsHit) {
+      findings.push(mkErr(file, 1, `${file} is missing SHARD-KEYWORDS header`));
+      nonConforming.add(file);
+    }
     if (summaries.length < 2 || summaries.length > 3) {
       findings.push(mkErr(file, 1, `${file} must have 2-3 SHARD-SUMMARY lines; found ${summaries.length}`));
+      nonConforming.add(file);
     }
 
     const id = idHit?.value;
     const title = titleHit?.value;
     const keywords = keywordsHit?.value;
 
-    // Check 16 (check-report-shards.sh:87-88).
+    // Check 16 (check-report-shards.sh:87-88) — cross-file finding, attributed to README.
     if (id && !readmeContent.includes(`\`${id}\``)) {
       findings.push(mkErr(README, 1, `${README} does not list shard label ${id}`));
+      nonConforming.add(file);
     }
-    // Check 17 (check-report-shards.sh:90-95).
+    // Check 17 (check-report-shards.sh:90-95) — cross-file finding, attributed to CATALOG.
     for (const value of [id, file, title, keywords]) {
       if (value && !catalogContent.includes(value)) {
         findings.push(mkErr(CATALOG, 1, `${CATALOG} does not list '${value}' from ${file}`));
+        nonConforming.add(file);
       }
     }
-    // Check 18 (check-report-shards.sh:96-99).
+    // Check 18 (check-report-shards.sh:96-99) — cross-file finding, attributed to CATALOG.
     for (const summary of summaries) {
       if (!catalogContent.includes(summary)) {
         findings.push(mkErr(CATALOG, 1, `${CATALOG} does not mirror summary from ${file}: ${summary}`));
+        nonConforming.add(file);
       }
     }
   }
 
   // Check 19 — orphan scan (check-report-shards.sh:104-109).
   for (const file of shardFiles) {
-    if (!seenFiles.has(file)) findings.push(mkErr(file, 1, `${file} exists but is not included by ${MASTER}`));
+    if (!seenFiles.has(file)) {
+      findings.push(mkErr(file, 1, `${file} exists but is not included by ${MASTER}`));
+      nonConforming.add(file);
+    }
   }
 
   // Check 20 — master purity (check-report-shards.sh:111-115).
@@ -206,15 +244,22 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     }
   });
 
+  // `checked` = fully conforming (zero findings against it, from ANY check above, regardless of
+  // which file that check attributed its finding to — rk-1tt); `total` = every shard identity this
+  // run examined (named by an \include, or physically present under sections/). The unit string
+  // says exactly that: "fully conforming", not merely "examined" (review finding 5).
   const shardIdentities = new Set<string>([...seenFiles, ...shardFiles]);
-  const checked = [...shardIdentities].filter(
-    (id) => !findings.some((f) => f.severity === "ERROR" && f.path === id),
-  ).length;
+  const checked = [...shardIdentities].filter((id) => !nonConforming.has(id)).length;
 
   return {
     findings,
     coverage: [
-      { gate: "shards", unit: "shard(s) included, labeled, cataloged", checked, total: shardIdentities.size },
+      {
+        gate: "shards",
+        unit: "shard(s) fully conforming (included, labeled, cataloged)",
+        checked,
+        total: shardIdentities.size,
+      },
     ],
   };
 }
