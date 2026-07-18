@@ -2,6 +2,14 @@
 // "Fixture directory layout") for both the corpus test harness (test/corpus.test.ts) and `bun
 // run selftest`'s coverage line — one discovery implementation, so the two can never silently
 // disagree on the fixture count.
+//
+// Lives under src/corpus/ (not src/gates/), one level up from this repo's own corpus/ fixture
+// tree it discovers: this is an fs-touching harness module, not a gate — src/gates/ is a PURE
+// directory per CLAUDE.md §5 and IMPLEMENTATION_PLAN.md §0, and an fs-using file placed inside
+// it is silently exempt from the marker-based purity grep (scripts/selftest.ts) rather than
+// visibly out of place (2026-07-18 M0.3 re-review finding 6). Moved here (not scripts/) because
+// it is shared library code two callers import (test/corpus.test.ts, scripts/selftest.ts,
+// src/cli/check.ts's `--selftest`), not a standalone script.
 
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";

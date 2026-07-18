@@ -7,25 +7,36 @@
 // rk-6vw (2026-07-18 M0.3 milestone review, finding 6 — "guard-the-guards lie"):
 // corpus/README.md:13 has always claimed "`rk check --selftest` runs the corpus", but this file
 // used to only COUNT fixture directories (`totalFixtureCount`), never actually run a single one
-// through its gate. It now calls `runAllFixtures` (src/gates/corpus-run.ts) — the exact same
+// through its gate. It now calls `runAllFixtures` (src/corpus/run.ts) — the exact same
 // runner test/corpus.test.ts uses per-fixture via `expect()` — so this script and the test suite
 // can never silently disagree about what "the corpus passes" means.
 //
 // Purity convention: a file opts into the check by starting with a `// PURITY: pure` comment
-// (first 5 lines) — src/refs/{checksum,lock,manifest,quote,path-safety}.ts, src/types.ts, and
-// (as of M0.3) src/gates/{framework,snapshot,config,defs,linker,refs,provenance,runs,shards}.ts
-// all do this; src/graph (M2.1) will adopt the same marker rather than a new mechanism. A file
-// without the marker is never scanned (an EDGE file legitimately uses fs/network/clock — e.g.
-// src/gates/{load,config-load,corpus-discovery,corpus-run}.ts). Forbidden patterns: `node:`
-// imports, `Date.`, `process.`, `Bun.`.
+// anywhere in its leading comment block (`headerBlock` below) — src/refs/{checksum,lock,manifest,
+// quote,path-safety}.ts, src/types.ts, and (as of M0.3) src/gates/{framework,snapshot,config,
+// defs,linker,refs,provenance,runs,shards}.ts all do this; src/graph (M2.1) will adopt the same
+// marker rather than a new mechanism. A file without the marker is never scanned (an EDGE file
+// legitimately uses fs/network/clock).
+//
+// rk-bdd (2026-07-18 M0.3 re-review, finding 6): the corpus harness (discovery + per-fixture
+// runner) used to live at src/gates/{corpus-discovery,corpus-run}.ts — fs-using files silently
+// exempt from the marker scan above, sitting inside src/gates/, which CLAUDE.md §5 and
+// IMPLEMENTATION_PLAN.md §0 both classify PURE. That was an architecture-law regression (an
+// unmarked file there reads as "forgot the marker", not "correctly placed edge code"). Both now
+// live at src/corpus/{discovery,run}.ts instead — edge territory, same tier as src/drive/
+// src/refs/src/cli. `checkGatesDirImpureAllowlist` below closes the hole that let this regression
+// stay silent: any future non-pure file landing directly in src/gates/ now fails loudly unless
+// it is in the allowlist, instead of just never being scanned by `checkPurity`.
+// src/gates/{load,config-load}.ts remain the only fs-using files still inside src/gates/ — see
+// their own module doc comments for why they were not moved in this pass (bd rk follow-up).
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { totalFixtureCount } from "../src/gates/corpus-discovery";
-import { GATE_DIRS, runAllFixtures } from "../src/gates/corpus-run";
+import { totalFixtureCount } from "../src/corpus/discovery";
+import { runAllFixtures } from "../src/corpus/run";
+import { formatCorpusRunReport } from "../src/corpus/report";
 
 const PURITY_MARKER = "PURITY: pure";
-const PURITY_MARKER_SCAN_LINES = 5;
 const FORBIDDEN: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bnode:/, label: "node:" },
   { pattern: /\bDate\./, label: "Date." },
@@ -39,6 +50,26 @@ export interface PurityViolation {
   line: number;
   pattern: string;
   text: string;
+}
+
+/** The file's leading comment block: every contiguous line from the top that is blank or starts
+ * with `//`, stopping at the first line of real code. `PURITY_MARKER`/`GATES_DIR_IMPURE_ALLOWLIST`
+ * detection both scan this (not a fixed line count — found empirically while wiring
+ * `checkGatesDirImpureAllowlist` in: `src/gates/{defs,refs,linker,runs}.ts`'s header runs 6-8
+ * lines and `provenance.ts`'s runs 9, all past a fixed 5-line window a prior version of this
+ * scan used, which silently never checked those five files at all despite their marker — an L2
+ * regression this fix closes). */
+function headerBlock(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("//") || line.trim() === "") {
+      out.push(line);
+    } else {
+      break;
+    }
+  }
+  return out.join("\n");
 }
 
 function findTsFiles(root: string, dir: string, out: string[]): void {
@@ -67,8 +98,7 @@ export function checkPurity(repoRoot: string): { checked: string[]; violations: 
   for (const file of allFiles) {
     const text = readFileSync(file, "utf8");
     const lines = text.split("\n");
-    const header = lines.slice(0, PURITY_MARKER_SCAN_LINES).join("\n");
-    if (!header.includes(PURITY_MARKER)) continue;
+    if (!headerBlock(text).includes(PURITY_MARKER)) continue;
     checked.push(file);
     lines.forEach((line, i) => {
       for (const { pattern, label } of FORBIDDEN) {
@@ -77,6 +107,46 @@ export function checkPurity(repoRoot: string): { checked: string[]; violations: 
         }
       }
     });
+  }
+  return { checked, violations };
+}
+
+/** Non-test .ts files directly under src/gates/ that are known, deliberate, fs-using edges
+ * (documented `// EDGE —` header, never marked `PURITY: pure`) and therefore legitimately absent
+ * from `checkPurity`'s scan. Any OTHER unmarked file appearing in src/gates/ is the exact
+ * regression rk-bdd finding 6 flagged: an impure module silently exempted from the purity grep
+ * by never opting in, rather than visibly flagged as out of place. Keep this list short — the
+ * fix for a new impure gate-adjacent module is almost always to relocate it (src/corpus/ or
+ * another edge directory), the way corpus-run.ts/corpus-discovery.ts were relocated, not to grow
+ * this allowlist. */
+const GATES_DIR_IMPURE_ALLOWLIST = new Set(["load.ts", "config-load.ts"]);
+
+export interface GatesDirViolation {
+  file: string;
+}
+
+/** Scans `<repoRoot>/src/gates/` (direct children only — it has no subdirectories) for a non-test
+ * `.ts` file that is neither `PURITY: pure`-marked nor in `GATES_DIR_IMPURE_ALLOWLIST`. Returns
+ * both the checked file list (coverage) and any violation. This is a directory-placement check,
+ * distinct from `checkPurity`'s marker-content check above: it is the thing that would have
+ * caught corpus-run.ts/corpus-discovery.ts landing in src/gates/ in the first place. */
+export function checkGatesDirImpureAllowlist(repoRoot: string): { checked: string[]; violations: GatesDirViolation[] } {
+  const gatesDir = join(repoRoot, "src", "gates");
+  let names: string[];
+  try {
+    names = readdirSync(gatesDir);
+  } catch {
+    return { checked: [], violations: [] };
+  }
+  const checked: string[] = [];
+  const violations: GatesDirViolation[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;
+    const file = join(gatesDir, name);
+    checked.push(file);
+    if (headerBlock(readFileSync(file, "utf8")).includes(PURITY_MARKER)) continue; // checkPurity already covers it
+    if (GATES_DIR_IMPURE_ALLOWLIST.has(name)) continue; // documented, deliberate edge file
+    violations.push({ file });
   }
   return { checked, violations };
 }
@@ -95,8 +165,26 @@ async function main(): Promise<number> {
       `(${violations.length} errors)`,
   );
 
+  // rk-bdd (finding 6): src/gates/ is a PURE directory (CLAUDE.md §5) — any non-test .ts file
+  // there that is neither PURITY-marked nor a documented allowlisted edge (load.ts,
+  // config-load.ts) is a silent-exemption regression, the same class corpus-run.ts/
+  // corpus-discovery.ts were before this WP relocated them to src/corpus/.
+  const { checked: gatesDirChecked, violations: gatesDirViolations } = checkGatesDirImpureAllowlist(repoRoot);
+  for (const v of gatesDirViolations) {
+    console.log(
+      `ERROR ${relative(repoRoot, v.file)}:1 impure file directly in src/gates/ (PURE per CLAUDE.md ` +
+        `§5) is neither PURITY-marked nor in scripts/selftest.ts's documented allowlist — relocate ` +
+        `it (e.g. src/corpus/) or add it to the allowlist with a reason`,
+    );
+  }
+  errors += gatesDirViolations.length;
+  console.log(
+    `checked gates-dir-purity: ${gatesDirChecked.length - gatesDirViolations.length}/${gatesDirChecked.length} ` +
+      `src/gates/ files pure-or-allowlisted (${gatesDirViolations.length} errors)`,
+  );
+
   // Corpus fixture count (M0.3): discovers corpus/<gate>/<fixture>/ the same way
-  // test/corpus.test.ts does (both call src/gates/corpus-discovery.ts — one implementation, so
+  // test/corpus.test.ts does (both call src/corpus/discovery.ts — one implementation, so
   // the two can never silently disagree). corpus/README.md's ledger totals to 84 fixtures across
   // the six M0 gates; a drift from that number means the corpus and its own ledger have gone out
   // of sync, which is itself an ERROR here, not a silent skip (L2).
@@ -113,34 +201,16 @@ async function main(): Promise<number> {
   console.log(`checked corpus: ${fixtureTotal}/${EXPECTED_FIXTURE_COUNT} gate fixtures discovered`);
 
   // Corpus execution (rk-6vw, finding 6): actually run every discovered fixture through its gate
-  // via the SAME runner test/corpus.test.ts uses (src/gates/corpus-run.ts's `runFixture`), never
-  // a second implementation that could quietly drift from it. Reports one pass-count line per
-  // gate plus an aggregate, and fails loudly — printing every fixture's own error list — on any
-  // mismatch, rather than silently counting directories the way this script used to.
+  // via the SAME runner test/corpus.test.ts (and `rk check --selftest`, src/cli/check.ts) uses
+  // (src/corpus/run.ts's `runFixture`/`runAllFixtures`), never a second implementation that could
+  // quietly drift from it. Reports one pass-count line per gate plus an aggregate, and fails
+  // loudly — printing every fixture's own error list — on any mismatch, rather than silently
+  // counting directories the way this script used to. `runFixture` itself never throws (rk-bdd
+  // finding 8: a per-fixture exception boundary converts any crash into that fixture's own error
+  // entry), so a crashing fixture no longer aborts this sweep before later fixtures run.
   const results = await runAllFixtures(corpusRoot);
-  const byGate = new Map<string, { pass: number; total: number }>();
-  for (const g of GATE_DIRS) byGate.set(g, { pass: 0, total: 0 });
-  let corpusRunFailures = 0;
-  for (const r of results) {
-    const bucket = byGate.get(r.gate)!;
-    if (r.notImplemented) continue; // stub gates: no pass/fail signal yet, excluded from counts
-    bucket.total += 1;
-    if (r.errors.length === 0) {
-      bucket.pass += 1;
-    } else {
-      corpusRunFailures += 1;
-      for (const e of r.errors) {
-        console.log(`ERROR corpus/${r.gate}/${r.fixtureId}: ${e}`);
-      }
-    }
-  }
-  for (const g of GATE_DIRS) {
-    const b = byGate.get(g)!;
-    console.log(`checked corpus/${g}: ${b.pass}/${b.total} fixtures passed`);
-  }
-  const runTotal = [...byGate.values()].reduce((sum, b) => sum + b.total, 0);
-  const runPass = [...byGate.values()].reduce((sum, b) => sum + b.pass, 0);
-  console.log(`checked corpus-run: ${runPass}/${runTotal} fixtures passed`);
+  const { lines: corpusReportLines, errorCount: corpusRunFailures } = formatCorpusRunReport(results);
+  for (const line of corpusReportLines) console.log(line);
   errors += corpusRunFailures;
 
   if (errors > 0) {

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkPurity } from "../scripts/selftest";
+import { checkGatesDirImpureAllowlist, checkPurity } from "../scripts/selftest";
 
 function makeTree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "rk-selftest-test-"));
@@ -64,6 +64,61 @@ describe("checkPurity", () => {
   test("the real src/ tree is currently clean (regression guard on rk's own code)", () => {
     const { checked, violations } = checkPurity(join(import.meta.dir, ".."));
     expect(checked.length).toBeGreaterThan(0); // at least the M0.6 pure modules exist
+    expect(violations).toEqual([]);
+  });
+
+  // rk-bdd: a prior version of this scan only looked at each file's first 5 lines for the
+  // marker. src/gates/{defs,refs,linker,runs}.ts (6-8 lines of header prose) and provenance.ts
+  // (9 lines) all carry the marker past that window — meaning `checkPurity` silently never
+  // scanned five of the six real gate implementations for forbidden patterns at all, despite them
+  // declaring purity. This reproduces that shape directly (a marker on line 7) rather than
+  // relying on rk's own gate files staying exactly this long forever.
+  test("finds the 'PURITY: pure' marker anywhere in the leading comment block, not just the first 5 lines", () => {
+    const root = makeTree({
+      "src/refs/long-header.ts":
+        "// line 1\n// line 2\n// line 3\n// line 4\n// line 5\n// line 6\n// PURITY: pure — no fs/network/clock (L3).\nimport { readFileSync } from 'node:fs';\n",
+    });
+    const { checked, violations } = checkPurity(root);
+    expect(checked).toHaveLength(1);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.pattern).toContain("node:");
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("checkGatesDirImpureAllowlist (rk-bdd finding 6)", () => {
+  test("flags a non-test .ts file directly in src/gates/ that is neither PURITY-marked nor allowlisted", () => {
+    const root = makeTree({
+      "src/gates/rogue-edge.ts": "// EDGE — touches fs, landed here by mistake.\nimport { readFileSync } from 'node:fs';\n",
+    });
+    const { checked, violations } = checkGatesDirImpureAllowlist(root);
+    expect(checked.map((f) => f.split("/").pop())).toContain("rogue-edge.ts");
+    expect(violations.map((v) => v.file.split("/").pop())).toContain("rogue-edge.ts");
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a PURITY-marked file in src/gates/ is never flagged", () => {
+    const root = makeTree({
+      "src/gates/pure-gate.ts": "// PURITY: pure — no fs/network/clock (L3).\nexport const x = 1;\n",
+    });
+    const { violations } = checkGatesDirImpureAllowlist(root);
+    expect(violations).toEqual([]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("load.ts / config-load.ts are allowlisted (documented, deliberate edges, not yet relocated)", () => {
+    const root = makeTree({
+      "src/gates/load.ts": "// EDGE — fs.\nimport { readFileSync } from 'node:fs';\n",
+      "src/gates/config-load.ts": "// EDGE — fs.\nimport { readFileSync } from 'node:fs';\n",
+    });
+    const { violations } = checkGatesDirImpureAllowlist(root);
+    expect(violations).toEqual([]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("the real src/gates/ tree is currently clean: every file is either PURITY-marked or allowlisted (regression guard for the corpus-run.ts/corpus-discovery.ts placement bug this WP fixed)", () => {
+    const { checked, violations } = checkGatesDirImpureAllowlist(join(import.meta.dir, ".."));
+    expect(checked.length).toBeGreaterThan(0);
     expect(violations).toEqual([]);
   });
 });

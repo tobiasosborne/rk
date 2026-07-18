@@ -2,7 +2,7 @@
 // expected.json + repo/ into a RepoSnapshot, runs the single named gate, and checks the result
 // against expected.json's convention (corpus/README.md) — findings subset match, verdict/
 // exit-code, the optional coverage expectation, and the config-override declaration. The actual
-// per-fixture assertion logic lives in src/gates/corpus-run.ts's `runFixture`, shared verbatim
+// per-fixture assertion logic lives in src/corpus/run.ts's `runFixture`, shared verbatim
 // with `bun run selftest` (rk-6vw, review finding 6: selftest must actually execute the corpus,
 // not merely count fixture directories, and the two must never be able to silently disagree).
 //
@@ -16,8 +16,8 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { GATES } from "../src/gates/index";
 import { DEFAULT_GATE_CONFIG } from "../src/gates/config";
-import { GATE_DIRS, discoverAllFixtures } from "../src/gates/corpus-discovery";
-import { runFixture } from "../src/gates/corpus-run";
+import { GATE_DIRS, discoverAllFixtures } from "../src/corpus/discovery";
+import { runFixture } from "../src/corpus/run";
 
 const CORPUS_ROOT = join(import.meta.dir, "..", "corpus");
 
