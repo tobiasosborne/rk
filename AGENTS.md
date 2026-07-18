@@ -109,8 +109,15 @@ Not read these? STOP and read them. Do not improvise from memory of them.
   to beads and is batched — never an acceptance-blocking repair wave. One acceptance
   report per milestone, regenerated once after repairs, not per review round. Repair
   rigor follows the FINDING's tier, not the review's: Tier-C findings get plain fixes,
-  no mutation-proving ritual. A milestone review loop exceeding ~1.5 repair cycles is
-  a rule-11 tripwire: stop and re-scope, do not grind.
+  no mutation-proving ritual.
+- **Review-loop cap (amended 2026-07-18, TJO — anti-Zeno rule): ONE review round plus
+  ONE repair wave per milestone, hard stop.** After the repair wave, the orchestrator
+  verifies the fixes mechanically against the review's file:line claims (tests,
+  fixtures, live-fire) and closes the milestone — repairs are NOT re-reviewed by a
+  fresh hostile pass. A hostile reviewer always finds something; "review until zero
+  findings" never terminates. Residual concerns become beads examined at the NEXT
+  milestone's single review. The red corpus + selftest built per L1/L2 are the
+  standing guard between reviews — that is their job, not the reviewer's.
 - Reviewer never implements the fix in the same session; findings go back to an
   implementer.
 - Orchestrator dispatches and bookkeeps; it does not judge proof-of-correctness for
