@@ -84,6 +84,9 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-11` | provenance | hardcoded-filename regression probe | worklog.md 2026-07-04: "caught a false-green: `check-provenance.py` hard-coded the ledger filename" (`docs/worklog.md:270-272`) | landed |
 | `provenance-12` | provenance | absolute source path (WARN) | class-driven (no incident on record) | landed |
 | `provenance-13` | provenance | status-table label absent (`13_discussion.tex` present, `\label{tab:status}`/`\midrule` missing) | class-driven; same shape as `refs-01`/`defs-14` (a checker that verifies zero things while reporting green) — `status_table_rows()` returns `[]` silently on this input (`check-provenance.py:207-211`); coverage line must show `0 tab:status rows` loudly, per the 2026-07-17 Fable review (F3) | landed |
+| `provenance-14` | provenance | check 4: git-TRACKED source outside every loader include rule, stale hash ⇒ ERROR | **rk-399** / `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 (BLOCKER) + Check-4 ruling: the retired "present in RepoSnapshot" proxy left a tracked path outside the include set absent from the snapshot and downgraded it to WARN, contradicting `gate-contracts.md:743`. The edge now hashes every `git ls-files` path; tracked+stale ⇒ ERROR. Red against pre-fix source (WARN, no ERROR), green after. | landed |
+| `provenance-15` | provenance | check 4: binary / non-UTF-8 payload with a CORRECT byte-faithful hash ⇒ PASS | **rk-399** finding 1: the retired UTF-8-string proxy round-tripped bytes through TextDecoder/TextEncoder and false-ERRORed non-UTF-8 payloads; the edge now hashes raw bytes. Red against pre-fix source (false ERROR), green after. Sibling ERROR case: `provenance-16`. | landed |
+| `provenance-16` | provenance | check 4: same binary payload, MISMATCHED recorded hash ⇒ ERROR | **rk-399** finding 1: guards against a "blanket-pass binary" mutation — proves the byte-faithful check still fails a genuinely stale binary source. Not corpus-red on its own (pre-fix source also ERRORs, for the wrong reason: string re-encode mismatch); its red-first partner is the `test/gates/provenance.test.ts` "binary payload whose bytes no longer match" mutation test. | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
@@ -91,6 +94,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `runs-05` | runs | missing one required field (hypothesis/command/finding/next) | class-driven (no incident on record) | landed |
 | `runs-06` | runs | stray top-level file (WARN) | class-driven (no incident on record) | landed |
 | `runs-07` | runs | empty `runs/` golden case (day-1 green) | class-driven; baseline, not a violation | landed |
+| `runs-08` | runs | empty run bundle DIRECTORY (exists, no README) ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): an empty bundle dir was invisible to file-prefix inference, reported 0/0 clean instead of ERROR-missing-README (`gate-contracts.md:862`). The gate now enumerates bundles from the `dirs` fact. Uses the empty-directory `.gitkeep` convention (see "Empty-directory fixtures" below); its red-first proof is the `test/gates/runs.test.ts` `dirs`-fact unit test, since a `.gitkeep`-populated bundle is coincidentally already caught by pre-fix inference. | landed |
 | `shards-01` | report-shards | oversized shard (>280 lines) | class-driven (no incident on record) | landed |
 | `shards-02` | report-shards | duplicate `SHARD-ID` | class-driven (no incident on record) | landed |
 | `shards-03` | report-shards | malformed `SHARD-ID` | class-driven (no incident on record) | landed |
@@ -103,6 +107,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-10` | report-shards | body-sectioning command in `main.tex` | class-driven (no incident on record) | landed |
 | `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | landed |
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
+| `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
 
 Totals: 15 defs + 23 argument/linker + 7 refs + 13 provenance + 7 runs + 12 report-shards = **77
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
@@ -238,6 +243,30 @@ Field semantics:
   yet been written into `docs/gate-contracts.md` (a pending correction), say so explicitly here
   — that fixture is not yet enforceable by M0.3 until the contract itself is amended.
 
+## Empty-directory fixtures (rk-399)
+
+Git cannot store an empty directory, but two contract checks turn on directory existence
+independent of any file inside: an empty run bundle must still ERROR on a missing README
+(`gate-contracts.md:862`), and `report/sections/` must exist as a directory
+(`gate-contracts.md:956`, `check-report-shards.sh:23`). `src/gates/load.ts` measures directory
+existence (empty ones included) into the `dirs` SnapshotFact by walking the tree with
+`readdirSync`, and the gates consume it via `dirExists`/`childDirs` (`src/gates/snapshot.ts`).
+
+Convention: a fixture that needs a genuinely-empty directory to survive a `git clone` places a
+single **`.gitkeep`** file in it. `load.ts` records the containing directory in `dirs` but
+**excludes `.gitkeep` from all content facts** — it is never added to the text map, never hashed,
+never counted as bundle/shard content. So `runs/<bundle>/.gitkeep` is an *empty bundle* (ERROR:
+missing README), and `report/sections/.gitkeep` is an *existing-but-empty* sections dir (Check 1
+passes, empty-scaffold exemption then applies). Fixtures using this: `runs-08`,
+`shards-11` (retrofitted), `shards-13` uses the *absence* of the directory.
+
+Red-first caveat for `.gitkeep`-based empty-bundle coverage: pre-fix file-prefix inference
+coincidentally already saw the `.gitkeep` as a file and flagged the missing README, so the
+`runs-08` corpus fixture is not red against pristine pre-fix source. The genuine red-first proof
+is the `test/gates/runs.test.ts` unit test that builds a `dirs`-fact snapshot with an empty
+bundle and **no** file at all — the only faithful model of a real on-disk empty directory, which
+git cannot commit. `shards-13` (directory *absent*) and `provenance-14`/`-15` are corpus-red-first.
+
 ## Validation methodology
 
 Every fixture's `aism_behavior` value was determined by actually **running the real AISM check
@@ -293,10 +322,10 @@ script-verified / rk-only / untested breakdown.
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
 | linker | 23/23 | 21 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 |
 | refs | 7/7 | 6 | 1 (`refs-07`, whole-quote-match rule) | 0 |
-| provenance | 13/13 | 12 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
-| runs | 7/7 | 7 | 0 | 0 |
-| shards | 12/12 | 12 | 0 | 0 |
-| **total** | **77/77** | **72** | **5** | **0** |
+| provenance | 16/16 | 15 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
+| runs | 8/8 | 8 | 0 | 0 |
+| shards | 13/13 | 13 | 0 | 0 |
+| **total** | reconciled at wave end | — | 5 | 0 |
 
 `linker-22`/`linker-23` (rk-co2 node_amended fix, 2026-07-18) are counted under `same`: both
 ledgers were built from a REAL `af init` + `af amend` workspace (not hand-stubbed JSON), and `af

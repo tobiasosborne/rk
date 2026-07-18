@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { runsGate } from "../../src/gates/runs";
-import type { RepoSnapshot } from "../../src/gates/snapshot";
+import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 
 /** A minimal, fully-compliant README body: all four required fields plus an invariant marker. */
@@ -29,6 +29,19 @@ function goodReadme(): string {
 
 function snapshot(entries: Record<string, string>): RepoSnapshot {
   return new Map(Object.entries(entries));
+}
+
+/** Snapshot carrying an explicit `dirs` fact (empty-directory existence), as `loadSnapshot`
+ * supplies from the real tree — the only way to model a genuinely-empty on-disk bundle directory,
+ * which git cannot store and file-prefix inference cannot see (rk-399 review finding 2). */
+function snapshotWithDirs(entries: Record<string, string>, dirs: string[]): RepoSnapshot {
+  const m = new Map(Object.entries(entries)) as Map<string, string> & SnapshotFacts;
+  Object.assign(m, {
+    sha256: new Map<string, string>(),
+    tracked: new Set<string>(),
+    dirs: new Set<string>(dirs),
+  } satisfies SnapshotFacts);
+  return m;
 }
 
 function run(entries: Record<string, string>) {
@@ -56,6 +69,31 @@ describe("runsGate — day-1 vacuity", () => {
     });
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([{ gate: "runs", unit: "run bundle(s)", checked: 0, total: 0 }]);
+  });
+});
+
+describe("runsGate — empty bundle directory (rk-399 finding 2)", () => {
+  test("a run bundle dir that EXISTS but is empty (no README): ERROR missing README, counted 0/1", () => {
+    // The bundle dir has no files, so file-prefix inference cannot see it — the old gate reported
+    // 0/0 clean (false PASS, gate-contracts.md:862). The `dirs` fact makes the empty directory
+    // visible, so the missing-README check fires and the bundle is counted.
+    const result = runsGate.run(
+      snapshotWithDirs({ "INDEX.md": "runs/2026-01-01-empty\n" }, ["runs", "runs/2026-01-01-empty"]),
+      DEFAULT_GATE_CONFIG,
+    );
+    const e = errors(result).find((f) => f.message.includes("missing README.md"));
+    expect(e).toBeDefined();
+    expect(e!.path).toBe("runs/2026-01-01-empty");
+    expect(result.coverage[0]).toEqual({ gate: "runs", unit: "run bundle(s)", checked: 1, total: 1 });
+  });
+
+  test("empty dir whose name also violates the grammar: BOTH bad-name and missing-README fire", () => {
+    const result = runsGate.run(
+      snapshotWithDirs({ "INDEX.md": "" }, ["runs", "runs/Bad_Name"]),
+      DEFAULT_GATE_CONFIG,
+    );
+    expect(errors(result).some((f) => f.message.includes("bad bundle name"))).toBe(true);
+    expect(errors(result).some((f) => f.message.includes("missing README.md"))).toBe(true);
   });
 });
 

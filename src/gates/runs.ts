@@ -9,7 +9,7 @@
 
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
-import { listDir, hasPath, hasPrefix } from "./snapshot";
+import { listDir, hasPath, hasPrefix, childDirs, dirExists } from "./snapshot";
 import type { GateConfig } from "./config";
 
 /** Bundle dirname grammar (check-runs.py:30, docs/gate-contracts.md Gate 5 Inputs). */
@@ -42,11 +42,13 @@ const RUNS_DIR = "runs";
  * finding F9: this gate's reverse-lookup source lives at the repo root. */
 const INDEX_PATH = "INDEX.md";
 
-/** True iff `snapshot` carries at least one file under `runs/<name>/` — i.e. `name` is a
- * directory, not a leaf file, per the RepoSnapshot convention (directory existence inferred by
- * prefix match; snapshot.ts). */
+/** True iff `bundlePath` is a directory (not a leaf file). A directory either holds files
+ * (file-prefix inference) or is recorded empty in the `dirs` fact — the latter is the empty run
+ * bundle the old prefix-only model could not see (rk-399 review finding 2). It is a leaf file iff
+ * it appears verbatim as a snapshot key. */
 function isBundleDir(snapshot: RepoSnapshot, bundlePath: string): boolean {
-  return hasPrefix(snapshot, bundlePath) && !hasPath(snapshot, bundlePath);
+  if (hasPath(snapshot, bundlePath)) return false;
+  return hasPrefix(snapshot, bundlePath) || dirExists(snapshot, bundlePath);
 }
 
 export const runsGate: Gate = {
@@ -57,7 +59,10 @@ export const runsGate: Gate = {
 
     // Check 6: classify every runs/ top-level entry as a bundle dir or a stray file
     // (check-runs.py:46-50). SKIP_TOP_LEVEL's own README.md is silently excluded from both.
-    const topLevel = listDir(snapshot, RUNS_DIR);
+    // Entries come from BOTH file-prefix inference (`listDir`, catches file-backed bundles and
+    // stray files) AND the `dirs` fact (`childDirs`, catches a genuinely-empty bundle directory
+    // that has no files under it — rk-399 finding 2); the union is de-duplicated and sorted.
+    const topLevel = [...new Set([...listDir(snapshot, RUNS_DIR), ...childDirs(snapshot, RUNS_DIR)])].sort();
     const bundleNames: string[] = [];
     for (const name of topLevel) {
       const bundlePath = `${RUNS_DIR}/${name}`;

@@ -1,0 +1,14 @@
+{
+  "gate": "runs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "runs/2026-01-01-empty-bundle",
+      "message_pattern": "missing README.md"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[rk-399 finding 2] A run bundle DIRECTORY that exists but is empty. git cannot store an empty directory, so the fixture convention places a `.gitkeep` inside it; load.ts records the directory in the `dirs` fact but EXCLUDES `.gitkeep` from bundle content (corpus/README.md 'empty-directory fixtures'). The old file-prefix-only model could not see the empty dir and reported 0/0 clean (false PASS, gate-contracts.md:862); the gate now enumerates the bundle from `dirs` and ERRORs on the missing README, counting it 1/1."
+}

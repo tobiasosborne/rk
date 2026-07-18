@@ -4,13 +4,13 @@
 // AISM is prior art, this contract is normative — CLAUDE.md L5).
 // PURITY: pure — no fs/network/clock (L3).
 //
-// KNOWN GAP (documented, not silently picked): check-report-shards.sh:23 also requires
-// `report/sections/` itself to exist as a directory. RepoSnapshot (src/gates/snapshot.ts) has no
-// empty-directory index by design ("no gate needs a meaningfully-empty directory" — snapshot.ts
-// doc comment); an empty `report/sections/` (the golden empty-scaffold fixture, shards-11, has
-// exactly this on disk) is therefore indistinguishable from an absent one. This check is a no-op
-// here — never emitted — rather than breaking shards-11. Flagged for the orchestrator/Fable
-// review, not resolved unilaterally.
+// RESOLVED (rk-399 review finding 2): check-report-shards.sh:23 also requires `report/sections/`
+// itself to exist as a directory. RepoSnapshot now carries a `dirs` SnapshotFact (directory
+// existence, empty ones included — src/gates/snapshot.ts), so Check 1 below enforces this via
+// `dirExists`: an empty `report/sections/` (the golden empty-scaffold fixture shards-11) is
+// distinguished from an absent one. The empty-directory fixture convention (a `.gitkeep`, excluded
+// from shard content) lets shards-11 keep an on-disk `report/sections/` across a git clone —
+// see corpus/README.md "empty-directory fixtures".
 //
 // KNOWN DIVERGENCE (stricter, by L5 default): check-report-shards.sh:33-36 exits 0 on the
 // empty-scaffold exemption UNCONDITIONALLY, even if MASTER/README/CATALOG existence checks
@@ -22,7 +22,7 @@
 
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
-import { hasPath } from "./snapshot";
+import { hasPath, dirExists } from "./snapshot";
 import type { GateConfig } from "./config";
 
 const MASTER = "report/main.tex";
@@ -85,8 +85,11 @@ function parseIncludes(content: string): Array<{ target: string; line: number }>
 function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
   const findings: Finding[] = [];
 
-  // Check 1 (check-report-shards.sh:22-25) — SECTIONS_DIR is a known no-op, see file header.
+  // Check 1 (check-report-shards.sh:22-25). SECTIONS_DIR existence is now enforced via the `dirs`
+  // fact (rk-399 finding 2) — surfaced before the empty-scaffold exemption so an absent sections/
+  // directory never green-lights as a clean empty scaffold.
   if (!hasPath(snapshot, MASTER)) findings.push(mkErr(MASTER, 1, `missing master ${MASTER}`));
+  if (!dirExists(snapshot, SECTIONS_DIR)) findings.push(mkErr(SECTIONS_DIR, 1, `missing sections directory ${SECTIONS_DIR}/`));
   if (!hasPath(snapshot, README)) findings.push(mkErr(README, 1, `missing report map ${README}`));
   if (!hasPath(snapshot, CATALOG)) findings.push(mkErr(CATALOG, 1, `missing shard catalog ${CATALOG}`));
 

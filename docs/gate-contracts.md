@@ -740,10 +740,28 @@ proves the limitation is not hypothetical.
    filters (fullmatch and length ≥ 2) are load-bearing: a literal port that omits either one
    floods false ERRORs on ordinary mixed-case/lowercase citation text already present in AISM
    HEAD's source cells.
-4. **hash freshness** — recompute `sha256[:16]` of every **tracked** (`git ls-files`)
-   source-registry row's path; mismatch ⇒ ERROR "file edited, hash stale"; malformed sha (not
-   16 lowercase hex) ⇒ ERROR; absolute (non-`refs/`-relative) path ⇒ WARN; untracked/absent
-   file ⇒ WARN, never ERROR (check-provenance.py:368-404,481-482).
+4. **hash freshness** — compare each source-registry row's recorded `sha256[:16]` against a
+   **byte-faithful** sha256 of the file's raw bytes, measured at the edge (`src/gates/load.ts`);
+   the gate never re-hashes snapshot text (a UTF-8 round-trip that corrupts non-UTF-8/binary
+   payloads). Boundary (settled 2026-07-18, rk-399 — was "ambiguous → escalate"; provenance
+   `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 + Check-4 ruling):
+   - malformed sha (not 16 lowercase hex) ⇒ ERROR;
+   - absolute (non-`refs/`-relative) path ⇒ WARN (hash unverifiable);
+   - **present on disk + hash mismatch ⇒ ERROR "file edited, hash stale"**, whether the file is
+     **git-tracked** (`git ls-files`; AISM parity, check-provenance.py:368-404,481-482) — this
+     holds **regardless of the loader's include rules**: the edge hashes every tracked file, so a
+     tracked source row naming a path *outside* those rules is verified, not silently WARNed
+     (this was BLOCKER finding 1) — **OR** git-untracked-but-present (a gitignored payload, e.g.
+     under `refs/`): that is a `[rk-stricter-intended]` ERROR (AISM WARNs it), carrying a
+     `present on disk but git-untracked; rk-stricter-intended` marker in the message. CLAUDE.md
+     L5 defaults to the stricter validity reading, and the failure direction (an extra ERROR,
+     never a missed stale-source false-green) is the safe one;
+   - **absent from disk** (no byte hash measured — not on disk, or untracked *and* outside the
+     include rules) ⇒ WARN "not hash-verifiable", never ERROR.
+   Tracking is real `git ls-files` state and byte hashes are of raw bytes — both are
+   `SnapshotFacts` supplied by the edge; the pure gate consumes facts, it does not guess (the
+   retired "present in RepoSnapshot" proxy could neither see a tracked path outside the include
+   set nor hash a binary payload — review Check-4 ruling).
 5. **status OVERCLAIM/underclaim** — a registry `status: open` result whose `tab:status` rows
    never frame it as `open` ⇒ ERROR (check-provenance.py:293,317-319,483-484); a `proved`/
    `validated` result framed *only* `open` ⇒ WARN (check-provenance.py:320-321).
@@ -954,10 +972,15 @@ in AISM.
   (check-report-shards.sh:28-30).
 
 **Checks.**
-1. `MASTER`, `SECTIONS_DIR`, `README`, `CATALOG` must all exist ⇒ fail per missing item
-   (check-report-shards.sh:22-25).
-2. **Empty-scaffold exemption** — zero `\include`s and zero `.tex` files under `sections/` ⇒
-   pass cleanly, exit 0 (check-report-shards.sh:31-36).
+1. `MASTER`, `README`, `CATALOG` (files) and `SECTIONS_DIR` (the `report/sections/`
+   **directory** itself) must all exist ⇒ fail per missing item (check-report-shards.sh:22-25).
+   The directory-existence half is enforced via the `dirs` SnapshotFact (`src/gates/snapshot.ts`),
+   which represents an empty directory that git cannot store — resolving the rk-399 review's
+   finding-2 gap where an absent `report/sections/` used to green-light as an empty scaffold. The
+   missing-directory finding is surfaced *before* the empty-scaffold exemption below, so an absent
+   `sections/` always fails even when there are no shards yet.
+2. **Empty-scaffold exemption** — the `report/sections/` directory exists (Check 1) but has zero
+   `\include`s and zero `.tex` files under it ⇒ pass cleanly, exit 0 (check-report-shards.sh:31-36).
 3. Non-empty scaffold with zero includes but nonzero shard files ⇒ fail
    (check-report-shards.sh:37-39).
 4. Every `\include` target must be under `sections/` ⇒ fail otherwise (check-report-shards.sh:45-48).

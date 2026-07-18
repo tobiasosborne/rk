@@ -37,14 +37,16 @@ function errorCountFor(text: string, name: string): number {
 
 /** Builds a fresh, content-empty repo tree that satisfies every gate's own "day-1 vacuity" /
  * generated-freshness requirement simultaneously — the scaffold-file existence gate 6 (shards)
- * unconditionally demands (report/main.tex, report/README.md, report/SHARD_CATALOG.md — Gate 6
- * Check 1) and the byte-exact generated-freshness gate 2 (linker) unconditionally demands
+ * unconditionally demands (report/main.tex, report/README.md, report/SHARD_CATALOG.md, plus the
+ * report/sections/ DIRECTORY itself — Gate 6 Check 1, check-report-shards.sh:23; empty here since
+ * there are no shards yet — rk-399) and the byte-exact generated-freshness gate 2 (linker) demands
  * (argument/INDEX.md, argument/DAG.md must byte-equal a fresh render of the empty lemma set —
  * Gate 2 Check 11, "an absent committed file also counts as stale"). This is deliberately NOT the
  * same as a literally bare directory: see the "bare tree" test below for why those two are
  * different contract states. */
 function writeGoldenScaffold(root: string): void {
   mkdirSync(join(root, "report"), { recursive: true });
+  mkdirSync(join(root, "report", "sections"), { recursive: true }); // exists but empty (no shards yet)
   mkdirSync(join(root, "argument"), { recursive: true });
   writeFileSync(join(root, "report", "main.tex"), "\\documentclass{article}\n\\begin{document}\n\\end{document}\n");
   writeFileSync(join(root, "report", "README.md"), "# report/ map\n\nNo shards yet -- empty scaffold.\n");

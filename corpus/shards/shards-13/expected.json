@@ -1,0 +1,14 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections",
+      "message_pattern": "missing sections directory"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[rk-399 finding 2] master/README/catalog present but NO report/sections/ directory. The old gate treated the absent directory as an empty scaffold and returned clean (false PASS); Check 1 now requires the directory to exist (check-report-shards.sh:23, gate-contracts.md:956) via the `dirs` fact, surfaced BEFORE the empty-scaffold exemption. Golden 'sections exists but empty' counterpart: shards-11 (with a .gitkeep)."
+}
