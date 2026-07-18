@@ -103,6 +103,14 @@ Not read these? STOP and read them. Do not improvise from memory of them.
     milestone reviews; a bug here is cheap and local.
   When in doubt, ask what a bug would corrupt: a wrong verdict or schema = A; a wrong
   behavior a test would catch = B; an inconvenience = C.
+- **Two-list reviews (amended 2026-07-18, TJO): every review returns landing-blockers
+  and follow-ups as separate lists.** Landing-blockers = BLOCKER/MAJOR findings on
+  validity semantics only; they alone gate milestone acceptance. Everything else goes
+  to beads and is batched — never an acceptance-blocking repair wave. One acceptance
+  report per milestone, regenerated once after repairs, not per review round. Repair
+  rigor follows the FINDING's tier, not the review's: Tier-C findings get plain fixes,
+  no mutation-proving ritual. A milestone review loop exceeding ~1.5 repair cycles is
+  a rule-11 tripwire: stop and re-scope, do not grind.
 - Reviewer never implements the fix in the same session; findings go back to an
   implementer.
 - Orchestrator dispatches and bookkeeps; it does not judge proof-of-correctness for
