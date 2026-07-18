@@ -5,13 +5,74 @@
 // ("Frontmatter: flat key: value per line, terminated by a second `---` line",
 // check-defs.py:30-50) and Gate 2 Inputs (identical grammar, argument.py:106-124).
 
+/** Edge-supplied facts a pure gate cannot compute itself (git state, raw-byte hashes,
+ * empty-directory existence). Every field is a *fact measured at the impure edge*
+ * (src/gates/load.ts), never a guess: the pure gate consumes them, it does not re-derive them.
+ * Present on every snapshot `loadSnapshot` builds; ABSENT on a bare `new Map()` probe (e.g.
+ * test/corpus.test.ts's notImplemented check) — hence `Partial` on `RepoSnapshot`, and every
+ * accessor below degrades gracefully when a field is missing (M0.3 review finding 1+2, rk-399). */
+export interface SnapshotFacts {
+  /** repo-relative path -> full 64-char lowercase sha256 of the file's RAW bytes (never a
+   * UTF-8 round-trip — byte-faithful for binary/non-UTF-8 payloads). Keyed for every file the
+   * edge hashed: the include-rule text files AND every git-tracked file (so a source row naming
+   * a tracked path OUTSIDE the include rules is still hash-verifiable — review finding 1). */
+  sha256: ReadonlyMap<string, string>;
+  /** repo-relative paths reported by `git ls-files` at the root (real git tracking state, not a
+   * "present in this snapshot" proxy — review Check-4 ruling). */
+  tracked: ReadonlySet<string>;
+  /** repo-relative directories that EXIST on disk, INCLUDING empty ones, no trailing slash.
+   * Lets a gate distinguish "the directory exists but holds no contract file" (ERROR classes:
+   * an empty run bundle, an absent report/sections/) from "inferred present because a file lives
+   * under it" — the case the old file-prefix-only model could not represent (review finding 2). */
+  dirs: ReadonlySet<string>;
+}
+
 /** path -> raw file text, repo-relative POSIX-style paths ("definitions/foo.md"), no leading
- * slash. Directory existence is inferred by prefix match over these keys (e.g. "does
- * proofs/lem-x/ledger/ exist?" <=> some key starts with "proofs/lem-x/ledger/") — no separate
- * directory listing is tracked, since every file class the six gates read is a real file, never
- * a meaningfully-empty directory (docs/gate-contracts.md's per-gate Inputs sections all name
- * globs over files, not bare directory presence). */
-export type RepoSnapshot = ReadonlyMap<string, string>;
+ * slash — the primary map every gate reads. Carries the edge-measured `SnapshotFacts` as
+ * OPTIONAL sidecar fields (`Partial`): `loadSnapshot` always populates them; a hand-built
+ * `new Map()` (a stub probe, a unit-test fixture that needs no facts) legitimately omits them,
+ * and the `fileSha256`/`isTracked`/`dirExists`/`childDirs` accessors all tolerate their
+ * absence. Consumers that only read text (`.get`/`.keys`/`.has`) are untouched by the sidecars. */
+export type RepoSnapshot = ReadonlyMap<string, string> & Partial<SnapshotFacts>;
+
+/** Byte-faithful full sha256 (64 hex) of `path`'s raw bytes as the edge measured it, or
+ * undefined when the edge never hashed `path` (absent from disk, or a bare-Map probe with no
+ * facts). A pure gate compares against this — it never re-hashes snapshot text (a UTF-8
+ * round-trip that silently corrupts binary payloads — review finding 1). */
+export function fileSha256(snapshot: RepoSnapshot, path: string): string | undefined {
+  return snapshot.sha256?.get(path);
+}
+
+/** True iff `git ls-files` listed `path` at the root. False when there are no tracking facts
+ * (bare-Map probe) — a gate must not treat "unknown tracking" as tracked. */
+export function isTracked(snapshot: RepoSnapshot, path: string): boolean {
+  return snapshot.tracked?.has(path) ?? false;
+}
+
+/** True iff directory `dir` exists on disk (empty ones included) per the edge's `dirs` fact.
+ * With no `dirs` fact (bare-Map probe), falls back to the legacy file-prefix inference so an
+ * empty-facts snapshot still answers consistently with `hasPrefix`. */
+export function dirExists(snapshot: RepoSnapshot, dir: string): boolean {
+  const d = dir.endsWith("/") ? dir.slice(0, -1) : dir;
+  if (snapshot.dirs) return snapshot.dirs.has(d);
+  return hasPrefix(snapshot, d);
+}
+
+/** Immediate child DIRECTORY names of `parent` from the `dirs` fact (empty-dir aware). Returns
+ * [] when there are no `dirs` facts — callers that also need file-inferred children union this
+ * with `listDir` (see src/gates/runs.ts). */
+export function childDirs(snapshot: RepoSnapshot, parent: string): string[] {
+  const p = parent.endsWith("/") ? parent : `${parent}/`;
+  const names = new Set<string>();
+  for (const d of snapshot.dirs ?? []) {
+    if (!d.startsWith(p)) continue;
+    const rest = d.slice(p.length);
+    if (rest.length === 0) continue;
+    const slash = rest.indexOf("/");
+    names.add(slash === -1 ? rest : rest.slice(0, slash));
+  }
+  return [...names].sort();
+}
 
 /** Immediate child names (files or subdirectories, one level only) of `dir` within `snapshot`.
  * `dir` may or may not carry a trailing slash. Returns `[]` when nothing in the snapshot lives
