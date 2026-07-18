@@ -500,6 +500,9 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-19` | OR-route golden case: one route fully available, shard is ready (no error) |
 | `linker-20` | schema-drift golden case: a `routes:`-less shard behaves byte-identically (pre-`bdf6800` regression probe) |
 | `linker-21` | **missing `id:` field** [F12] — shard frontmatter has no `id` line at all ⇒ ERROR finding (AISM crashes with an uncaught `KeyError` here; rk must not) |
+| `linker-22` | **`node_amended` on root node RECONCILES a contract mismatch** [rk-co2] — a later ledger amendment corrects the root statement to match the registry `contract` ⇒ check 9 (Contract match) stays clean, golden case, no drift ERROR |
+| `linker-23` | **`node_amended` on root node BREAKS contract agreement** [rk-co2 companion] — inverse of `linker-22`: the root statement matches the `contract` at creation, a later amendment moves it away ⇒ check 9 (Contract match) "contract drift" ERROR still fires |
+| `linker-24` | **missing `kind:` field entirely** [rk-aft, finding 3] — shard frontmatter has no `kind` line at all ⇒ check 3 ERROR "missing required field 'kind'" (AISM's enum check, argument.py:141, is a no-op when `kind` is absent — no finding, shard registers clean) |
 
 ---
 
@@ -672,6 +675,7 @@ changed across AISM's history at time of reading.
 | `refs-05` | no-quote external (WARN, skip_noquote) |
 | `refs-06` | unparseable external JSON |
 | `refs-07` | **paraphrase-wrapped verbatim core** [ruling #3] — ≥40-char genuine verbatim run wrapped in paraphrased outer wording ⇒ FAIL under whole-quote-match (would PASS under AISM's own longest-run rule) |
+| `refs-08` | **syntactically-valid non-object JSON external** [rk-6r3, finding 7] — `null`/array payload ⇒ check 5's unparseable-JSON treatment extended to non-object shapes, ERROR "malformed external", never a thrown exception (AISM crashes with an uncaught `AttributeError` here, check-refs.py:180) |
 
 ---
 
@@ -892,6 +896,11 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-11` | hardcoded-filename regression probe — rename the status-table file; must still be scanned (proves the config-parameter divergence actually fixes incident (a)) |
 | `provenance-12` | absolute (non-`refs/`-relative) source path (WARN) |
 | `provenance-13` | **status-table label absent** [F3] — `13_discussion.tex` present but no `\label{tab:status}`/`\midrule` ⇒ coverage line must show `0 tab:status rows` loudly, never a silent green |
+| `provenance-14` | **check 4: git-tracked source outside every loader include rule, stale hash** [rk-399, finding 1 BLOCKER] — the edge hashes every `git ls-files` path, so a tracked path outside the include set is still verified ⇒ ERROR "file edited, hash stale" |
+| `provenance-15` | **check 4: binary/non-UTF-8 payload, correct byte-faithful hash** [rk-399, finding 1] — raw-byte hashing (not a UTF-8 text round-trip) ⇒ PASS, no false ERROR |
+| `provenance-16` | **check 4: same binary payload, mismatched recorded hash** [rk-399, finding 1] — proves the byte-faithful check still fails a genuinely stale binary source ⇒ ERROR "file edited, hash stale" |
+| `provenance-17` | **registry-parse frontmatter-invalid > 0** [rk-v18, N4] — one valid lemma plus one lemma with no frontmatter at all ⇒ Gate 4's own aggregate WARN naming the excluded path, coverage denominator honest (`checked` < `total`, never a silent `1/1`) |
+| `provenance-18` | **check 6: three whitelisted-unanchored shards ⇒ one aggregate WARN** [ruling f] — the flood shape (96/118/138 per-item WARNs on real AISM historical trees) collapses into one WARN naming the count + sorted ids |
 
 ---
 
@@ -970,6 +979,7 @@ changed across AISM's history at time of reading.
 | `runs-05` | missing one required field (parametrize over hypothesis/command/finding/next) |
 | `runs-06` | stray top-level file (WARN) |
 | `runs-07` | empty `runs/` golden case (day-1 green baseline; asserts the coverage line still fires) |
+| `runs-08` | **empty run bundle DIRECTORY (exists, no README)** [rk-399, finding 2 BLOCKER] — check 2 must ERROR "missing README.md" even when file-prefix inference sees nothing; the gate enumerates bundles from the `dirs` SnapshotFact, not file prefixes alone |
 
 ---
 
@@ -1138,6 +1148,7 @@ KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
 | `shards-10` | body-sectioning command present in `main.tex` |
 | `shards-11` | empty-scaffold golden case (zero includes, zero shard files — must pass) |
 | `shards-12` | non-empty scaffold with zero `\include`s (shard files exist, master has none) |
+| `shards-13` | **absent `report/sections/` directory** [rk-399, finding 2 BLOCKER] — check 1 must ERROR via the `dirs` SnapshotFact rather than green-lighting as an empty scaffold; golden "exists but empty" counterpart is `shards-11` |
 
 ---
 
