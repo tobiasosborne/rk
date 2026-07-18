@@ -91,6 +91,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-16` | provenance | check 4: same binary payload, MISMATCHED recorded hash ⇒ ERROR | **rk-399** finding 1: guards against a "blanket-pass binary" mutation — proves the byte-faithful check still fails a genuinely stale binary source. Not corpus-red on its own (pre-fix source also ERRORs, for the wrong reason: string re-encode mismatch); its red-first partner is the `test/gates/provenance.test.ts` "binary payload whose bytes no longer match" mutation test. | landed |
 | `provenance-17` | provenance | registry-parse frontmatter-invalid > 0: one valid lemma + one lemma with NO frontmatter at all ⇒ Gate 4's aggregate WARN naming the excluded path, coverage denominator honest (`checked` < `total`) | **rk-v18** / **rk-4uw** (N4, 2026-07-18 M0.3 re-review finding 4): the corpus fixture this ledger previously deferred — see `registrySkipReport` (`provenance-parse.ts:79-107`). Mutation-proven red-first: temporarily reverting `registrySkipReport` to its pre-fix shape (denominator collapsed to the surviving parsed set, no WARN emitted) fails this fixture on both the missing aggregate WARN and the coverage mismatch (`checked=1/1` instead of `1/2`); reverted immediately after confirming red. `aism_behavior`: differs — `check-provenance.py`'s `parse_registry` (check-provenance.py:120-132) silently drops the malformed shard with no finding and no visible count; its `main()` summary (check-provenance.py:514) prints only the surviving count. Triage: rk-stricter-intended. | landed |
 | `provenance-18` | provenance | check 6: THREE whitelisted-unanchored shards ⇒ ONE aggregate WARN (the flood shape) | **review ruling f** (overturned in re-review): per-item whitelist WARNs reached 96/118/138 on real AISM historical trees — a finding-flood under the contract's own >25 threshold. The gate now aggregates them into one WARN naming the count + sorted ids (mirrors the ratified frontmatter-invalid aggregate, ruling b). Red against pre-fix source (3 per-item WARNs, no aggregate finding), green after. Non-whitelisted unanchored shards stay per-item ERRORs (`test/gates/provenance.test.ts`). `[rk-stricter-intended]` vs AISM's per-shard console lines. (Id `-18` avoids collision with `provenance-17`, rk-4uw's frontmatter-invalid fixture, landed the same wave.) | landed |
+| `provenance-19` | provenance | check 4: stale source payload shadowed by a coincidental VCS-named parent (`notes/.svn/payload.bin`) ⇒ ERROR (the loader-skip-set false-WARN) | **round-3 landing-blocker 1** (docs/reviews/2026-07-18-m0.3-review3-codex.md): the old `loadSnapshot` skip-set skipped every directory basenamed `.git`/`node_modules`/`.hg`/`.svn` ANYWHERE in the tree, so a present-on-disk source under such a parent got no hash and Gate 4 read it as genuinely absent ⇒ WARN false-pass (contradicting present-stale ⇒ ERROR). The skip is now anchored to the repo root and narrowed to `.git` alone. Mutation-proven red-first: restoring the skip-anywhere behavior fails this fixture (no ERROR, verdict flips to pass); reverted after confirming red. `.svn` is not gitignored (unlike `node_modules`), so a `.svn`-shadowed payload is the corpus-expressible witness; the `node_modules`/nested-`.git` cases are covered by the load-edge unit test (`test/load.test.ts`, "blocker 1: a NESTED directory named like a VCS/dep dir"). `aism_behavior`: same (AISM's raw-byte hash check also ERRORs an edited tracked source). | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
@@ -113,7 +114,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 | `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
 
-Totals: 15 defs + 24 argument/linker + 8 refs + 18 provenance + 8 runs + 13 report-shards = **86
+Totals: 15 defs + 24 argument/linker + 8 refs + 19 provenance + 8 runs + 13 report-shards = **87
 fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables (recounted
 2026-07-18, rk-4uw N4+N5: +2 over the previously-pinned 84 — `provenance-17`, this WP's new
 frontmatter-invalid>0 fixture landed below, and `provenance-18`, ruling f's whitelisted-unanchored
@@ -313,7 +314,7 @@ brittle noise unrelated to what the fixture proves. The criterion: a fixture get
 expectation iff its own row in `docs/gate-contracts.md`'s "Corpus fixtures required" table, or
 a named Divergences entry, explicitly frames the fixture's POINT as the coverage line's
 truthfulness or visibility — not merely "the gate happens to also emit a coverage line" (true of
-all 86 fixtures, and not by itself a reason to assert on it). By that criterion:
+all 87 fixtures, and not by itself a reason to assert on it). By that criterion:
 
 | fixture | why | `docs/gate-contracts.md` anchor |
 |---|---|---|
@@ -333,7 +334,7 @@ corpus fixture driving `skipped.length > 0` — a live L2 gap (2026-07-18 M0.3 r
 closes it: one valid lemma plus one lemma with no frontmatter at all, asserting both the aggregate
 WARN and the honest `1/2` coverage denominator end-to-end through the corpus runner.
 
-Every other fixture (the remaining 78 = 86 total − 8 with an asserted `coverage` expectation) is a
+Every other fixture (the remaining 79 = 87 total − 8 with an asserted `coverage` expectation) is a
 purely finding-shaped fixture per this criterion and carries no `coverage` field — its
 `checked`/`total` values are whatever the gate happens to produce, asserted nowhere, same as
 before this WP.
@@ -465,10 +466,10 @@ script-verified / rk-only / untested breakdown.
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
 | linker | 24/24 | 21 | 3 (`linker-15` message-only, `linker-21` crash→ERROR, `linker-24` missing-`kind` no-op — confirmed rk-stricter-intended by empirical harness run, rk-4uw, see below) | 0 |
 | refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
-| provenance | 18/18 | 15 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
+| provenance | 19/19 | 16 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
 | shards | 13/13 | 13 | 0 | 0 |
-| **total** | 86 (all script-validated) | 77 | 9 | 0 |
+| **total** | 87 (all script-validated) | 78 | 9 | 0 |
 
 `linker-24` (rk-aft, missing `kind:` field) was script-validated 2026-07-18 (rk-4uw) via the
 module-import harness: `argument.exec_module` imported read-only, `ARG_DIR`/`DEFS_DIR`/

@@ -1,0 +1,14 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/PROVENANCE.md",
+      "message_pattern": "file edited, hash stale"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same",
+  "notes": "[round-3 landing-blocker 1] A stale source payload shadowed by a coincidental VCS-named parent (`notes/.svn/payload.bin`). The old loader skip-set skipped every directory basenamed `.git`/`node_modules`/`.hg`/`.svn` ANYWHERE in the tree, so this present-on-disk payload received no hash and Gate 4 check 4 read it as genuinely absent -> WARN false-pass (contradicting gate-contracts.md's present-stale => ERROR). The skip is now anchored to the repo root and narrowed to `.git` alone, so the payload is walked, hashed, and its stale sha => ERROR. Requires the payload to be git-tracked so `git ls-files` in the fixture dir lists it (corpus/README.md Validation methodology); `.svn` is not gitignored, unlike `node_modules`, so a `.svn`-shadowed payload is the corpus-expressible witness (a `node_modules`-shadowed one is unrepresentable in a committed tree — see the load-edge unit test in test/load.test.ts, 'blocker 1: a NESTED directory named like a VCS/dep dir')."
+}

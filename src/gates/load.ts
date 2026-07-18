@@ -10,7 +10,7 @@
 //
 // Hash-verifiability is GLOBAL, not bounded by the include rules (review N1 BLOCKER): a full-tree
 // walk (`walkTree`) records a hash for EVERY file present on disk and EVERY directory (empty ones
-// included), skipping only VCS/dep dirs (`SKIP_DIRS`) and the `.gitkeep` placeholder. So a source
+// included), skipping only the repo-root `.git` (`ROOT_SKIP_DIR`) and the `.gitkeep` placeholder. So a source
 // payload present on disk but outside the include rules AND untracked (a gitignored payload) still
 // receives a hash fact — the pure gate then distinguishes "present + stale ⇒ ERROR" from "absent ⇒
 // WARN" (docs/gate-contracts.md Gate 4 check 4). Only TEXT content stays bounded to the include
@@ -44,10 +44,26 @@ interface IncludeRule {
  * empty directory in git, which cannot store one (corpus/README.md "empty-directory fixtures"). */
 const DIR_PLACEHOLDER = ".gitkeep";
 
-/** Directories the full-tree hash walk never descends into or records: version-control internals
- * and vendored-dependency trees. None ever hold a research source payload a provenance row could
- * name, and `.git` alone is large enough (thousands of loose objects) to dominate the walk cost. */
-const SKIP_DIRS = new Set([".git", "node_modules", ".hg", ".svn"]);
+/** The SOLE directory the full-tree hash walk skips, and ONLY at the repo root: `.git`.
+ *
+ * round-3 landing-blocker 1: the skip-set must not match a basename ANYWHERE in the tree. The old
+ * set (`.git`, `node_modules`, `.hg`, `.svn`, skipped wherever they appeared) meant a source
+ * payload shadowed by a coincidental parent — `notes/node_modules/payload.bin`, a gitignored blob
+ * under a directory a researcher happened to name `.svn`, etc. — received no hash, so Gate 4
+ * check 4 read it as genuinely absent and downgraded a present+stale source to a WARN false-pass.
+ * The invariant is absolute: no path a provenance source row can name may be present-on-disk yet
+ * hash-fact-absent.
+ *
+ * Why `.git` is the one safe exception, and why only at the root: git itself REFUSES to place
+ * tracked content under a `.git` component (`git add .git/x` is rejected), so no source payload —
+ * tracked or gitignored — can ever legitimately be named under the repo-root `.git`; and it is the
+ * cost driver (thousands of loose objects dominate the walk). Anchoring to the root is what keeps
+ * the exception safe: a NESTED directory literally named `.git` (a vendored/independent repo under
+ * our root) is ordinary content from this root's vantage and IS walked. `node_modules`/`.hg`/
+ * `.svn` are NOT git-forbidden locations — a gitignored payload can live under them — so they are
+ * no longer skipped at all; the invariant forbids it. (In a research repo they are rarely present,
+ * and far smaller than `.git` when they are.) */
+const ROOT_SKIP_DIR = ".git";
 
 /** One rule per file class docs/gate-contracts.md names as an Input across the six gates:
  * - `definitions/*.md`               — defs gate (Gate 1 Inputs)
@@ -142,7 +158,7 @@ function collectDir(
 }
 
 /** Full recursive walk from `root`: records EVERY directory (empty ones included) into `acc.dirs`
- * and a byte-faithful sha256 for EVERY file present on disk into `acc.sha256`, skipping `SKIP_DIRS`
+ * and a byte-faithful sha256 for EVERY file present on disk into `acc.sha256`, skipping the repo-root `.git`
  * and the `.gitkeep` placeholder. Files already hashed by an include rule are not re-read
  * (`acc.sha256.has`). This is what makes hash-verifiability global (review N1): a present-on-disk
  * source outside the include rules — untracked/gitignored included — still gets a hash fact, so the
@@ -161,7 +177,7 @@ function walkTree(absRoot: string, relDir: string, acc: Accum): void {
     const st = statSync(absPath);
     const rel = relDir === "" ? name : `${relDir}/${name}`;
     if (st.isDirectory()) {
-      if (SKIP_DIRS.has(name)) continue; // never descend into or record VCS/dep dirs
+      if (relDir === "" && name === ROOT_SKIP_DIR) continue; // skip ONLY the repo-root .git
       walkTree(absRoot, rel, acc);
       continue;
     }
@@ -206,7 +222,7 @@ export function loadSnapshot(root: string): RepoSnapshot {
   }
 
   // Full-tree walk: hash every file present on disk not already hashed, and record every directory
-  // — hash-verifiability is not bounded by the include rules (review N1). VCS/dep dirs skipped.
+  // — hash-verifiability is not bounded by the include rules (review N1). Only the repo-root .git is skipped.
   walkTree(root, "", acc);
 
   const tracked = gitTracked(root);

@@ -159,8 +159,44 @@ describe("loadSnapshot", () => {
     const snap = loadSnapshot(root);
     expect(snap.dirs.has("notes")).toBe(true);
     expect(snap.dirs.has("notes/deep")).toBe(true);
-    // .git is a skip-dir: neither recorded nor descended into.
+    // The repo-ROOT .git is the sole skip: neither recorded nor descended into.
     expect(snap.dirs.has(".git")).toBe(false);
     expect(fileSha256(snap, ".git/objects/ab/cdef")).toBeUndefined();
+  });
+
+  // round-3 landing-blocker 1 (BLOCKER): the walk skip-set must NOT match basenames anywhere in
+  // the tree. A source payload present on disk but shadowed by a coincidental VCS/dep-named parent
+  // (e.g. `notes/node_modules/payload.bin`) previously received no hash, so Gate 4 check 4 read it
+  // as genuinely absent and downgraded a present+stale source to a WARN false-pass, contradicting
+  // gate-contracts.md's "present stale ⇒ ERROR". The skip is now anchored to the repo root and
+  // narrowed to `.git` alone; every NESTED same-named directory is walked and hashed.
+  test("blocker 1: a NESTED directory named like a VCS/dep dir is still walked and hashed", () => {
+    const root = makeTree({
+      "notes/node_modules/payload.bin": "shadowed by a coincidental node_modules parent",
+      "notes/.svn/payload.tex": "shadowed by a coincidental .svn parent",
+      "notes/.hg/payload.md": "shadowed by a coincidental .hg parent",
+      "vendor/dep/.git/config": "a nested .git is NOT the repo-root .git — must be walked",
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    // Every present file gets a hash fact — no path a provenance source row could name is left
+    // present-on-disk yet hash-fact-absent (the absolute invariant).
+    expect(fileSha256(snap, "notes/node_modules/payload.bin")).toBeDefined();
+    expect(fileSha256(snap, "notes/.svn/payload.tex")).toBeDefined();
+    expect(fileSha256(snap, "notes/.hg/payload.md")).toBeDefined();
+    expect(fileSha256(snap, "vendor/dep/.git/config")).toBeDefined();
+  });
+
+  test("blocker 1: ONLY the repo-root .git is skipped (cost driver), not a nested one", () => {
+    const root = makeTree({
+      ".git/objects/ab/cdef": "root git internals — skipped (cost)",
+      "sub/.git/objects/de/adbe": "a nested .git is ordinary content from this root's vantage",
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    expect(fileSha256(snap, ".git/objects/ab/cdef")).toBeUndefined(); // root .git skipped
+    expect(snap.dirs.has(".git")).toBe(false);
+    expect(fileSha256(snap, "sub/.git/objects/de/adbe")).toBeDefined(); // nested .git walked
+    expect(snap.dirs.has("sub/.git")).toBe(true);
   });
 });
