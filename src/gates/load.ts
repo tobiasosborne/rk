@@ -7,6 +7,14 @@
 // rk-399): (1) byte-faithful raw-byte sha256 of every file (never a UTF-8 round-trip — correct
 // for binary/non-UTF-8 payloads); (2) real git tracking via `git ls-files` at the root; (3)
 // directory existence INCLUDING empty directories. The gate consumes facts; it never guesses.
+//
+// Hash-verifiability is GLOBAL, not bounded by the include rules (review N1 BLOCKER): a full-tree
+// walk (`walkTree`) records a hash for EVERY file present on disk and EVERY directory (empty ones
+// included), skipping only VCS/dep dirs (`SKIP_DIRS`) and the `.gitkeep` placeholder. So a source
+// payload present on disk but outside the include rules AND untracked (a gitignored payload) still
+// receives a hash fact — the pure gate then distinguishes "present + stale ⇒ ERROR" from "absent ⇒
+// WARN" (docs/gate-contracts.md Gate 4 check 4). Only TEXT content stays bounded to the include
+// rules (the six gates' declared Inputs); the hash+dirs FACTS span the whole tree.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -26,6 +34,11 @@ interface IncludeRule {
  * from its sha256/tracked facts). This is the corpus convention for representing a genuinely
  * empty directory in git, which cannot store one (corpus/README.md "empty-directory fixtures"). */
 const DIR_PLACEHOLDER = ".gitkeep";
+
+/** Directories the full-tree hash walk never descends into or records: version-control internals
+ * and vendored-dependency trees. None ever hold a research source payload a provenance row could
+ * name, and `.git` alone is large enough (thousands of loose objects) to dominate the walk cost. */
+const SKIP_DIRS = new Set([".git", "node_modules", ".hg", ".svn"]);
 
 /** One rule per file class docs/gate-contracts.md names as an Input across the six gates:
  * - `definitions/*.md`               — defs gate (Gate 1 Inputs)
@@ -53,9 +66,10 @@ const DIR_PLACEHOLDER = ".gitkeep";
  * plus the repo-root `INDEX.md` (runs gate's reverse-lookup input), handled separately below
  * since it is a single literal file, not a directory rule.
  *
- * NOTE (review finding 1): the include set no longer bounds hash-verifiability. A provenance
- * source row may name a tracked path OUTSIDE these rules; the git-tracked pass below hashes
- * every tracked file so such a row is verified (tracked+stale ⇒ ERROR), never silently WARNed. */
+ * NOTE (review finding 1 + N1): the include set bounds only TEXT content, never hash-
+ * verifiability. `walkTree` below hashes every file present on disk (tracked or not, inside these
+ * rules or not), so a provenance source row naming ANY present path is verified (present+stale ⇒
+ * ERROR), never silently WARNed as "absent". */
 const INCLUDE_RULES: IncludeRule[] = [
   { dir: "definitions", recursive: false },
   { dir: "argument", recursive: false },
@@ -118,6 +132,36 @@ function collectDir(
   }
 }
 
+/** Full recursive walk from `root`: records EVERY directory (empty ones included) into `acc.dirs`
+ * and a byte-faithful sha256 for EVERY file present on disk into `acc.sha256`, skipping `SKIP_DIRS`
+ * and the `.gitkeep` placeholder. Files already hashed by an include rule are not re-read
+ * (`acc.sha256.has`). This is what makes hash-verifiability global (review N1): a present-on-disk
+ * source outside the include rules — untracked/gitignored included — still gets a hash fact, so the
+ * pure gate never conflates "present + stale" (ERROR) with "absent" (WARN). */
+function walkTree(absRoot: string, relDir: string, acc: Accum): void {
+  const absDir = relDir === "" ? absRoot : join(absRoot, ...relDir.split("/"));
+  let entries: string[];
+  try {
+    entries = readdirSync(absDir);
+  } catch {
+    return; // an unreadable/absent directory is silent, matching collectDir
+  }
+  if (relDir !== "") acc.dirs.add(relDir);
+  for (const name of entries) {
+    const absPath = join(absDir, name);
+    const st = statSync(absPath);
+    const rel = relDir === "" ? name : `${relDir}/${name}`;
+    if (st.isDirectory()) {
+      if (SKIP_DIRS.has(name)) continue; // never descend into or record VCS/dep dirs
+      walkTree(absRoot, rel, acc);
+      continue;
+    }
+    if (name === DIR_PLACEHOLDER) continue; // directory existence only, never content/hash
+    if (acc.sha256.has(rel)) continue; // already hashed via an include rule — avoid a re-read
+    acc.sha256.set(rel, sha256Bytes(readFileSync(absPath)));
+  }
+}
+
 /** `git ls-files -z` at `root` → repo-relative tracked paths. Empty set when `root` is not a git
  * repo / git is unavailable — tracking then degrades to "nothing tracked" (a source row is WARN,
  * never a false ERROR). Runs from `root` so paths come back relative to it (matches the snapshot
@@ -134,11 +178,13 @@ function gitTracked(root: string): Set<string> {
   }
 }
 
-/** Builds a RepoSnapshot (text + SnapshotFacts) from a real directory tree. Include-rule files
- * are read for text + hashed; every git-tracked file is additionally hashed (so a source row
- * naming a tracked path outside the include rules is still verifiable); directory existence
- * (empty dirs included) is recorded. Any rule's directory being entirely absent is silent — this
- * mirrors every gate's own "empty/absent input is a legitimate state" contract. */
+/** Builds a RepoSnapshot (text + SnapshotFacts) from a real directory tree. Include-rule files are
+ * read for text (and hashed once, in the same read); `walkTree` then hashes EVERY remaining file
+ * present on disk and records EVERY directory (empty ones included), so hash-verifiability spans
+ * the whole tree, not just the include rules (review N1). `git ls-files` supplies the real
+ * `tracked` fact (used only to shape the stale-source ERROR message: tracked vs
+ * gitignored-but-present). Any rule's directory being entirely absent is silent — mirroring every
+ * gate's own "empty/absent input is a legitimate state" contract. */
 export function loadSnapshot(root: string): RepoSnapshot {
   const acc: Accum = { text: new Map(), sha256: new Map(), dirs: new Set() };
   for (const rule of INCLUDE_RULES) {
@@ -150,23 +196,11 @@ export function loadSnapshot(root: string): RepoSnapshot {
     // absent entirely is legitimate (a fresh scaffold before any run bundle exists)
   }
 
-  const tracked = gitTracked(root);
-  // Hash every tracked file not already hashed via the include rules, so a provenance source row
-  // naming a tracked path OUTSIDE the include set is hash-verifiable (review finding 1) rather
-  // than being downgraded to an "unverifiable/WARN" false pass. The `.gitkeep` placeholder is
-  // never hashed as content.
-  for (const path of tracked) {
-    if (acc.sha256.has(path)) continue;
-    if (path.endsWith(`/${DIR_PLACEHOLDER}`) || path === DIR_PLACEHOLDER) continue;
-    try {
-      const bytes = readFileSync(join(root, ...path.split("/")));
-      acc.sha256.set(path, sha256Bytes(bytes));
-    } catch {
-      // tracked in the index but not on disk (staged delete etc.): leave unhashed => the gate
-      // treats it as absent (WARN), never a false ERROR.
-    }
-  }
+  // Full-tree walk: hash every file present on disk not already hashed, and record every directory
+  // — hash-verifiability is not bounded by the include rules (review N1). VCS/dep dirs skipped.
+  walkTree(root, "", acc);
 
+  const tracked = gitTracked(root);
   const facts: SnapshotFacts = { sha256: acc.sha256, tracked, dirs: acc.dirs };
   const snapshot = acc.text as Map<string, string> & SnapshotFacts;
   Object.assign(snapshot, facts);

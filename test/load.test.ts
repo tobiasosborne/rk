@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSnapshot } from "../src/gates/load";
+import { fileSha256 } from "../src/gates/snapshot";
 
 function makeTree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "rk-load-test-"));
@@ -122,5 +123,44 @@ describe("loadSnapshot", () => {
     const snap = loadSnapshot(root);
     expect(snap.has("package.json")).toBe(false);
     expect(snap.has("src/gates/defs.ts")).toBe(false);
+  });
+
+  // review N1 (BLOCKER): hash-verifiability must NOT be bounded by the include rules. A source
+  // payload present on disk but OUTSIDE the include rules AND untracked (makeTree builds a non-git
+  // tree, so `git ls-files` returns nothing — every file here is untracked) must still receive a
+  // byte-faithful hash fact, so the pure gate can tell "present on disk + stale ⇒ ERROR" from
+  // "absent ⇒ WARN" (docs/gate-contracts.md Gate 4 check 4). Text content stays bounded to the
+  // include rules (no kitchen-sink); only the hash+dirs FACTS span the whole tree.
+  test("hashes every present file, including untracked ones outside the include rules (N1)", () => {
+    const root = makeTree({
+      "definitions/a.md": "A",
+      "notes/data.txt": "untracked payload outside every include rule",
+      "top-level-note.md": "also outside the include rules",
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    // Present on disk => a hash fact exists (mechanically distinguishable from absent).
+    expect(fileSha256(snap, "notes/data.txt")).toBeDefined();
+    expect(fileSha256(snap, "top-level-note.md")).toBeDefined();
+    // ...but NOT pulled into the text map (content stays bounded to the include rules).
+    expect(snap.has("notes/data.txt")).toBe(false);
+    expect(snap.has("top-level-note.md")).toBe(false);
+    // A genuinely-absent path has NO hash fact — the WARN case, never conflated with present.
+    expect(fileSha256(snap, "notes/absent.txt")).toBeUndefined();
+  });
+
+  test("records every directory (empty ones included) across the whole tree, skipping .git (N1/N2)", () => {
+    const root = makeTree({
+      "definitions/a.md": "A",
+      "notes/deep/data.txt": "x",
+      ".git/objects/ab/cdef": "git internals must never be walked",
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    expect(snap.dirs.has("notes")).toBe(true);
+    expect(snap.dirs.has("notes/deep")).toBe(true);
+    // .git is a skip-dir: neither recorded nor descended into.
+    expect(snap.dirs.has(".git")).toBe(false);
+    expect(fileSha256(snap, ".git/objects/ab/cdef")).toBeUndefined();
   });
 });

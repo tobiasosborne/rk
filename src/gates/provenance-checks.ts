@@ -43,8 +43,10 @@ export function checkSourceHashes(
     }
     const full = fileSha256(snapshot, path);
     if (full === undefined) {
-      // No byte-faithful hash measured for this path => it is absent from disk (or untracked and
-      // outside the include set). Unverifiable, WARN — never a false ERROR (contract Gate 4 ch4).
+      // No byte-faithful hash measured for this path => it is genuinely ABSENT from disk. The edge
+      // hashes EVERY present file (tracked or not, inside the include rules or not — review N1), so
+      // "no hash fact" can no longer mean "present but unloaded"; it means absent. Unverifiable,
+      // WARN — never a false ERROR (contract Gate 4 check 4, "absent from disk ⇒ WARN").
       unverifiable.add(key);
       continue;
     }
