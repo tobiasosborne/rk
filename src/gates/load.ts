@@ -21,7 +21,21 @@ interface IncludeRule {
  * - `argument/lemmas/*.md`           — linker + provenance gates (Gate 2 / Gate 4 Inputs)
  * - `proofs/**`                      — refs gate's externals JSON + linker's ledger/meta.json
  *                                       introspection targets (Gate 2 / Gate 3 Inputs)
- * - `refs/manifest/*`                — defs gate's manifest (Gate 1 Inputs: checksums.sha256)
+ * - `refs/**`                        — defs gate's manifest (`refs/manifest/*`, Gate 1 Inputs:
+ *                                       checksums.sha256) AND the refs gate's quote-source
+ *                                       payload tree `refs/<source-id>/*` that Checks 2-4 byte-
+ *                                       verify claimed VERBATIM quotes against (Gate 3 Inputs).
+ *                                       One recursive rule covers both: a locus like
+ *                                       `refs/kitaev-2405.02434/approximate_algebras.tex:503-532`
+ *                                       (gate-contracts.md Gate 3) can nest arbitrarily deep, and
+ *                                       narrowing to a fixed depth or extension would silently
+ *                                       reintroduce the payload-ABSENT false-read this rule exists
+ *                                       to close (rk-skd; see docs/gate-contracts.md Gate 3
+ *                                       "THE 19/19 false-green"). Matches the `proofs/**`
+ *                                       precedent below: recursive, no extension filter — these
+ *                                       payloads are gitignored in real repos (present only on
+ *                                       disk, never in git), so a whole-tree recursive read here
+ *                                       is exactly the loader's job, not kitchen-sink bloat.
  * - `runs/**`                        — runs gate (Gate 5 Inputs)
  * - `report/**\/*.{tex,md}`          — provenance + report-shards gates (Gate 4 / Gate 6 Inputs)
  * plus the repo-root `INDEX.md` (runs gate's reverse-lookup input), handled separately below
@@ -31,7 +45,7 @@ const INCLUDE_RULES: IncludeRule[] = [
   { dir: "argument", recursive: false },
   { dir: "argument/lemmas", recursive: false },
   { dir: "proofs", recursive: true },
-  { dir: "refs/manifest", recursive: false },
+  { dir: "refs", recursive: true },
   { dir: "runs", recursive: true },
   { dir: "report", recursive: true, extensions: [".tex", ".md"] },
 ];

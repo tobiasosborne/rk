@@ -64,6 +64,18 @@ describe("loadSnapshot", () => {
     expect(snap.get("refs/manifest/checksums.sha256")).toContain("deadbeef");
   });
 
+  test("loads refs/<source-id>/* payload files recursively (refs gate Checks 2-4 input, " +
+    "rk-skd)", () => {
+    const root = makeTree({
+      "refs/src-x/paper.md": "The always-tight hulls K_T(u) and K_O(u) are disjoint.",
+      "refs/src-p/sub/approximate_algebras.tex": "\\section{Tight hulls}",
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    expect(snap.get("refs/src-x/paper.md")).toContain("always-tight hulls");
+    expect(snap.get("refs/src-p/sub/approximate_algebras.tex")).toContain("Tight hulls");
+  });
+
   test("loads runs/** recursively, including a nested bundle README", () => {
     const root = makeTree({ "runs/2026-07-01-example/README.md": "hypothesis..." });
     dirs.push(root);
