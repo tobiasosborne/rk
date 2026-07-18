@@ -1,0 +1,15 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lemmas/lem-bad.md",
+      "message_pattern": "1 registry file(s) excluded from provenance re-parse"
+    }
+  ],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["1 frontmatter-invalid"] },
+  "aism_behavior": "differs: check-provenance.py's parse_registry (check-provenance.py:120-132) silently `continue`s past the malformed lem-bad.md with no finding and no visible count; main()'s summary line (check-provenance.py:514) prints only `len(shards)` (1 registry results) with no trace the raw registry universe was 2 -- the exact silent-shrinkage shape rk-v18 fixes. rk's aggregate WARN + honest 1/2 coverage denominator (`registrySkipReport`, provenance-parse.ts:79-107) is a deliberate tightening over this AISM gap. Triage: rk-stricter-intended.",
+  "notes": "rk-4uw (N4, 2026-07-18 M0.3 re-review finding 4): the corpus fixture the ledger previously deferred for `registrySkipReport`'s frontmatter-invalid>0 path (rk-v18) -- one valid lemma (lem-good) plus one lemma with no frontmatter at all (lem-bad, `not frontmatter at all\n`, neither `---`-delimited nor terminated). Targets Gate 4's aggregate WARN (naming the excluded path) and the raw-inputs coverage denominator (checked=1 < total=2), never a silent 1/1. Mirrors the existing unit-level proof at test/gates/provenance.test.ts:108-130 (rk-v18 describe block) -- this fixture is the L2 corpus-level counterpart, not a duplicate: the unit test isolates the pure gate directly, this fixture drives it end-to-end through the corpus runner/loadSnapshot edge."
+}
