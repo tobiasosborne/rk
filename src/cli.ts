@@ -13,6 +13,7 @@ import { checkCommand } from "./cli/check";
 import { doctorCommand } from "./cli/doctor";
 import { phaseCommand } from "./cli/phase";
 import { initCommand } from "./cli/init";
+import { upgradeCommand } from "./cli/upgrade";
 import type { Out } from "./cli/args";
 import { defaultOut } from "./cli/args";
 
@@ -24,11 +25,13 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   doctor: doctorCommand,
   phase: phaseCommand,
   init: initCommand,
+  upgrade: upgradeCommand,
 };
 
 function topHelp(out: Out): number {
   out.log("rk — research-automation tool");
   out.log('  rk init "<north-star contract>" [--root <dir>] [--force]  stamp a fresh scaffold (M1.2, PRD C1)');
+  out.log("  rk upgrade [--root <dir>]  compare the stamped template_version, print manual-diff instructions (M1.4)");
   out.log("  rk refs status|add|quote   ground-truth reference library (PRD C7)");
   out.log("  rk check [--root <dir>]    run all six M0 gates (docs/gate-contracts.md)");
   out.log("  rk check --selftest [--root <dir>]  run rk's own red-fixture corpus (default <root>/corpus)");
