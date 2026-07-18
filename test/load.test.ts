@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSnapshot } from "../src/gates/load";
@@ -198,5 +198,57 @@ describe("loadSnapshot", () => {
     expect(snap.dirs.has(".git")).toBe(false);
     expect(fileSha256(snap, "sub/.git/objects/de/adbe")).toBeDefined(); // nested .git walked
     expect(snap.dirs.has("sub/.git")).toBe(true);
+  });
+
+  // round-3 landing-blocker 3 (MAJOR): the walkers used statSync, which FOLLOWS symlinks — a
+  // dangling link crashes the walk, a self/parent-referential link recurses forever, and an
+  // escaping link reads (or walks) outside the root. `loadSnapshot` runs BEFORE the per-gate
+  // exception boundary (src/cli/check.ts), so any such throw kills the whole composed check. The
+  // policy is now lstat-based: symlinks are recorded as neither file nor directory and are never
+  // followed, so none of the three can throw or escape.
+  describe("symlink policy (blocker 3): symlinks are never followed", () => {
+    test("a DANGLING symlink does not crash the walk and is not hashed", () => {
+      const root = makeTree({ "definitions/a.md": "A" });
+      dirs.push(root);
+      symlinkSync("./nonexistent-target", join(root, "notes-dangling.md")); // target absent
+      // statSync would throw ENOENT here (following the dead link); lstat does not.
+      expect(() => loadSnapshot(root)).not.toThrow();
+      const snap = loadSnapshot(root);
+      expect(fileSha256(snap, "notes-dangling.md")).toBeUndefined();
+    });
+
+    test("a CYCLIC (self/parent-referential) symlink terminates, never infinite-recurses", () => {
+      const root = makeTree({ "loopdir/real.md": "R" });
+      dirs.push(root);
+      symlinkSync(join(root, "loopdir"), join(root, "loopdir", "self")); // self -> its own parent dir
+      // statSync would follow `self` as a directory and recurse forever (RangeError: stack).
+      expect(() => loadSnapshot(root)).not.toThrow();
+      const snap = loadSnapshot(root);
+      // the real file is still hashed; the symlink is neither hashed nor recorded as a directory.
+      expect(fileSha256(snap, "loopdir/real.md")).toBeDefined();
+      expect(fileSha256(snap, "loopdir/self")).toBeUndefined();
+      expect(snap.dirs.has("loopdir/self")).toBe(false);
+    });
+
+    test("an ESCAPING symlink (target outside the root) is not followed — no root escape", () => {
+      const outside = mkdtempSync(join(tmpdir(), "rk-load-outside-"));
+      dirs.push(outside);
+      writeFileSync(join(outside, "secret.txt"), "must never enter the snapshot via a symlink");
+      const root = makeTree({ "definitions/a.md": "A" });
+      dirs.push(root);
+      symlinkSync(join(outside, "secret.txt"), join(root, "escape.md")); // absolute, outside root
+      const snap = loadSnapshot(root);
+      // statSync would follow and hash the outside file's bytes under "escape.md"; lstat does not.
+      expect(fileSha256(snap, "escape.md")).toBeUndefined();
+    });
+
+    test("even an IN-TREE symlink to a real file is not followed (policy is: symlinks are content-invisible)", () => {
+      const root = makeTree({ "definitions/a.md": "A" });
+      dirs.push(root);
+      symlinkSync(join(root, "definitions", "a.md"), join(root, "link-to-a.md"));
+      const snap = loadSnapshot(root);
+      expect(fileSha256(snap, "link-to-a.md")).toBeUndefined();
+      expect(snap.has("link-to-a.md")).toBe(false);
+    });
   });
 });

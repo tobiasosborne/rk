@@ -100,6 +100,28 @@ Justification: L2's coverage-reporting mandate is only meaningful if every gate 
 every time; a fix-one-rerun loop hides how many gates are broken at once. No individual gate's
 internal logic changes — only the wrapper's control flow.
 
+**Snapshot loading** (round-3 landing-blocker 3). `rk check` builds the in-memory `RepoSnapshot`
+(`src/gates/load.ts`) once, BEFORE the per-gate exception boundary. Two rules keep that
+precondition from silently defeating composition:
+
+- **Symlink policy.** The loader `lstat`s every entry and treats a symbolic link as
+  **content-invisible**: never followed — not hashed, not read as text, not recorded as a
+  directory, never descended into. This closes three failure modes the older follow-the-link
+  behavior exposed, each of which could throw or diverge before any gate ran: a **dangling** link
+  (would throw following a dead target), a **cyclic** self/parent-referential link (would recurse
+  forever), and an **escaping** link to a path outside the root (would pull foreign bytes into the
+  snapshot). A symlinked source therefore carries no hash fact, so Gate 4 reads it as genuinely
+  absent ⇒ WARN "not hash-verifiable" — the safe direction (never a false ERROR, never a
+  missed-stale false-green). Only regular files receive content/hash; fifos/sockets/device nodes
+  are skipped for the same reason. This is a **deviation** from AISM's scripts, which never walked
+  a repo tree at all (each hard-coded its inputs); no gate's pass/fail semantics changes.
+- **Load failure is composed, never fatal.** Snapshot loading is a precondition of all six gates,
+  so a failure cannot be attributed to any one of them. If it throws anyway (defense-in-depth —
+  the lstat policy makes the loader effectively total), `rk check` emits one loud ERROR under the
+  `<snapshot-load>` sentinel path (same angle-bracket, never-a-real-path convention as
+  `<gate:NAME>`), a crash-marked coverage line for every registered gate, and exit 1 — never a
+  silent pass-shaped `0/0` and never an uncaught process exit.
+
 **Out of scope for `rk check`.** `check-all.sh` also runs `gen-current-pointer.py --check`
 (`CURRENT.md` freshness against the registry, check-all.sh:20) and a tooling-test loop over
 `scripts/tests/test_*.py` (check-all.sh:33-37) as part of the same local-CI invocation. Neither

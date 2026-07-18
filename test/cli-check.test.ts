@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/cli";
+import { checkCommand } from "../src/cli/check";
 import { GATES } from "../src/gates/index";
 import { renderDag, renderIndex } from "../src/gates/linker-render";
 
@@ -157,6 +158,45 @@ describe("rk check", () => {
     for (const line of findingLines) expect(line).toMatch(FINDING_RE);
   });
 
+  // round-3 landing-blocker 3: `loadSnapshot` runs BEFORE the per-gate exception boundary
+  // (src/cli/check.ts), so an uncaught throw there used to kill the whole composed check and drop
+  // all six coverage lines, violating unconditional composition (gate-contracts.md). Snapshot
+  // loading must now fail LOUDLY and COMPOSED — a single <snapshot-load> ERROR, a crash-marked
+  // coverage line for every registered gate, exit 1 — never an uncaught process exit. The lstat
+  // symlink policy makes the loader effectively total, so this boundary is fault-injected via the
+  // injected loader seam (checkCommand's 3rd param), the deterministic analogue of the mock.module
+  // seam the per-gate-crash test below uses.
+  test("snapshot-load failure is a loud COMPOSED failure (one <snapshot-load> ERROR, every gate's coverage line marked, exit 1), never an uncaught process exit (blocker 3, gate-contracts.md Composition)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-check-snaploadfail-"));
+    dirs.push(root);
+
+    const { out, lines } = capture();
+    const code = await checkCommand(["--root", root], out, () => {
+      throw new Error("boom: simulated snapshot-load failure (fault injection, not a real loader bug)");
+    });
+    const text = lines.join("\n");
+
+    // One loud ERROR under the <snapshot-load> sentinel path (never a real repo-relative path,
+    // same convention as the <gate:NAME> crash sentinel), carrying the underlying cause.
+    expect(text).toContain("ERROR <snapshot-load>:1");
+    expect(text).toContain("boom: simulated snapshot-load failure");
+
+    // Composition preserved: every registered gate still gets a coverage line, and each reads
+    // unambiguously as a load failure (never a silent pass-shaped 0/0 day-1-vacuity line).
+    for (const gate of GATES) {
+      expect(text).toMatch(
+        new RegExp(`^checked ${gate.name}: 0/0 SNAPSHOT LOAD FAILED .* \\(\\d+ errors, \\d+ warnings\\)$`, "m"),
+      );
+    }
+    // Every printed finding line still obeys the shared finding format (the sentinel ERROR too).
+    for (const line of text.split("\n").filter((l) => l.startsWith("ERROR ") || l.startsWith("WARN "))) {
+      expect(line).toMatch(FINDING_RE);
+    }
+
+    expect(code).toBe(1);
+    expect(text).toContain("rk check: FAILED (snapshot load error");
+  });
+
   test("top-level help now mentions 'rk check' as a next step", async () => {
     const { out, lines } = capture();
     const code = await run([], { out });
@@ -201,7 +241,7 @@ describe("rk check", () => {
     test("a fixture failure in the corpus fails --selftest's exit code and names the fixture", async () => {
       const root = mkdtempSync(join(tmpdir(), "rk-check-selftest-badcorpus-"));
       dirs.push(root);
-      // Copies the REAL corpus/ tree (all six gate directories, the full 86-fixture ledger
+      // Copies the REAL corpus/ tree (all six gate directories, the full 87-fixture ledger
       // total) rather than a synthetic one-fixture tree: the round-3 review follow-up 2 guard
       // below (missing/empty gate directory, ledger-count mismatch) would otherwise reject a
       // partial corpus before a single fixture ever ran, which is exactly the failure mode this

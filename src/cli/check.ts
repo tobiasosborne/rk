@@ -143,13 +143,52 @@ async function runSelftest(root: string, out: Out): Promise<number> {
   return 0;
 }
 
-export async function checkCommand(args: string[], out: Out): Promise<number> {
+/** round-3 landing-blocker 3: `loadSnapshot` runs BEFORE the per-gate exception boundary
+ * (`runGateSafely`), so an uncaught throw here — a symlink/fs edge case the loader's own
+ * containment misses — would kill the entire composed check and take all six coverage lines with
+ * it, violating unconditional composition (gate-contracts.md Shared conventions, "Composition":
+ * every gate runs and every coverage line prints regardless of earlier failures). Snapshot loading
+ * is a precondition of ALL gates, so its failure cannot be attributed to any one of them; it
+ * becomes a single loud ERROR under the `<snapshot-load>` sentinel path (the same angle-bracket,
+ * never-a-real-path convention as `<gate:NAME>`), plus a crash-marked coverage line for every
+ * registered gate, plus exit 1 — never a silent pass-shaped `0/0` and never an uncaught process
+ * exit. The lstat-based symlink policy (src/gates/load.ts) makes the loader effectively total, so
+ * this is defense-in-depth (like `runGateSafely`), not a license for the loader to throw. */
+function emitSnapshotLoadFailure(root: string, e: unknown, out: Out): number {
+  const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  out.log(
+    `ERROR <snapshot-load>:1 rk check could not load the repo snapshot from '${root}' — snapshot ` +
+      `loading is a precondition of every gate, so this is a COMPOSED failure (loud ERROR + all ` +
+      `coverage lines + exit 1), never an uncaught process exit that would drop the other coverage ` +
+      `lines (gate-contracts.md Shared conventions, "Composition"): ${message}`,
+  );
+  for (const gate of GATES) {
+    out.log(
+      `checked ${gate.name}: 0/0 SNAPSHOT LOAD FAILED — see the <snapshot-load> ERROR above ` +
+        `(0 errors, 0 warnings)`,
+    );
+  }
+  out.log("");
+  out.log("rk check: FAILED (snapshot load error — see the <snapshot-load> ERROR above).");
+  return 1;
+}
+
+export async function checkCommand(
+  args: string[],
+  out: Out,
+  load: (root: string) => RepoSnapshot = loadSnapshot,
+): Promise<number> {
   const { rest, root } = extractRoot(args);
   if (rest.includes("--selftest")) {
     return runSelftest(root, out);
   }
 
-  const snapshot = loadSnapshot(root);
+  let snapshot: RepoSnapshot;
+  try {
+    snapshot = load(root);
+  } catch (e) {
+    return emitSnapshotLoadFailure(root, e, out); // loud composed failure, never an uncaught exit
+  }
   const config = await loadGateConfig(root);
 
   let anyError = false;

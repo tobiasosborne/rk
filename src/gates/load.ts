@@ -25,7 +25,7 @@
 // review-record immutability convention. A correctly-scoped move needs its own WP with time for
 // the full doc sweep, not a same-session tack-on. Filed as rk-7uc.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RepoSnapshot, SnapshotFacts } from "./snapshot";
 import { sha256Bytes } from "../refs/hash";
@@ -111,6 +111,21 @@ interface Accum {
   dirs: Set<string>;
 }
 
+/** SYMLINK POLICY (round-3 landing-blocker 3; docs/gate-contracts.md Shared conventions, "Snapshot
+ * loading"). Both walkers `lstat` every entry and treat a symbolic link as CONTENT-INVISIBLE: it
+ * is never followed — not hashed, not read as text, not recorded as a directory, never descended
+ * into. This is the whole safety story for three failure modes the old `statSync` (which follows
+ * links) exposed, each of which could throw or diverge BEFORE `rk check`'s per-gate exception
+ * boundary and take the entire composed run down: (1) a DANGLING link — `statSync` throws ENOENT
+ * following a dead target; `lstat` returns the link's own metadata and never touches the target;
+ * (2) a CYCLIC self/parent-referential link — `statSync` reports it as a directory and the walk
+ * recurses forever; not following it terminates trivially; (3) an ESCAPING link to a path outside
+ * the root — `statSync` would read/walk foreign bytes into the snapshot; not following it keeps the
+ * walk inside the root. A symlinked source therefore has no hash fact, so Gate 4 reads it as
+ * genuinely absent ⇒ WARN "not hash-verifiable" — the safe direction (never a false ERROR, never a
+ * missed-stale false-green), and never a crash. Only regular files (`isFile()`) get content/hash;
+ * fifos/sockets/device nodes are skipped for the same reason. */
+
 /** Reads `absPath`'s raw bytes: UTF-8-decoded text into the map (what text gates read) and a
  * byte-faithful sha256 into the facts (what Gate 4 verifies). The two are decoupled on purpose —
  * the sha is of the raw bytes, so a non-UTF-8/binary payload hashes correctly even though its
@@ -138,7 +153,8 @@ function collectDir(
   acc.dirs.add(relDir); // the directory EXISTS (recorded even when it holds no matching files)
   for (const name of entries) {
     const absPath = join(absDir, name);
-    const st = statSync(absPath);
+    const st = lstatSync(absPath); // lstat: never follows the link (see the SYMLINK POLICY note above)
+    if (st.isSymbolicLink()) continue; // symlinks are content-invisible: neither followed nor recorded
     if (st.isDirectory()) {
       // A recursive rule descends into subdirs (recording their existence, empty ones included,
       // AND their content); a non-recursive rule descends ONLY to record the subdir's existence,
@@ -148,6 +164,7 @@ function collectDir(
       continue;
     }
     if (name === DIR_PLACEHOLDER) continue; // directory placeholder: existence only, never content
+    if (!st.isFile()) continue; // only regular files carry content (skip fifo/socket/device nodes)
     if (extensions && extensions.length > 0) {
       const dot = name.lastIndexOf(".");
       const ext = dot === -1 ? "" : name.slice(dot);
@@ -174,8 +191,9 @@ function walkTree(absRoot: string, relDir: string, acc: Accum): void {
   if (relDir !== "") acc.dirs.add(relDir);
   for (const name of entries) {
     const absPath = join(absDir, name);
-    const st = statSync(absPath);
+    const st = lstatSync(absPath); // lstat: never follows the link (see the SYMLINK POLICY note above)
     const rel = relDir === "" ? name : `${relDir}/${name}`;
+    if (st.isSymbolicLink()) continue; // symlinks are content-invisible: neither followed nor recorded
     if (st.isDirectory()) {
       if (relDir === "" && name === ROOT_SKIP_DIR) continue; // skip ONLY the repo-root .git
       walkTree(absRoot, rel, acc);
@@ -183,6 +201,7 @@ function walkTree(absRoot: string, relDir: string, acc: Accum): void {
     }
     if (name === DIR_PLACEHOLDER) continue; // directory existence only, never content/hash
     if (acc.sha256.has(rel)) continue; // already hashed via an include rule — avoid a re-read
+    if (!st.isFile()) continue; // only regular files get a hash (skip fifo/socket/device nodes)
     acc.sha256.set(rel, sha256Bytes(readFileSync(absPath)));
   }
 }
