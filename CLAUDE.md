@@ -45,7 +45,9 @@ Not read these? STOP and read them. Do not improvise from memory of them.
   is the bar; deliberately matching a known-wrong behavior is itself a bug.
 - **L6 — Validity semantics outrank everything.** Any change touching a validity check
   (gate logic, provenance, status propagation, verdict staleness, truthful rendering)
-  gets a Fable-tier review before it lands. Cost and speed never outrank the barrier.
+  gets a top-tier review before it lands (currently GPT 5.6 Sol at xhigh via
+  `codex exec`; Fable only with explicit TJO permission — amended 2026-07-18). Cost and
+  speed never outrank the barrier.
 
 ## 2. Rules
 
@@ -80,8 +82,14 @@ Not read these? STOP and read them. Do not improvise from memory of them.
 
 - **Implementers: Sonnet.** Generic WP implementation, ports, tests, fixtures.
 - **Summarisation and code queries: Sonnet.**
-- **Reviews: Fable, serial — frequency scales with blast radius**, not with commit
-  count. A bug's reach decides the cadence:
+- **Reviews: GPT 5.6 Sol via `codex exec`, serial — frequency scales with blast
+  radius**, not with commit count (amended 2026-07-18, TJO directive: Fable no longer
+  reviews by default; use Fable only with explicit TJO permission). Tier A reviews run
+  at `-c model_reasoning_effort="xhigh"`; Tier B at the config default (`high`).
+  Invocation pattern: `codex exec review --commit <sha>` / `--base <branch>` /
+  `--uncommitted` for diff reviews, or `codex exec -s read-only "<prompt>"` for
+  document/design reviews; `-o <file>` captures the final message. A bug's reach
+  decides the cadence:
   - **Tier A — review before landing**: validity semantics (gate pass/fail rules,
     status propagation, provenance/staleness rules, truthful rendering), contract
     documents, versioned schemas, and shared contracts other components consume
@@ -138,7 +146,8 @@ one. The critical-path query (M2.5) is load-bearing for batch exclusion (M3.4).
 - A PRD/plan conflict or gap discovered mid-WP → surface it in HANDOFF + a note in
   `../research-workflows/`, pick nothing silently.
 - Tempted to add a runtime dependency, a server, a daemon, or remote automation.
-- An L6 validity semantic would change without a Fable review available.
+- An L6 validity semantic would change without a top-tier review available (codex
+  gpt-5.6-sol xhigh, or Fable with explicit permission).
 - A cross-repo item (V/F) turns out bigger than its plan size — re-plan, don't absorb
   it here.
 - Anything in the sister repos would need modifying beyond the named V/F items.
