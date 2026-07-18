@@ -89,7 +89,8 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `provenance-14` | provenance | check 4: git-TRACKED source outside every loader include rule, stale hash ⇒ ERROR | **rk-399** / `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 (BLOCKER) + Check-4 ruling: the retired "present in RepoSnapshot" proxy left a tracked path outside the include set absent from the snapshot and downgraded it to WARN, contradicting `gate-contracts.md:743`. The edge now hashes every `git ls-files` path; tracked+stale ⇒ ERROR. Red against pre-fix source (WARN, no ERROR), green after. | landed |
 | `provenance-15` | provenance | check 4: binary / non-UTF-8 payload with a CORRECT byte-faithful hash ⇒ PASS | **rk-399** finding 1: the retired UTF-8-string proxy round-tripped bytes through TextDecoder/TextEncoder and false-ERRORed non-UTF-8 payloads; the edge now hashes raw bytes. Red against pre-fix source (false ERROR), green after. Sibling ERROR case: `provenance-16`. | landed |
 | `provenance-16` | provenance | check 4: same binary payload, MISMATCHED recorded hash ⇒ ERROR | **rk-399** finding 1: guards against a "blanket-pass binary" mutation — proves the byte-faithful check still fails a genuinely stale binary source. Not corpus-red on its own (pre-fix source also ERRORs, for the wrong reason: string re-encode mismatch); its red-first partner is the `test/gates/provenance.test.ts` "binary payload whose bytes no longer match" mutation test. | landed |
-| `provenance-18` | provenance | check 6: THREE whitelisted-unanchored shards ⇒ ONE aggregate WARN (the flood shape) | **review ruling f** (overturned in re-review): per-item whitelist WARNs reached 96/118/138 on real AISM historical trees — a finding-flood under the contract's own >25 threshold. The gate now aggregates them into one WARN naming the count + sorted ids (mirrors the ratified frontmatter-invalid aggregate, ruling b). Red against pre-fix source (3 per-item WARNs, no aggregate finding), green after. Non-whitelisted unanchored shards stay per-item ERRORs (`test/gates/provenance.test.ts`). `[rk-stricter-intended]` vs AISM's per-shard console lines. (Id `-18` avoids collision with the concurrently-landing `provenance-17`, rk-4uw's frontmatter-invalid fixture.) | landed |
+| `provenance-17` | provenance | registry-parse frontmatter-invalid > 0: one valid lemma + one lemma with NO frontmatter at all ⇒ Gate 4's aggregate WARN naming the excluded path, coverage denominator honest (`checked` < `total`) | **rk-v18** / **rk-4uw** (N4, 2026-07-18 M0.3 re-review finding 4): the corpus fixture this ledger previously deferred — see `registrySkipReport` (`provenance-parse.ts:79-107`). Mutation-proven red-first: temporarily reverting `registrySkipReport` to its pre-fix shape (denominator collapsed to the surviving parsed set, no WARN emitted) fails this fixture on both the missing aggregate WARN and the coverage mismatch (`checked=1/1` instead of `1/2`); reverted immediately after confirming red. `aism_behavior`: differs — `check-provenance.py`'s `parse_registry` (check-provenance.py:120-132) silently drops the malformed shard with no finding and no visible count; its `main()` summary (check-provenance.py:514) prints only the surviving count. Triage: rk-stricter-intended. | landed |
+| `provenance-18` | provenance | check 6: THREE whitelisted-unanchored shards ⇒ ONE aggregate WARN (the flood shape) | **review ruling f** (overturned in re-review): per-item whitelist WARNs reached 96/118/138 on real AISM historical trees — a finding-flood under the contract's own >25 threshold. The gate now aggregates them into one WARN naming the count + sorted ids (mirrors the ratified frontmatter-invalid aggregate, ruling b). Red against pre-fix source (3 per-item WARNs, no aggregate finding), green after. Non-whitelisted unanchored shards stay per-item ERRORs (`test/gates/provenance.test.ts`). `[rk-stricter-intended]` vs AISM's per-shard console lines. (Id `-18` avoids collision with `provenance-17`, rk-4uw's frontmatter-invalid fixture, landed the same wave.) | landed |
 | `runs-01` [PLAN] | runs | orphaned run bundle (not in INDEX.md) | class-driven (no incident on record) | landed |
 | `runs-02` [PLAN] | runs | missing invariant | class-driven (no incident on record) | landed |
 | `runs-03` | runs | bad bundle name | class-driven (no incident on record) | landed |
@@ -112,8 +113,18 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 | `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
 
-Totals: 15 defs + 24 argument/linker + 8 refs + 16 provenance + 8 runs + 13 report-shards = **84
-fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. Ten carry
+Totals: 15 defs + 24 argument/linker + 8 refs + 18 provenance + 8 runs + 13 report-shards = **86
+fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables (recounted
+2026-07-18, rk-4uw N4+N5: +2 over the previously-pinned 84 — `provenance-17`, this WP's new
+frontmatter-invalid>0 fixture landed below, and `provenance-18`, ruling f's whitelisted-unanchored
+aggregate fixture, which had already landed on disk with its own ledger row above but was not yet
+reflected in the Totals line or the `EXPECTED_FIXTURE_COUNT`/corpus-count-assertion constants).
+`linker-22`/`linker-23`/`linker-24`, `refs-08`, `provenance-14`/`provenance-15`/`provenance-16`/
+`provenance-18`, `runs-08`, and `shards-13` were added by the 2026-07-18 M0.3 milestone-review
+repair waves (`docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` findings 1-11,
+`docs/reviews/2026-07-18-m0.3-rereview-codex.md` findings N1-N5 + rulings b/d/f) and are now
+synced into `docs/gate-contracts.md`'s per-gate "Corpus fixtures required" tables alongside this
+row. Ten carry
 `[PLAN]` (IMPLEMENTATION_PLAN M0.2's mandatory list): `defs-07` (duplicate alias), `linker-06`
 (dependency cycle), `linker-12` (contract mismatch registry↔af-root), `linker-16` (hand-edited
 generated file), `refs-01` (19/19 false-green), `provenance-01` (overclaim), `provenance-03`
@@ -172,18 +183,25 @@ uses, `src/gates/config-load.ts`); the corpus runner (`src/corpus/run.ts`'s `run
 shared by `test/corpus.test.ts` and `bun run selftest`) loads it per-fixture and merges it over
 `DEFAULT_GATE_CONFIG` before running the gate. Absent file: unchanged default-config behavior.
 
-**Declaration is mandatory (rk-6vw, 2026-07-18 M0.3 milestone review finding 10).** An
-undeclared `.rk/config.json` can silently weaken what a golden fixture proves about the default
-boundary (finding 10's example: a higher linker brittleness cap could leave the 26-node golden
-fixture clean without proving the default-26 boundary at all) — so `expected.json` must name the
-override explicitly via its own `config_override` field (see the convention section below) for
-the runner to accept it; an *undeclared* `.rk/config.json` present in a fixture's `repo/` is
-itself a harness-level failure (not merely an unflagged one), and every fixture with **no**
-`config_override` field is asserted to run with EXACTLY `DEFAULT_GATE_CONFIG` (both directions —
-declared-but-absent and present-but-undeclared — are checked by the same single comparison in
-`runFixture`). `provenance-11` is the only fixture that uses this (its
-`provenanceStatusTableFile` override, now declared as `"config_override": {
-"provenanceStatusTableFile": "report/sections/14_discussion.tex" }`).
+**Declaration is mandatory (rk-6vw, 2026-07-18 M0.3 milestone review finding 10; wording corrected
+2026-07-18, rk-4uw, re-review ruling (e) — narrowly ratified).** An undeclared `.rk/config.json`
+can silently weaken what a golden fixture proves about the default boundary (finding 10's example:
+a higher linker brittleness cap could leave the 26-node golden fixture clean without proving the
+default-26 boundary at all) — so `expected.json` must name the override explicitly via its own
+`config_override` field (see the convention section below) for the runner to accept it. What the
+single comparison in `runFixture` actually guarantees is **exact effective-configuration
+equality**: the resolved `GateConfig` a fixture's `repo/` (with or without `.rk/config.json`)
+produces via `loadGateConfig` must equal EXACTLY `mergeGateConfig(expected.config_override)` —
+`mergeGateConfig(undefined)` (bare defaults) when `config_override` is absent, or the declared
+override's merge when present. This catches a *config value* mismatch in both directions: an
+override that changes the resolved config without a matching `config_override` declaration, and a
+declared `config_override` that doesn't match what the fixture's config actually resolves to. It
+does **not** prove `.rk/config.json`'s literal presence or absence on disk: an undeclared file
+containing only explicit defaults (or `{}`) resolves to the exact same `GateConfig` as no file at
+all — `loadGateConfig` returns merged defaults in both cases — so such a file, present in a
+fixture's `repo/` with no `config_override` field, passes this comparison undetected. `provenance-
+11` is the only fixture that uses this (its `provenanceStatusTableFile` override, now declared as
+`"config_override": { "provenanceStatusTableFile": "report/sections/14_discussion.tex" }`).
 
 ## `expected.json` convention
 
@@ -295,30 +313,29 @@ brittle noise unrelated to what the fixture proves. The criterion: a fixture get
 expectation iff its own row in `docs/gate-contracts.md`'s "Corpus fixtures required" table, or
 a named Divergences entry, explicitly frames the fixture's POINT as the coverage line's
 truthfulness or visibility — not merely "the gate happens to also emit a coverage line" (true of
-all 84 fixtures, and not by itself a reason to assert on it). By that criterion:
+all 86 fixtures, and not by itself a reason to assert on it). By that criterion:
 
 | fixture | why | `docs/gate-contracts.md` anchor |
 |---|---|---|
 | `defs-14` | manifest absent ⇒ checks 8–9 coverage count must read `0/K`, not silently no-op | Gate 1 fixture table |
 | `refs-01` | 19/19 false-green ⇒ coverage line must show `0` import/no-quote-skipped, not `N` silently-skipped | Gate 3 fixture table |
 | `provenance-13` | status-table label absent ⇒ coverage line must show `0 tab:status rows` loudly (F3); the SAME coverage line also carries the rk-v18 registry-skip fix's `0 frontmatter-invalid` sub-count, so this one fixture's `unit_patterns` pins both deviations at once | Gate 4 fixture table + Gate 4 Divergences (rk-v18) |
+| `provenance-17` | registry-parse frontmatter-invalid > 0 (one malformed shard among two) ⇒ coverage `checked`/`total` must show the honest raw-inputs denominator (`1/2`), not a silently-collapsed `1/1`; closes the gap this section used to flag as a known follow-up (rk-v18, N4) | Gate 4 fixture table + Gate 4 Divergences (rk-v18) |
 | `runs-07` | empty `runs/` day-1 golden case, explicitly "asserts the coverage line still fires" | Gate 5 fixture table |
 | `shards-08`, `shards-09` | coverage numerator must mean "fully conforming", not "examined" — a live CATALOG/README ERROR must still exclude the shard from `checked` (rk-1tt) | Gate 6 Divergences |
 
-**Known gap, flagged rather than silently left (rk-4wm agenda):** `registrySkipReport`'s
-frontmatter-invalid-registry-shard path (rk-v18) has red-first proof only at the unit-test level
-(`test/gates/provenance.test.ts`, git-stash mutation check) — no landed corpus fixture actually
-drives `skipped.length > 0` (every one of the 16 landed `provenance/*` fixtures parses cleanly,
-0 frontmatter-invalid). `provenance-13`'s `unit_patterns` pins the *format* of that coverage
-sub-count (`0 frontmatter-invalid`) but not a genuine non-zero skip count. Adding a dedicated
-`provenance-17` fixture for this would bump the corpus total past the 84 this WP's harness/
-ledger/selftest all pin exactly — left as a follow-up rather than done silently under this WP's
-scope (test/corpus.test.ts, scripts/selftest.ts, corpus-run.ts, corpus/*/expected.json,
-corpus/README.md only).
+**Known gap CLOSED (rk-4uw, 2026-07-18, N4).** This section previously flagged that
+`registrySkipReport`'s frontmatter-invalid-registry-shard path (rk-v18) had red-first proof only
+at the unit-test level (`test/gates/provenance.test.ts`, git-stash mutation check), with no landed
+corpus fixture driving `skipped.length > 0` — a live L2 gap (2026-07-18 M0.3 re-review, finding
+4: "That conflicts directly with L2's fixture-per-failure-mode law"). `provenance-17` (above)
+closes it: one valid lemma plus one lemma with no frontmatter at all, asserting both the aggregate
+WARN and the honest `1/2` coverage denominator end-to-end through the corpus runner.
 
-Every other fixture (the remaining 79) is a purely finding-shaped fixture per this criterion and
-carries no `coverage` field — its `checked`/`total` values are whatever the gate happens to
-produce, asserted nowhere, same as before this WP.
+Every other fixture (the remaining 79 = 86 total − 7 with an asserted `coverage` expectation) is a
+purely finding-shaped fixture per this criterion and carries no `coverage` field — its
+`checked`/`total` values are whatever the gate happens to produce, asserted nowhere, same as
+before this WP.
 
 ## `bun run selftest` actually runs the corpus (rk-6vw)
 
@@ -345,7 +362,7 @@ selftest`), and — since 2026-07-18, rk-bdd finding 7 — the actual `rk check 
 (`src/cli/check.ts`) this section's title refers to, which was unwired until then (only the
 `bun run selftest` package script existed). All three format their report the same way
 (`src/corpus/report.ts`'s `formatCorpusRunReport`). `bun run selftest`'s corpus-execution step
-runs in well under a second (84 in-memory gate runs against small fixture trees); the whole
+runs in well under a second (86 in-memory gate runs against small fixture trees); the whole
 script, purity grep included, is comfortably under CLAUDE.md's `<10s` bar.
 
 ## Empty-directory fixtures (rk-399)
@@ -445,12 +462,22 @@ script-verified / rk-only / untested breakdown.
 | gate | fixtures | `aism_behavior: same` | `differs` | `unrunnable` |
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
-| linker | 24/24 | 21 | 2 (`linker-15` message-only, `linker-21` crash→ERROR) | 0 (`linker-24` pending script validation, see rk-rzn) |
+| linker | 24/24 | 21 | 3 (`linker-15` message-only, `linker-21` crash→ERROR, `linker-24` missing-`kind` no-op — confirmed rk-stricter-intended by empirical harness run, rk-4uw, see below) | 0 |
 | refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
-| provenance | 16/16 | 15 | 1 (`provenance-11`, hardcoded-filename incident) | 0 |
+| provenance | 18/18 | 15 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
 | shards | 13/13 | 13 | 0 | 0 |
-| **total** | 84 (83 script-validated + `linker-24` pending) | — | 6 | 0 |
+| **total** | 86 (all script-validated) | 77 | 9 | 0 |
+
+`linker-24` (rk-aft, missing `kind:` field) was script-validated 2026-07-18 (rk-4uw) via the
+module-import harness: `argument.exec_module` imported read-only, `ARG_DIR`/`DEFS_DIR`/
+`PROOFS_DIR` patched to `corpus/linker/linker-24/repo`, `parse_registry(ARG_DIR)` called directly
+— returns the shard with `errors == []`, and the full non-generate composition (argument.py:
+679-702) also produces zero errors/warnings, exit 0. Confirms ratified ruling (d) empirically:
+AISM's enum check (`if fm.get("kind") and fm["kind"] not in KINDS:`, argument.py:141 in the
+current checkout — cited `argument.py:139` in the ruling text, a two-line drift, same statement)
+is a no-op when `kind` is absent entirely. See `corpus/linker/linker-24/expected.json`'s
+`aism_behavior` field for the full citation.
 
 `linker-22`/`linker-23` (rk-co2 node_amended fix, 2026-07-18) are counted under `same`: both
 ledgers were built from a REAL `af init` + `af amend` workspace (not hand-stubbed JSON), and `af

@@ -185,10 +185,12 @@ async function main(): Promise<number> {
 
   // Corpus fixture count (M0.3): discovers corpus/<gate>/<fixture>/ the same way
   // test/corpus.test.ts does (both call src/corpus/discovery.ts — one implementation, so
-  // the two can never silently disagree). corpus/README.md's ledger totals to 84 fixtures across
-  // the six M0 gates; a drift from that number means the corpus and its own ledger have gone out
-  // of sync, which is itself an ERROR here, not a silent skip (L2).
-  const EXPECTED_FIXTURE_COUNT = 84;
+  // the two can never silently disagree). corpus/README.md's ledger totals to 86 fixtures across
+  // the six M0 gates (rk-4uw, N4+N5: +2 since the 84-count was last pinned — `provenance-17`,
+  // the previously-deferred frontmatter-invalid>0 fixture, and `provenance-18`, ruling f's
+  // whitelisted-unanchored aggregate fixture); a drift from that number means the corpus and its
+  // own ledger have gone out of sync, which is itself an ERROR here, not a silent skip (L2).
+  const EXPECTED_FIXTURE_COUNT = 86;
   const corpusRoot = join(repoRoot, "corpus");
   const fixtureTotal = totalFixtureCount(corpusRoot);
   if (fixtureTotal !== EXPECTED_FIXTURE_COUNT) {
