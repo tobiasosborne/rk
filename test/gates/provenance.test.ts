@@ -18,6 +18,7 @@ import { sha256Bytes } from "../../src/refs/hash";
 import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
 import { loadSnapshot } from "../../src/gates/load";
 import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 
 /** First-16 sha256 of a string's UTF-8 bytes — the "sha256-16" manifest convention. Byte-exact
  * with what the edge (src/gates/load.ts, via src/refs/hash.ts) computes for a UTF-8 text file. */
@@ -633,7 +634,7 @@ describe("provenance-parse helpers — direct unit tests", () => {
 
   test("labelsOf: explicit report tokens are included UNCONDITIONALLY, even when unresolved", () => {
     const s: RegistryShard = { id: "lem-x", path: "argument/lemmas/lem-x.md", af: "none", provenance: "report lem:missing" };
-    const tex = texLabels(new Map());
+    const tex = texLabels(snapshotFromFiles({}));
     expect(labelsOf(s, tex).has("lem:missing")) .toBe(true);
   });
 
@@ -641,7 +642,7 @@ describe("provenance-parse helpers — direct unit tests", () => {
     const s: RegistryShard = { id: "lem-P-properties", path: "argument/lemmas/lem-P-properties.md", af: "none", provenance: "" };
     const withLabel = texLabels(snapshot({ "report/sections/01.tex": "\\label{lem:P-properties}\n" }));
     expect(labelsOf(s, withLabel).has("lem:P-properties")).toBe(true);
-    const withoutLabel = texLabels(new Map());
+    const withoutLabel = texLabels(snapshotFromFiles({}));
     expect(labelsOf(s, withoutLabel).size).toBe(0);
   });
 
@@ -667,7 +668,7 @@ describe("provenance-parse helpers — direct unit tests", () => {
   });
 
   test("statusTableRows: absent configured file returns [] silently", () => {
-    expect(statusTableRows(new Map(), "report/sections/13_discussion.tex")).toEqual([]);
+    expect(statusTableRows(snapshotFromFiles({}), "report/sections/13_discussion.tex")).toEqual([]);
   });
 
   test("statusTableRows: present but missing \\midrule/\\label{tab:status} returns [] silently", () => {

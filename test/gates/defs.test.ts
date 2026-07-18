@@ -10,6 +10,7 @@ import { describe, expect, test } from "bun:test";
 import { checkShard, dedupNames, defsGate } from "../../src/gates/defs";
 import type { Finding } from "../../src/gates/framework";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 
 const EMPTY_MANIFEST = { present: true, prefix2path: new Map<string, string>(), sourceIds: new Set<string>() };
@@ -234,7 +235,7 @@ describe("checkShard — cited-shard presence (checks 8-9, F5 reversed M0.7)", (
 
 describe("defsGate.run — coverage line composition", () => {
   function snapshot(files: Record<string, string>): RepoSnapshot {
-    return new Map(Object.entries(files));
+    return snapshotFromFiles(files);
   }
 
   test("no cited shards at all: unit is bare 'shards', no sub-count", () => {
@@ -295,20 +296,20 @@ describe("defsGate.run — coverage line composition", () => {
   });
 
   test("a fully-empty definitions/ tree is a legitimate 0/0 pass, not an error", () => {
-    const result = defsGate.run(new Map(), DEFAULT_GATE_CONFIG);
+    const result = defsGate.run(snapshotFromFiles({}), DEFAULT_GATE_CONFIG);
     expect(result.coverage).toEqual([{ gate: "defs", unit: "shards", checked: 0, total: 0 }]);
     expect(result.findings.filter((f) => f.severity === "ERROR")).toHaveLength(0);
   });
 
   test("gate reports notImplemented: undefined once real (never true) — corpus.test.ts's stub probe flips on this", () => {
-    const result = defsGate.run(new Map(), DEFAULT_GATE_CONFIG);
+    const result = defsGate.run(snapshotFromFiles({}), DEFAULT_GATE_CONFIG);
     expect(result.notImplemented).toBeUndefined();
   });
 });
 
 describe("defsGate.run — frontmatter presence/termination gates the rest of the shard's checks", () => {
   function snapshot(files: Record<string, string>): RepoSnapshot {
-    return new Map(Object.entries(files));
+    return snapshotFromFiles(files);
   }
 
   test("missing frontmatter: exactly one ERROR, no downstream field checks attempted", () => {

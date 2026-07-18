@@ -30,7 +30,14 @@ for (const gateDir of GATE_DIRS) {
   describe(`corpus / ${gateDir}`, () => {
     // A stub's notImplemented flag is static at M0.3 (never varies with input) — probe it once
     // against an empty snapshot rather than re-running the gate per fixture just to find out.
-    const isStub = gate ? gate.run(new Map(), DEFAULT_GATE_CONFIG).notImplemented === true : true;
+    // An empty snapshot still carries the (now REQUIRED — review N2) SnapshotFacts, so a gate that
+    // reads them (provenance/runs/shards) probes cleanly instead of dereferencing a missing fact.
+    const emptySnapshot = Object.assign(new Map<string, string>(), {
+      sha256: new Map<string, string>(),
+      tracked: new Set<string>(),
+      dirs: new Set<string>(),
+    });
+    const isStub = gate ? gate.run(emptySnapshot, DEFAULT_GATE_CONFIG).notImplemented === true : true;
 
     for (const fixtureId of fixtures) {
       const label = isStub

@@ -15,6 +15,7 @@ import { describe, expect, test } from "bun:test";
 import { introspectWorkspace } from "../../src/gates/linker-workspace";
 import { parseRegistry } from "../../src/gates/linker-parse";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 
 function snapshotOf(workspace: string, events: unknown[]): RepoSnapshot {
   const m = new Map<string, string>();
@@ -22,7 +23,7 @@ function snapshotOf(workspace: string, events: unknown[]): RepoSnapshot {
     const seq = String(i + 1).padStart(6, "0");
     m.set(`${workspace}/ledger/${seq}.json`, JSON.stringify(e));
   });
-  return m;
+  return snapshotFromFiles(m);
 }
 
 describe("introspectWorkspace / node_amended replay (rk-co2)", () => {
@@ -71,12 +72,12 @@ describe("introspectWorkspace / node_amended replay (rk-co2)", () => {
 
 describe("parseRegistry / required 'kind' field (rk-aft, 2026-07-18 M0.3 review finding 3)", () => {
   test("a lemma shard with no `kind:` line at all registers an ERROR, not a silent pass", () => {
-    const snapshot: RepoSnapshot = new Map([
+    const snapshot: RepoSnapshot = snapshotFromFiles(new Map([
       [
         "argument/lemmas/lem-no-kind.md",
         "---\nid: lem-no-kind\nstatus: stated\naf: none\ncontract: no kind here\n---\n",
       ],
-    ]);
+    ]));
     const { lemmas, errors } = parseRegistry(snapshot);
     expect(errors).toHaveLength(1);
     expect(errors[0]?.severity).toBe("ERROR");
@@ -88,24 +89,24 @@ describe("parseRegistry / required 'kind' field (rk-aft, 2026-07-18 M0.3 review 
   });
 
   test("`kind:` present but empty is treated the same as absent (falsy, not a KINDS-enum miss)", () => {
-    const snapshot: RepoSnapshot = new Map([
+    const snapshot: RepoSnapshot = snapshotFromFiles(new Map([
       [
         "argument/lemmas/lem-empty-kind.md",
         "---\nid: lem-empty-kind\nkind:\nstatus: stated\naf: none\ncontract: c\n---\n",
       ],
-    ]);
+    ]));
     const { errors } = parseRegistry(snapshot);
     expect(errors).toHaveLength(1);
     expect(errors[0]?.message).toContain("missing required field 'kind'");
   });
 
   test("a valid `kind:` value registers cleanly (no regression on the golden path)", () => {
-    const snapshot: RepoSnapshot = new Map([
+    const snapshot: RepoSnapshot = snapshotFromFiles(new Map([
       [
         "argument/lemmas/lem-ok.md",
         "---\nid: lem-ok\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
       ],
-    ]);
+    ]));
     const { lemmas, errors } = parseRegistry(snapshot);
     expect(errors).toHaveLength(0);
     expect(lemmas[0]?.kind).toBe("lemma");

@@ -7,7 +7,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { runsGate } from "../../src/gates/runs";
-import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
+import type { RepoSnapshot } from "../../src/gates/snapshot";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 
 /** A minimal, fully-compliant README body: all four required fields plus an invariant marker. */
@@ -28,20 +29,14 @@ function goodReadme(): string {
 }
 
 function snapshot(entries: Record<string, string>): RepoSnapshot {
-  return new Map(Object.entries(entries));
+  return snapshotFromFiles(entries);
 }
 
-/** Snapshot carrying an explicit `dirs` fact (empty-directory existence), as `loadSnapshot`
- * supplies from the real tree — the only way to model a genuinely-empty on-disk bundle directory,
- * which git cannot store and file-prefix inference cannot see (rk-399 review finding 2). */
+/** Snapshot carrying EXTRA empty-directory existence facts, as `loadSnapshot` supplies from the
+ * real tree — the only way to model a genuinely-empty on-disk bundle directory, which git cannot
+ * store and file-prefix inference cannot see (rk-399 review finding 2). */
 function snapshotWithDirs(entries: Record<string, string>, dirs: string[]): RepoSnapshot {
-  const m = new Map(Object.entries(entries)) as Map<string, string> & SnapshotFacts;
-  Object.assign(m, {
-    sha256: new Map<string, string>(),
-    tracked: new Set<string>(),
-    dirs: new Set<string>(dirs),
-  } satisfies SnapshotFacts);
-  return m;
+  return snapshotFromFiles(entries, { dirs });
 }
 
 function run(entries: Record<string, string>) {

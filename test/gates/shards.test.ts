@@ -7,19 +7,14 @@
 
 import { describe, expect, test } from "bun:test";
 import { shardsGate } from "../../src/gates/shards";
-import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
+import type { RepoSnapshot } from "../../src/gates/snapshot";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 
-/** Snapshot with an explicit `dirs` fact (directory existence, empty ones included), as
- * `loadSnapshot` supplies from the real tree. */
+/** Snapshot with EXTRA directory-existence facts (empty ones included), as `loadSnapshot` supplies
+ * from the real tree. */
 function snap(entries: Record<string, string>, dirs: string[]): RepoSnapshot {
-  const m = new Map(Object.entries(entries)) as Map<string, string> & SnapshotFacts;
-  Object.assign(m, {
-    sha256: new Map<string, string>(),
-    tracked: new Set<string>(),
-    dirs: new Set<string>(dirs),
-  } satisfies SnapshotFacts);
-  return m;
+  return snapshotFromFiles(entries, { dirs });
 }
 
 function errors(result: ReturnType<typeof shardsGate.run>) {

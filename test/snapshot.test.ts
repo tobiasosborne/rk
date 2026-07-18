@@ -1,13 +1,74 @@
 import { describe, expect, test } from "bun:test";
-import { hasPath, hasPrefix, listDir, parseFrontmatter } from "../src/gates/snapshot";
+import {
+  childDirs,
+  dirExists,
+  fileSha256,
+  hasPath,
+  hasPrefix,
+  isTracked,
+  listDir,
+  parseFrontmatter,
+  snapshotFromFiles,
+} from "../src/gates/snapshot";
+import type { RepoSnapshot, SnapshotFacts } from "../src/gates/snapshot";
+
+describe("snapshotFromFiles — pure test/probe builder (N2: facts are REQUIRED, never optional)", () => {
+  test("synthesizes all three required facts from an in-memory file map", () => {
+    const snap = snapshotFromFiles({
+      "runs/2026-01-01-x/README.md": "hi",
+      "report/main.tex": "m",
+    });
+    // Text map intact.
+    expect(snap.get("report/main.tex")).toBe("m");
+    // dirs DERIVED from every ancestor of every file path.
+    expect(snap.dirs.has("runs")).toBe(true);
+    expect(snap.dirs.has("runs/2026-01-01-x")).toBe(true);
+    expect(snap.dirs.has("report")).toBe(true);
+    // tracked defaults to every file path.
+    expect(isTracked(snap, "report/main.tex")).toBe(true);
+    // sha256 defaults to empty (no hasher in a pure module) — an EXPLICIT all-absent state.
+    expect(fileSha256(snap, "report/main.tex")).toBeUndefined();
+  });
+
+  test("opts.dirs adds EMPTY directories that hold no file (path-derivation cannot see them)", () => {
+    const snap = snapshotFromFiles({ "runs/README.md": "schema doc" }, { dirs: ["runs/2026-01-01-empty"] });
+    expect(snap.dirs.has("runs/2026-01-01-empty")).toBe(true);
+    expect(childDirs(snap, "runs")).toEqual(["2026-01-01-empty"]);
+  });
+
+  test("opts.tracked and opts.sha256 override the defaults", () => {
+    const snap = snapshotFromFiles(
+      { "refs/x/payload.tex": "body" },
+      { tracked: [], sha256: { "refs/x/payload.tex": "deadbeefdeadbeef" } },
+    );
+    expect(isTracked(snap, "refs/x/payload.tex")).toBe(false); // untracked-but-present
+    expect(fileSha256(snap, "refs/x/payload.tex")).toBe("deadbeefdeadbeef");
+  });
+});
+
+describe("accessors read facts with NO silent degradation (N2)", () => {
+  test("dirExists reads the dirs fact strictly — no file-prefix fallback on a factless snapshot", () => {
+    // A hand-built factless snapshot is a TYPE error now; forced via `as` to prove the runtime no
+    // longer silently papers over the missing fact (old dirExists fell back to hasPrefix and
+    // returned TRUE here from the file prefix, making a present-but-empty dir indistinguishable
+    // from an absent-but-file-shadowed one — the exact N2 ambiguity).
+    const factless = new Map([["report/sections/a.tex", "x"]]) as unknown as RepoSnapshot;
+    expect(() => dirExists(factless, "report/sections")).toThrow();
+  });
+
+  test("childDirs reads the dirs fact strictly — no silent [] on a factless snapshot", () => {
+    const factless = new Map([["runs/2026-01-01-x/README.md", "x"]]) as unknown as RepoSnapshot;
+    expect(() => childDirs(factless, "runs")).toThrow();
+  });
+});
 
 describe("listDir / hasPath / hasPrefix", () => {
-  const snap = new Map([
-    ["definitions/a.md", "A"],
-    ["definitions/b.md", "B"],
-    ["proofs/lem-x/ledger/000001.json", "{}"],
-    ["proofs/lem-x/meta.json", "{}"],
-  ]);
+  const snap = snapshotFromFiles({
+    "definitions/a.md": "A",
+    "definitions/b.md": "B",
+    "proofs/lem-x/ledger/000001.json": "{}",
+    "proofs/lem-x/meta.json": "{}",
+  });
 
   test("listDir returns immediate children only, sorted", () => {
     expect(listDir(snap, "definitions")).toEqual(["a.md", "b.md"]);

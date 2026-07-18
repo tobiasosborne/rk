@@ -30,9 +30,10 @@ import { formatCoverageLine } from "../../src/gates/framework";
 import { unmatchedExpectations } from "../../src/gates/subset-match";
 import type { ExpectedFinding } from "../../src/gates/subset-match";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
 
 function snap(entries: Record<string, string>): RepoSnapshot {
-  return new Map(Object.entries(entries));
+  return snapshotFromFiles(entries);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -439,7 +440,7 @@ function loadFullSnapshot(root: string): RepoSnapshot {
     }
   };
   walk(root);
-  return out;
+  return snapshotFromFiles(out);
 }
 
 interface ExpectedJson {
