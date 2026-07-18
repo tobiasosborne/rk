@@ -152,6 +152,11 @@ corpus/<gate>/<fixture-id>/
   expected.json  machine-readable expectation — the interface M0.3's test harness consumes.
 ```
 
+A fixture's `repo/` may carry its own `.rk/config.json` (same shape/path convention a real repo
+uses, `src/gates/config-load.ts`); `test/corpus.test.ts` loads it per-fixture and merges it over
+`DEFAULT_GATE_CONFIG` before running the gate. Absent file: unchanged default-config behavior.
+`provenance-11` is the first fixture to use this (its `provenanceStatusTableFile` override).
+
 ## `expected.json` convention
 
 **Normativity hierarchy (2026-07-17 TJO premise correction — read this before anything

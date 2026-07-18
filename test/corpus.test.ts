@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { GATES } from "../src/gates/index";
 import { loadSnapshot } from "../src/gates/load";
 import { DEFAULT_GATE_CONFIG } from "../src/gates/config";
+import { loadGateConfig } from "../src/gates/config-load";
 import { unmatchedExpectations } from "../src/gates/subset-match";
 import type { ExpectedFinding } from "../src/gates/subset-match";
 import { GATE_DIRS, discoverAllFixtures } from "../src/gates/corpus-discovery";
@@ -46,11 +47,17 @@ for (const gateDir of GATE_DIRS) {
         ? `${gateDir}/${fixtureId} (gate not implemented — ${fixtures.length} fixtures pending)`
         : `${gateDir}/${fixtureId}`;
 
-      const body = () => {
+      // Per-fixture config override (rk-r5t): a fixture's repo/ may carry its own
+      // .rk/config.json, loaded via the same production edge (src/gates/config-load.ts)
+      // real repos use — never an invented test-only convention. Absent file/dir degrades to
+      // DEFAULT_GATE_CONFIG untouched, exactly as loadGateConfig already guarantees.
+      const body = async () => {
         if (!gate) throw new Error(`no registered gate named '${gateDir}' (src/gates/index.ts)`);
         const expected: ExpectedJson = JSON.parse(readFileSync(join(fixtureDir, "expected.json"), "utf8"));
-        const snapshot = loadSnapshot(join(fixtureDir, "repo"));
-        const result = gate.run(snapshot, DEFAULT_GATE_CONFIG);
+        const repoDir = join(fixtureDir, "repo");
+        const snapshot = loadSnapshot(repoDir);
+        const config = await loadGateConfig(repoDir);
+        const result = gate.run(snapshot, config);
 
         const missing = unmatchedExpectations(result.findings, expected.findings);
         expect(missing).toEqual([]);
