@@ -12,6 +12,7 @@ import { refsDispatch } from "./cli/refs";
 import { checkCommand } from "./cli/check";
 import { doctorCommand } from "./cli/doctor";
 import { phaseCommand } from "./cli/phase";
+import { initCommand } from "./cli/init";
 import type { Out } from "./cli/args";
 import { defaultOut } from "./cli/args";
 
@@ -22,16 +23,18 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   check: checkCommand,
   doctor: doctorCommand,
   phase: phaseCommand,
+  init: initCommand,
 };
 
 function topHelp(out: Out): number {
   out.log("rk — research-automation tool");
+  out.log('  rk init "<north-star contract>" [--root <dir>] [--force]  stamp a fresh scaffold (M1.2, PRD C1)');
   out.log("  rk refs status|add|quote   ground-truth reference library (PRD C7)");
   out.log("  rk check [--root <dir>]    run all six M0 gates (docs/gate-contracts.md)");
   out.log("  rk check --selftest [--root <dir>]  run rk's own red-fixture corpus (default <root>/corpus)");
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
-  out.log("  next: 'rk refs status' to see what's acquired in this repo.");
+  out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");
   return 0;
 }
 
