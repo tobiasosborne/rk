@@ -761,17 +761,22 @@ proves the limitation is not hypothetical.
    `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 1 + Check-4 ruling):
    - malformed sha (not 16 lowercase hex) ⇒ ERROR;
    - absolute (non-`refs/`-relative) path ⇒ WARN (hash unverifiable);
-   - **present on disk + hash mismatch ⇒ ERROR "file edited, hash stale"**, whether the file is
-     **git-tracked** (`git ls-files`; AISM parity, check-provenance.py:368-404,481-482) — this
-     holds **regardless of the loader's include rules**: the edge hashes every tracked file, so a
-     tracked source row naming a path *outside* those rules is verified, not silently WARNed
-     (this was BLOCKER finding 1) — **OR** git-untracked-but-present (a gitignored payload, e.g.
-     under `refs/`): that is a `[rk-stricter-intended]` ERROR (AISM WARNs it), carrying a
-     `present on disk but git-untracked; rk-stricter-intended` marker in the message. CLAUDE.md
-     L5 defaults to the stricter validity reading, and the failure direction (an extra ERROR,
-     never a missed stale-source false-green) is the safe one;
-   - **absent from disk** (no byte hash measured — not on disk, or untracked *and* outside the
-     include rules) ⇒ WARN "not hash-verifiable", never ERROR.
+   - **present on disk + hash mismatch ⇒ ERROR "file edited, hash stale"**, always — this holds
+     **regardless of git-tracking AND regardless of the loader's include rules**. The edge hashes
+     **every file present on disk** (a full-tree walk that descends everywhere except the repo-root
+     `.git`; round-3 landing-blocker 1), so a source row naming *any* present path is verified, not
+     silently WARNed — inside the include rules or not, tracked or gitignored. The only distinction
+     tracking draws is the message shape: a **git-tracked** stale file (`git ls-files`; AISM parity,
+     check-provenance.py:368-404,481-482) carries no suffix, while a **git-untracked-but-present**
+     one (a gitignored payload, e.g. under `refs/`) is the same `[rk-stricter-intended]` ERROR (AISM
+     WARNs it) carrying a `present on disk but git-untracked; rk-stricter-intended` marker. CLAUDE.md
+     L5 defaults to the stricter validity reading, and the failure direction (an extra ERROR, never
+     a missed stale-source false-green) is the safe one;
+   - **genuinely absent from disk** ⇒ WARN "not hash-verifiable", never ERROR. Because the edge
+     hashes every present file regardless of tracking or the include rules, a *missing* byte-hash
+     fact can mean only one thing: the path is not on disk at all. (The round-2 exception that also
+     called an "untracked *and* outside the include rules" path absent is retired — after
+     landing-blocker 1 no present path is left unhashed, so that class no longer exists.)
    Tracking is real `git ls-files` state and byte hashes are of raw bytes — both are
    `SnapshotFacts` supplied by the edge; the pure gate consumes facts, it does not guess (the
    retired "present in RepoSnapshot" proxy could neither see a tracked path outside the include
