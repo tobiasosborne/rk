@@ -9,6 +9,7 @@
     }
   ],
   "exit_code": 1,
+  "config_override": { "provenanceStatusTableFile": "report/sections/14_discussion.tex" },
   "aism_behavior": "differs: AISM's hardcoded ROOT/'report/sections/13_discussion.tex' (check-provenance.py:206) doesn't exist in this fixture (the table lives in 14_discussion.tex) -- script-verified: status_table_rows() silently returns [], check 5 examines zero rows, the OVERCLAIM is MISSED, exit 0 (false green)",
   "notes": "Regression probe for incident (a) (worklog.md:270-272, F10-corrected direction: the ledger was renumbered TO 13_discussion.tex, the stale hardcode pointed at the OLD name). Triage: rk-stricter-intended — the config-parameter deviation (gate-contracts.md Gate 4 Deviations) is exactly the fix for this exact bug class; script-verified BOTH ways (harness run with tab_status_file='13_discussion.tex' reproduces AISM's miss; with '14_discussion.tex' reproduces rk's catch)."
 }

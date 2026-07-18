@@ -19,6 +19,7 @@
     }
   ],
   "exit_code": 1,
+  "coverage": { "checked": 0, "total": 3, "unit_patterns": ["3 failed", "0 import-skipped", "0 no-quote-skipped"] },
   "aism_behavior": "same",
   "notes": "[PLAN] aism-dbq regression probe (the 19/19 false-green, at 3-external scale): every claimed refs/ payload is absent locally; ALL must FAIL, none may be classified skip. Script-verified: 3 externals, 3 failed, 0 import-skipped, 0 no-quote-skipped — the coverage-line breakdown that would have caught the pre-fix bug is exactly what this fixture pins."
 }

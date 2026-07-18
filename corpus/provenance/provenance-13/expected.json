@@ -3,6 +3,7 @@
   "verdict": "pass",
   "findings": [],
   "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["0 frontmatter-invalid", "0 tab:status rows"] },
   "aism_behavior": "same",
   "notes": "[F3, 2026-07-17 Fable review] status-table label absent: 13_discussion.tex EXISTS but has neither \\label{tab:status} nor \\midrule -> status_table_rows() returns [] (check-provenance.py:207-211), the SAME silent-skip shape as refs-01/defs-14/defs-15 (a checker verifying zero things while reporting green). Script-verified: 0 errors, 0 warnings from status drift specifically. rk's Deviation makes this loud: the coverage line always prints '<S> tab:status rows' (here 0) instead of AISM's total silence — verdict is identical (both green), only visibility differs, which is why aism_behavior is 'same' (verdict-level) even though the point of the fixture is a rk-only transparency deviation."
 }

@@ -14,6 +14,7 @@
     }
   ],
   "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1 },
   "aism_behavior": "same",
   "notes": "check-report-shards.sh:58-59 (path) and :87-88 (label) -- two separate README checks, both genuinely missing here since README.md mentions neither; script-verified."
 }

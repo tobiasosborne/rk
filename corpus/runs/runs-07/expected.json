@@ -3,6 +3,7 @@
   "verdict": "pass",
   "findings": [],
   "exit_code": 0,
+  "coverage": { "checked": 0, "total": 0 },
   "aism_behavior": "same",
   "notes": "Golden day-1 case (check-runs.py:16, 'Day 1: runs/ is empty by design => the gate is green'). runs/ contains only its own README.md (SKIP-listed schema doc, check-runs.py:36) -- zero bundles. Script-verified: coverage line explicitly states '0 run bundle(s)', never omitted, per the Day-1-vacuity contract clause."
 }

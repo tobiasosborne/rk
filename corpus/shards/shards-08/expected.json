@@ -9,6 +9,7 @@
     }
   ],
   "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1 },
   "aism_behavior": "same",
   "notes": "check-report-shards.sh:90-95; script-verified. CATALOG omits only the SHARD-KEYWORDS string; ID/path/title/summary lines are all present so only the one missing item is flagged."
 }

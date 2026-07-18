@@ -1,20 +1,28 @@
-// scripts/selftest.ts — `bun run selftest`. v0: the L3 purity grep + a placeholder corpus
-// check. CLAUDE.md §4: "bun test + bun run selftest ... all three green before any commit
-// that claims a WP step." L2's coverage-reporting mandate applies here too: every check
-// prints exactly one final coverage line, even at N=0 (an empty corpus on day one is a
-// legitimate green state, not a silent skip).
+// scripts/selftest.ts — `bun run selftest`. The L3 purity grep + the corpus red-fixture runner.
+// CLAUDE.md §4: "bun test + bun run selftest ... all three green before any commit that claims
+// a WP step." L2's coverage-reporting mandate applies here too: every check prints exactly one
+// final coverage line, even at N=0 (an empty corpus on day one is a legitimate green state, not
+// a silent skip).
+//
+// rk-6vw (2026-07-18 M0.3 milestone review, finding 6 — "guard-the-guards lie"):
+// corpus/README.md:13 has always claimed "`rk check --selftest` runs the corpus", but this file
+// used to only COUNT fixture directories (`totalFixtureCount`), never actually run a single one
+// through its gate. It now calls `runAllFixtures` (src/gates/corpus-run.ts) — the exact same
+// runner test/corpus.test.ts uses per-fixture via `expect()` — so this script and the test suite
+// can never silently disagree about what "the corpus passes" means.
 //
 // Purity convention: a file opts into the check by starting with a `// PURITY: pure` comment
 // (first 5 lines) — src/refs/{checksum,lock,manifest,quote,path-safety}.ts, src/types.ts, and
 // (as of M0.3) src/gates/{framework,snapshot,config,defs,linker,refs,provenance,runs,shards}.ts
 // all do this; src/graph (M2.1) will adopt the same marker rather than a new mechanism. A file
 // without the marker is never scanned (an EDGE file legitimately uses fs/network/clock — e.g.
-// src/gates/{load,config-load,corpus-discovery}.ts). Forbidden patterns: `node:` imports,
-// `Date.`, `process.`, `Bun.`.
+// src/gates/{load,config-load,corpus-discovery,corpus-run}.ts). Forbidden patterns: `node:`
+// imports, `Date.`, `process.`, `Bun.`.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { totalFixtureCount } from "../src/gates/corpus-discovery";
+import { GATE_DIRS, runAllFixtures } from "../src/gates/corpus-run";
 
 const PURITY_MARKER = "PURITY: pure";
 const PURITY_MARKER_SCAN_LINES = 5;
@@ -73,7 +81,7 @@ export function checkPurity(repoRoot: string): { checked: string[]; violations: 
   return { checked, violations };
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const repoRoot = join(import.meta.dir, "..");
   let errors = 0;
 
@@ -104,8 +112,39 @@ function main(): number {
   }
   console.log(`checked corpus: ${fixtureTotal}/${EXPECTED_FIXTURE_COUNT} gate fixtures discovered`);
 
+  // Corpus execution (rk-6vw, finding 6): actually run every discovered fixture through its gate
+  // via the SAME runner test/corpus.test.ts uses (src/gates/corpus-run.ts's `runFixture`), never
+  // a second implementation that could quietly drift from it. Reports one pass-count line per
+  // gate plus an aggregate, and fails loudly — printing every fixture's own error list — on any
+  // mismatch, rather than silently counting directories the way this script used to.
+  const results = await runAllFixtures(corpusRoot);
+  const byGate = new Map<string, { pass: number; total: number }>();
+  for (const g of GATE_DIRS) byGate.set(g, { pass: 0, total: 0 });
+  let corpusRunFailures = 0;
+  for (const r of results) {
+    const bucket = byGate.get(r.gate)!;
+    if (r.notImplemented) continue; // stub gates: no pass/fail signal yet, excluded from counts
+    bucket.total += 1;
+    if (r.errors.length === 0) {
+      bucket.pass += 1;
+    } else {
+      corpusRunFailures += 1;
+      for (const e of r.errors) {
+        console.log(`ERROR corpus/${r.gate}/${r.fixtureId}: ${e}`);
+      }
+    }
+  }
+  for (const g of GATE_DIRS) {
+    const b = byGate.get(g)!;
+    console.log(`checked corpus/${g}: ${b.pass}/${b.total} fixtures passed`);
+  }
+  const runTotal = [...byGate.values()].reduce((sum, b) => sum + b.total, 0);
+  const runPass = [...byGate.values()].reduce((sum, b) => sum + b.pass, 0);
+  console.log(`checked corpus-run: ${runPass}/${runTotal} fixtures passed`);
+  errors += corpusRunFailures;
+
   if (errors > 0) {
-    console.log(`\nrk selftest: FAILED (${errors} error(s)). Fix the purity violation(s) above.`);
+    console.log(`\nrk selftest: FAILED (${errors} error(s)). Fix the violation(s) above.`);
     return 1;
   }
   console.log("\nrk selftest: OK");
@@ -113,5 +152,5 @@ function main(): number {
 }
 
 if (import.meta.main) {
-  process.exit(main());
+  process.exit(await main());
 }

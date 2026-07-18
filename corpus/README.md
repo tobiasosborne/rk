@@ -10,7 +10,9 @@ CLAUDE.md L2 (red corpus first): "Any gate or check guarding a failure mode ship
 corpus fixture reproducing that failure mode, drawn from a real incident where one exists...
 A gate with no red fixture does not exist." This file is the tracked ledger of every fixture
 named in `docs/gate-contracts.md`'s per-gate "Corpus fixtures required" tables — the plan
-(M0.2) builds one minimal repo fixture per row below; `rk check --selftest` runs the corpus.
+(M0.2) builds one minimal repo fixture per row below; `bun run selftest` (`scripts/
+selftest.ts`) actually runs every one of them (see "`bun run selftest` actually runs the corpus"
+below — rk-6vw, 2026-07-18 M0.3 milestone review finding 6).
 
 Not every violation class has a real AISM incident behind it — several gates are preventive
 (no drift has actually occurred in AISM's history at time of writing). Where a real incident
@@ -165,9 +167,22 @@ corpus/<gate>/<fixture-id>/
 ```
 
 A fixture's `repo/` may carry its own `.rk/config.json` (same shape/path convention a real repo
-uses, `src/gates/config-load.ts`); `test/corpus.test.ts` loads it per-fixture and merges it over
+uses, `src/gates/config-load.ts`); the corpus runner (`src/gates/corpus-run.ts`'s `runFixture`,
+shared by `test/corpus.test.ts` and `bun run selftest`) loads it per-fixture and merges it over
 `DEFAULT_GATE_CONFIG` before running the gate. Absent file: unchanged default-config behavior.
-`provenance-11` is the first fixture to use this (its `provenanceStatusTableFile` override).
+
+**Declaration is mandatory (rk-6vw, 2026-07-18 M0.3 milestone review finding 10).** An
+undeclared `.rk/config.json` can silently weaken what a golden fixture proves about the default
+boundary (finding 10's example: a higher linker brittleness cap could leave the 26-node golden
+fixture clean without proving the default-26 boundary at all) — so `expected.json` must name the
+override explicitly via its own `config_override` field (see the convention section below) for
+the runner to accept it; an *undeclared* `.rk/config.json` present in a fixture's `repo/` is
+itself a harness-level failure (not merely an unflagged one), and every fixture with **no**
+`config_override` field is asserted to run with EXACTLY `DEFAULT_GATE_CONFIG` (both directions —
+declared-but-absent and present-but-undeclared — are checked by the same single comparison in
+`runFixture`). `provenance-11` is the only fixture that uses this (its
+`provenanceStatusTableFile` override, now declared as `"config_override": {
+"provenanceStatusTableFile": "report/sections/14_discussion.tex" }`).
 
 ## `expected.json` convention
 
@@ -190,10 +205,15 @@ weaken the expectation to match AISM.
     { "severity": "ERROR", "path_pattern": "definitions/def-x.md", "message_pattern": "DRIFT" }
   ],
   "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["0 frontmatter-invalid"] },
+  "config_override": { "linkerBrittlenessSoftCap": 5 },
   "aism_behavior": "same",
   "notes": "one line: what this fixture proves and how it was validated"
 }
 ```
+
+`coverage` and `config_override` are both OPTIONAL — most fixtures carry neither (see "Which
+fixtures get a `coverage` expectation" below).
 
 Field semantics:
 
@@ -217,6 +237,29 @@ Field semantics:
     text (not the whole `SEVERITY path:line message` line).
 - **`exit_code`** — the single gate's own exit code in isolation under the contract (0 or 1;
   `rk check`'s composed exit code is a separate concern, out of scope for a per-gate fixture).
+- **`coverage`** (OPTIONAL; rk-6vw, 2026-07-18 M0.3 milestone review finding 6) — an exact
+  expectation on the gate's own `CoverageLine` (`src/gates/framework.ts`; every one of the six
+  gates emits exactly one per run, per `docs/gate-contracts.md`'s "Coverage line" shared
+  convention). When present, the runner (`src/gates/corpus-run.ts`) asserts it — never merely
+  reports it:
+  - `checked`/`total` — matched EXACTLY against `coverage[0].checked`/`coverage[0].total`.
+  - `unit_patterns` (optional array) — every string must appear as a case-sensitive substring of
+    `coverage[0].unit`, same convention as `findings[].message_pattern`. Needed because a
+    fixture's actual coverage-point is often a sub-count embedded in the free-form `unit` text
+    rather than the top-level `checked`/`total` pair itself — e.g. provenance-13's point is "0
+    tab:status rows", not its registry-level `1/1`.
+  - See "Which fixtures get a `coverage` expectation" below for the criterion deciding which
+    fixtures carry this field; absent means the harness makes no coverage assertion at all for
+    that fixture (a purely finding-shaped fixture, not a claim that its coverage line is
+    unconstrained).
+- **`config_override`** (OPTIONAL; rk-6vw, finding 10) — declares the exact `Partial<GateConfig>`
+  (`src/gates/config.ts`) this fixture's `repo/.rk/config.json` carries. Mandatory whenever that
+  file exists; forbidden (must be absent, or the field itself absent) otherwise. The runner
+  asserts the loaded config (`loadGateConfig(repoDir)`, merged over `DEFAULT_GATE_CONFIG`) equals
+  EXACTLY `mergeGateConfig(config_override)` — this single comparison catches both an undeclared
+  override (file present, field absent → the loaded config differs from bare defaults) and a
+  stale declaration (field present but doesn't match what the file actually resolves to). See the
+  "Fixture directory layout" section above for the full rationale.
 - **`aism_behavior`** — characterization of prior art, subordinate to `verdict`/`findings`/
   `exit_code` above; never authoritative:
   - `"same"` — the corresponding AISM script, run against this fixture's `repo/` tree, produces
@@ -242,6 +285,56 @@ Field semantics:
   unrunnable-and-why). Where a fixture's `verdict` anticipates a contract clause that has not
   yet been written into `docs/gate-contracts.md` (a pending correction), say so explicitly here
   — that fixture is not yet enforceable by M0.3 until the contract itself is amended.
+
+## Which fixtures get a `coverage` expectation (rk-6vw)
+
+Not every fixture's contract clause is about the coverage line — most target one specific
+`Finding`, and asserting an incidental `checked`/`total` value alongside it would just be
+brittle noise unrelated to what the fixture proves. The criterion: a fixture gets a `coverage`
+expectation iff its own row in `docs/gate-contracts.md`'s "Corpus fixtures required" table, or
+a named Divergences entry, explicitly frames the fixture's POINT as the coverage line's
+truthfulness or visibility — not merely "the gate happens to also emit a coverage line" (true of
+all 84 fixtures, and not by itself a reason to assert on it). By that criterion:
+
+| fixture | why | `docs/gate-contracts.md` anchor |
+|---|---|---|
+| `defs-14` | manifest absent ⇒ checks 8–9 coverage count must read `0/K`, not silently no-op | Gate 1 fixture table |
+| `refs-01` | 19/19 false-green ⇒ coverage line must show `0` import/no-quote-skipped, not `N` silently-skipped | Gate 3 fixture table |
+| `provenance-13` | status-table label absent ⇒ coverage line must show `0 tab:status rows` loudly (F3); the SAME coverage line also carries the rk-v18 registry-skip fix's `0 frontmatter-invalid` sub-count, so this one fixture's `unit_patterns` pins both deviations at once | Gate 4 fixture table + Gate 4 Divergences (rk-v18) |
+| `runs-07` | empty `runs/` day-1 golden case, explicitly "asserts the coverage line still fires" | Gate 5 fixture table |
+| `shards-08`, `shards-09` | coverage numerator must mean "fully conforming", not "examined" — a live CATALOG/README ERROR must still exclude the shard from `checked` (rk-1tt) | Gate 6 Divergences |
+
+**Known gap, flagged rather than silently left (rk-4wm agenda):** `registrySkipReport`'s
+frontmatter-invalid-registry-shard path (rk-v18) has red-first proof only at the unit-test level
+(`test/gates/provenance.test.ts`, git-stash mutation check) — no landed corpus fixture actually
+drives `skipped.length > 0` (every one of the 16 landed `provenance/*` fixtures parses cleanly,
+0 frontmatter-invalid). `provenance-13`'s `unit_patterns` pins the *format* of that coverage
+sub-count (`0 frontmatter-invalid`) but not a genuine non-zero skip count. Adding a dedicated
+`provenance-17` fixture for this would bump the corpus total past the 84 this WP's harness/
+ledger/selftest all pin exactly — left as a follow-up rather than done silently under this WP's
+scope (test/corpus.test.ts, scripts/selftest.ts, corpus-run.ts, corpus/*/expected.json,
+corpus/README.md only).
+
+Every other fixture (the remaining 79) is a purely finding-shaped fixture per this criterion and
+carries no `coverage` field — its `checked`/`total` values are whatever the gate happens to
+produce, asserted nowhere, same as before this WP.
+
+## `bun run selftest` actually runs the corpus (rk-6vw)
+
+Before 2026-07-18, `scripts/selftest.ts` only called `totalFixtureCount` — it counted fixture
+*directories*, never ran a single one through its gate, contradicting this file's own line 13
+above ("`rk check --selftest` runs the corpus"), a guard-the-guards truthfulness gap (2026-07-18
+M0.3 milestone review, finding 6). The per-fixture run/assert logic that used to live only inside
+`test/corpus.test.ts` is now `src/gates/corpus-run.ts`'s `runFixture`/`runAllFixtures` — an EDGE
+module (reads `repo/`, `.rk/config.json`, and `expected.json` off disk, so it is never marked
+`PURITY: pure` and is exempt from the L3 purity grep, same as `load.ts`/`config-load.ts`/
+`corpus-discovery.ts`). Both `test/corpus.test.ts` (per-fixture `test()`/`expect()`, for readable
+red output under `bun test`) and `scripts/selftest.ts` (aggregated per-gate pass counts, for a
+fast whole-corpus sanity check under `bun run selftest`) call this SAME function — one
+implementation, so the two entry points can never silently disagree about what "the corpus
+passes" means. `bun run selftest`'s corpus-execution step runs in well under a second (84
+in-memory gate runs against small fixture trees); the whole script, purity grep included, is
+comfortably under CLAUDE.md's `<10s` bar.
 
 ## Empty-directory fixtures (rk-399)
 
