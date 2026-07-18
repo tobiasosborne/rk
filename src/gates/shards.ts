@@ -24,6 +24,7 @@ import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { hasPath, dirExists } from "./snapshot";
 import type { GateConfig } from "./config";
+import { escapeRegExp, firstHeader, allHeaders, parseIncludes } from "./shards-parse";
 
 const MASTER = "report/main.tex";
 const SECTIONS_DIR = "report/sections";
@@ -32,54 +33,6 @@ const CATALOG = "report/SHARD_CATALOG.md";
 
 function mkErr(path: string, line: number, message: string): Finding {
   return { severity: "ERROR", path, line, message };
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
-}
-
-interface HeaderHit {
-  value: string;
-  line: number;
-}
-
-/** `sed 's/^% KEY:[[:space:]]*(.+)$/\1/p' | head -n 1` equivalent — first-wins per
- * docs/gate-contracts.md Gate 6 Inputs table ("a duplicate line within the same file is not an
- * error"). */
-function firstHeader(content: string, key: string): HeaderHit | undefined {
-  const re = new RegExp(`^% ${key}:\\s*(.+)$`);
-  const lines = content.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const m = re.exec(lines[i]!);
-    if (m) return { value: m[1]!, line: i + 1 };
-  }
-  return undefined;
-}
-
-/** `mapfile` equivalent — every matching line, in order (SHARD-SUMMARY's cardinality IS checked,
- * unlike the other three headers — see Gate 6 Inputs table). */
-function allHeaders(content: string, key: string): string[] {
-  const re = new RegExp(`^% ${key}:\\s*(.+)$`);
-  return content
-    .split("\n")
-    .map((line) => re.exec(line)?.[1])
-    .filter((v): v is string => v !== undefined);
-}
-
-/** Every `\include{...}` target on a non-comment line of `content`, in order (check-report-
- * shards.sh:28-30). A comment line (leading `%`, after trimming) is excluded entirely. */
-function parseIncludes(content: string): Array<{ target: string; line: number }> {
-  const out: Array<{ target: string; line: number }> = [];
-  const re = /\\include\{([^}]+)\}/g;
-  content.split("\n").forEach((line, idx) => {
-    if (/^\s*%/.test(line)) return;
-    let m: RegExpExecArray | null;
-    let last: RegExpExecArray | null = null;
-    re.lastIndex = 0;
-    while ((m = re.exec(line)) !== null) last = m;
-    if (last) out.push({ target: last[1]!, line: idx + 1 });
-  });
-  return out;
 }
 
 function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
@@ -110,7 +63,15 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     findings.push(mkErr(MASTER, 1, `${MASTER} has no \\include statements but ${SECTIONS_DIR} has ${shardFiles.length} shard(s)`));
   }
 
-  const idFormatRe = new RegExp(`^${escapeRegExp(config.shardsPrefix)}-[0-9]{2}[A-Z]?-[A-Z0-9-]+$`);
+  // R12 (bead rk-psm): shardsPrefix has NO default (src/gates/config.ts) — required-when-consumed.
+  // idFormatRe is built only when a prefix is actually configured; the first shard that needs
+  // SHARD-ID format/prefix validation without one gets ONE loud, counted config-missing ERROR
+  // (below) instead of silently adopting AISM's own campaign name or crashing.
+  const prefixConfigured = typeof config.shardsPrefix === "string" && config.shardsPrefix.length > 0;
+  const idFormatRe = prefixConfigured
+    ? new RegExp(`^${escapeRegExp(config.shardsPrefix!)}-[0-9]{2}[A-Z]?-[A-Z0-9-]+$`)
+    : undefined;
+  let shardsPrefixErrorEmitted = false;
   const seenFiles = new Set<string>();
   const seenIds = new Set<string>();
   const readmeContent = snapshot.get(README) ?? "";
@@ -179,7 +140,22 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     if (!idHit) {
       findings.push(mkErr(file, 1, `${file} is missing SHARD-ID header`));
       nonConforming.add(file);
-    } else if (!idFormatRe.test(idHit.value)) {
+    } else if (!prefixConfigured) {
+      // R12: config-missing is a repo-level condition, not a per-shard one — emit it ONCE (loud,
+      // visible, counted per L2 — never a silent skip), not once per shard that would trigger it.
+      if (!shardsPrefixErrorEmitted) {
+        findings.push(
+          mkErr(
+            ".rk/config.json",
+            1,
+            "shardsPrefix is not configured (required to validate SHARD-ID headers, e.g. 'AISM-01-INTRO') " +
+              "-- set \"shardsPrefix\" in .rk/config.json (docs/gate-contracts.md Gate 6)",
+          ),
+        );
+        shardsPrefixErrorEmitted = true;
+      }
+      nonConforming.add(file);
+    } else if (!idFormatRe!.test(idHit.value)) {
       findings.push(mkErr(file, idHit.line, `${file} has invalid SHARD-ID '${idHit.value}'`));
       nonConforming.add(file);
     } else if (seenIds.has(idHit.value)) {

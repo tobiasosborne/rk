@@ -55,4 +55,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * --selftest` (src/cli/check.ts) both enforce this exact number against `totalFixtureCount`, so
  * the two entry points can never drift apart on what "the corpus" is expected to contain. A drift
  * between this constant and corpus/README.md's own ledger is itself a bug — bump both together. */
-export const EXPECTED_FIXTURE_COUNT = 87;
+export const EXPECTED_FIXTURE_COUNT = 88;

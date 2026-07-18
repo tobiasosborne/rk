@@ -9,7 +9,14 @@ import { describe, expect, test } from "bun:test";
 import { shardsGate } from "../../src/gates/shards";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
-import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
+import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
+
+// R12 (bead rk-psm): shardsPrefix carries no default. The rk-1tt describe block below exercises
+// real SHARD-ID header validation (the coverage-numerator fix), which is orthogonal to the
+// shardsPrefix-requiredness check (its own describe block is test/corpus.test.ts's shards-14
+// fixture + this file's own describe below) — configure it explicitly so those tests keep
+// isolating what they were written to isolate.
+const CONFIG_WITH_PREFIX = mergeGateConfig({ shardsPrefix: "AISM" });
 
 /** Snapshot with EXTRA directory-existence facts (empty ones included), as `loadSnapshot` supplies
  * from the real tree. */
@@ -77,7 +84,7 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
   }
 
   test("golden fully-conforming single shard: coverage 1/1 (sanity baseline the fix must not regress)", () => {
-    const result = shardsGate.run(tree(), DEFAULT_GATE_CONFIG);
+    const result = shardsGate.run(tree(), CONFIG_WITH_PREFIX);
     expect(errors(result)).toEqual([]);
     expect(result.coverage).toEqual([
       { gate: "shards", unit: "shard(s) fully conforming (included, labeled, cataloged)", checked: 1, total: 1 },
@@ -89,7 +96,7 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
     const badCatalog =
       "## AISM-01-INTRO\n\nFile: report/sections/01_intro.tex\nTitle: Introduction\n\n" +
       "First summary line.\nSecond summary line.\n";
-    const result = shardsGate.run(tree({ catalog: badCatalog }), DEFAULT_GATE_CONFIG);
+    const result = shardsGate.run(tree({ catalog: badCatalog }), CONFIG_WITH_PREFIX);
     const e = errors(result).find((f) => f.path === "report/SHARD_CATALOG.md");
     expect(e).toBeDefined();
     expect(errors(result).some((f) => f.path === "report/sections/01_intro.tex")).toBe(false);
@@ -99,7 +106,7 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
 
   test("shards-09 shape: README missing BOTH path and label entries for an existing shard -> 0/1, not 1/1", () => {
     const badReadme = "# report/ map\n\nThis map does not mention the shard file at all.\n";
-    const result = shardsGate.run(tree({ readme: badReadme }), DEFAULT_GATE_CONFIG);
+    const result = shardsGate.run(tree({ readme: badReadme }), CONFIG_WITH_PREFIX);
     expect(errors(result).filter((f) => f.path === "report/README.md")).toHaveLength(2);
     expect(errors(result).some((f) => f.path === "report/sections/01_intro.tex")).toBe(false);
     expect(result.coverage[0]!.checked).toBe(0);
@@ -154,5 +161,53 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
     // The offending include identity counts in the denominator and is excluded from the numerator.
     expect(result.coverage[0]!.checked).toBe(0);
     expect(result.coverage[0]!.total).toBe(1);
+  });
+});
+
+// R12 (bead rk-psm, M1 landing-blocker): shardsPrefix carries NO default (src/gates/config.ts).
+// corpus/shards/shards-14 covers this end-to-end through the corpus runner; these tests isolate
+// the gate's own config-missing behavior directly.
+describe("shardsGate — R12: shardsPrefix required-when-consumed (no silent AISM default)", () => {
+  const GOLDEN_MASTER = "\\documentclass{article}\n\\begin{document}\n\\include{sections/01_intro}\n\\end{document}\n";
+  const GOLDEN_SHARD =
+    "% SHARD-ID: AISM-01-INTRO\n% SHARD-TITLE: Introduction\n% SHARD-KEYWORDS: intro, overview\n" +
+    "% SHARD-SUMMARY: First summary line.\n% SHARD-SUMMARY: Second summary line.\nBody text here.\n";
+  const GOLDEN_README = "# report/ map\n\n- `report/sections/01_intro.tex` (`AISM-01-INTRO`)\n";
+  const GOLDEN_CATALOG =
+    "## AISM-01-INTRO\n\nFile: report/sections/01_intro.tex\nTitle: Introduction\nKeywords: intro, overview\n\n" +
+    "First summary line.\nSecond summary line.\n";
+
+  function goldenTree(): RepoSnapshot {
+    return snap(
+      {
+        "report/main.tex": GOLDEN_MASTER,
+        "report/README.md": GOLDEN_README,
+        "report/SHARD_CATALOG.md": GOLDEN_CATALOG,
+        "report/sections/01_intro.tex": GOLDEN_SHARD,
+      },
+      ["report", "report/sections"],
+    );
+  }
+
+  test("no shardsPrefix configured, a real shard needs SHARD-ID validation: ONE loud, counted config-missing ERROR, never a crash, never silent", () => {
+    const result = shardsGate.run(goldenTree(), DEFAULT_GATE_CONFIG); // DEFAULT_GATE_CONFIG carries no shardsPrefix
+    const cfgErrors = errors(result).filter((f) => f.path === ".rk/config.json");
+    expect(cfgErrors).toHaveLength(1);
+    expect(cfgErrors[0]!.message).toContain("shardsPrefix is not configured");
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(result.coverage[0]!.total).toBe(1);
+  });
+
+  test("no shardsPrefix configured, but nothing to check (empty scaffold): NOT reported — required-when-CONSUMED, not required-always", () => {
+    const result = shardsGate.run(
+      snap({ ...SCAFFOLD_FILES }, ["report", "report/sections"]),
+      DEFAULT_GATE_CONFIG,
+    );
+    expect(errors(result)).toEqual([]);
+  });
+
+  test("shardsPrefix explicitly configured: no config-missing finding, normal validation proceeds", () => {
+    const result = shardsGate.run(goldenTree(), CONFIG_WITH_PREFIX);
+    expect(errors(result).some((f) => f.path === ".rk/config.json")).toBe(false);
   });
 });

@@ -113,13 +113,17 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-11` | report-shards | empty-scaffold golden case | class-driven; baseline, not a violation | landed |
 | `shards-12` | report-shards | non-empty scaffold, zero `\include`s | class-driven (no incident on record) | landed |
 | `shards-13` | report-shards | absent `report/sections/` directory ⇒ ERROR | **rk-399** / review finding 2 (BLOCKER): `check-report-shards.sh:23` requires the `report/sections/` directory to exist; the old gate could not represent an empty/absent directory and declined the check, so an absent `sections/` green-lit as a clean empty scaffold (`gate-contracts.md:956`). Check 1 now enforces it via the `dirs` fact, surfaced before the empty-scaffold exemption. Red against pre-fix source (clean pass), green after. Golden "exists but empty" counterpart: `shards-11` (now carries a `.gitkeep`). | landed |
+| `shards-14` | report-shards | no `shardsPrefix` configured, a real shard needs SHARD-ID validation ⇒ config-missing ERROR | **R12** / bead rk-psm (M1 landing-blocker, `docs/memos/2026-07-18-aism-residue-audit.md` section R12): `src/gates/config.ts`'s `shardsPrefix` default `"AISM"` deleted — a general tool must never default a shard-id prefix to a specific campaign name. `shardsPrefix` is now required-when-consumed: the shards gate emits ONE loud, counted ERROR (`path: ".rk/config.json"`) the first time it needs to validate a SHARD-ID header without a configured prefix, never a silent AISM-shaped default and never a crash. This is the L2 red fixture for the new failure mode; mutation-proven red-first (temporarily making the gate silently accept on missing prefix turns this fixture red; reverted after confirming). | landed |
 
-Totals: 15 defs + 24 argument/linker + 8 refs + 19 provenance + 8 runs + 13 report-shards = **87
-fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables (recounted
-2026-07-18, rk-4uw N4+N5: +2 over the previously-pinned 84 — `provenance-17`, this WP's new
-frontmatter-invalid>0 fixture landed below, and `provenance-18`, ruling f's whitelisted-unanchored
-aggregate fixture, which had already landed on disk with its own ledger row above but was not yet
-reflected in the Totals line or the `EXPECTED_FIXTURE_COUNT`/corpus-count-assertion constants).
+Totals: 15 defs + 24 argument/linker + 8 refs + 19 provenance + 8 runs + 14 report-shards = **88
+fixtures** across the six M0 gates named in `docs/gate-contracts.md`'s per-gate tables. `shards-14`
+(+1 over the previously-pinned 87) is the M1 addition: bead rk-psm / audit landing-blocker R12
+(`docs/memos/2026-07-18-aism-residue-audit.md`), removing `shardsPrefix`'s `"AISM"` default — see
+its own row above and `docs/gate-contracts.md` Gate 6's updated Inputs/Divergences sections.
+(Recounted 2026-07-18, rk-4uw N4+N5, at 87: `provenance-17`, this WP's new frontmatter-invalid>0
+fixture landed below, and `provenance-18`, ruling f's whitelisted-unanchored aggregate fixture,
+which had already landed on disk with its own ledger row above but was not yet reflected in the
+Totals line or the `EXPECTED_FIXTURE_COUNT`/corpus-count-assertion constants.)
 `linker-22`/`linker-23`/`linker-24`, `refs-08`, `provenance-14`/`provenance-15`/`provenance-16`/
 `provenance-18`, `runs-08`, and `shards-13` were added by the 2026-07-18 M0.3 milestone-review
 repair waves (`docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` findings 1-11,
@@ -468,8 +472,16 @@ script-verified / rk-only / untested breakdown.
 | refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
 | provenance | 19/19 | 16 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
-| shards | 13/13 | 13 | 0 | 0 |
-| **total** | 87 (all script-validated) | 78 | 9 | 0 |
+| shards | 14/14 | 13 | 1 (`shards-14`, rk-stricter-intended, R12 shardsPrefix requiredness) | 0 |
+| **total** | 88 (all script-validated) | 78 | 10 | 0 |
+
+`shards-14` (R12, bead rk-psm) was script-validated 2026-07-18: `check-report-shards.sh` run
+directly against `corpus/shards/shards-14/repo` (`GIT_CEILING_DIRECTORIES` pinned to rk's own
+toplevel, per the Validation methodology below) exits 0 — AISM's script hardcodes `PREFIX="AISM"`
+and never requires per-repo configuration, so this fixture's golden `AISM-01-INTRO` content passes
+cleanly against it. rk's contract requires the config-missing ERROR regardless (a general tool
+must never silently adopt a campaign-specific default) — confirmed `differs`, triage
+rk-stricter-intended.
 
 `linker-24` (rk-aft, missing `kind:` field) was script-validated 2026-07-18 (rk-4uw) via the
 module-import harness: `argument.exec_module` imported read-only, `ARG_DIR`/`DEFS_DIR`/

@@ -1,0 +1,15 @@
+{
+  "gate": "shards",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "shardsPrefix is not configured"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1 },
+  "aism_behavior": "differs: check-report-shards.sh:17 hardcodes PREFIX=\"AISM\" and never requires per-repo configuration -- a general tool must never default a shard-id prefix to a specific campaign name (R12, docs/memos/2026-07-18-aism-residue-audit.md). Triage: rk-stricter-intended.",
+  "notes": "R12 / bead rk-psm: shardsPrefix has no default (src/gates/config.ts). This fixture is otherwise a fully-conforming golden shard tree (same shape as shards-01..10's content) with NO repo/.rk/config.json -- the shards gate emits one loud, counted config-missing ERROR the first time it needs to validate a SHARD-ID header, rather than silently defaulting to AISM's own campaign name or crashing. New failure-mode fixture (L2 red corpus for R12)."
+}

@@ -9,6 +9,9 @@
     }
   ],
   "exit_code": 1,
+  "config_override": {
+    "shardsPrefix": "AISM"
+  },
   "aism_behavior": "same",
   "notes": "check-report-shards.sh:69; script-verified."
 }

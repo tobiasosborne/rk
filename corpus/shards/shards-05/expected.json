@@ -9,6 +9,9 @@
     }
   ],
   "exit_code": 1,
+  "config_override": {
+    "shardsPrefix": "AISM"
+  },
   "aism_behavior": "same",
   "notes": "check-report-shards.sh:104-109; script-verified. Per-include checks (header/README/CATALOG) never even run for an orphan file (the trailing orphan-scan is a separate loop over the whole directory), so 02_orphan.tex's own header content is inert for this fixture's target finding, included anyway for realism."
 }

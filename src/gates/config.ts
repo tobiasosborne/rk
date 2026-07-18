@@ -25,10 +25,14 @@ export interface GateConfig {
    * 13_discussion.tex`) that already caused one real false-green when the ledger was renamed;
    * now a per-repo parameter, default byte-identical to AISM's own value. */
   provenanceStatusTableFile: string;
-  /** Report-shards gate's shard-id prefix. docs/gate-contracts.md Gate 6 Inputs: `PREFIX =
-   * "AISM"` hardcoded in the source script; per-repo config here (Divergences: message-only —
-   * AISM's own default is unchanged by this parameterization). */
-  shardsPrefix: string;
+  /** Report-shards gate's shard-id prefix. docs/gate-contracts.md Gate 6 Inputs: AISM hardcodes
+   * `PREFIX = "AISM"`; rk carries NO default (R12, bead rk-psm, M1 landing-blocker — a general
+   * tool must never default a shard-id prefix to a specific campaign name). Required-when-
+   * consumed: absent/empty when the shards gate needs to validate a SHARD-ID header ⇒ one loud,
+   * counted config-missing ERROR (src/gates/shards.ts), never a silent AISM-shaped default and
+   * never a crash. `undefined` is the correct "not configured" state — never coerce it to `""`
+   * or any other sentinel string. */
+  shardsPrefix?: string;
   /** Report-shards gate's per-shard line cap. docs/gate-contracts.md Gate 6 Inputs: `MAX_LINES`,
    * default 280 (already an env-var override, `REPORT_SHARD_MAX_LINES`, in AISM). */
   shardsMaxLines: number;
@@ -45,7 +49,7 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
   phase: DEFAULT_PHASE,
   linkerBrittlenessSoftCap: 26,
   provenanceStatusTableFile: "report/sections/13_discussion.tex",
-  shardsPrefix: "AISM",
+  // shardsPrefix: deliberately NO default (R12) — omitted, never set to "" or any other sentinel.
   shardsMaxLines: 280,
   refsMinRunReportingLength: 40,
 };

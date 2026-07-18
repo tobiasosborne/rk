@@ -33,15 +33,18 @@ mechanical audit of this document should not flag their absence from the triad a
 
 **Tag asymmetry, resolved once.** Two divergences look superficially identical — a hardcoded
 AISM value becomes an explicit rk config parameter — yet carry different tags: Gate 4's
-`provenance-11` (the `tab:status` source filename) is `[rk-stricter-intended]`, while Gate 6's
-`PREFIX`/`MAX_LINES` parameterization is `[message-only]`. The distinguishing question is
-whether the change alters *what gets scanned or checked*: `provenance-11`'s hardcoded filename
-already caused a real false-green (incident (a) in Gate 4) by silently pointing at a stale,
-renamed file — parameterizing it closes that scanning gap, so it is a genuine (zero-cost)
-strictness tightening. `PREFIX`/`MAX_LINES` change only *how* a value already correct for AISM's
-own repo is configured; AISM's own defaults remain byte-identical, so no tree's scan set or
-verdict ever changes — text/config-surface only, hence `[message-only]`. See each entry for the
-specific reasoning.
+`provenance-11` (the `tab:status` source filename) and Gate 6's `PREFIX` (amended 2026-07-18, R12)
+are both `[rk-stricter-intended]`, while Gate 6's `MAX_LINES` parameterization is `[message-only]`.
+The distinguishing question is whether the change alters *what gets scanned or checked, or what
+counts as passing*: `provenance-11`'s hardcoded filename already caused a real false-green
+(incident (a) in Gate 4) by silently pointing at a stale, renamed file; `PREFIX` carrying forward
+AISM's own `"AISM"` value as rk's default was itself exactly that shape of residue (a
+general-purpose tool silently validating every repo against one prior campaign's name) — removing
+the default and requiring explicit configuration closes both gaps, a genuine (near-zero-cost,
+R12-audited) strictness tightening in each case. `MAX_LINES` changes only *how* a value already
+correct for AISM's own repo is configured; AISM's own default remains byte-identical, so no tree's
+scan set or verdict ever changes for it — text/config-surface only, hence `[message-only]`. See
+each entry for the specific reasoning.
 
 Every check below cites its AISM source as `script:line-range` for provenance. Every gate's
 docstring/header comment is itself read as part of the spec's prior art — AISM's authors
@@ -137,8 +140,9 @@ global constants, ported from AISM's hardcoded defaults:
   >3") — that prose is stale against the code (`af_constants.py:19`, `check_brittleness`'s
   actual signature has no depth parameter at all). Ground truth per L5 is the code, not the
   stale doc; see the linker gate section for the full incident (aism-s64).
-- **Report-shard PREFIX** ("AISM" in the source) and **MAX_LINES** (280, already an env-var
-  override in AISM) — see the report-shards gate section.
+- **Report-shard PREFIX** (no default — amended 2026-07-18, R12; was "AISM" in the AISM source)
+  and **MAX_LINES** (280, already an env-var override in AISM) — see the report-shards gate
+  section.
 
 **Fixture/harness invocation (read before running any AISM script against a fixture or
 historical tree).** Two harness pitfalls surfaced building the M0.2 corpus (recorded in full in
@@ -960,9 +964,9 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   AISM's own history (incident (a), above — a rename silently blinded the check). The default
   value is byte-identical to AISM's; only the mechanism for pointing at it changes, closing a
   structural false-green surface rather than tightening a check's logic. Fixture:
-  `provenance-11`. (Contrast Gate 6's `PREFIX`/`MAX_LINES` parameterization, tagged
-  `[message-only]` despite the surface-level similarity — see the Authority section's "Tag
-  asymmetry, resolved once".)
+  `provenance-11`. (Gate 6's `PREFIX` parameterization, amended 2026-07-18/R12, is now tagged the
+  same `[rk-stricter-intended]` for the same reason; its sibling `MAX_LINES` stays `[message-only]`
+  — see the Authority section's "Tag asymmetry, resolved once".)
 - **[message-only] Coverage line** (amended 2026-07-18, rk-v18). `checked provenance: <N>/<M>
   registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<E> errors, <W>
   warnings)`. `M` (the denominator) is every `argument/lemmas/*.md` file this gate discovered,
@@ -1108,7 +1112,15 @@ own enumerated checks.
   `CATALOG = report/SHARD_CATALOG.md` (check-report-shards.sh:12-15).
 - `MAX_LINES`: env override `REPORT_SHARD_MAX_LINES`, default **280** (check-report-shards.sh:16).
 - `PREFIX = "AISM"` (check-report-shards.sh:17) — a hardcoded shell variable in AISM (only ever
-  needed one value there); **per-repo parameter** in the port — see Divergences.
+  needed one value there); **per-repo parameter, `GateConfig.shardsPrefix`, with NO default** in
+  the port (**R12**, bead rk-psm, M1 landing-blocker — amended 2026-07-18: a general tool must
+  never default a shard-id prefix to a specific campaign name) — see Divergences. **Required-
+  when-consumed**: the shards gate only needs `PREFIX` to validate a real shard's `SHARD-ID`
+  header (Checks 10/12 below); a tree with nothing to check yet (the empty-scaffold exemption,
+  Check 2) never touches it and is unaffected by whether it is configured. The first shard that
+  DOES need it, with no `shardsPrefix` configured, produces one loud ERROR at the sentinel path
+  `.rk/config.json:1` ("shardsPrefix is not configured...") — visible, counted (L2), never a
+  silent AISM-shaped default and never a crash. Fixture: `shards-14`.
 - Per-shard TeX-comment header lines inside each `report/sections/NN_slug.tex`:
 
 | header | cardinality | format |
@@ -1154,6 +1166,11 @@ in AISM.
 11. `SHARD-ID` unique across all shards ⇒ fail on duplicate (check-report-shards.sh:71-72).
 12. `SHARD-ID`'s numeric-prefix segment matches the filename's own leading 2 chars ⇒ fail
     otherwise (check-report-shards.sh:75-78).
+
+    Checks 10 and 12 both consume `PREFIX` (`GateConfig.shardsPrefix`). When it is unconfigured,
+    checks 9/11/13-20 still run normally, but 10/12 cannot — the shard is instead flagged by the
+    config-missing ERROR (Inputs, above) and excluded from the coverage numerator; every OTHER
+    shard needing the same missing config reuses the SAME one ERROR (never one per shard).
 13. `SHARD-TITLE` present ⇒ fail if absent (check-report-shards.sh:81).
 14. `SHARD-KEYWORDS` present ⇒ fail if absent (check-report-shards.sh:82).
 15. `SHARD-SUMMARY` count is exactly 2 or 3 ⇒ fail otherwise (check-report-shards.sh:83-84).
@@ -1187,15 +1204,29 @@ in AISM.
   explicitly to prevent the wrong assignment.
 
 **Divergences from AISM (triage).**
-- **[message-only] `PREFIX`/`MAX_LINES` become explicit per-repo config parameters** (`PREFIX`
-  "AISM"; `MAX_LINES` 280, already env-overridable in AISM). This is the definitional
-  per-repo-parameterization the whole rk extraction exists to perform (PRD C7/M0, "extraction
-  ... into a maintained package, no more repo-local copies") — not a behavior change: AISM's own
-  defaults (`PREFIX=AISM`, `MAX_LINES=280`) remain byte-identical when rk is pointed at AISM's
-  own repo. (Contrast Gate 4's `provenance-11`, tagged `[rk-stricter-intended]` for the same
-  hardcoded-literal-to-config-parameter shape — see the Authority section's "Tag asymmetry,
-  resolved once": that one changes what gets scanned, closing a real false-green; this one does
-  not.)
+- **[message-only] `MAX_LINES` becomes an explicit per-repo config parameter** (default 280,
+  already env-overridable in AISM via `REPORT_SHARD_MAX_LINES`). Not a behavior change: AISM's own
+  default (`MAX_LINES=280`) remains byte-identical when rk is pointed at AISM's own repo.
+- **[rk-stricter-intended] `PREFIX` becomes a per-repo config parameter with NO default** (R12,
+  bead rk-psm — amended 2026-07-18; supersedes the pre-M1 text of this entry, which bundled
+  `PREFIX` with `MAX_LINES` above under `[message-only]` on the reasoning that AISM's own default
+  stayed byte-identical). That reasoning held only as long as rk carried AISM's `"AISM"` string
+  forward as ITS OWN default — a residue an M1 audit (`docs/memos/2026-07-18-aism-residue-audit.md`
+  R12) flagged as a real defect: a general-purpose tool defaulting a shard-id prefix to one
+  specific prior campaign's name is exactly the kind of copy-paste-from-AISM residue the whole rk
+  extraction exists to remove (CLAUDE.md L5). This IS a behavior change — a repo that never
+  configures `shardsPrefix` now gets a loud config-missing ERROR instead of silently validating
+  against `"AISM"` — but a zero-cost one for AISM itself: pointing rk at AISM's own repo with
+  `shardsPrefix: "AISM"` configured reproduces byte-identical behavior; AISM's own script, with its
+  prefix hardcoded, cannot express "unconfigured" at all and so has no equivalent state to diverge
+  from except by inspection. Confirmed `differs` by running `check-report-shards.sh` directly
+  against `corpus/shards/shards-14/repo` (`GIT_CEILING_DIRECTORIES` pinned per the Validation
+  methodology): it exits 0 (AISM's hardcoded `PREFIX="AISM"` matches the fixture's golden
+  `AISM-01-INTRO` content), while rk's contract requires the config-missing ERROR regardless.
+  Fixture: `shards-14`. (Contrast Gate 4's `provenance-11`, the OTHER `[rk-stricter-intended]`
+  hardcoded-literal-to-config-parameter entry in this document — see the Authority section's "Tag
+  asymmetry, resolved once": both close a real gap the AISM-hardcoded literal left open, unlike
+  `MAX_LINES` immediately above, which changes only how an already-correct value is configured.)
 - **[message-only]** Standard cross-gate finding-format change: `SEVERITY
   report/sections/<file>.tex:<line>` for shard-header/size findings (line resolved to the
   offending header comment's own line where possible, else 1); `SEVERITY
@@ -1253,6 +1284,7 @@ KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
 | `shards-11` | empty-scaffold golden case (zero includes, zero shard files — must pass) |
 | `shards-12` | non-empty scaffold with zero `\include`s (shard files exist, master has none) |
 | `shards-13` | **absent `report/sections/` directory** [rk-399, finding 2 BLOCKER] — check 1 must ERROR via the `dirs` SnapshotFact rather than green-lighting as an empty scaffold; golden "exists but empty" counterpart is `shards-11` |
+| `shards-14` | **`shardsPrefix` unconfigured, a real shard needs SHARD-ID validation** [R12, bead rk-psm, M1 landing-blocker] — a fully-conforming golden shard tree (same shape as `shards-01`..`10`'s content) with NO `repo/.rk/config.json` ⇒ one loud, counted config-missing ERROR at `.rk/config.json:1`, never a silent AISM-shaped default and never a crash |
 
 ---
 

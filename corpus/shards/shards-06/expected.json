@@ -9,6 +9,9 @@
     }
   ],
   "exit_code": 1,
+  "config_override": {
+    "shardsPrefix": "AISM"
+  },
   "aism_behavior": "same",
   "notes": "check-report-shards.sh:50; script-verified. A duplicate \\include also makes the per-include loop revisit the same shard file twice, so 'duplicate SHARD-ID AISM-01-INTRO' fires too (the second visit finds its own ID already seen) -- an incidental second finding, not a separate violation, harmless under the subset-match convention."
 }
