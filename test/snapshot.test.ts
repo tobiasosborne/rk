@@ -11,6 +11,8 @@ import {
   snapshotFromFiles,
 } from "../src/gates/snapshot";
 import type { RepoSnapshot, SnapshotFacts } from "../src/gates/snapshot";
+import { sha256Hex } from "../src/gates/sha256";
+import { sha256Bytes } from "../src/refs/hash";
 
 describe("snapshotFromFiles — pure test/probe builder (N2: facts are REQUIRED, never optional)", () => {
   test("synthesizes all three required facts from an in-memory file map", () => {
@@ -26,8 +28,27 @@ describe("snapshotFromFiles — pure test/probe builder (N2: facts are REQUIRED,
     expect(snap.dirs.has("report")).toBe(true);
     // tracked defaults to every file path.
     expect(isTracked(snap, "report/main.tex")).toBe(true);
-    // sha256 defaults to empty (no hasher in a pure module) — an EXPLICIT all-absent state.
-    expect(fileSha256(snap, "report/main.tex")).toBeUndefined();
+  });
+
+  // M0.3 round-3 landing-blocker 2 (snapshot.ts:85/108): the builder must produce COHERENT facts —
+  // a modeled-present file must carry a hash, exactly as the real edge (`loadSnapshot`) guarantees.
+  // The old empty-`sha256` default created {present, tracked, no-hash}, an impossible edge state
+  // Gate 4 check 4 reads as genuine disk-absence (false WARN). This pins present ⟺ hashed, and that
+  // the default hash is BYTE-FAITHFUL (equal to the edge hasher over the file's UTF-8 bytes).
+  test("every modeled-present file carries a byte-faithful hash (present ⟺ hashed — no impossible edge state)", () => {
+    const snap = snapshotFromFiles({
+      "runs/2026-01-01-x/README.md": "hi",
+      "report/main.tex": "m",
+    });
+    // The reviewer's exact probe {has:true, tracked:true, hash:null} must no longer be reachable.
+    expect(snap.has("report/main.tex")).toBe(true);
+    expect(isTracked(snap, "report/main.tex")).toBe(true);
+    expect(fileSha256(snap, "report/main.tex")).toBeDefined();
+    // Byte-faithful: identical to the edge hasher over the same UTF-8 bytes.
+    expect(fileSha256(snap, "report/main.tex")).toBe(sha256Bytes(new TextEncoder().encode("m")));
+    expect(fileSha256(snap, "runs/2026-01-01-x/README.md")).toBe(sha256Hex(new TextEncoder().encode("hi")));
+    // A genuinely-absent path still has NO hash fact — the WARN case, never conflated with present.
+    expect(fileSha256(snap, "report/absent.tex")).toBeUndefined();
   });
 
   test("opts.dirs adds EMPTY directories that hold no file (path-derivation cannot see them)", () => {

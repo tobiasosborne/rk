@@ -18,6 +18,7 @@ import { GATES } from "../src/gates/index";
 import { DEFAULT_GATE_CONFIG } from "../src/gates/config";
 import { GATE_DIRS, discoverAllFixtures } from "../src/corpus/discovery";
 import { runFixture } from "../src/corpus/run";
+import { snapshotFromFiles } from "../src/gates/snapshot";
 
 const CORPUS_ROOT = join(import.meta.dir, "..", "corpus");
 
@@ -30,13 +31,10 @@ for (const gateDir of GATE_DIRS) {
   describe(`corpus / ${gateDir}`, () => {
     // A stub's notImplemented flag is static at M0.3 (never varies with input) — probe it once
     // against an empty snapshot rather than re-running the gate per fixture just to find out.
-    // An empty snapshot still carries the (now REQUIRED — review N2) SnapshotFacts, so a gate that
-    // reads them (provenance/runs/shards) probes cleanly instead of dereferencing a missing fact.
-    const emptySnapshot = Object.assign(new Map<string, string>(), {
-      sha256: new Map<string, string>(),
-      tracked: new Set<string>(),
-      dirs: new Set<string>(),
-    });
+    // Built through the sanctioned builder (M0.3 round-3 landing-blocker 2: facts are constructed
+    // ONLY via `snapshotFromFiles`, never hand-assembled — an empty file map yields coherent empty
+    // facts). A gate that reads facts (provenance/runs/shards) probes cleanly.
+    const emptySnapshot = snapshotFromFiles({});
     const isStub = gate ? gate.run(emptySnapshot, DEFAULT_GATE_CONFIG).notImplemented === true : true;
 
     for (const fixtureId of fixtures) {

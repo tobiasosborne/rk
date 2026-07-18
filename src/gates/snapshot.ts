@@ -5,6 +5,8 @@
 // ("Frontmatter: flat key: value per line, terminated by a second `---` line",
 // check-defs.py:30-50) and Gate 2 Inputs (identical grammar, argument.py:106-124).
 
+import { sha256Hex } from "./sha256";
+
 /** Edge-supplied facts a pure gate cannot compute itself (git state, raw-byte hashes,
  * empty-directory existence). Every field is a *fact measured at the impure edge*
  * (src/gates/load.ts), never a guess: the pure gate consumes them, it does not re-derive them.
@@ -84,12 +86,15 @@ export function childDirs(snapshot: RepoSnapshot, parent: string): string[] {
  *     bundle, an empty `report/sections/`).
  *   - `tracked` — every file path by default (everything tracked), overridable via `opts.tracked`
  *     (e.g. `[]` for an untracked-but-present payload).
- *   - `sha256` — INJECTED via `opts.sha256`, defaulting to empty. Byte hashing needs a hasher, and
- *     L3 purity forbids the native crypto primitives in this pure module; the only gate that
- *     verifies hash freshness (Gate 4 check 4) owns a hasher in its own non-pure test file and
- *     injects the map.
- *     An empty default is an EXPLICIT "no file hashed" (all-absent) state the gate reads
- *     truthfully — never a silent degradation. */
+ *   - `sha256` — every modeled-present file is hashed BY DEFAULT (byte-faithful sha256 of its
+ *     UTF-8 bytes, via the pure `sha256Hex` — byte-identical to the edge hasher, test/gates/
+ *     sha256.test.ts), so the builder upholds the SAME invariant the real edge does: present ⟺
+ *     hashed. `opts.sha256` overrides per-path — required for a BINARY/non-UTF-8 payload, whose
+ *     lossy UTF-8 text projection would otherwise hash differently from its raw bytes (pass the
+ *     raw-byte hash the manifest records). M0.3 round-3 landing-blocker 2 / review N2: the old
+ *     empty-`sha256` default produced an IMPOSSIBLE edge state — a file marked present+tracked yet
+ *     carrying no hash, which Gate 4 check 4 reads as genuine disk-absence (a false WARN). The edge
+ *     never emits {present, no-hash}; the builder must not either. */
 export function snapshotFromFiles(
   files: Record<string, string> | ReadonlyMap<string, string>,
   opts: {
@@ -106,9 +111,15 @@ export function snapshotFromFiles(
     for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
   }
   const tracked = new Set<string>(opts.tracked ?? text.keys());
+  // Default: hash every modeled-present file (present ⟺ hashed, matching the real edge). Then
+  // apply `opts.sha256` overrides — the raw-byte hash for a binary/non-UTF-8 payload whose text
+  // projection is lossy (M0.3 round-3 landing-blocker 2).
+  const encoder = new TextEncoder();
+  const sha256 = new Map<string, string>();
+  for (const [path, content] of text) sha256.set(path, sha256Hex(encoder.encode(content)));
   const shaSrc = opts.sha256;
   const shaPairs = shaSrc instanceof Map ? [...shaSrc.entries()] : Object.entries((shaSrc as Record<string, string>) ?? {});
-  const sha256 = new Map<string, string>(shaPairs);
+  for (const [k, v] of shaPairs) sha256.set(k, v);
   const snapshot = text as Map<string, string> & SnapshotFacts;
   Object.assign(snapshot, { sha256, tracked, dirs } satisfies SnapshotFacts);
   return snapshot;

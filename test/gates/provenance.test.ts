@@ -17,7 +17,7 @@ import { parseUnwired, splitSourceTokens, statusTableRows } from "../../src/gate
 import { sha256Bytes } from "../../src/refs/hash";
 import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
 import { loadSnapshot } from "../../src/gates/load";
-import type { RepoSnapshot, SnapshotFacts } from "../../src/gates/snapshot";
+import type { RepoSnapshot } from "../../src/gates/snapshot";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 
 /** First-16 sha256 of a string's UTF-8 bytes — the "sha256-16" manifest convention. Byte-exact
@@ -26,22 +26,21 @@ function sha16(s: string): string {
   return sha256Bytes(new TextEncoder().encode(s)).slice(0, 16);
 }
 
-/** Hand-built snapshot with edge-measured SnapshotFacts (rk-399): every entry is hashed from its
- * UTF-8 bytes into `sha256` and marked `tracked` by default; `opts` overrides those facts (a
- * raw-byte hash for a binary payload, an untracked-but-present path, a bespoke tracked set). This
- * mirrors what `loadSnapshot` supplies at the real edge — the pure gate reads facts, not text. */
+/** Snapshot with edge-faithful SnapshotFacts (rk-399), built through the sanctioned builder
+ * `snapshotFromFiles` (M0.3 round-3 landing-blocker 2: no hand-assembled facts — construction is
+ * mechanically builder-only). The builder hashes every entry from its UTF-8 bytes and marks every
+ * entry `tracked` by default; `opts` overrides those facts (a raw-byte hash for a binary payload,
+ * an untracked-but-present path, a bespoke tracked set / dirs). This mirrors what `loadSnapshot`
+ * supplies at the real edge — the pure gate reads facts, not text. */
 function snapshot(
   entries: Record<string, string>,
   opts?: { sha256?: Record<string, string>; tracked?: string[]; dirs?: string[] },
 ): RepoSnapshot {
-  const m = new Map(Object.entries(entries)) as Map<string, string> & SnapshotFacts;
-  const sha256 = new Map<string, string>();
-  for (const [k, v] of Object.entries(entries)) sha256.set(k, sha256Bytes(new TextEncoder().encode(v)));
-  for (const [k, v] of Object.entries(opts?.sha256 ?? {})) sha256.set(k, v);
-  const tracked = new Set<string>(opts?.tracked ?? [...sha256.keys()]);
-  const dirs = new Set<string>(opts?.dirs ?? []);
-  Object.assign(m, { sha256, tracked, dirs } satisfies SnapshotFacts);
-  return m;
+  return snapshotFromFiles(entries, {
+    sha256: opts?.sha256,
+    tracked: opts?.tracked,
+    dirs: opts?.dirs,
+  });
 }
 
 function shard(fields: Record<string, string>): string {
