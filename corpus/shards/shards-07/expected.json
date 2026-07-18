@@ -9,6 +9,7 @@
     }
   ],
   "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1 },
   "aism_behavior": "same",
-  "notes": "check-report-shards.sh:45-48; script-verified. Zero real files under sections/ in this fixture (the include target doesn't resolve to a real path at all), so no orphan-scan noise."
+  "notes": "check-report-shards.sh:45-48; script-verified. Zero real files under sections/ in this fixture (the include target doesn't resolve to a real path at all), so no orphan-scan noise. Coverage 0/1 (review N3): the invalid include is itself a non-conforming shard identity — it counts in the denominator, never the numerator. Before the N3 fix this fixture reported ERROR + 0/0 (the identity was `continue`d before entering any denominator set)."
 }

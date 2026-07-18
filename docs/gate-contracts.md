@@ -1079,9 +1079,14 @@ in AISM.
 - **[message-only] Coverage line, numerator semantics defined explicitly** (amended 2026-07-18,
   rk-1tt, review finding 5). `checked shards: <N>/<M> shard(s) fully conforming (included,
   labeled, cataloged) (<E> errors, <W> warnings)`. `M` (the denominator) is every shard identity
-  this run examined — named by an `\include` in `main.tex`, or physically present under
-  `sections/`, whichever set is larger; `N` (the numerator) means **fully conforming**: zero
-  findings against that shard from ANY of checks 5-19, not merely "was looked at". This is a
+  this run examined — named by an `\include` in `main.tex` (**including an `\include` whose target
+  lies outside `sections/`**, which resolves to no `sections/X.tex` file but is itself a
+  non-conforming identity that still counts — amended 2026-07-18, review N3), or physically present
+  under `sections/`, whichever set is larger; `N` (the numerator) means **fully conforming**: zero
+  findings against that shard from ANY of checks 5-19, not merely "was looked at". An
+  outside-`sections/` include therefore contributes to `M` but never to `N`; the pre-N3 code
+  `continue`d it before it entered any denominator set, reporting a false `0/0` beside a live
+  Check-4 ERROR (fixture `shards-07`). This is a
   definition, not a behavior change — AISM's own script has no coverage line of any kind
   (`check-report-shards.sh` only prints per-violation lines and a final pass/fail); the port added
   this line under the same CLAUDE.md L2 mandate every gate's coverage line follows, and this entry

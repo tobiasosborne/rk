@@ -123,11 +123,17 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
   // README finding never matched `f.path === file`) and even missed a wholly nonexistent shard
   // (check 6's ERROR names MASTER, not the missing file).
   const nonConforming = new Set<string>();
+  // Identities named by an \include whose target is NOT under sections/ (review N3): they can never
+  // resolve to a `sections/X.tex` path, so they never enter `seenFiles`, but the contract counts
+  // every identity an \include names in the denominator. Each is itself a non-conforming identity.
+  const invalidIncludes = new Set<string>();
 
   for (const { target, line } of includes) {
     // Check 4 (check-report-shards.sh:45-48).
     if (!target.startsWith("sections/")) {
       findings.push(mkErr(MASTER, line, `\\include{${target}} should point under sections/ (relative to report/)`));
+      invalidIncludes.add(target);
+      nonConforming.add(target);
       continue;
     }
     const file = `${SECTIONS_DIR}/${target.slice("sections/".length)}.tex`;
@@ -246,9 +252,10 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
 
   // `checked` = fully conforming (zero findings against it, from ANY check above, regardless of
   // which file that check attributed its finding to — rk-1tt); `total` = every shard identity this
-  // run examined (named by an \include, or physically present under sections/). The unit string
-  // says exactly that: "fully conforming", not merely "examined" (review finding 5).
-  const shardIdentities = new Set<string>([...seenFiles, ...shardFiles]);
+  // run examined (named by an \include — INCLUDING one whose target lies outside sections/, itself
+  // non-conforming, review N3 — or physically present under sections/). The unit string says
+  // exactly that: "fully conforming", not merely "examined" (review finding 5).
+  const shardIdentities = new Set<string>([...seenFiles, ...shardFiles, ...invalidIncludes]);
   const checked = [...shardIdentities].filter((id) => !nonConforming.has(id)).length;
 
   return {

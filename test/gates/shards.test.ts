@@ -128,4 +128,31 @@ describe("shardsGate — rk-1tt: coverage numerator means fully-conforming, comp
     expect(result.coverage[0]!.checked).toBe(0);
     expect(result.coverage[0]!.total).toBe(1);
   });
+
+  // review N3: an \include whose target lies OUTSIDE sections/ took `continue` before the identity
+  // entered any set that feeds the denominator, so it produced ERROR + 0/0 — a truthful-coverage
+  // defect (contract Gate 6: the denominator includes identities named by an \include). The invalid
+  // include is itself a non-conforming identity: it must count in the denominator, never the
+  // numerator.
+  test("invalid \\include target (outside sections/) counts in the denominator: ERROR + 0/1, not 0/0 (N3)", () => {
+    const badMaster =
+      "\\documentclass{article}\n\\begin{document}\n\\include{other/misplaced_shard}\n\\end{document}\n";
+    const result = shardsGate.run(
+      snap(
+        {
+          "report/main.tex": badMaster,
+          "report/README.md": GOLDEN_README,
+          "report/SHARD_CATALOG.md": GOLDEN_CATALOG,
+        },
+        ["report", "report/sections"],
+      ),
+      DEFAULT_GATE_CONFIG,
+    );
+    const e = errors(result).find((f) => f.message.includes("should point under sections/"));
+    expect(e).toBeDefined();
+    expect(e!.path).toBe("report/main.tex");
+    // The offending include identity counts in the denominator and is excluded from the numerator.
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(result.coverage[0]!.total).toBe(1);
+  });
 });
