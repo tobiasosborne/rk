@@ -6,6 +6,7 @@
 // check-provenance.py:230-237). PROVENANCE.md/UNWIRED.md/tab:status parsing lives in the sibling
 // shard provenance-md.ts (kept separate to stay under the ~200-line shard target).
 
+import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { listDir, parseFrontmatter } from "./snapshot";
 
@@ -25,26 +26,46 @@ export interface RegistryShard {
   provenance: string;
 }
 
+/** `parseProvenanceRegistry`'s return: the successfully-parsed shards plus every registry file
+ * this gate DECLINED to parse, named explicitly — never a bare count folded away (rk-v18, review
+ * finding 4). */
+export interface RegistryParseResult {
+  shards: RegistryShard[];
+  /** repo-relative paths of `argument/lemmas/*.md` files discovered but excluded because their
+   * frontmatter is missing or unterminated, sorted. Kept separate from `shards` (rather than
+   * dropped) so `provenance.ts` can report BOTH the raw registry universe and the surviving
+   * parsed set — collapsing them back into one number would silently shrink the coverage
+   * denominator around exactly the shards this gate refused to look at. */
+  skipped: string[];
+}
+
 /** check-provenance.py:120-132 `parse_registry` — independent re-parse of argument/lemmas/*.md,
  * reading only the fields this gate needs. A shard with missing/unterminated frontmatter is
- * silently excluded here (`fm is None: continue`, check-provenance.py:128-129) — the linker gate
- * (Gate 2) is the one that reports frontmatter-validity ERRORs; this gate is a read-only
- * downstream consumer and must not double-report them. An `id:`-less shard defaults to the
- * filename stem (`fm.setdefault("id", path.stem)`, check-provenance.py:130) rather than being
- * excluded — a genuine difference from the linker gate's own F12 fix (linker-parse.ts), because
- * AISM's check-provenance.py itself never crashes on a missing `id:` (it has no `l["id"]`
- * bracket-access chain the way argument.py's checks do), so there is no crash to convert into a
- * finding here. */
-export function parseProvenanceRegistry(snapshot: RepoSnapshot): RegistryShard[] {
-  const out: RegistryShard[] = [];
+ * excluded from `shards` here (`fm is None: continue`, check-provenance.py:128-129) but named in
+ * `skipped`, never dropped outright: the linker gate (Gate 2) is the one that reports the
+ * frontmatter-validity ERROR (`linker-01`), so this gate must not re-issue that ERROR — but per
+ * docs/gate-contracts.md Shared conventions ("a skip is always visible with a count", CLAUDE.md
+ * L2) it must not silently shrink its own coverage denominator around the exclusion either
+ * (rk-v18; `registrySkipWarning` below turns `skipped` into the visible WARN + coverage total).
+ * An `id:`-less shard defaults to the filename stem (`fm.setdefault("id", path.stem)`,
+ * check-provenance.py:130) rather than being excluded — a genuine difference from the linker
+ * gate's own F12 fix (linker-parse.ts), because AISM's check-provenance.py itself never crashes
+ * on a missing `id:` (it has no `l["id"]` bracket-access chain the way argument.py's checks do),
+ * so there is no crash to convert into a finding here. */
+export function parseProvenanceRegistry(snapshot: RepoSnapshot): RegistryParseResult {
+  const shards: RegistryShard[] = [];
+  const skipped: string[] = [];
   const names = listDir(snapshot, LEMMA_DIR)
     .filter((n) => n.endsWith(".md") && n !== "README.md" && n !== "INDEX.md")
     .sort();
   for (const name of names) {
     const path = `${LEMMA_DIR}/${name}`;
     const fm = parseFrontmatter(snapshot.get(path) ?? "");
-    if (!fm.present || !fm.terminated) continue;
-    out.push({
+    if (!fm.present || !fm.terminated) {
+      skipped.push(path);
+      continue;
+    }
+    shards.push({
       id: fm.fields.id ?? name.slice(0, -".md".length),
       path,
       status: fm.fields.status,
@@ -52,7 +73,36 @@ export function parseProvenanceRegistry(snapshot: RepoSnapshot): RegistryShard[]
       provenance: fm.fields.provenance ?? "",
     });
   }
-  return out;
+  return { shards, skipped };
+}
+
+/** Gate 4's own visible-skip duty over `skipped` (rk-v18, review finding 4): `checked`/`total`
+ * for the coverage line (total = raw registry inputs discovered, checked = the surviving parsed
+ * set — never collapsed to the same number), plus a single aggregate WARN naming every excluded
+ * path when `skipped` is non-empty. This is deliberately a WARN, not a duplicate ERROR: Gate 2
+ * (the linker) already ERRORs the same defect (`linker-01`, missing/unterminated frontmatter) —
+ * this WARN's job is only to keep Gate 4's OWN coverage denominator honest, not to re-report a
+ * validity failure Gate 2 already owns. [Tier-A / L6: this WARN-vs-ERROR choice is a validity-
+ * surface decision — flagged for Fable ratification at the rk-4wm milestone review, per
+ * docs/reviews/2026-07-18-m0.3-milestone-review-codex.md finding 4.] */
+export function registrySkipReport(
+  shards: RegistryShard[],
+  skipped: string[],
+): { checked: number; total: number; warning?: Finding } {
+  const checked = shards.length;
+  const total = checked + skipped.length;
+  if (skipped.length === 0) return { checked, total };
+  return {
+    checked,
+    total,
+    warning: {
+      severity: "WARN",
+      path: skipped[0]!,
+      message:
+        `${skipped.length} registry file(s) excluded from provenance re-parse (missing/` +
+        `unterminated frontmatter; Gate 2 reports the validity ERROR for this): ${skipped.join(", ")}`,
+    },
+  };
 }
 
 export interface TexLabels {

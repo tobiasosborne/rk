@@ -3,8 +3,11 @@
 // needs `latexmk`/subprocess, out of scope for this pure gate — no fixture requires it). Ported
 // from check-provenance.py (READ-ONLY prior art, ../almost-idempotent-stochastic-maps/scripts/
 // check-provenance.py) per CLAUDE.md L5: characterized, never canon. Parsing lives in the sibling
-// shards provenance-parse.ts (registry + `\label{}` + join key), provenance-md.ts (PROVENANCE.md/
-// UNWIRED.md/tab:status), provenance-sha256.ts (pure hash). PURITY: pure — no fs/network/clock.
+// shards provenance-parse.ts (registry + `\label{}` + join key + the rk-v18 visible-skip report),
+// provenance-md.ts (PROVENANCE.md/UNWIRED.md/tab:status), provenance-checks.ts (checks 4-5, hash
+// freshness + status drift — the pure-hash accessors these checks consume now live in
+// snapshot.ts's fileSha256/isTracked, not a dedicated provenance-sha256.ts shard). PURITY: pure —
+// no fs/network/clock.
 //
 // Divergence [rk-stricter-intended, provenance-11]: `provenanceStatusTableFile` is a GateConfig
 // parameter (default byte-identical to AISM's hardcoded `report/sections/13_discussion.tex`,
@@ -25,12 +28,13 @@
 // both were BLOCKERs in the review (findings 1 + Check-4 ruling).
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
-import { fileSha256, isTracked, type RepoSnapshot } from "./snapshot";
+import type { RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";
 import {
   forwardTokens,
   labelsOf,
   parseProvenanceRegistry,
+  registrySkipReport,
   texLabels,
   type RegistryShard,
   type TexLabels,
@@ -41,15 +45,14 @@ import {
   splitSourceTokens,
   statusTableRows,
   type ClaimRow,
-  type SourceRow,
 } from "./provenance-md";
+import { checkSourceHashes, checkStatusDrift } from "./provenance-checks";
 
 const PROVENANCE_PATH = "report/PROVENANCE.md";
 const RESULT_KINDS = new Set(["thm", "lem", "prop", "cor", "op", "obs", "ex"]);
 const SOURCE_ALLOW = new Set(["ORIGINAL", "OPEN", "ELEMENTARY", "EXTRACT", "PDF", "CONSENSUS", "MODEL", "V", "I", "O"]);
 const KEY_TOKEN_RE = /^[A-Z0-9][A-Z0-9-]*$/;
 const EXTERN_YEAR_RE = /^[A-Z]+[0-9]{3,}$/;
-const SHA16_RE = /^[0-9a-f]{16}$/;
 
 function pyListRepr(items: Iterable<string>): string {
   return `[${[...items].map((i) => `'${i}'`).join(", ")}]`;
@@ -99,97 +102,6 @@ function checkClaimSources(
           message: `PROVENANCE row '${label}': Source key '${tok}' not in the source registry`,
         });
       }
-    }
-  }
-}
-
-// check 4 — hash freshness (ERROR/WARN): check-provenance.py:368-404. Consumes the edge's
-// byte-faithful `snapshot.sha256` fact and real `isTracked` state (see the file-header boundary
-// note) — the gate never re-hashes text. tracked+stale ⇒ ERROR (AISM parity); present-but-
-// untracked (gitignored) + stale ⇒ ERROR [rk-stricter-intended]; absent ⇒ WARN, never ERROR.
-function checkSourceHashes(sourceRows: SourceRow[], snapshot: RepoSnapshot, findings: Finding[]): void {
-  const unverifiable = new Set<string>();
-  for (const { key, path, sha } of sourceRows) {
-    if (!SHA16_RE.test(sha)) {
-      findings.push({ severity: "ERROR", path: PROVENANCE_PATH, message: `source '${key}': sha '${sha}' is not 16 lowercase hex` });
-      continue;
-    }
-    if (path.startsWith("/")) {
-      findings.push({
-        severity: "WARN",
-        path: PROVENANCE_PATH,
-        message: `source '${key}': absolute path '${path}' (not refs/-relative); hash unverifiable`,
-      });
-      continue;
-    }
-    const full = fileSha256(snapshot, path);
-    if (full === undefined) {
-      // No byte-faithful hash measured for this path => it is absent from disk (or untracked and
-      // outside the include set). Unverifiable, WARN — never a false ERROR (contract Gate 4 ch4).
-      unverifiable.add(key);
-      continue;
-    }
-    const actual = full.slice(0, 16);
-    if (actual !== sha) {
-      const suffix = isTracked(snapshot, path)
-        ? ""
-        : " [present on disk but git-untracked; rk-stricter-intended ERROR — see docs/gate-contracts.md Gate 4 check 4]";
-      findings.push({
-        severity: "ERROR",
-        path: PROVENANCE_PATH,
-        message: `source '${key}': recorded ${sha} != actual ${actual} (${path}) — file edited, hash stale${suffix}`,
-      });
-    }
-  }
-  if (unverifiable.size > 0) {
-    findings.push({
-      severity: "WARN",
-      path: PROVENANCE_PATH,
-      message:
-        `${unverifiable.size} source payload(s) not hash-verifiable here (untracked/absent from this ` +
-        `snapshot): ${[...unverifiable].sort().join(", ")}`,
-    });
-  }
-}
-
-// check 5 — status OVERCLAIM (ERROR) / underclaim (WARN): check-provenance.py:293,317-321.
-function checkStatusDrift(
-  statusRows: { statusCell: string; labels: string[] }[],
-  shards: RegistryShard[],
-  tex: TexLabels,
-  findings: Finding[],
-): void {
-  const idOfLabel = new Map<string, string>();
-  for (const s of shards) for (const lab of labelsOf(s, tex)) idOfLabel.set(lab, s.id);
-  const shardOf = new Map(shards.map((s) => [s.id, s]));
-  const cellsOf = new Map<string, Set<string>>();
-  for (const { statusCell, labels } of statusRows) {
-    for (const lab of labels) {
-      const rid = idOfLabel.get(lab);
-      if (!rid) continue;
-      if (!cellsOf.has(rid)) cellsOf.set(rid, new Set());
-      cellsOf.get(rid)!.add(statusCell);
-    }
-  }
-  for (const [rid, cells] of cellsOf) {
-    const shard = shardOf.get(rid)!;
-    const anyOpen = [...cells].some((c) => c === "open");
-    const anyNonopen = [...cells].some((c) => c !== "open");
-    if (shard.status === "open" && !anyOpen) {
-      findings.push({
-        severity: "ERROR",
-        path: shard.path,
-        message:
-          `OVERCLAIM ${rid}: registry status=open but tab:status frames it ${pyListRepr([...cells].sort())} ` +
-          `(never 'open') — the paper claims an open result is settled`,
-      });
-    }
-    if ((shard.af === "validated" || shard.status === "proved") && !anyNonopen) {
-      findings.push({
-        severity: "WARN",
-        path: shard.path,
-        message: `${rid}: registry ${shard.status}/${shard.af} but tab:status frames it only 'open'`,
-      });
     }
   }
 }
@@ -251,7 +163,7 @@ export const provenanceGate: Gate = {
   name: "provenance",
   run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const findings: Finding[] = [];
-    const shards = parseProvenanceRegistry(snapshot);
+    const { shards, skipped } = parseProvenanceRegistry(snapshot);
     const tex = texLabels(snapshot);
     const prov = parseProvenanceMd(snapshot);
     const whitelist = parseUnwired(snapshot);
@@ -260,7 +172,7 @@ export const provenanceGate: Gate = {
     checkForwardLabels(shards, tex, findings);
     checkClaimLabels(prov.claimRows, tex, findings);
     checkClaimSources(prov.claimRows, prov.sourceRegistry, findings);
-    checkSourceHashes(prov.sourceRows, snapshot, findings);
+    checkSourceHashes(prov.sourceRows, snapshot, findings, PROVENANCE_PATH);
     checkStatusDrift(statusRows, shards, tex, findings);
     checkAnchor(shards, tex, whitelist, findings);
     checkReverseLabels(shards, tex, findings);
@@ -272,13 +184,20 @@ export const provenanceGate: Gate = {
       findings.push({ severity: "WARN", path: PROVENANCE_PATH, message: w });
     }
 
-    const n = shards.length;
+    // rk-v18 (review finding 4): a registry file this gate declined to re-parse (missing/
+    // unterminated frontmatter) must not silently shrink the coverage denominator around it —
+    // see provenance-parse.ts's registrySkipReport for the WARN-vs-ERROR reasoning.
+    const { checked, total, warning } = registrySkipReport(shards, skipped);
+    if (warning) findings.push(warning);
+
     const coverage: CoverageLine[] = [
       {
         gate: "provenance",
-        checked: n,
-        total: n,
-        unit: `registry results, ${prov.claimRows.length} claim rows, ${statusRows.length} tab:status rows`,
+        checked,
+        total,
+        unit:
+          `registry results, ${skipped.length} frontmatter-invalid, ${prov.claimRows.length} ` +
+          `claim rows, ${statusRows.length} tab:status rows`,
       },
     ];
 

@@ -83,7 +83,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run({});
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 claim rows, 0 tab:status rows" },
+      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows" },
     ]);
   });
 
@@ -91,8 +91,60 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run(baseline());
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 1 claim rows, 0 tab:status rows" },
+      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows" },
     ]);
+  });
+});
+
+describe("provenanceGate — rk-v18: malformed registry shards are a visible skip, never a shrunken denominator", () => {
+  // Review finding 4: provenance-parse.ts used to `continue` past missing/unterminated
+  // frontmatter with no finding and no count, while the coverage line derived BOTH its numerator
+  // and denominator from the surviving parsed set — so one good shard + one malformed shard
+  // reported a full "1/1" as if the malformed file never existed. The fix: denominator = every
+  // registry file discovered under argument/lemmas/, numerator = the surviving parsed set, plus
+  // an aggregate WARN naming every excluded path (Gate 2/linker still owns the frontmatter-
+  // validity ERROR itself — this gate does not double-report that ERROR, only its own coverage).
+  test("one good shard + one malformed shard: coverage is 1/2, not 1/1 — the lie this fixes", () => {
+    const entries = baseline();
+    entries["argument/lemmas/lem-bad.md"] = "not frontmatter at all\n";
+    const result = run(entries);
+    expect(result.coverage).toEqual([
+      {
+        gate: "provenance",
+        checked: 1,
+        total: 2,
+        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows",
+      },
+    ]);
+  });
+
+  test("the exclusion is visible as an aggregate WARN naming the skipped path", () => {
+    const entries = baseline();
+    entries["argument/lemmas/lem-bad.md"] = "not frontmatter at all\n";
+    const result = run(entries);
+    const w = warnings(result).find((f) => f.message.includes("excluded from provenance re-parse"));
+    expect(w).toBeDefined();
+    expect(w!.message).toContain("argument/lemmas/lem-bad.md");
+    expect(w!.message).toContain("1 registry file(s)");
+  });
+
+  test("no malformed shards: no skip WARN, coverage unit shows '0 frontmatter-invalid'", () => {
+    const result = run(baseline());
+    expect(warnings(result).some((f) => f.message.includes("excluded from provenance re-parse"))).toBe(false);
+    expect(result.coverage[0]!.unit).toContain("0 frontmatter-invalid");
+  });
+
+  test("all-malformed registry: coverage 0/N, never a vacuous 0/0 hiding N real files", () => {
+    const entries = baseline();
+    delete entries["argument/lemmas/lem-x.md"];
+    entries["argument/lemmas/lem-bad1.md"] = "no frontmatter\n";
+    entries["argument/lemmas/lem-bad2.md"] = "---\nid: x\n"; // unterminated
+    const result = run(entries);
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(result.coverage[0]!.total).toBe(2);
+    const w = warnings(result).find((f) => f.message.includes("excluded from provenance re-parse"));
+    expect(w!.message).toContain("argument/lemmas/lem-bad1.md");
+    expect(w!.message).toContain("argument/lemmas/lem-bad2.md");
   });
 });
 
@@ -566,14 +618,17 @@ describe("provenance-parse helpers — direct unit tests", () => {
     const snap = snapshot({
       "argument/lemmas/lem-noid.md": "---\nkind: lemma\nstatus: stated\naf: none\n---\nbody\n",
     });
-    const shards = parseProvenanceRegistry(snap);
+    const { shards, skipped } = parseProvenanceRegistry(snap);
     expect(shards).toHaveLength(1);
     expect(shards[0]!.id).toBe("lem-noid");
+    expect(skipped).toEqual([]);
   });
 
-  test("parseProvenanceRegistry: missing/unterminated frontmatter excludes the shard silently (no finding here)", () => {
+  test("parseProvenanceRegistry: missing/unterminated frontmatter excludes the shard from `shards` but names it in `skipped` (rk-v18 — never a bare drop)", () => {
     const snap = snapshot({ "argument/lemmas/lem-bad.md": "not frontmatter at all\n" });
-    expect(parseProvenanceRegistry(snap)).toEqual([]);
+    const { shards, skipped } = parseProvenanceRegistry(snap);
+    expect(shards).toEqual([]);
+    expect(skipped).toEqual(["argument/lemmas/lem-bad.md"]);
   });
 
   test("labelsOf: explicit report tokens are included UNCONDITIONALLY, even when unresolved", () => {
