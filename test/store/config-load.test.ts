@@ -61,7 +61,13 @@ describe("loadGateConfig (edge: reads .rk/config.json)", () => {
     const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
     dirs.push(root);
     const cfg = await loadGateConfig(root);
-    expect(cfg).toEqual(DEFAULT_GATE_CONFIG);
+    // rk-xbm: loadGateConfig now always attaches `_configValidation` (the config-error side
+    // channel `configGate` reads, src/gates/config.ts) -- nothing to validate here (no file at
+    // all), so it's the empty summary. Compared field-by-field (not a bare toEqual against
+    // DEFAULT_GATE_CONFIG) so this test states what changed, rather than silently widening.
+    const { _configValidation, ...rest } = cfg;
+    expect(rest).toEqual(DEFAULT_GATE_CONFIG);
+    expect(_configValidation).toEqual({ findings: [], checked: 0, total: 0 });
   });
 
   test("merges a present .rk/config.json over the defaults", async () => {
@@ -80,6 +86,80 @@ describe("loadGateConfig (edge: reads .rk/config.json)", () => {
     mkdirSync(join(root, ".rk"), { recursive: true });
     writeFileSync(join(root, ".rk", "config.json"), "{ not json");
     const cfg = await loadGateConfig(root);
-    expect(cfg).toEqual(DEFAULT_GATE_CONFIG);
+    // rk-xbm: unchanged, deliberately -- malformed JSON *syntax* is a distinct failure mode from
+    // a malformed *field value* (out of this bead's named scope, see config-load.ts's header
+    // comment); still degrades silently to defaults, no config-error finding.
+    const { _configValidation, ...rest } = cfg;
+    expect(rest).toEqual(DEFAULT_GATE_CONFIG);
+    expect(_configValidation).toEqual({ findings: [], checked: 0, total: 0 });
   });
+});
+
+// rk-xbm (M1 review B1): config-load.ts:39's old `parsed as Partial<GateConfig>` cast let ANY
+// JSON value through unvalidated. These tests reproduce the two concrete consequences named in
+// the finding (a typo'd `phase`, a malformed `shardsMaxLines`) plus the general unknown-key case,
+// through `loadGateConfig` end-to-end (the real edge a `.rk/config.json` typo actually hits).
+describe("loadGateConfig — rk-xbm: every field runtime-validated, never silently accepted", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  async function withConfig(json: unknown): Promise<Awaited<ReturnType<typeof loadGateConfig>>> {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify(json));
+    return loadGateConfig(root);
+  }
+
+  test("phase: typo -- falls back to consolidation (never silently exploration), one loud ERROR", async () => {
+    const cfg = await withConfig({ phase: "typo" });
+    expect(cfg.phase).toBe("consolidation");
+    const findings = cfg._configValidation!.findings;
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("ERROR");
+    expect(findings[0]!.structural).toBe(true);
+    expect(findings[0]!.path).toBe(".rk/config.json");
+    expect(findings[0]!.message).toContain("phase");
+    expect(findings[0]!.message).toContain("typo");
+  });
+
+  test("shardsMaxLines: 'garbage' -- falls back to the numeric default, one loud ERROR", async () => {
+    const cfg = await withConfig({ shardsMaxLines: "garbage" });
+    expect(cfg.shardsMaxLines).toBe(DEFAULT_GATE_CONFIG.shardsMaxLines);
+    const findings = cfg._configValidation!.findings;
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("ERROR");
+    expect(findings[0]!.message).toContain("shardsMaxLines");
+    expect(findings[0]!.message).toContain("garbage");
+  });
+
+  test("shardsMaxLines: 0 and negative are rejected too (positive-number range check)", async () => {
+    for (const bad of [0, -5, NaN]) {
+      const cfg = await withConfig({ shardsMaxLines: bad });
+      expect(cfg.shardsMaxLines).toBe(DEFAULT_GATE_CONFIG.shardsMaxLines);
+      expect(cfg._configValidation!.findings).toHaveLength(1);
+    }
+  });
+
+  test("unknown key -- dropped, one loud ERROR, never silently applied", async () => {
+    const cfg = await withConfig({ shardsMxLines: 999 });
+    expect((cfg as unknown as Record<string, unknown>).shardsMxLines).toBeUndefined();
+    expect(cfg.shardsMaxLines).toBe(DEFAULT_GATE_CONFIG.shardsMaxLines);
+    const findings = cfg._configValidation!.findings;
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toContain("unknown config key");
+    expect(findings[0]!.message).toContain("shardsMxLines");
+  });
+
+  test("a fully valid config produces zero validation findings and a checked==total coverage pair", async () => {
+    const cfg = await withConfig({ phase: "exploration", shardsMaxLines: 350, shardsPrefix: "MC" });
+    expect(cfg._configValidation).toEqual({ findings: [], checked: 3, total: 3 });
+  });
+
+  // Mutation proof: temporarily changing `if (v === "exploration" || v === "consolidation")` in
+  // src/gates/config.ts's phase branch to just `if (true)` makes the first test above pass
+  // `cfg.phase === "typo"` straight through -- confirmed RED by hand during implementation
+  // (assertion `cfg.phase === "consolidation"` fails, receiving "typo" instead), then reverted.
 });

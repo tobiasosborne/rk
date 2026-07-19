@@ -63,3 +63,41 @@ describe("applyPhase — exploration (only structural findings stay blocking)", 
     expect(out.filter((f) => f.severity === "WARN")).toHaveLength(3); // 2 demoted + 1 already-WARN
   });
 });
+
+// rk-xbm (M1 review B1, docs/reviews/2026-07-18-m1-milestone-review-codex.md L1): the OLD code
+// here was `if (phase === "consolidation") return findings; <demote>` -- ANY value that wasn't
+// the literal string "consolidation", including a typo, fell into the demotion branch and ran as
+// exploration. `phase`'s static type is `Phase`, but `GateConfig.phase` is (transitively) sourced
+// from untyped `.rk/config.json` JSON a compile-time cast cannot make honest -- these tests pass
+// a value the type system would normally forbid via `as Phase`, exactly the shape a real typo'd
+// config file produces at runtime.
+describe("applyPhase — rk-xbm: an invalid phase value never silently demotes (L6)", () => {
+  test("a typo'd phase value: severities are NOT demoted (behaves like consolidation)", () => {
+    const findings = [err(false, "missing SHARD-TITLE header")];
+    const out = applyPhase(findings, "typo" as Phase);
+    const original = out.find((f) => f.message.includes("missing SHARD-TITLE header"));
+    expect(original!.severity).toBe("ERROR"); // NOT demoted to WARN
+    expect(original!.message).not.toContain("advisory in exploration phase");
+  });
+
+  test("a typo'd phase value produces one loud, structural, non-demotable config ERROR", () => {
+    const out = applyPhase([warn()], "typo" as Phase);
+    const configFindings = out.filter((f) => f.path === ".rk/config.json");
+    expect(configFindings).toHaveLength(1);
+    expect(configFindings[0]).toMatchObject({ severity: "ERROR", structural: true });
+    expect(configFindings[0]!.message).toContain("typo");
+    expect(configFindings[0]!.message).toContain("consolidation");
+  });
+
+  test("count is preserved: the invalid-phase finding is PREPENDED, existing findings untouched in count", () => {
+    const findings = [err(true), err(false), warn()];
+    const out = applyPhase(findings, "typo" as Phase);
+    expect(out).toHaveLength(4); // 3 original + 1 synthetic config-error
+  });
+
+  // Mutation proof (this WP's brief): reverting to the pre-fix `if (phase === "consolidation")
+  // return findings; return findings.map(demote)` (i.e. deleting the `phase !== "exploration"`
+  // branch entirely) makes "typo'd phase value: severities are NOT demoted" above go RED (the
+  // ERROR gets rewritten to WARN with an "advisory in exploration phase" clause) -- confirmed by
+  // hand during implementation, reverted immediately after.
+});

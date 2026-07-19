@@ -257,3 +257,79 @@ describe("shardsGate — R12: shardsPrefix required-when-consumed (no silent AIS
     expect(errors(result).some((f) => f.path === ".rk/config.json")).toBe(false);
   });
 });
+
+// rk-xbm (M1 review B1, docs/reviews/2026-07-18-m1-milestone-review-codex.md L1): Check 7's
+// `lineCount > config.shardsMaxLines` used to trust `config.shardsMaxLines` unconditionally --
+// `.rk/config.json`'s untyped JSON reaching this gate as e.g. the STRING "garbage" makes every
+// such comparison coerce to `NaN`, and any comparison against `NaN` is always `false` -- a
+// false-green on the per-shard line-cap check regardless of how long the shard actually is (the
+// exact incident this bead names). src/gates/config.ts's `validateConfigOverrides` now sanitizes
+// this at the `.rk/config.json`-loading edge (src/store/config-load.ts), so a caller going
+// through `loadGateConfig` never reaches this gate with a malformed value at all; these tests
+// exercise this gate's OWN defense-in-depth directly, constructing a `GateConfig` by hand the way
+// a caller bypassing `loadGateConfig` still could (as `mergeGateConfig` itself performs no
+// runtime validation on an already-typed `Partial<GateConfig>` -- see that function's own doc
+// comment).
+describe("shardsGate — rk-xbm: a malformed shardsMaxLines never produces a false-green (defense in depth)", () => {
+  const GOLDEN_MASTER = "\\documentclass{article}\n\\begin{document}\n\\include{sections/01_intro}\n\\end{document}\n";
+  const GOLDEN_README = "# report/ map\n\n- `report/sections/01_intro.tex` (`AISM-01-INTRO`)\n";
+  const GOLDEN_CATALOG =
+    "## AISM-01-INTRO\n\nFile: report/sections/01_intro.tex\nTitle: Introduction\nKeywords: intro, overview\n\n" +
+    "First summary line.\nSecond summary line.\n";
+
+  // 300 body lines (well past the real default of 280) after the four header lines + 2 summary
+  // lines -- deliberately over-length so the max-lines check has something real to catch.
+  const OVERLONG_SHARD =
+    "% SHARD-ID: AISM-01-INTRO\n% SHARD-TITLE: Introduction\n% SHARD-KEYWORDS: intro, overview\n" +
+    "% SHARD-SUMMARY: First summary line.\n% SHARD-SUMMARY: Second summary line.\n" +
+    "Body line.\n".repeat(300);
+
+  function overlongTree(): RepoSnapshot {
+    return snap(
+      {
+        "report/main.tex": GOLDEN_MASTER,
+        "report/README.md": GOLDEN_README,
+        "report/SHARD_CATALOG.md": GOLDEN_CATALOG,
+        "report/sections/01_intro.tex": OVERLONG_SHARD,
+      },
+      ["report", "report/sections"],
+    );
+  }
+
+  test("shardsMaxLines: 'garbage' (a string) -- the over-length shard is STILL caught, never silently passed", () => {
+    const badConfig = { ...CONFIG_WITH_PREFIX, shardsMaxLines: "garbage" as unknown as number };
+    const result = shardsGate.run(overlongTree(), badConfig);
+    const lineCountError = errors(result).find((f) => f.message.includes("has") && f.message.includes("lines;"));
+    expect(lineCountError).toBeDefined();
+    expect(lineCountError!.path).toBe("report/sections/01_intro.tex");
+    // The guard falls back to the real default (280) in the message text, not the garbage value.
+    expect(lineCountError!.message).toContain(`hard guard is ${DEFAULT_GATE_CONFIG.shardsMaxLines}`);
+  });
+
+  test("shardsMaxLines: 'garbage' -- also produces ONE loud config-error finding, not a silent fallback", () => {
+    const badConfig = { ...CONFIG_WITH_PREFIX, shardsMaxLines: "garbage" as unknown as number };
+    const result = shardsGate.run(overlongTree(), badConfig);
+    const cfgErrors = errors(result).filter((f) => f.path === ".rk/config.json" && f.message.includes("shardsMaxLines"));
+    expect(cfgErrors).toHaveLength(1);
+    expect(cfgErrors[0]!.message).toContain("garbage");
+  });
+
+  test("shardsMaxLines: 0 (a non-positive number) is also rejected, same fallback behavior", () => {
+    const badConfig = { ...CONFIG_WITH_PREFIX, shardsMaxLines: 0 };
+    const result = shardsGate.run(overlongTree(), badConfig);
+    const lineCountError = errors(result).find((f) => f.message.includes("has") && f.message.includes("lines;"));
+    expect(lineCountError).toBeDefined();
+  });
+
+  test("a valid shardsMaxLines is completely unaffected: no config-error finding emitted", () => {
+    const result = shardsGate.run(overlongTree(), CONFIG_WITH_PREFIX);
+    expect(errors(result).some((f) => f.path === ".rk/config.json" && f.message.includes("shardsMaxLines"))).toBe(false);
+  });
+
+  // Mutation proof (this WP's brief): reverting Check 7 to trust `config.shardsMaxLines` directly
+  // (`if (lineCount > config.shardsMaxLines)` with no `shardsMaxLinesValid`/`effectiveMaxLines`
+  // guard) makes "the over-length shard is STILL caught" above go RED -- `"garbage" as unknown`
+  // coerces to `NaN` in the comparison, `lineCount > NaN` is always `false`, so the over-length
+  // finding disappears entirely (the exact false-green this bead fixes). Confirmed by hand during
+  // implementation, reverted immediately after.
+});

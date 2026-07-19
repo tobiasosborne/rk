@@ -41,6 +41,7 @@ import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { hasPath, dirExists } from "./snapshot";
 import type { GateConfig } from "./config";
+import { DEFAULT_GATE_CONFIG } from "./config";
 import { escapeRegExp, firstHeader, allHeaders, parseIncludes } from "./shards-parse";
 
 const MASTER = "report/main.tex";
@@ -102,6 +103,24 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     ? new RegExp(`^${escapeRegExp(config.shardsPrefix!)}-[0-9]{2}[A-Z]?-[A-Z0-9-]+$`)
     : undefined;
   let shardsPrefixErrorEmitted = false;
+
+  // rk-xbm (M1 review B1): defense-in-depth against a malformed `config.shardsMaxLines` reaching
+  // Check 7's `>` comparison below. `.rk/config.json`'s untyped JSON used to be cast straight to
+  // `Partial<GateConfig>` with no runtime check (src/store/config-load.ts, fixed by this same
+  // bead) -- `shardsMaxLines: "garbage"` made `lineCount > config.shardsMaxLines` a string/number
+  // comparison that is ALWAYS false (JS coerces the string to NaN; every comparison against NaN
+  // is false), so an over-length shard silently passed -- a false-green on the per-shard line-cap
+  // check, the exact incident this bead names. `src/gates/config.ts`'s `validateConfigOverrides`
+  // now sanitizes this at the `.rk/config.json`-loading edge, so a caller going through
+  // `loadGateConfig` never hands this gate a malformed value at all; this check is redundant
+  // defense for any caller that constructs a `GateConfig` directly (tests, corpus fixtures). A
+  // malformed value here gets ONE loud, counted config ERROR (mirroring the `shardsPrefix`
+  // config-missing pattern immediately above) and the check itself still runs, against the
+  // strict default, rather than silently skipping the line-cap check for the whole repo.
+  const shardsMaxLinesValid =
+    typeof config.shardsMaxLines === "number" && Number.isFinite(config.shardsMaxLines) && config.shardsMaxLines > 0;
+  const effectiveMaxLines = shardsMaxLinesValid ? config.shardsMaxLines : DEFAULT_GATE_CONFIG.shardsMaxLines;
+  let shardsMaxLinesErrorEmitted = false;
   const seenFiles = new Set<string>();
   const seenIds = new Set<string>();
   const readmeContent = snapshot.get(README) ?? "";
@@ -149,8 +168,21 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const content = snapshot.get(file)!;
     // Check 7 — wc -l semantics: count of '\n' bytes, not split().length (check-report-shards.sh:54-57).
     const lineCount = (content.match(/\n/g) ?? []).length;
-    if (lineCount > config.shardsMaxLines) {
-      findings.push(mkErr(file, 1, `${file} has ${lineCount} lines; target is about 200 and hard guard is ${config.shardsMaxLines}`));
+    if (!shardsMaxLinesValid && !shardsMaxLinesErrorEmitted) {
+      findings.push(
+        mkErr(
+          ".rk/config.json",
+          1,
+          `shardsMaxLines is not a positive number (got ${JSON.stringify(config.shardsMaxLines)}) -- ` +
+            `set "shardsMaxLines" to a positive integer in .rk/config.json (docs/gate-contracts.md ` +
+            `Gate 6); using the strict default ${DEFAULT_GATE_CONFIG.shardsMaxLines} for this run's ` +
+            `line-count check rather than silently passing every shard (rk-xbm)`,
+        ),
+      );
+      shardsMaxLinesErrorEmitted = true;
+    }
+    if (lineCount > effectiveMaxLines) {
+      findings.push(mkErr(file, 1, `${file} has ${lineCount} lines; target is about 200 and hard guard is ${effectiveMaxLines}`));
       nonConforming.add(file);
     }
     // Check 8 (check-report-shards.sh:58-59) — cross-file finding, attributed to README.

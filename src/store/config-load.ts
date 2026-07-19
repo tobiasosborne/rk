@@ -15,12 +15,20 @@
 
 import { join } from "node:path";
 import type { GateConfig } from "../gates/config";
-import { mergeGateConfig } from "../gates/config";
+import { mergeGateConfig, validateConfigOverrides } from "../gates/config";
+
+function noValidation(): NonNullable<GateConfig["_configValidation"]> {
+  return { findings: [], checked: 0, total: 0 };
+}
 
 export async function loadGateConfig(root: string): Promise<GateConfig> {
   const path = join(root, ".rk", "config.json");
   const file = Bun.file(path);
-  if (!(await file.exists())) return mergeGateConfig(undefined);
+  if (!(await file.exists())) {
+    const config = mergeGateConfig(undefined);
+    config._configValidation = noValidation();
+    return config;
+  }
 
   let parsed: unknown;
   try {
@@ -29,12 +37,30 @@ export async function loadGateConfig(root: string): Promise<GateConfig> {
     // A corrupt config.json degrades to defaults rather than crashing `rk check` outright — the
     // same "absent/unparseable input becomes a visible degraded state, never a hard crash"
     // pattern every gate follows for its own inputs (docs/gate-contracts.md's shared
-    // philosophy). `rk check` itself may choose to surface this via its own diagnostics later;
-    // this function's contract is just "never throw on a bad config file".
-    return mergeGateConfig(undefined);
+    // philosophy). Deliberately UNCHANGED by rk-xbm (below): malformed JSON *syntax* is a
+    // distinct failure mode from a malformed *field value* -- out of this bead's named scope
+    // (CLAUDE.md L11). `rk check` itself may choose to surface this via its own diagnostics
+    // later; this function's contract is just "never throw on a bad config file".
+    const config = mergeGateConfig(undefined);
+    config._configValidation = noValidation();
+    return config;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return mergeGateConfig(undefined);
+    const config = mergeGateConfig(undefined);
+    config._configValidation = noValidation();
+    return config;
   }
-  return mergeGateConfig(parsed as Partial<GateConfig>);
+
+  // rk-xbm (M1 review B1): the ONE unsafe boundary named in the finding -- `parsed` is untyped,
+  // untrusted JSON, and the old `parsed as Partial<GateConfig>` cast took the compiler's word for
+  // a shape it never actually checked (`{"phase": "typo"}`, `{"shardsMaxLines": "garbage"}` sailed
+  // straight through). `validateConfigOverrides` (src/gates/config.ts) runtime-checks every field
+  // (enum membership, type/range, unknown-key detection) BEFORE anything reaches
+  // `mergeGateConfig`; a rejected field is dropped (falls back to `DEFAULT_GATE_CONFIG`, never the
+  // raw malformed value) and produces one loud, counted config ERROR finding, carried on
+  // `config._configValidation` for `configGate` (src/gates/index.ts) to surface.
+  const { overrides, findings, checked, total } = validateConfigOverrides(parsed as Record<string, unknown>);
+  const config = mergeGateConfig(overrides);
+  config._configValidation = { findings, checked, total };
+  return config;
 }

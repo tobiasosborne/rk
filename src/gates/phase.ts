@@ -35,9 +35,37 @@ export const DEFAULT_PHASE: Phase = "consolidation";
  * can tell a WARN is a phase-demoted ERROR, not an ordinary advisory). Structural ERROR findings
  * and every WARN (already advisory, nothing to demote) pass through completely unchanged in both
  * phases. Called exactly once per gate result, from `src/cli/check.ts` — never inside a gate
- * itself (gates stay phase-unaware; L3 pure core, one composition-layer policy). */
+ * itself (gates stay phase-unaware; L3 pure core, one composition-layer policy).
+ *
+ * rk-xbm (M1 review B1, docs/reviews/2026-07-18-m1-milestone-review-codex.md L1): `phase`'s
+ * static type is `Phase`, but the ONLY caller passes `GateConfig.phase` sourced (transitively)
+ * from `.rk/config.json` -- untyped JSON a compiler cast cannot make honest. The OLD code here
+ * was `if (phase === "consolidation") return findings; <demote>` -- a typo like `"typo"` is not
+ * `=== "consolidation"`, so it fell straight into the demotion branch and silently ran as if
+ * `"exploration"` had been requested (a silent severity-policy change, exactly the drift CLAUDE.md
+ * L6 forbids). This function now checks membership in the two-value enum explicitly: an
+ * unrecognized value is treated as `"consolidation"` (the strict default, never a silent
+ * demotion) AND is made loud by prepending one `structural: true` config-error finding (never
+ * demotable by this same function, on any later call) so `rk check`'s exit code still reflects
+ * it. `src/gates/config.ts`'s `validateConfigOverrides` / `configGate` perform the SAME check
+ * earlier, at the `.rk/config.json`-loading edge -- this is redundant defense-in-depth for any
+ * caller that constructs a `GateConfig` directly (tests, corpus fixtures) rather than going
+ * through `loadGateConfig`. */
 export function applyPhase(findings: Finding[], phase: Phase): Finding[] {
   if (phase === "consolidation") return findings;
+  if (phase !== "exploration") {
+    const invalidPhaseFinding: Finding = {
+      severity: "ERROR",
+      path: ".rk/config.json",
+      line: 1,
+      message:
+        `invalid phase value ${JSON.stringify(phase)} in .rk/config.json -- must be ` +
+        `"exploration" or "consolidation"; treating as "consolidation" (the strict default) ` +
+        `rather than silently demoting severities to the exploration policy`,
+      structural: true,
+    };
+    return [invalidPhaseFinding, ...findings];
+  }
   return findings.map((f) => {
     if (f.severity !== "ERROR" || f.structural) return f;
     return {
