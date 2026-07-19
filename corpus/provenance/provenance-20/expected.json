@@ -1,0 +1,19 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "OVERCLAIM thm-main"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["0 frontmatter-invalid"]
+  },
+  "aism_behavior": "differs: AISM's own check-provenance.py `parse_registry` globs only `<arg_dir>/lemmas/*.md` (check-provenance.py:120-132), the same private-subdirectory convention Gate 2's linker-26/linker-27 fixtures already document (bead rk-9pk). This fixture's `argument/lemmas/` does not even exist -- the shard is written directly at `argument/thm-main.md` root (the exact dogfood-1 shape: a north-star theorem, no `lemmas/` subdirectory, since rk's own scaffold stamps `argument/` only, PRD.md:79-85). AISM's script would report an EMPTY registry (zero shards, zero errors) and check 5 (status OVERCLAIM/underclaim) would compare against nothing: a silent, unvalidated green over a status:open result the paper's own tab:status table frames as proved -- the project's #1 guarded failure mode (check-provenance.py:24,296-298) entirely undefended. rk's Gate 4 registry scan now mirrors Gate 2's `argument/**/*.md` recursive contract exactly (same NON_SHARD_NAMES exclusion set: README.md/INDEX.md/DAG.md at any depth), so the root-level shard is discovered, re-parsed, and checked -- producing the OVERCLAIM ERROR this fixture proves.",
+  "notes": "rk-2t8 (M1-review B2, 2026-07-19): before this fix, provenance-parse.ts hardcoded `argument/lemmas` as the ONLY registry root, one directory level, while linker-parse.ts (Gate 2) already discovered `argument/**/*.md` recursively (rk-9pk). A shard at `argument/thm-main.md` was therefore invisible to Gate 4 specifically: linker reported 1/1 (the shard parses and passes acyclicity/status/orphan checks cleanly), provenance reported a vacuous 0/0, and this exact status:open-framed-as-proved shape produced NO OVERCLAIM ERROR -- the gate's own #1 guarded failure mode (gate-contracts.md:875) silently defeated for any shard outside argument/lemmas/. Fixed: Gate 4's registry discovery is now `argument/**/*.md`, recursive, using the identical exclusion set as Gate 2 (README.md/INDEX.md/DAG.md at any depth), so the two gates always agree on the shard universe. Mutation-proven red-first (test/gates/provenance.test.ts, describe 'rk-2t8'): reverting the scan to `argument/lemmas` only turns both the direct unit test and this fixture red (0/0 registry results, no OVERCLAIM finding); reverted after confirming red."
+}

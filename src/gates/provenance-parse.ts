@@ -1,10 +1,23 @@
 // PURITY: pure — no fs/network/clock (L3). Gate 4 (provenance) registry + report-label parsers:
-// an INDEPENDENT re-parse of argument/lemmas/*.md (docs/gate-contracts.md Gate 4 Inputs:
+// an INDEPENDENT re-parse of argument/**/*.md (docs/gate-contracts.md Gate 4 Inputs:
 // "re-parsed independently of the linker gate; fields read: id, status, af, provenance, kind" —
 // check-provenance.py:120-132) and report/sections/*.tex `\label{}` scanning
 // (check-provenance.py:135-143), plus the registry<->report join key (`labelsOf`,
 // check-provenance.py:230-237). PROVENANCE.md/UNWIRED.md/tab:status parsing lives in the sibling
 // shard provenance-md.ts (kept separate to stay under the ~200-line shard target).
+//
+// Divergence [rk-2t8, M1-review B2, 2026-07-19]: this gate used to glob only `argument/lemmas/
+// *.md` (one directory level), while Gate 2 (linker-parse.ts) discovers `argument/**/*.md`
+// RECURSIVELY (rk-9pk — the dogfood-1 root-level-shard fix). A shard written at `argument/*.md`
+// (or any depth other than exactly one level under `lemmas/`) was therefore INVISIBLE to this
+// gate: linker reported 1/1, provenance reported 0/0, and a status:open shard framed as proved in
+// the tab:status table produced NO OVERCLAIM ERROR — the gate's own #1 guarded failure mode
+// (gate-contracts.md:875) silently defeated for any shard outside `argument/lemmas/`. Fixed: the
+// registry universe is now `argument/**/*.md`, RECURSIVE, using the exact same exclusion set as
+// Gate 2 (`README.md`/`INDEX.md`/`DAG.md` at ANY depth — non-shard documentation/mirrors), so the
+// two gates always agree on the shard universe. This is an independent re-implementation (not an
+// import from linker-parse.ts), preserving the "independent re-parse" property the contract
+// documents — a bug in Gate 2's own parser must not silently propagate into Gate 4's coverage.
 
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
@@ -14,7 +27,28 @@ const LABEL_TOKEN = "[a-z]+:[A-Za-z0-9-]+";
 export const LABEL_FULL_RE = new RegExp(`^${LABEL_TOKEN}$`);
 const LABEL_DEF_RE = new RegExp(`\\\\label\\{(${LABEL_TOKEN})\\}`, "g");
 const REPORT_TOK_RE = new RegExp(`report\\s+(${LABEL_TOKEN})`, "g");
-const LEMMA_DIR = "argument/lemmas";
+const ARGUMENT_DIR = "argument";
+
+/** File basenames excluded from the registry scan at ANY depth under `argument/` — non-shard
+ * documentation/mirrors, not results. Must match Gate 2's own `NON_SHARD_NAMES`
+ * (linker-parse.ts) EXACTLY (rk-2t8): the two gates must always agree on the shard universe, or a
+ * shard visible to one and invisible to the other reopens the same silent-skip class this fix
+ * closes. Duplicated rather than imported — see the file header's "independent re-parse" note. */
+const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
+
+/** Every `.md` file under `argument/`, RECURSIVE, returned as paths relative to `argument/`
+ * (e.g. "lem-root.md" for a root-level shard, "lemmas/lem-y.md", "lemmas/sub/lem-z.md"), sorted
+ * lexicographically. Mirrors linker-parse.ts's `listArgumentMdFilesRelative` exactly (rk-2t8) —
+ * reads directly off the snapshot's text-map keys, since `RepoSnapshot`'s `listDir` is
+ * deliberately one-level-only (see linker-parse.ts's own comment on this). */
+function listArgumentMdFilesRelative(snapshot: RepoSnapshot): string[] {
+  const prefix = `${ARGUMENT_DIR}/`;
+  const out: string[] = [];
+  for (const path of snapshot.keys()) {
+    if (path.startsWith(prefix) && path.endsWith(".md")) out.push(path.slice(prefix.length));
+  }
+  return out.sort();
+}
 
 export interface RegistryShard {
   id: string;
@@ -31,15 +65,16 @@ export interface RegistryShard {
  * finding 4). */
 export interface RegistryParseResult {
   shards: RegistryShard[];
-  /** repo-relative paths of `argument/lemmas/*.md` files discovered but excluded because their
-   * frontmatter is missing or unterminated, sorted. Kept separate from `shards` (rather than
-   * dropped) so `provenance.ts` can report BOTH the raw registry universe and the surviving
-   * parsed set — collapsing them back into one number would silently shrink the coverage
-   * denominator around exactly the shards this gate refused to look at. */
+  /** repo-relative paths of `argument/**\/*.md` files discovered (recursive, rk-2t8) but excluded
+   * because their frontmatter is missing or unterminated, sorted. Kept separate from `shards`
+   * (rather than dropped) so `provenance.ts` can report BOTH the raw registry universe and the
+   * surviving parsed set — collapsing them back into one number would silently shrink the
+   * coverage denominator around exactly the shards this gate refused to look at. */
   skipped: string[];
 }
 
-/** check-provenance.py:120-132 `parse_registry` — independent re-parse of argument/lemmas/*.md,
+/** check-provenance.py:120-132 `parse_registry` — independent re-parse of argument/**\/*.md
+ * (recursive, rk-2t8 — mirrors Gate 2's linker-parse.ts discovery contract exactly),
  * reading only the fields this gate needs. A shard with missing/unterminated frontmatter is
  * excluded from `shards` here (`fm is None: continue`, check-provenance.py:128-129) but named in
  * `skipped`, never dropped outright: the linker gate (Gate 2) is the one that reports the
@@ -55,18 +90,17 @@ export interface RegistryParseResult {
 export function parseProvenanceRegistry(snapshot: RepoSnapshot): RegistryParseResult {
   const shards: RegistryShard[] = [];
   const skipped: string[] = [];
-  const names = listDir(snapshot, LEMMA_DIR)
-    .filter((n) => n.endsWith(".md") && n !== "README.md" && n !== "INDEX.md")
-    .sort();
-  for (const name of names) {
-    const path = `${LEMMA_DIR}/${name}`;
+  for (const rel of listArgumentMdFilesRelative(snapshot)) {
+    const base = rel.slice(rel.lastIndexOf("/") + 1);
+    if (NON_SHARD_NAMES.has(base)) continue;
+    const path = `${ARGUMENT_DIR}/${rel}`;
     const fm = parseFrontmatter(snapshot.get(path) ?? "");
     if (!fm.present || !fm.terminated) {
       skipped.push(path);
       continue;
     }
     shards.push({
-      id: fm.fields.id ?? name.slice(0, -".md".length),
+      id: fm.fields.id ?? base.slice(0, -".md".length),
       path,
       status: fm.fields.status,
       af: fm.fields.af !== undefined ? fm.fields.af : "none",

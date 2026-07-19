@@ -148,6 +148,79 @@ describe("provenanceGate — rk-v18: malformed registry shards are a visible ski
   });
 });
 
+describe("provenanceGate — rk-2t8: recursive argument/**/*.md discovery mirrors Gate 2 (linker)", () => {
+  // Gate 2 (linker-parse.ts) discovers argument/**/*.md RECURSIVELY (rk-9pk), excluding
+  // README.md/INDEX.md/DAG.md at any depth. Gate 4 (this gate) used to hardcode `argument/lemmas`
+  // as its own registry root, so a root-level shard (the exact dogfood-1 shape: a north-star
+  // theorem written at argument/*.md, not argument/lemmas/*.md) was INVISIBLE to provenance:
+  // linker reported 1/1, provenance reported 0/0, and a status:open shard framed as proved in the
+  // tab:status table produced NO OVERCLAIM ERROR — Gate 4's #1 guarded failure mode
+  // (gate-contracts.md:875) silently defeated for any shard outside argument/lemmas/.
+  test("root-level shard (argument/lem-root.md, NOT argument/lemmas/): OVERCLAIM is still caught", () => {
+    const entries: Record<string, string> = {
+      "argument/lem-root.md": shard({
+        id: "lem-root",
+        kind: "theorem",
+        status: "open",
+        af: "none",
+        provenance: "report lem:root",
+      }),
+      "report/sections/01_body.tex": "\\label{lem:root}\nNorth-star theorem text.\n",
+      "report/sections/13_discussion.tex":
+        "\\begin{tabular}{ll}\n\\toprule\nResult & Status \\\\\n\\midrule\n" +
+        "Foo \\Cref{lem:root} & proved \\\\\n\\bottomrule\n\\end{tabular}\n\\label{tab:status}\n",
+      "report/PROVENANCE.md":
+        "# PROVENANCE\n\n## Ground-truth source registry\n\n## Per-claim ledger\n\n" +
+        "| Report label | Source |\n|---|---|\n| lem:root | ORIGINAL |\n",
+      "report/UNWIRED.md": "# UNWIRED\n```\n```\n",
+    };
+    const result = run(entries);
+    const e = errors(result).find((f) => f.message.includes("OVERCLAIM lem-root"));
+    expect(e).toBeDefined();
+    expect(e!.path).toBe("argument/lem-root.md");
+    // coverage must count the recursively-discovered shard, not report a vacuous 0/0
+    expect(result.coverage[0]!.checked).toBe(1);
+    expect(result.coverage[0]!.total).toBe(1);
+  });
+
+  test("a shard nested deeper than argument/lemmas/ (argument/lemmas/sub/lem-deep.md) is also discovered", () => {
+    const entries = baseline();
+    delete entries["argument/lemmas/lem-x.md"];
+    entries["argument/lemmas/sub/lem-deep.md"] = shard({
+      id: "lem-deep",
+      kind: "lemma",
+      status: "stated",
+      af: "none",
+      provenance: "report lem:x",
+    });
+    const result = run(entries);
+    expect(result.coverage[0]!.checked).toBe(1);
+    expect(result.coverage[0]!.total).toBe(1);
+    expect(errors(result)).toEqual([]);
+  });
+
+  test("README.md/INDEX.md/DAG.md at any depth under argument/ are excluded from the registry universe (matches Gate 2's NON_SHARD_NAMES exactly)", () => {
+    const entries = baseline();
+    entries["argument/README.md"] = "not a shard\n";
+    entries["argument/INDEX.md"] = "not a shard\n";
+    entries["argument/DAG.md"] = "not a shard\n";
+    entries["argument/lemmas/README.md"] = "not a shard\n";
+    const result = run(entries);
+    // Only the one real baseline shard is counted; the four non-shard names are invisible to
+    // both the numerator and the denominator (never surfaced as frontmatter-invalid either).
+    expect(result.coverage[0]!.checked).toBe(1);
+    expect(result.coverage[0]!.total).toBe(1);
+    expect(result.coverage[0]!.unit).toContain("0 frontmatter-invalid");
+  });
+
+  test("a non-.md file under argument/ is not a shard candidate", () => {
+    const entries = baseline();
+    entries["argument/notes.txt"] = "prose\n";
+    const result = run(entries);
+    expect(result.coverage[0]!.total).toBe(1);
+  });
+});
+
 describe("provenanceGate — check 1: forward labels (dangling)", () => {
   test("provenance names a report label with no matching \\label{}: ERROR", () => {
     const entries = baseline();
