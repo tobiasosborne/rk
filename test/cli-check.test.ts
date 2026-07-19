@@ -237,6 +237,32 @@ describe("rk check", () => {
       expect(code).toBe(1);
     });
 
+    test("a structurally incomplete build (a shard with an unrecognized 'kind') -> render-site-v1 verification refuses to trust it, ERRORing 'structurally incomplete' rather than silently regenerating against a partial document", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-incomplete-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      mkdirSync(join(root, "argument", "lemmas"), { recursive: true });
+      // 'kind: bogus' is not a recognized RegistryKind -> src/graph/from-registry.ts's
+      // convertLemma returns null -> a RegistrySkip -> buildGraphDocument's
+      // diagnostics.isStructurallyComplete === false (M2 boundary review blocker #2).
+      writeFileSync(
+        join(root, "argument", "lemmas", "lem-bogus.md"),
+        "---\nid: lem-bogus\nkind: bogus\nstatus: stated\naf: none\ncontract: x\n---\n",
+      );
+      mkdirSync(join(root, "build", "site"), { recursive: true });
+      writeFileSync(join(root, "build", "site", "index.html"), "<html>whatever</html>");
+      writeManifest(root, "build/site/index.html", "render-site-v1");
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).toContain("build/site/index.html cannot be regenerated for verification");
+      expect(text).toContain("structurally incomplete");
+      expect(errorCountFor(text, "freshness")).toBeGreaterThan(0);
+      expect(code).toBe(1);
+    });
+
     test("an unrecognized generator id declared for an HTML output -> Gate 7 ERRORs, never the old silent 'not adopted' green exit (blocker #3a)", async () => {
       const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-unknown-"));
       dirs.push(root);

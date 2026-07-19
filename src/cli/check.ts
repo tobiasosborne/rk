@@ -78,21 +78,26 @@ function prepareRenderSiteExternalRegen(
   try {
     const buildResult = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
 
-    if (buildResult.report.registrySkipped.length > 0) {
+    // M2 boundary review blocker #2 (join lane, landed src/store/build-graph.ts's `diagnostics`
+    // field): `isStructurallyComplete` is the single source of truth for "was anything rejected
+    // rather than projected" -- true iff every `structuralLoss` array (registry skips, malformed
+    // fr log lines) is empty. A build this incomplete must never be the "expected" side of a
+    // freshness diff -- named via the SAME concrete path/reason entries `rk render`/`rk graph`
+    // themselves refuse output over (src/render/diagnostics-view.ts's structuralLossLines).
+    const { diagnostics } = buildResult;
+    if (!diagnostics.isStructurallyComplete) {
+      const lossCount =
+        diagnostics.structuralLoss.registrySkips.length + diagnostics.structuralLoss.frMalformedLines.length;
+      const skipDetail = diagnostics.structuralLoss.registrySkips.map((s) => `${s.path} (${s.reason})`).join("; ");
+      const frDetail = diagnostics.structuralLoss.frMalformedLines
+        .map((l) => `fr log line ${l.lineNo} (${l.snippet})`)
+        .join("; ");
+      const detail = [skipDetail, frDetail].filter((s) => s.length > 0).join("; ");
       return fail(
-        `the GraphDocument build reported ${buildResult.report.registrySkipped.length} structurally-skipped ` +
-          `registry shard(s) (src/graph/from-registry.ts's RegistrySkip) -- a build this incomplete must never ` +
-          `be used as the "expected" side of a freshness diff`,
+        `the GraphDocument build is structurally incomplete (${lossCount} structural-loss ` +
+          `entr${lossCount === 1 ? "y" : "ies"}: ${detail || "see rk render/rk graph for detail"}) -- a build ` +
+          `this incomplete must never be used as the "expected" side of a freshness diff`,
       );
-    }
-    // Consumed tolerantly (M2 boundary review landing-blocker #2, concurrently landing in the
-    // join lane / src/store/build-graph.ts): any OTHER structural-diagnostics surface this build
-    // result carries, under any plausible shape -- this file must not hard-depend on a
-    // not-yet-landed field's exact type or location.
-    const anyResult = buildResult as unknown as { diagnostics?: unknown[]; report?: { diagnostics?: unknown[] } };
-    const extraDiagnostics = anyResult.diagnostics ?? anyResult.report?.diagnostics;
-    if (Array.isArray(extraDiagnostics) && extraDiagnostics.length > 0) {
-      return fail(`the GraphDocument build reported ${extraDiagnostics.length} structural diagnostic(s)`);
     }
 
     // Same northStarId source rk render itself uses when no explicit `--north-star` overrides it

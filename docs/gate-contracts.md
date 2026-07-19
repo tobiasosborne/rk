@@ -1565,11 +1565,12 @@ itself; it only diffs SUPPLIED bytes. Consequently `freshnessGate.run` (the plai
 interface every OTHER caller uses — `src/gates/index.ts`'s registry, the corpus harness) always
 passes an EMPTY `externalRegen` map, so a `render-site-v1` entry run through that plain interface
 always reports "cannot be regenerated for verification" (`freshness-07`) — never a silent pass.
-If the edge cannot produce trustworthy expected bytes (a structurally incomplete build — today,
-any non-empty `AssembleReport.registrySkipped`; consumed tolerantly for whatever OTHER
-structural-diagnostics surface a future build result carries — or an unexpected exception from
+If the edge cannot produce trustworthy expected bytes (a structurally incomplete build —
+`buildGraphDocument`'s own `diagnostics.isStructurallyComplete === false`, the join lane's M2
+boundary review blocker #2 first-class build-diagnostics surface: a registry shard skipped for a
+structural parse reason, or a malformed raw fr log line — or an unexpected exception from
 `buildGraphDocument`/`renderSite`), every declared `render-site-v1` path gets a loud, named
-`ok:false` ERROR, never a silent pass or skip.
+`ok:false` ERROR naming the concrete structural-loss entries, never a silent pass or skip.
 
 **Edge-only wrinkle: the snapshot text map doesn't cover `build/`.** `src/store/
 snapshot-load.ts`'s `RepoSnapshot` text map is bounded to the six pre-M2.6 gates' declared
