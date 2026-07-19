@@ -123,7 +123,8 @@ describe("rk check", () => {
     expect(text).not.toContain("argument/INDEX.md is STALE");
     expect(text).not.toContain("argument/DAG.md is STALE");
     expect(text).toContain(
-      "checked linker: 0/0 lemma shards (0 non-shard files ignored); mirrors: INDEX absent (not adopted), DAG absent (not adopted) (0 errors, 0 warnings)",
+      "checked linker: 0/0 lemma shards (0 non-shard files ignored); mirrors: INDEX absent (not adopted), DAG absent (not adopted); " +
+        "critical-path provenance: no north star configured; L5 store: absent (no promotions) (0 errors, 0 warnings)",
     );
 
     expect(code).toBe(0);
