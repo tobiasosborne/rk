@@ -61,4 +61,36 @@ describe("render/site", () => {
     const html = indexHtml(renderSite(doc, { northStarId: "n-open" }));
     expect(html).toContain("what blocks the north star (n-open)");
   });
+
+  test("no `sources` option: no banner element, no evidence-sources section (M2 boundary review blocker #2)", () => {
+    const html = indexHtml(renderSite(doc));
+    expect(html).not.toContain('class="rk-banner');
+    expect(html).not.toContain("evidence sources");
+  });
+
+  test("degraded `sources`: a site-level banner OUTSIDE the hash-routed sections, plus a dashboard row", () => {
+    const html = indexHtml(renderSite(doc, { sources: { af: "ledger-fallback", fr: "export", bd: "read" } }));
+    expect(html).toContain('class="rk-banner');
+    expect(html).toContain("ledger fallback (reduced fidelity)");
+    expect(html).toContain("evidence sources");
+    // the banner sits between the header and <main>, i.e. before the hash-routed dashboard div.
+    const bannerIdx = html.indexOf('class="rk-banner');
+    const mainIdx = html.indexOf("<main>");
+    expect(bannerIdx).toBeGreaterThan(0);
+    expect(bannerIdx).toBeLessThan(mainIdx);
+  });
+
+  test("fully authoritative `sources`: evidence-sources section renders but no banner element", () => {
+    const html = indexHtml(renderSite(doc, { sources: { af: "export", fr: "export", bd: "read" } }));
+    expect(html).not.toContain('class="rk-banner');
+    expect(html).toContain("evidence sources");
+    expect(html).toContain("af: export");
+  });
+
+  test("all-absent `sources` (nothing adopted yet): named on the dashboard, but NO alarm banner", () => {
+    const html = indexHtml(renderSite(doc, { sources: { af: "absent", fr: "absent", bd: "absent" } }));
+    expect(html).not.toContain('class="rk-banner');
+    expect(html).toContain("evidence sources");
+    expect(html).toContain("af: absent");
+  });
 });

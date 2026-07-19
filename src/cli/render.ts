@@ -5,6 +5,17 @@
 // files — no render logic here. Mirrors src/cli/graph.ts's shape (extractRoot/extractFlag,
 // injectable af/fr commands for tests, self-teaching output).
 //
+// M2 boundary review, landing-blocker #2 (consumer side): `src/store/build-graph.ts`'s
+// `BuildGraphResult.diagnostics` (the join lane's producer-side landing, commit "blocker 2
+// (producer side)") names structural parse/conversion LOSS (`structuralLoss`) and per-source
+// (af/fr/bd) build status (`sources`). When `!diagnostics.isStructurallyComplete`, `rk render`
+// REFUSES to write anything (exit nonzero, naming every structuralLoss entry) rather than writing
+// a smaller-but-still-exit-0 site — a structurally lossy projection is not a complete report, no
+// matter how small. A degraded/absent source (`sources`) does NOT block output (both are
+// legitimate, presence-conditional states) but IS visibly distinguished from an authoritative read
+// in both the terminal output and the rendered HTML (src/render/diagnostics-view.ts's banner +
+// dashboard "evidence sources" section).
+//
 // M2 boundary review, landing-blocker #3 + ratified verdict (e): `--out` must be a REPO-RELATIVE
 // MANAGED path (absolute paths and `..` escapes rejected) so every render output is declarable in
 // `.rk/generated.json` for Gate 7 (src/gates/freshness.ts) to verify — an unmanaged/absolute
@@ -19,6 +30,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { MANIFEST_PATH, MANIFEST_SCHEMA_VERSION, RENDER_SITE_GENERATOR } from "../gates/freshness";
+import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
 import { renderSite } from "../render/site";
 import { buildGraphDocument } from "../store/build-graph";
 import { loadGateConfig } from "../store/config-load";
@@ -148,9 +160,20 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
     return 2;
   }
 
-  const { doc } = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
+  const { doc, diagnostics } = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
+
+  if (!diagnostics.isStructurallyComplete) {
+    out.log(
+      "rk render: refusing to write output -- the projection is structurally incomplete " +
+        "(never a smaller-but-complete-looking site):",
+    );
+    for (const line of structuralLossLines(diagnostics.structuralLoss)) out.log(`  ${line}`);
+    out.log("  next: fix the structural issue(s) above (or remove the offending input) and re-run 'rk render'.");
+    return 1;
+  }
+
   const northStarId = await resolveNorthStar(root, northStarFlag);
-  const site = renderSite(doc, { northStarId, title: titleFlag });
+  const site = renderSite(doc, { northStarId, title: titleFlag, sources: diagnostics.sources });
 
   const outRoot = join(root, outDir);
   for (const file of site.files) {
@@ -173,6 +196,7 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
     `  ${conflicts} conflict(s), ${unresolved} unresolved reference(s)` +
       `${northStarId ? `, north star ${northStarId}` : ", no north star configured"}.`,
   );
+  for (const line of sourceStatusLines(diagnostics.sources)) out.log(`  ${line}`);
   out.log(`  adopted ${manifestEntryPath} in ${MANIFEST_PATH} (generator '${RENDER_SITE_GENERATOR}') for Gate 7.`);
   out.log(`  open ${join(outDir, "index.html")} in a browser (self-contained, no server needed).`);
   out.log("  next: 'rk render --north-star <id>' to include the what-blocks summary if unset.");

@@ -10,6 +10,7 @@ import { computeWhatBlocks, type BlockerEntry } from "../graph/query-blocks";
 import { computeFocusView } from "../graph/query-focus";
 import { computeTaintTrace, taintedNodes, type TaintEntry } from "../graph/query-taint";
 import type { GraphDocument } from "../graph/types";
+import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
 import { buildGraphDocument } from "../store/build-graph";
 import { loadGateConfig } from "../store/config-load";
 import type { Out } from "./args";
@@ -161,7 +162,20 @@ export async function graphCommand(args: string[], out: Out, deps: GraphCommandD
     return 2;
   }
 
-  const { doc } = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
+  const { doc, diagnostics } = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
+
+  // M2 boundary review, landing-blocker #2 (consumer side): a structurally incomplete projection
+  // must never render as a complete report, no matter how small the view command asked for.
+  if (!diagnostics.isStructurallyComplete) {
+    out.log(
+      "rk graph: refusing to report -- the projection is structurally incomplete " +
+        "(never a smaller-but-complete-looking view):",
+    );
+    for (const line of structuralLossLines(diagnostics.structuralLoss)) out.log(`  ${line}`);
+    out.log("  next: fix the structural issue(s) above (or remove the offending input) and re-run 'rk graph'.");
+    return 1;
+  }
+  for (const line of sourceStatusLines(diagnostics.sources)) out.log(line);
 
   if (focusId) return runFocus(doc, focusId, out);
   if (criticalPath) {

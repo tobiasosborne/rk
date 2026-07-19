@@ -161,6 +161,46 @@ describe("rk graph — CLI wiring", () => {
     expect(lines.join("\n")).toContain("0/1 node(s) not clean");
   });
 
+  // M2 boundary review, landing-blocker #2 (consumer side): a structurally incomplete projection
+  // must never render as a complete report, whichever view was asked for.
+  test("BLOCKER: a registrySkip (unrecognized kind) makes rk graph REFUSE, naming the shard", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    writeShard(root, "lem-a");
+    writeShard(root, "lem-bad", { kind: "not-a-real-kind" });
+    const { out, lines } = capture();
+    const code = await graphCommand(["--focus", "lem-a", "--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("structurally incomplete");
+    expect(lines.join("\n")).toContain("argument/lem-bad.md");
+    expect(lines.join("\n")).not.toContain("focus: lem-a"); // never a partial report either
+  });
+
+  test("BLOCKER: a malformed fr log line makes rk graph REFUSE regardless of view", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    writeShard(root, "lem-a");
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    writeFileSync(join(root, ".frontier", "log.jsonl"), 'not valid json\n{"cycle":1,"outcome":"orient"}\n');
+    const { out, lines } = capture();
+    const code = await graphCommand(["--taint", "--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("structurally incomplete");
+    expect(lines.join("\n")).toContain("line 1");
+  });
+
+  test("degraded/absent sources are named on every successful view, never silently 'export'", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    writeShard(root, "lem-a");
+    const { out, lines } = capture();
+    const code = await graphCommand(["--focus", "lem-a", "--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("af: absent");
+    expect(lines.join("\n")).toContain("fr: absent");
+    expect(lines.join("\n")).toContain("bd: absent");
+  });
+
   test("--taint <unknown-id>: exit 1, honest message", async () => {
     const root = tmpRoot();
     dirs.push(root);

@@ -15,6 +15,7 @@ import { computeTaintTrace } from "../graph/query-taint";
 import type { GraphDocument } from "../graph/types";
 import { renderDashboard } from "./dashboard";
 import { renderDag } from "./dag";
+import { renderDegradedBanner, renderSourcesBlock, type SourceStatuses } from "./diagnostics-view";
 import { esc } from "./html";
 import { nodePanelId, renderNodePanel } from "./node-view";
 import { renderStatusCss } from "./styling";
@@ -31,6 +32,12 @@ export interface RenderSiteOptions {
   /** Shown in the header only — NOT part of node identity, so it never affects determinism of a
    * node's own markup. */
   title?: string;
+  /** M2 boundary review blocker #2 (consumer side): per-source build status (af/fr/bd — export,
+   * degraded fallback, or absent). Absent means the caller had no diagnostics to report (never
+   * treated as "everything was authoritative" — the banner/sources block simply does not render).
+   * A degraded/absent source is visibly distinguished from an authoritative-empty one via a
+   * site-level banner plus a per-source line on the dashboard, never silently folded together. */
+  sources?: SourceStatuses;
 }
 
 const BASE_CSS = `
@@ -56,6 +63,7 @@ code{background:rgba(127,127,127,.14);padding:0 .2rem;border-radius:3px}
 .rk-legend ul{list-style:none;padding-left:0}
 .rk-legend-item{margin:.15rem 0}
 .rk-legend-meaning{color:var(--rk-muted);margin-left:.4rem;font-size:.9rem}
+.rk-banner{padding:.5rem 1rem;font-weight:600;border-bottom:1px solid var(--rk-line)}
 .rk-route-target{display:none}
 #dashboard{display:block}
 .rk-dag-node{cursor:pointer}
@@ -88,14 +96,19 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
   const title = options.title ?? "rk campaign report";
   const taint = computeTaintTrace(doc);
   const panels = doc.nodes.map((nd) => renderNodePanel(doc, nd.id, taint.get(nd.id))).join("\n");
-  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}</div>`;
+  const sourcesBlock = options.sources ? renderSourcesBlock(options.sources) : "";
+  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}${sourcesBlock}</div>`;
   const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
+  // M2 boundary review blocker #2: the degraded-source banner sits OUTSIDE the hash-routed
+  // sections (`.rk-route-target`), so it stays visible no matter which view a reader lands on —
+  // never only on the dashboard.
+  const banner = options.sources ? renderDegradedBanner(options.sources) : "";
 
   const contents =
     `<!doctype html>\n<html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
     `<title>${esc(title)}</title><style>${BASE_CSS}${renderStatusCss()}</style></head>` +
-    `<body>${nav(doc, title)}<main>${dashboard}${dag}${panels}</main>` +
+    `<body>${nav(doc, title)}${banner}<main>${dashboard}${dag}${panels}</main>` +
     `<script>${ROUTER_JS}</script></body></html>\n`;
 
   return { files: [{ path: "index.html", contents }] };

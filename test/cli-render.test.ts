@@ -121,6 +121,59 @@ describe("rk render — CLI edge", () => {
     expect(readFileSync(join(root, ".rk", "generated.json"), "utf8")).toBe("{ not json");
   });
 
+  // M2 boundary review, landing-blocker #2 (consumer side): a structurally incomplete projection
+  // must never render as a complete report.
+  test("BLOCKER: a registrySkip (unrecognized kind) makes rk render REFUSE, never a smaller site", async () => {
+    const root = repo();
+    writeShard(root, "lem-bad", { kind: "not-a-real-kind" });
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("structurally incomplete");
+    expect(lines.join("\n")).toContain("argument/lem-bad.md");
+    expect(lines.join("\n")).toContain("unrecognized or missing kind");
+    expect(existsSync(join(root, "build", "site", "index.html"))).toBe(false);
+    expect(existsSync(join(root, ".rk", "generated.json"))).toBe(false); // no manifest write either
+  });
+
+  test("BLOCKER: a malformed fr log line makes rk render REFUSE, naming the line", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    writeFileSync(join(root, ".frontier", "log.jsonl"), 'not valid json\n{"cycle":1,"outcome":"orient"}\n');
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("structurally incomplete");
+    expect(lines.join("\n")).toContain("line 1");
+    expect(existsSync(join(root, "build", "site", "index.html"))).toBe(false);
+  });
+
+  test("a fallback fr source (malformed-free, but no fr binary) is visibly distinguished, never silently 'absent'", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    writeFileSync(join(root, ".frontier", "log.jsonl"), '{"cycle":1,"outcome":"orient"}\n');
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0); // no malformed lines here -- structurally complete, just degraded
+    expect(lines.join("\n")).toContain("fr: log fallback (reduced fidelity)");
+    const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
+    expect(html).toContain("log fallback (reduced fidelity)");
+    expect(html).toContain('class="rk-banner'); // a genuine fallback DOES warrant the loud banner
+  });
+
+  test("nothing adopted (no af/fr/bd): sources named plainly on both surfaces, no alarm banner", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("af: absent");
+    expect(lines.join("\n")).toContain("fr: absent");
+    expect(lines.join("\n")).toContain("bd: absent");
+    const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
+    expect(html).toContain("evidence sources");
+    expect(html).not.toContain('class="rk-banner');
+  });
+
   test("--north-star threads into the what-blocks summary", async () => {
     const root = repo();
     const { out } = capture();
