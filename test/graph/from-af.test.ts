@@ -89,6 +89,19 @@ describe("buildAfEdges — af-evidence requirement (Tier A review blocker 1 line
     expect(unresolved).toEqual([]);
   });
 
+  test('M2-boundary-review blocker 5: a WHITESPACE-ONLY byte difference is a mismatch — graph v1 is a byte-match verdict, not whitespace-normalized equality', () => {
+    const n = node({ contract: "Every halo  collapses within finite time under the flow." }); // two spaces
+    const { edges } = buildAfEdges([n], [resolvedRecord({ rootStatement: "Every halo collapses within finite time under the flow." })]); // one space
+    expect(edges[0]!.workspaceResolved).toBe(true);
+    expect((edges[0] as { contractMatch: boolean }).contractMatch).toBe(false);
+  });
+
+  test("byte-identical strings still match (no false mismatch introduced by removing normalization)", () => {
+    const n = node();
+    const { edges } = buildAfEdges([n], [resolvedRecord()]);
+    expect((edges[0] as { contractMatch: boolean }).contractMatch).toBe(true);
+  });
+
   test("a non-root afRootNodeId (blocker 2 lineage) is reported unresolved, never silently accepted as a match", () => {
     const n = node();
     const { edges, unresolved } = buildAfEdges([n], [resolvedRecord({ rootNodeId: "1.2" })]);

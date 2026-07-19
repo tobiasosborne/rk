@@ -33,10 +33,6 @@ export interface AfSourceRecord {
   nodeCount?: number;
 }
 
-function normalizeContract(s: string): string {
-  return s.split(/\s+/).filter((x) => x.length > 0).join(" ");
-}
-
 function unresolved(nodeId: string, workspace: string, reason: string): UnresolvedOtherRef {
   return { edge: "af", nodeId, ref: workspace, reason };
 }
@@ -82,7 +78,12 @@ function buildOne(regNode: RegistryNode, record: AfSourceRecord | undefined): { 
     workspaceResolved: true,
     afSchemaVersion: schemaVersion,
     afRootNodeId: AF_ROOT_NODE_ID,
-    contractMatch: normalizeContract(regNode.contract) === normalizeContract(record.rootStatement ?? ""),
+    // M2-boundary-review blocker 5 (2026-07-19): graph v1 ratified a BYTE-match verdict at this
+    // join boundary — exact string equality, no whitespace normalization. Gate 2's OWN contract
+    // check (src/gates/*) may normalize for its own purposes; this projection boundary must not
+    // reuse that older, looser check, or a whitespace-only difference silently suppresses the
+    // mandatory contract-mismatch conflict.
+    contractMatch: regNode.contract === (record.rootStatement ?? ""),
     epistemicState,
     taintState,
     nodeCount: record.nodeCount,
