@@ -79,3 +79,32 @@ describe("rk upgrade: mismatched template_version", () => {
     expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
   });
 });
+
+describe("rk upgrade: rewritten-whole files are framed as a structural diff, never a safe overwrite (rk-czv)", () => {
+  test("never calls rewritten-whole files a 'safe' overwrite candidate", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "template-version"), "0.0.1\n");
+    const { out, lines } = capture();
+    await upgradeCommand(["--root", root], out);
+    const text = lines.join("\n");
+    expect(text).not.toContain("safe, deliberate overwrite");
+    expect(text.toLowerCase()).not.toMatch(/\(safe,? deliberate overwrite/);
+    expect(text).toContain("structural diff — preserve your filled slots");
+    expect(text).toContain("NEVER a safe overwrite");
+  });
+
+  test("names the campaign-owned slots for CLAUDE.md/AGENTS.md/PRD.md/HANDOFF.md", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "template-version"), "0.0.1\n");
+    const { out, lines } = capture();
+    await upgradeCommand(["--root", root], out);
+    const text = lines.join("\n");
+    expect(text).toContain("goal, north-star contract, shard-id prefix");
+    expect(text).toContain("State / Current work / Next steps");
+    expect(text).toContain("BLANK scaffold");
+  });
+});
