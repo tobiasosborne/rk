@@ -19,21 +19,141 @@
 // own red-test corpus" (the thing a consumer of the `rk` binary can actually run against their
 // own checkout of rk, without rk's dev-only `scripts/` directory).
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadSnapshot } from "../store/snapshot-load";
 import { loadGateConfig } from "../store/config-load";
+import { buildGraphDocument } from "../store/build-graph";
+import { renderSite } from "../render/site";
 import { GATES } from "../gates/index";
 import { formatFinding } from "../gates/framework";
 import type { Gate, GateResult } from "../gates/framework";
 import type { RepoSnapshot } from "../gates/snapshot";
 import type { GateConfig } from "../gates/config";
 import { applyPhase } from "../gates/phase";
+import {
+  declaredGeneratorPaths,
+  RENDER_SITE_GENERATOR,
+  runFreshnessGate,
+  type ExternalRegenResult,
+} from "../gates/freshness";
 import { runAllFixtures } from "../corpus/run";
 import { formatCorpusRunReport } from "../corpus/report";
 import { discoverAllFixtures, EXPECTED_FIXTURE_COUNT, GATE_DIRS } from "../corpus/discovery";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
+
+/** Injectable af/fr command overrides for `rk check`'s render-site-v1 edge-regeneration path
+ * (`prepareRenderSiteExternalRegen` below) — same seam `src/cli/render.ts`'s `RenderCommandDeps`
+ * already uses, so a test can force the af/fr-absent fallback deterministically without touching
+ * `$PATH`. */
+export interface CheckCommandDeps {
+  afCommand?: readonly string[];
+  frCommand?: readonly string[];
+}
+
+/** M2 boundary review blocker #3: Gate 7's `render-site-v1` generator is recognized but stays
+ * unverifiable by the PURE gate itself (src/gates/freshness.ts's header explains why) — this is
+ * the edge that actually regenerates the site and hands the gate the resulting bytes, or a loud,
+ * structured failure reason, via `runFreshnessGate`'s `externalRegen` parameter. Never throws:
+ * every failure mode (a structurally incomplete build, an unexpected exception from
+ * `buildGraphDocument`/`renderSite`) becomes an `ExternalRegenResult` of `{ok: false, reason}` for
+ * every affected path — `runFreshnessGate` then turns that into a loud per-path ERROR, never a
+ * silent pass or skip. Only invoked when the manifest actually declares at least one
+ * `render-site-v1` path (`paths.length === 0` short-circuits before touching af/fr/fs at all). */
+function prepareRenderSiteExternalRegen(
+  root: string,
+  paths: readonly string[],
+  config: GateConfig,
+  deps: CheckCommandDeps,
+): ReadonlyMap<string, ExternalRegenResult> {
+  const map = new Map<string, ExternalRegenResult>();
+  if (paths.length === 0) return map;
+
+  const fail = (reason: string): ReadonlyMap<string, ExternalRegenResult> => {
+    for (const p of paths) map.set(p, { ok: false, reason });
+    return map;
+  };
+
+  try {
+    const buildResult = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
+
+    if (buildResult.report.registrySkipped.length > 0) {
+      return fail(
+        `the GraphDocument build reported ${buildResult.report.registrySkipped.length} structurally-skipped ` +
+          `registry shard(s) (src/graph/from-registry.ts's RegistrySkip) -- a build this incomplete must never ` +
+          `be used as the "expected" side of a freshness diff`,
+      );
+    }
+    // Consumed tolerantly (M2 boundary review landing-blocker #2, concurrently landing in the
+    // join lane / src/store/build-graph.ts): any OTHER structural-diagnostics surface this build
+    // result carries, under any plausible shape -- this file must not hard-depend on a
+    // not-yet-landed field's exact type or location.
+    const anyResult = buildResult as unknown as { diagnostics?: unknown[]; report?: { diagnostics?: unknown[] } };
+    const extraDiagnostics = anyResult.diagnostics ?? anyResult.report?.diagnostics;
+    if (Array.isArray(extraDiagnostics) && extraDiagnostics.length > 0) {
+      return fail(`the GraphDocument build reported ${extraDiagnostics.length} structural diagnostic(s)`);
+    }
+
+    // Same northStarId source rk render itself uses when no explicit `--north-star` overrides it
+    // (src/cli/render.ts's resolveNorthStar) -- `rk check` has no CLI equivalent of `rk render`'s
+    // own `--title`/`--north-star` flags, so a render invoked with either flag explicitly set will
+    // legitimately diff against this config-only regeneration (a known, documented limitation --
+    // docs/gate-contracts.md's Gate 7 section).
+    const site = renderSite(buildResult.doc, { northStarId: config.northStarId });
+    const indexFile = site.files.find((f) => f.path === "index.html");
+    if (!indexFile) {
+      return fail(
+        `renderSite's pure API did not produce an "index.html" file (produced: ` +
+          `${site.files.map((f) => f.path).join(", ") || "none"})`,
+      );
+    }
+    for (const p of paths) map.set(p, { ok: true, bytes: indexFile.contents });
+    return map;
+  } catch (e) {
+    const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    return fail(`building the GraphDocument / rendering the site threw: ${message}`);
+  }
+}
+
+/** `src/store/snapshot-load.ts`'s `RepoSnapshot` text map is deliberately bounded to the six
+ * gates' declared Inputs (definitions/, argument/, proofs/, refs/, runs/, report/, .rk/ —
+ * "explicit include globs from the contract, no kitchen-sink") — it does NOT include `rk
+ * render`'s own output directory (`build/site/` by default), which is not any pre-M2.6 gate's
+ * Input. Gate 7 still needs the ACTUAL on-disk bytes of a declared `render-site-v1` path to diff
+ * against (the "have" side — `runFreshnessGate`'s ordinary declared-but-missing/STALE logic).
+ * Rather than widen `src/store/snapshot-load.ts`'s include rules (join-lane territory this WP
+ * does not touch — src/store/** is out of scope), this reads the handful of declared
+ * render-site-v1 paths directly, at the edge, and hands freshness's own gate invocation an
+ * augmented snapshot carrying just those extra entries — every OTHER gate keeps seeing the
+ * original, untouched snapshot. A path genuinely absent from disk is left unaugmented; Gate 7's
+ * own declared-but-missing check reports that, unchanged. */
+function augmentSnapshotForRenderSite(
+  snapshot: RepoSnapshot,
+  root: string,
+  paths: readonly string[],
+): RepoSnapshot {
+  let extra: Map<string, string> | undefined;
+  for (const p of paths) {
+    if (snapshot.has(p)) continue; // already visible under an existing include rule
+    let text: string;
+    try {
+      text = readFileSync(join(root, ...p.split("/")), "utf8");
+    } catch {
+      continue; // genuinely absent from disk -- Gate 7's own declared-but-missing ERROR handles this
+    }
+    if (!extra) extra = new Map<string, string>();
+    extra.set(p, text);
+  }
+  if (!extra) return snapshot;
+  const merged = new Map<string, string>(snapshot);
+  for (const [k, v] of extra) merged.set(k, v);
+  return Object.assign(merged, {
+    sha256: snapshot.sha256,
+    tracked: snapshot.tracked,
+    dirs: snapshot.dirs,
+  }) as RepoSnapshot;
+}
 
 /** rk-6r3 / M0.3 review finding 7: gate-contracts.md:85's "unconditional composition" promise
  * ("all six gates run unconditionally ... every coverage line prints regardless of earlier
@@ -181,6 +301,7 @@ export async function checkCommand(
   args: string[],
   out: Out,
   load: (root: string) => RepoSnapshot = loadSnapshot,
+  buildDeps: CheckCommandDeps = {},
 ): Promise<number> {
   const { rest, root } = extractRoot(args);
   if (rest.includes("--selftest")) {
@@ -195,9 +316,26 @@ export async function checkCommand(
   }
   const config = await loadGateConfig(root);
 
+  // M2 boundary review blocker #3: render-site-v1 regeneration happens HERE, at the edge --
+  // src/gates/freshness.ts's Gate 7 stays pure and only diffs the bytes prepared below.
+  const renderSitePaths = declaredGeneratorPaths(snapshot, RENDER_SITE_GENERATOR);
+  const renderSiteExternalRegen = prepareRenderSiteExternalRegen(root, renderSitePaths, config, buildDeps);
+  // See augmentSnapshotForRenderSite's own doc comment: `build/site/index.html` (rk render's
+  // default output) lives outside every pre-M2.6 include rule, so freshness's own snapshot is
+  // augmented with just the declared render-site-v1 paths that exist on disk -- every OTHER gate
+  // still sees the original, unaugmented `snapshot`.
+  const freshnessSnapshot = augmentSnapshotForRenderSite(snapshot, root, renderSitePaths);
+
   let anyError = false;
   for (const gate of GATES) {
-    const result = runGateSafely(gate, snapshot, config);
+    const effectiveGate: Gate =
+      gate.name === "freshness"
+        ? {
+            name: "freshness",
+            run: (_snap: RepoSnapshot, cfg: GateConfig) => runFreshnessGate(freshnessSnapshot, cfg, renderSiteExternalRegen),
+          }
+        : gate;
+    const result = runGateSafely(effectiveGate, snapshot, config);
 
     if (result.notImplemented) {
       out.log(`gate ${gate.name}: NOT IMPLEMENTED`);

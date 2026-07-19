@@ -6,6 +6,9 @@ import { run } from "../src/cli";
 import { checkCommand } from "../src/cli/check";
 import { GATES } from "../src/gates/index";
 import { renderDag, renderIndex } from "../src/gates/linker-render";
+import { loadSnapshot } from "../src/store/snapshot-load";
+import { buildGraphDocument } from "../src/store/build-graph";
+import { renderSite } from "../src/render/site";
 
 const RK_REPO_ROOT = join(import.meta.dir, "..");
 
@@ -154,6 +157,102 @@ describe("rk check", () => {
 
     expect(code).toBe(1);
     expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
+  });
+
+  // M2 boundary review blocker #3: Gate 7 (freshness) used to have no way to protect M2.4's
+  // actual generated HTML at all — `rk render`'s output went entirely unchecked. This exercises
+  // the full edge-regeneration pipeline `src/cli/check.ts`'s `prepareRenderSiteExternalRegen`
+  // implements: build a real GraphDocument, render it via `src/render/site.ts`'s pure API, and
+  // diff the result against `build/site/index.html` — the same pair of pure functions `rk
+  // render` itself calls (src/cli/render.ts), so this is a genuine end-to-end proof, not a
+  // hand-rolled stand-in. `frCommand`/`afCommand` are pinned to a guaranteed-absent binary (the
+  // same "deterministic without touching $PATH" seam `src/store/af-load.ts`/`fr-load.ts`'s own
+  // tests use) so this suite never depends on whether `af`/`fr` happen to be installed on the
+  // machine running it.
+  describe("rk check — render-site-v1 (Gate 7 protecting M2.4's actual generated HTML)", () => {
+    const FAKE_CMD = ["/definitely/does/not/exist/rk-freshness-test-binary"] as const;
+
+    function writeManifest(root: string, path: string, generator: string): void {
+      mkdirSync(join(root, ".rk"), { recursive: true });
+      writeFileSync(join(root, ".rk", "generated.json"), JSON.stringify({ schema_version: "1", entries: [{ path, generator }] }));
+    }
+
+    function goldenSiteBytes(root: string): string {
+      const { doc } = buildGraphDocument(root, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const site = renderSite(doc, {});
+      return site.files.find((f) => f.path === "index.html")!.contents;
+    }
+
+    test("a clean, byte-identical build/site/index.html declared under 'render-site-v1' -> Gate 7 reports zero errors", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-clean-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+
+      const bytes = goldenSiteBytes(root);
+      mkdirSync(join(root, "build", "site"), { recursive: true });
+      writeFileSync(join(root, "build", "site", "index.html"), bytes);
+      writeManifest(root, "build/site/index.html", "render-site-v1");
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(errorCountFor(text, "freshness")).toBe(0);
+      expect(text).not.toContain("cannot be regenerated for verification");
+      expect(text).not.toContain("build/site/index.html is STALE");
+      expect(code).toBe(0);
+    });
+
+    test("a hand-edited build/site/index.html declared under 'render-site-v1' -> Gate 7 ERRORs (STALE), never a silent pass", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-stale-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+
+      mkdirSync(join(root, "build", "site"), { recursive: true });
+      writeFileSync(join(root, "build", "site", "index.html"), "<html>hand-edited, not a real render</html>\n");
+      writeManifest(root, "build/site/index.html", "render-site-v1");
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).toContain("build/site/index.html is STALE");
+      expect(errorCountFor(text, "freshness")).toBeGreaterThan(0);
+      expect(code).toBe(1);
+    });
+
+    test("declared under 'render-site-v1' but never actually written to disk -> Gate 7 ERRORs declared-but-missing (edge regeneration still succeeds; the diff target is simply absent)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-missing-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      writeManifest(root, "build/site/index.html", "render-site-v1");
+      // Deliberately never write build/site/index.html at all.
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).toContain("build/site/index.html is declared in .rk/generated.json");
+      expect(text).toContain("absent from the repo");
+      expect(code).toBe(1);
+    });
+
+    test("an unrecognized generator id declared for an HTML output -> Gate 7 ERRORs, never the old silent 'not adopted' green exit (blocker #3a)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-unknown-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      mkdirSync(join(root, "build", "site"), { recursive: true });
+      writeFileSync(join(root, "build", "site", "index.html"), "<html></html>");
+      writeManifest(root, "build/site/index.html", "render-html-v2"); // a typo'd/unregistered id
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).toContain("unrecognized generator 'render-html-v2'");
+      expect(errorCountFor(text, "freshness")).toBeGreaterThan(0);
+      expect(code).toBe(1);
+    });
   });
 
   test("no short-circuit: a single forced ERROR in one gate (defs) still lets every other registered gate run and report its own line, and every printed finding matches the shared finding-format contract (docs/gate-contracts.md Shared conventions: 'Composition' + 'Finding format')", async () => {
