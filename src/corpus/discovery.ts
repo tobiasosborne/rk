@@ -76,5 +76,13 @@ export function totalFixtureCount(corpusRoot: string): number {
  * mechanism over a declared `.rk/generated.json` manifest — clean-regenerate golden pass, a
  * hand-edited generated file, a declared-but-missing generated file, a malformed manifest, and
  * the no-manifest presence-conditional golden pass. `freshness` added to GATE_DIRS as the second
- * synthetic (no AISM check-all.sh counterpart) gate's corpus directory. */
-export const EXPECTED_FIXTURE_COUNT = 103;
+ * synthetic (no AISM check-all.sh counterpart) gate's corpus directory.
+ * 109 (+6 over the then-pinned 103): M2 repair wave (M2 boundary review, 2026-07-19) —
+ * `freshness-06` (unknown generator = blocking ERROR, review blocker 3) + `freshness-07`
+ * (render-site-v1 without edge regeneration = ERROR, never silent) + `freshness-08`..`freshness-11`
+ * (manifest schema runtime enforcement: missing/wrong schema_version, extra top-level/per-entry
+ * keys, review blocker 4). The concurrent corpus/graph additions (conflict-banked-unfresh-*,
+ * conflict-fr-superseded, review blockers 6-7) live under corpus/graph/, which is NOT in
+ * GATE_DIRS — they run under the bun-test harness (see corpus/README.md's Graph fixtures
+ * section and bead rk-b09 for the selftest-visibility follow-up). */
+export const EXPECTED_FIXTURE_COUNT = 109;

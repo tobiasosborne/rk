@@ -245,3 +245,24 @@ fixture before reader acceptance (tracked as a review follow-up, not actioned he
 **Memo question 5 — `RegistryNode` vs `Lemma`: ANSWERED, confirmed.** Keep the interfaces
 separate; M2.2 is the explicit, total conversion boundary. No code change was needed — this WP's
 original design call stands.
+
+## Addendum (2026-07-19, M2 boundary review repair wave)
+
+The M2 boundary review (scratch: m2-boundary-review.md; single review round per the
+anti-Zeno cap) prescribed five semantic corrections to the join/conflict layer, all landed
+and mutation-proven (commits dc626d0, 97e58be, 93d00a2, 5f3903c, 70e5391, c4c0f0a):
+
+- Contract matching at the registry↔af boundary is BYTE-exact (`===`), never
+  whitespace-normalized — Gate 2's older normalized check is not reused here (blocker 5).
+- Oracle-backing requires `verdictFresh === true`; `undefined` (freshness unrecomputable,
+  e.g. ledger fallback) is NOT fresh (blocker 6).
+- Cycles named in any edge's `supersedes` field are excluded from promotion/conflict
+  computation; superseded edges remain visible in `edges.fr` (blocker 7).
+- `banked-without-oracle` is ONE node-level existential conflict: qualifying cycles are
+  coalesced per resolved node at assembly (identity stays `(kind, edge, nodeId)`, no schema
+  bump — review verdict (c); graph v2 may revisit with a cycle-aware identity, bead rk-tns
+  closed on this basis).
+- fr reader accounting: `totalLogRecords` counts raw nonblank lines; malformed lines are
+  carried as structural diagnostics, feeding `BuildDiagnostics.structuralLoss` and the
+  `isStructurallyComplete` flag that `rk render`/`rk graph` now refuse to render past
+  (blockers 9 and 2).
