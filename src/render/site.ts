@@ -16,6 +16,7 @@ import type { GraphDocument } from "../graph/types";
 import { renderDashboard } from "./dashboard";
 import { renderDag } from "./dag";
 import { renderDegradedBanner, renderSourcesBlock, type SourceStatuses } from "./diagnostics-view";
+import { renderGraveyard } from "./graveyard-view";
 import { esc } from "./html";
 import { nodePanelId, renderNodePanel } from "./node-view";
 import { renderStatusCss } from "./styling";
@@ -86,6 +87,7 @@ function nav(doc: GraphDocument, title: string): string {
   return (
     `<header><h1>${esc(title)}</h1>` +
     `<nav><a href="#dashboard">dashboard</a><a href="#dag">DAG</a>` +
+    `<a href="#graveyard">graveyard</a>` +
     `<details style="display:inline-block;vertical-align:top"><summary style="cursor:pointer;display:inline">nodes (${doc.nodes.length})</summary>` +
     `<ul style="position:absolute;background:var(--rk-bg);border:1px solid var(--rk-line);max-height:60vh;overflow:auto;padding:.5rem 1.4rem">${nodeLinks}</ul></details>` +
     `</nav></header>`
@@ -99,6 +101,7 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
   const sourcesBlock = options.sources ? renderSourcesBlock(options.sources) : "";
   const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}${sourcesBlock}</div>`;
   const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
+  const graveyard = `<section id="graveyard" class="rk-route-target">${renderGraveyard(doc)}</section>`;
   // M2 boundary review blocker #2: the degraded-source banner sits OUTSIDE the hash-routed
   // sections (`.rk-route-target`), so it stays visible no matter which view a reader lands on —
   // never only on the dashboard.
@@ -108,7 +111,7 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
     `<!doctype html>\n<html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
     `<title>${esc(title)}</title><style>${BASE_CSS}${renderStatusCss()}</style></head>` +
-    `<body>${nav(doc, title)}${banner}<main>${dashboard}${dag}${panels}</main>` +
+    `<body>${nav(doc, title)}${banner}<main>${dashboard}${dag}${graveyard}${panels}</main>` +
     `<script>${ROUTER_JS}</script></body></html>\n`;
 
   return { files: [{ path: "index.html", contents }] };

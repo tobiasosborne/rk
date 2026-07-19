@@ -87,6 +87,13 @@ describe("render/site", () => {
     expect(html).toContain("af: export");
   });
 
+  test("wires the dead-route graveyard as its own hash-routed section, linked from the nav", () => {
+    const html = indexHtml(renderSite(doc));
+    expect(html).toContain('href="#graveyard"');
+    expect(html).toContain('id="graveyard" class="rk-route-target"');
+    expect(html).toContain("dead-route graveyard");
+  });
+
   test("all-absent `sources` (nothing adopted yet): named on the dashboard, but NO alarm banner", () => {
     const html = indexHtml(renderSite(doc, { sources: { af: "absent", fr: "absent", bd: "absent" } }));
     expect(html).not.toContain('class="rk-banner');

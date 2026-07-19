@@ -74,8 +74,57 @@
         "status": "closed"
       }
     ],
-    "fr": [],
-    "report": []
+    "fr": [
+      {
+        "artifact": "argument/lemmas/n-obstruction.md",
+        "cycle": 1,
+        "outcome": "died",
+        "resolutionMethod": "path",
+        "resolvedNodeId": "n-obstruction"
+      },
+      {
+        "artifact": "argument/lemmas/n-obstruction.md",
+        "cycle": 2,
+        "outcome": "died",
+        "resolutionMethod": "path",
+        "resolvedNodeId": "n-obstruction",
+        "supersedes": 1
+      },
+      {
+        "artifact": "argument/lemmas/n-disproved.md",
+        "cycle": 3,
+        "outcome": "refuted",
+        "resolutionMethod": "path",
+        "resolvedNodeId": "n-disproved"
+      },
+      {
+        "artifact": "attempt/unmatched-path.md",
+        "cycle": 4,
+        "outcome": "died",
+        "resolutionMethod": "unresolved"
+      },
+      {
+        "artifact": "argument/lemmas/n-proved.md",
+        "cycle": 5,
+        "outcome": "banked",
+        "resolutionMethod": "path",
+        "resolvedNodeId": "n-proved",
+        "verdict": "audited",
+        "verdictFresh": true
+      }
+    ],
+    "report": [
+      {
+        "anchor": "lem:proved-anchor",
+        "nodeId": "n-proved",
+        "resolved": true
+      },
+      {
+        "anchor": "lem:missing-anchor",
+        "nodeId": "n-stated",
+        "resolved": false
+      }
+    ]
   },
   "nodes": [
     {
@@ -85,7 +134,7 @@
         "count": 0
       },
       "contract": "Contract of n-cited.",
-      "defs": [],
+      "defs": ["def-foo"],
       "deps": [],
       "id": "n-cited",
       "kind": "lemma",
@@ -237,7 +286,7 @@
         "count": 0
       },
       "contract": "Contract of n-proved.",
-      "defs": [],
+      "defs": ["def-bar"],
       "deps": [],
       "id": "n-proved",
       "kind": "theorem",
@@ -268,7 +317,7 @@
         "count": 0
       },
       "contract": "Contract of n-stated.",
-      "defs": [],
+      "defs": ["def-missing"],
       "deps": [],
       "id": "n-stated",
       "kind": "lemma",
@@ -352,6 +401,12 @@
       "nodeId": "n-proved-orphan",
       "reason": "no af export found for workspace",
       "ref": "proofs/missing-proved"
+    },
+    {
+      "edge": "fr",
+      "ref": "attempt/unmatched-path.md",
+      "reason": "no registry node's path or id matches artifact 'attempt/unmatched-path.md'",
+      "sourceCycle": 4
     }
   ]
 }
