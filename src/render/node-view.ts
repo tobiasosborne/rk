@@ -10,7 +10,7 @@ import { computeFocusView, type DepStatus } from "../graph/query-focus";
 import type { TaintEntry } from "../graph/query-taint";
 import type { AfEdge, FrEdge, GraphDocument } from "../graph/types";
 import { esc } from "./html";
-import { styleForOptional } from "./styling";
+import { effectivePresentation } from "./styling";
 
 /** Stable DOM id for a node's pre-rendered panel — the hash router (src/render/site.ts) shows the
  * `#node-<id>` section. `id` values are filename stems (safe), but escape defensively anyway. */
@@ -66,11 +66,15 @@ export function renderNodePanel(doc: GraphDocument, id: string, taintEntry: Tain
     return `<section id="${esc(nodePanelId(id))}" class="rk-node"><p class="rk-defect">no node '${esc(id)}'.</p></section>`;
   }
   const n = view.node;
-  const st = styleForOptional(n.status);
+  // The effective presentation (M2 boundary review, blocker #1): a conflict naming this node OR a
+  // non-clean computed taint overrides the declared status's face-value styling — the declared
+  // claim stays visible in `st.label`'s "declared X; evidence Y" form, it just never paints or
+  // counts as rigorous/available on its own say-so.
+  const st = effectivePresentation(n.status, view.conflicts.length > 0, taintEntry?.taint ?? "clean");
 
   const badge =
     `<span class="rk-badge ${st.cssClass} ${st.tierClass}" style="--rk-status-colour:${st.colour}">` +
-    `${esc(st.label)}</span> <span class="rk-tier">${st.rigorous ? "rigorous" : "not rigorous"}</span>`;
+    `${esc(st.label)}</span> <span class="rk-tier">${st.isDefect ? "defect" : st.rigorous ? "rigorous" : "not rigorous"}</span>`;
 
   const routes = view.routes.length === 0
     ? `<p class="rk-none">no routes (deps-only shard)</p>`
@@ -105,13 +109,24 @@ export function renderNodePanel(doc: GraphDocument, id: string, taintEntry: Tain
     ? `<p class="rk-none">no fr evidence</p>`
     : `<ul class="rk-fr">${view.frEdges.map(frItem).join("")}</ul>`;
 
+  // EFFECTIVE availability (blocker #1): a defect node must never read as "available" even when
+  // the monotone-trust predicate (query-shared.ts's `isNodeAvailable`, reflected in
+  // `view.available`) would say so on the raw af flag/status alone — its own evidence contradicts
+  // the declared status, so the overclaim stops here rather than at the graph layer.
+  const effectiveAvailable = st.isDefect ? false : view.available;
+  const availLine = st.isDefect
+    ? `<p class="rk-avail rk-defect">available (monotone-trust): ${effectiveAvailable} ` +
+      `(monotone-trust rule alone would say ${view.available}; overridden — evidence conflicted/tainted, see above); ` +
+      `own requirements met: ${view.requirementsMet}</p>`
+    : `<p class="rk-avail">available (monotone-trust): ${effectiveAvailable}; own requirements met: ${view.requirementsMet}</p>`;
+
   return (
     `<section id="${esc(nodePanelId(id))}" class="rk-node ${st.tierClass}">` +
     `<h2>${esc(id)} <span class="rk-kind">(${esc(n.kind)})</span></h2>` +
     `<p class="rk-status-line">status: ${badge}</p>` +
     `<blockquote class="rk-contract">${esc(n.contract)}</blockquote>` +
     conflicts + taint +
-    `<p class="rk-avail">available (monotone-trust): ${view.available}; own requirements met: ${view.requirementsMet}</p>` +
+    availLine +
     `<h3>af evidence</h3>${afBlock(view.afEdge)}` +
     `<h3>deps (AND)</h3>${deps}` +
     `<h3>routes (OR)</h3>${routes}` +

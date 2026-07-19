@@ -4,9 +4,9 @@
 // visually distinct from OR-route edges, every node click-through to its drill-down panel.
 
 import { describe, expect, test } from "bun:test";
-import type { GraphDocument, RegistryNode } from "../../src/graph/types";
+import type { AfEdge, ConflictRecord, GraphDocument, RegistryNode } from "../../src/graph/types";
 import { computeLayers, renderDag } from "../../src/render/dag";
-import { statusStyle } from "../../src/render/styling";
+import { DEFECT_COLOUR, statusStyle } from "../../src/render/styling";
 import { nodePanelId } from "../../src/render/node-view";
 
 const B = { count: 0, classifications: [] as [] };
@@ -73,4 +73,31 @@ describe("render/dag", () => {
     const empty: GraphDocument = { ...doc, nodes: [], edges: { af: [], bd: [], fr: [], report: [] } };
     expect(renderDag(empty)).toContain("no nodes");
   });
+
+  test("BLOCKER #1: a conflicted 'proved' node gets its own defect class, never rk-dag-rigorous", () => {
+    const afEdge: AfEdge = {
+      nodeId: "mid", workspace: "proofs/mid", workspaceResolved: true, afSchemaVersion: "1",
+      afRootNodeId: "1", contractMatch: false, epistemicState: "validated", taintState: "clean", nodeCount: 1,
+    };
+    const conflict: ConflictRecord = {
+      kind: "contract-mismatch", edge: "af", nodeId: "mid", message: "contractMatch:false",
+    };
+    const conflicted: GraphDocument = {
+      ...doc,
+      nodes: doc.nodes.map((nd) => (nd.id === "mid" ? { ...nd, af: "validated" as const, workspace: "proofs/mid" } : nd)),
+      edges: { af: [afEdge], bd: [], fr: [], report: [] },
+      conflicts: [conflict],
+    };
+    const svg = renderDag(conflicted);
+    expect(svg).toContain("rk-dag-defect");
+    expect(svg).toContain(DEFECT_COLOUR);
+    // the defective node's own <a> tag must never carry rk-dag-rigorous.
+    const midTag = svg.match(new RegExp(`<a href="#${nodePanelId("mid")}"[^>]*>`))?.[0];
+    expect(midTag).toBeDefined();
+    expect(midTag).not.toContain("rk-dag-rigorous");
+  });
+
+  // Mutation evidence: an `effectivePresentation` that ignored conflicts (isDefect = taint-only)
+  // would make the previous test's "rk-dag-defect"/DEFECT_COLOUR assertions fail, since this
+  // fixture's conflict carries clean taint — verified by hand, restored after (see WP report).
 });

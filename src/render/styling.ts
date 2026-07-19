@@ -6,14 +6,23 @@
 // defeats the whole artifact silently." Concentrating the map in one module makes that class of
 // bug a single-file, corpus-covered edit rather than a drift spread across templates.
 //
-// Two invariants are load-bearing and pinned by test/render/styling.test.ts +
+// Three invariants are load-bearing and pinned by test/render/styling.test.ts +
 // corpus/render/rigour-ladder:
 //   1. The rigorous/non-rigorous partition equals PRD §5's "rigorous" column EXACTLY
 //      (cited/proved/consensus rigorous; everything else not) — encoded in `RIGOROUS_STATUSES`.
 //   2. A non-rigorous status NEVER shares a `tierClass` or a `colour` with a rigorous one, so
 //      "is this claim actually rigorous" is answerable from the emitted markup alone.
+//   3. (M2 boundary review, landing-blocker #1) A DECLARED status is never the last word: every
+//      surface (dashboard headline/counts, DAG node fill, node-panel badge, "available" line)
+//      MUST read a node's visual identity through `effectivePresentation`, not `statusStyle`/
+//      `styleForOptional` directly, once a conflict or non-clean taint is in play. A node whose
+//      status says "proved" but whose af contract mismatches or whose taint is non-clean is
+//      painted with `DEFECT_TIER_CLASS`, excluded from every rigorous/available count, and
+//      labelled "declared <status>; evidence conflicted"/"...tainted" — the declared claim stays
+//      VISIBLE (truthfulness means showing both the claim and the contradiction), it is just
+//      never allowed to pass as unqualified rigorous/available.
 
-import { RIGOUR_STATUSES, type RigourStatus } from "../graph/types";
+import { RIGOUR_STATUSES, type AfTaintState, type RigourStatus } from "../graph/types";
 
 /** The tier class is a two-valued partition stamped on every rendered node; a reader (or a test)
  * can answer "is this claim rigorous?" from the class list alone, never needing to re-derive it
@@ -105,6 +114,88 @@ export function styleForOptional(status: RigourStatus | undefined): {
   return status === undefined ? UNSET_STYLE : statusStyle(status);
 }
 
+// ---------------------------------------------------------------------------------------
+// Effective presentation state (M2 boundary review, landing-blocker #1) — THE single place a
+// declared status, a conflict, and a computed taint state combine into what a reader actually
+// SEES. Every render surface (dashboard, DAG, node panel) MUST go through `effectivePresentation`
+// once it has a node's conflicts/taint in hand, rather than styling straight off `statusStyle`/
+// `styleForOptional`. Kept in this module (not query-taint.ts / dashboard.ts) because "one node,
+// one visual truth" is exactly this file's job (see module header).
+// ---------------------------------------------------------------------------------------
+
+/** A THIRD tier class, disjoint from both `RIGOROUS_TIER_CLASS` and `NONRIGOROUS_TIER_CLASS` —
+ * a defect is never "just non-rigorous" (that would silently look identical to an honestly
+ * labelled `stated`/`conjecture` node); it gets its own visual identity so "this claim is
+ * contradicted by its own evidence" is answerable from the class list alone, same discipline as
+ * invariant 2 above. */
+export const DEFECT_TIER_CLASS = "rk-defect-tier";
+
+/** Distinct from every `STATUS_STYLES` colour and from `UNSET_STYLE.colour` (asserted by
+ * test/render/styling.test.ts) — a defect must never visually pass for any real status, rigorous
+ * or not. */
+export const DEFECT_COLOUR = "#e11d48";
+
+export interface EffectivePresentation {
+  /** The declared status, verbatim, exactly as frontmatter said it — NEVER hidden even when
+   * `isDefect`. `undefined` for an actually-unset status (never folded into a real one). */
+  declaredStatus: RigourStatus | undefined;
+  /** true iff a conflict record names this node OR its computed taint is non-clean
+   * (`tainted`/`self_admitted`/`unresolved`) — the two inputs the review named explicitly. */
+  isDefect: boolean;
+  /** The declared status's own per-status class (or `UNSET_STYLE`'s) — kept even when `isDefect`
+   * so the underlying claim is still identifiable in markup, not erased. */
+  cssClass: string;
+  /** `DEFECT_TIER_CLASS` when `isDefect`; otherwise the declared status's own tier class. */
+  tierClass: string;
+  /** EFFECTIVE rigour: always `false` when `isDefect`, regardless of whether the declared status
+   * is one of `RIGOROUS_STATUSES` — this is the value every rigorous COUNT/headline must use. */
+  rigorous: boolean;
+  /** `DEFECT_COLOUR` when `isDefect`; otherwise the declared status's own colour. */
+  colour: string;
+  /** Declared status's own label when clean; `"declared <status>; evidence <reasons>"` when
+   * `isDefect` — reasons is "conflicted", "tainted", or "conflicted, tainted". Never suppresses
+   * the declared claim, per this module's truthfulness stance. */
+  label: string;
+  meaning: string;
+}
+
+/** Derives the ONE effective presentation for a node from its declared status plus the two
+ * defect-bearing signals a caller has already computed: whether a `ConflictRecord` names this
+ * node (`doc.conflicts.some(c => c.nodeId === id)`), and its computed taint
+ * (`computeTaintTrace(doc).get(id)?.taint`, default `"clean"` for a node with no taint opinion of
+ * its own and nothing tainted upstream). Every render surface funnels through here rather than
+ * re-deriving "is this actually trustworthy" locally — the single-file guarantee this module
+ * exists for (PRD C6). */
+export function effectivePresentation(
+  status: RigourStatus | undefined,
+  hasConflict: boolean,
+  taint: AfTaintState,
+): EffectivePresentation {
+  const base = styleForOptional(status);
+  const taintNonClean = taint !== "clean";
+  const isDefect = hasConflict || taintNonClean;
+
+  if (!isDefect) {
+    return { declaredStatus: status, isDefect: false, ...base };
+  }
+
+  const reasons: string[] = [];
+  if (hasConflict) reasons.push("conflicted");
+  if (taintNonClean) reasons.push("tainted");
+  const declaredWord = status === undefined ? "unset" : status;
+
+  return {
+    declaredStatus: status,
+    isDefect: true,
+    cssClass: base.cssClass,
+    tierClass: DEFECT_TIER_CLASS,
+    rigorous: false,
+    colour: DEFECT_COLOUR,
+    label: `declared ${declaredWord}; evidence ${reasons.join(", ")}`,
+    meaning: base.meaning,
+  };
+}
+
 /** CSS rules for every status class + the two tier classes — generated FROM the map above, so the
  * stylesheet and the class names a node carries can never disagree. Inlined into the site's
  * `<style>` (CSP-safe, no external sheet). */
@@ -117,6 +208,7 @@ export function renderStatusCss(): string {
   rules.push(`.${UNSET_STYLE.cssClass}{--rk-status-colour:${UNSET_STYLE.colour};}`);
   rules.push(`.${RIGOROUS_TIER_CLASS} .rk-badge{border-left:4px solid var(--rk-status-colour);}`);
   rules.push(`.${NONRIGOROUS_TIER_CLASS} .rk-badge{border-left:4px dashed var(--rk-status-colour);}`);
+  rules.push(`.${DEFECT_TIER_CLASS} .rk-badge{border:2px dashed ${DEFECT_COLOUR};background:rgba(225,29,72,.14);}`);
   return rules.join("\n");
 }
 

@@ -48,6 +48,22 @@
         "taintState": "tainted",
         "workspace": "proofs/n-tainted",
         "workspaceResolved": true
+      },
+      {
+        "afRootNodeId": "1",
+        "afSchemaVersion": "1",
+        "contractMatch": true,
+        "epistemicState": "validated",
+        "nodeCount": 2,
+        "nodeId": "n-proved-tainted",
+        "taintState": "tainted",
+        "workspace": "proofs/n-proved-tainted",
+        "workspaceResolved": true
+      },
+      {
+        "nodeId": "n-proved-orphan",
+        "workspace": "proofs/missing-proved",
+        "workspaceResolved": false
       }
     ],
     "bd": [
@@ -275,6 +291,52 @@
       "routes": [],
       "status": "stated",
       "workspace": "proofs/n-tainted"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-unset.",
+      "defs": [],
+      "deps": [],
+      "id": "n-unset",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-unset.md",
+      "routes": []
+    },
+    {
+      "af": "validated",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-proved-tainted.",
+      "defs": [],
+      "deps": [],
+      "id": "n-proved-tainted",
+      "kind": "theorem",
+      "path": "argument/lemmas/n-proved-tainted.md",
+      "routes": [],
+      "status": "proved",
+      "workspace": "proofs/n-proved-tainted"
+    },
+    {
+      "af": "validated",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-proved-orphan.",
+      "defs": [],
+      "deps": [],
+      "id": "n-proved-orphan",
+      "kind": "theorem",
+      "path": "argument/lemmas/n-proved-orphan.md",
+      "routes": [],
+      "status": "proved",
+      "workspace": "proofs/missing-proved"
     }
   ],
   "schema_version": "1",
@@ -284,6 +346,12 @@
       "nodeId": "n-orphan",
       "reason": "no af export found for workspace",
       "ref": "proofs/missing"
+    },
+    {
+      "edge": "af",
+      "nodeId": "n-proved-orphan",
+      "reason": "no af export found for workspace",
+      "ref": "proofs/missing-proved"
     }
   ]
 }

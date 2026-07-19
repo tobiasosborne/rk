@@ -88,8 +88,8 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
   const title = options.title ?? "rk campaign report";
   const taint = computeTaintTrace(doc);
   const panels = doc.nodes.map((nd) => renderNodePanel(doc, nd.id, taint.get(nd.id))).join("\n");
-  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId)}</div>`;
-  const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc)}</section>`;
+  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}</div>`;
+  const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
 
   const contents =
     `<!doctype html>\n<html lang="en"><head><meta charset="utf-8">` +

@@ -6,35 +6,57 @@
 // never disagree with a node badge's tier.
 
 import { computeWhatBlocks, type BlockerEntry } from "../graph/query-blocks";
+import { computeTaintTrace, type TaintEntry } from "../graph/query-taint";
 import { RIGOUR_STATUSES, type GraphDocument, type RigourStatus } from "../graph/types";
 import { esc } from "./html";
 import { nodePanelId } from "./node-view";
-import { isRigorous, renderLegend, statusStyle } from "./styling";
+import { effectivePresentation, renderLegend, statusStyle } from "./styling";
 
 export interface StatusCounts {
+  /** DECLARED status counts, verbatim — a conflicted/tainted `proved` node still counts under
+   * `proved` here; this table is "what was claimed", never adjusted (M2 boundary review
+   * blocker #1: the declared claim stays visible). */
   byStatus: Record<RigourStatus, number>;
   unset: number;
+  /** EFFECTIVE rigorous count — a conflicted or tainted node is EXCLUDED even when its declared
+   * status is one of `RIGOROUS_STATUSES` (the headline this whole fix exists to correct). */
   rigorous: number;
   nonRigorous: number;
+  /** Count of nodes whose effective presentation `isDefect` (conflict or non-clean taint) —
+   * named separately so the dashboard can call them out regardless of declared status. */
+  defect: number;
 }
 
-export function statusCounts(doc: GraphDocument): StatusCounts {
+function nodeTaint(id: string, taint: ReadonlyMap<string, TaintEntry>): TaintEntry["taint"] {
+  return taint.get(id)?.taint ?? "clean";
+}
+
+function conflictedIds(doc: GraphDocument): Set<string> {
+  return new Set(doc.conflicts.map((c) => c.nodeId).filter((id): id is string => id !== undefined));
+}
+
+export function statusCounts(doc: GraphDocument, taint?: ReadonlyMap<string, TaintEntry>): StatusCounts {
+  const t = taint ?? computeTaintTrace(doc);
+  const conflicted = conflictedIds(doc);
   const byStatus = Object.fromEntries(RIGOUR_STATUSES.map((s) => [s, 0])) as Record<RigourStatus, number>;
   let unset = 0;
   let rigorous = 0;
+  let defect = 0;
   for (const nd of doc.nodes) {
     if (nd.status === undefined) {
       unset++;
-      continue;
+    } else {
+      byStatus[nd.status]++;
     }
-    byStatus[nd.status]++;
-    if (isRigorous(nd.status)) rigorous++;
+    const pres = effectivePresentation(nd.status, conflicted.has(nd.id), nodeTaint(nd.id, t));
+    if (pres.isDefect) defect++;
+    if (pres.rigorous) rigorous++;
   }
-  return { byStatus, unset, rigorous, nonRigorous: doc.nodes.length - rigorous };
+  return { byStatus, unset, rigorous, nonRigorous: doc.nodes.length - rigorous, defect };
 }
 
-function countsBlock(doc: GraphDocument): string {
-  const c = statusCounts(doc);
+function countsBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>): string {
+  const c = statusCounts(doc, taint);
   const rows = RIGOUR_STATUSES.filter((s) => c.byStatus[s] > 0).map((s) => {
     const st = statusStyle(s);
     return (
@@ -43,11 +65,37 @@ function countsBlock(doc: GraphDocument): string {
     );
   }).join("");
   const unsetRow = c.unset > 0 ? `<tr><td>unset</td><td>${c.unset}</td><td>not</td></tr>` : "";
+  const defectNote = c.defect > 0
+    ? ` (${c.defect} declared status contradicted by its own evidence — excluded from the rigorous count above; see "declared status contradicted" below)`
+    : "";
   return (
     `<section class="rk-counts"><h2>status counts (${doc.nodes.length} nodes)</h2>` +
-    `<p class="rk-headline">${c.rigorous} rigorous, ${c.nonRigorous} not rigorous</p>` +
+    `<p class="rk-headline">${c.rigorous} rigorous, ${c.nonRigorous} not rigorous${esc(defectNote)}</p>` +
     `<table><thead><tr><th>status</th><th>count</th><th>tier</th></tr></thead>` +
     `<tbody>${rows}${unsetRow}</tbody></table></section>`
+  );
+}
+
+/** Named, first-class callout (M2 boundary review, blocker #1): every node whose effective
+ * presentation is a defect (a conflict names it, or its computed taint is non-clean), regardless
+ * of its declared status. This is what makes "excluded from the rigorous count" mechanically
+ * checkable on the page itself, not just true in the count arithmetic. */
+function defectBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>): string {
+  const conflicted = conflictedIds(doc);
+  const rows = doc.nodes
+    .map((nd) => ({ nd, pres: effectivePresentation(nd.status, conflicted.has(nd.id), nodeTaint(nd.id, taint)) }))
+    .filter((x) => x.pres.isDefect)
+    .map(
+      (x) =>
+        `<li><a href="#${esc(nodePanelId(x.nd.id))}">${esc(x.nd.id)}</a>: ${esc(x.pres.label)}</li>`,
+    )
+    .join("");
+  if (rows.length === 0) {
+    return `<section class="rk-defect-nodes"><h2>declared status contradicted by evidence</h2><p class="rk-ok">none</p></section>`;
+  }
+  return (
+    `<section class="rk-defect-nodes rk-defect"><h2>declared status contradicted by evidence</h2>` +
+    `<ul>${rows}</ul></section>`
   );
 }
 
@@ -113,12 +161,20 @@ function whatBlocksBlock(doc: GraphDocument, northStarId?: string): string {
 }
 
 /** The full dashboard fragment. `northStarId` (optional) drives the what-blocks summary; absent, it
- * degrades honestly to a note rather than fabricating a path. */
-export function renderDashboard(doc: GraphDocument, northStarId?: string): string {
+ * degrades honestly to a note rather than fabricating a path. `taint` (optional) is the doc-wide
+ * taint trace — pass the one `render/site.ts` already computed once per render; when omitted this
+ * recomputes it (kept optional so every pre-existing unit test call site keeps working). */
+export function renderDashboard(
+  doc: GraphDocument,
+  northStarId?: string,
+  taint?: ReadonlyMap<string, TaintEntry>,
+): string {
+  const t = taint ?? computeTaintTrace(doc);
   return (
     `<div class="rk-dashboard">` +
-    countsBlock(doc) +
+    countsBlock(doc, t) +
     conflictsBlock(doc) +
+    defectBlock(doc, t) +
     unresolvedBlock(doc) +
     whatBlocksBlock(doc, northStarId) +
     `<section class="rk-legend-section"><h2>rigour ladder legend</h2>${renderLegend()}</section>` +

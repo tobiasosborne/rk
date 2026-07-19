@@ -91,6 +91,46 @@ describe("corpus/render/rigour-ladder — one node per status, asserted against 
     expect(panel).toContain("rk-defect");
   });
 
+  test("BLOCKER #1 red case: a conflicted 'proved' node is NEVER painted rigorous/available (n-conflict)", () => {
+    const panel = renderNodePanel(doc, "n-conflict", taint.get("n-conflict"));
+    const classes = badgeClasses(panel);
+    // the declared claim stays visible...
+    expect(panel).toContain("declared proved; evidence conflicted");
+    // ...but it never counts as rigorous or available.
+    expect(classes).not.toContain(RIGOROUS_TIER_CLASS);
+    expect(classes).toContain("rk-defect-tier");
+    expect(panel).not.toContain("available (monotone-trust): true");
+    expect(panel).toMatch(/available \(monotone-trust\): false/);
+  });
+
+  test("conflicted-proved is not the only defect route: tainted-proved gets the same treatment, no conflict record needed (n-proved-tainted)", () => {
+    const panel = renderNodePanel(doc, "n-proved-tainted", taint.get("n-proved-tainted"));
+    const classes = badgeClasses(panel);
+    expect(panel).toContain("declared proved; evidence tainted");
+    expect(classes).not.toContain(RIGOROUS_TIER_CLASS);
+    expect(classes).toContain("rk-defect-tier");
+    expect(panel).not.toContain("available (monotone-trust): true");
+  });
+
+  test("orphan-proved: an unresolved af workspace under a declared 'proved' status is a defect too (n-proved-orphan)", () => {
+    const panel = renderNodePanel(doc, "n-proved-orphan", taint.get("n-proved-orphan"));
+    const classes = badgeClasses(panel);
+    expect(panel).toContain("did not resolve"); // af evidence block still shows the orphan honestly
+    expect(panel).toContain("declared proved; evidence tainted"); // unresolved af -> taint "unresolved" -> non-clean
+    expect(classes).not.toContain(RIGOROUS_TIER_CLASS);
+    expect(classes).toContain("rk-defect-tier");
+    expect(panel).not.toContain("available (monotone-trust): true");
+  });
+
+  test("an actually-unset-status node renders its own 'unset' identity, never folded into a real status (n-unset)", () => {
+    const panel = renderNodePanel(doc, "n-unset", taint.get("n-unset"));
+    const classes = badgeClasses(panel);
+    expect(classes).toContain("rk-s-unset");
+    expect(panel).toContain("unset");
+    expect(classes).not.toContain(RIGOROUS_TIER_CLASS);
+    for (const s of RIGOUR_STATUSES) expect(classes).not.toContain(statusStyle(s).cssClass);
+  });
+
   test("an unresolved af workspace renders as a defect, never a silent drop (n-orphan)", () => {
     const panel = renderNodePanel(doc, "n-orphan", taint.get("n-orphan"));
     expect(panel).toContain("did not resolve");

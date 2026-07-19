@@ -14,9 +14,10 @@
 // quality matters, vendoring dagre behind this same interface is the follow-up.
 
 import { isNodeAvailable, requiredIds } from "../graph/query-shared";
+import { computeTaintTrace, type TaintEntry } from "../graph/query-taint";
 import type { GraphDocument, RegistryNode } from "../graph/types";
 import { esc } from "./html";
-import { styleForOptional } from "./styling";
+import { effectivePresentation } from "./styling";
 import { nodePanelId } from "./node-view";
 
 const COL = 210;
@@ -85,31 +86,40 @@ function edge(from: Placed, to: Placed, kind: "and" | "or"): string {
   );
 }
 
-function nodeSvg(p: Placed): string {
-  const st = styleForOptional(p.n.status);
+function nodeSvg(p: Placed, hasConflict: boolean, taint: TaintEntry["taint"]): string {
+  const st = effectivePresentation(p.n.status, hasConflict, taint);
   const x = p.cx - NW / 2;
   const y = p.cy - NH / 2;
-  const rigCls = st.rigorous ? "rk-dag-rigorous" : "rk-dag-nonrigorous";
+  // Effective rigour drives the visual class, not the raw declared status (M2 boundary review
+  // blocker #1) — a defect gets ITS OWN class, never silently folded into "non-rigorous".
+  const rigCls = st.isDefect ? "rk-dag-defect" : st.rigorous ? "rk-dag-rigorous" : "rk-dag-nonrigorous";
   const strokeW = st.rigorous ? 2.5 : 1.2;
   const dash = st.rigorous ? "" : 'stroke-dasharray="3 3" ';
-  const avail = isNodeAvailable(p.n) ? "" : "opacity:.82;";
+  // A defect node is never presented as available, regardless of the monotone-trust predicate —
+  // its own evidence contradicts the declared status, so dimming it is the honest default.
+  const avail = !st.isDefect && isNodeAvailable(p.n) ? "" : "opacity:.82;";
   const label = p.n.id.length > 22 ? p.n.id.slice(0, 20) + ".." : p.n.id;
+  const tierWord = st.isDefect ? " (defect: see title)" : st.rigorous ? " (rigorous)" : " (not rigorous)";
   return (
     `<a href="#${esc(nodePanelId(p.n.id))}" class="rk-dag-node ${rigCls}">` +
     `<rect x="${x}" y="${y}" width="${NW}" height="${NH}" rx="5" fill="${st.colour}" ` +
     `stroke="#111" stroke-width="${strokeW}" ${dash}style="${avail}"/>` +
     `<text x="${p.cx}" y="${p.cy + 4}" text-anchor="middle" fill="#fff">${esc(label)}</text>` +
-    `<title>${esc(p.n.id)} — ${esc(st.label)}${st.rigorous ? " (rigorous)" : " (not rigorous)"}</title>` +
+    `<title>${esc(p.n.id)} — ${esc(st.label)}${tierWord}</title>` +
     `</a>`
   );
 }
 
 /** Renders the whole DAG as one inline SVG. Straight-line edges (AND solid grey, OR dashed purple)
- * drawn first, rigour-coloured node boxes on top, each a hash link to its drill-down panel. */
-export function renderDag(doc: GraphDocument): string {
+ * drawn first, rigour-coloured node boxes on top, each a hash link to its drill-down panel.
+ * `taint` (optional) is the doc-wide taint trace — pass the one `render/site.ts` already computed
+ * once per render; recomputed when omitted so existing call sites keep working. */
+export function renderDag(doc: GraphDocument, taint?: ReadonlyMap<string, TaintEntry>): string {
   if (doc.nodes.length === 0) return `<p class="rk-none">no nodes to graph.</p>`;
   const layers = computeLayers(doc);
   const placed = place(doc, layers);
+  const t = taint ?? computeTaintTrace(doc);
+  const conflicted = new Set(doc.conflicts.map((c) => c.nodeId).filter((id): id is string => id !== undefined));
 
   const edges: string[] = [];
   for (const nd of doc.nodes) {
@@ -126,14 +136,17 @@ export function renderDag(doc: GraphDocument): string {
     }
   }
 
-  const nodes = [...placed.values()].map((p) => nodeSvg(p)).join("");
+  const nodes = [...placed.values()]
+    .map((p) => nodeSvg(p, conflicted.has(p.n.id), t.get(p.n.id)?.taint ?? "clean"))
+    .join("");
   const maxLayer = Math.max(0, ...[...layers.values()]);
   const maxRow = Math.max(1, ...[...countRows(doc, layers).values()]);
   const width = PAD * 2 + (maxLayer + 1) * COL;
   const height = PAD * 2 + maxRow * ROW;
 
   return (
-    `<div class="rk-dag-legend rk-muted">solid box + thick border = rigorous; dashed = not. ` +
+    `<div class="rk-dag-legend rk-muted">solid box + thick border = rigorous; dashed = not; ` +
+    `red dashed outline = declared status contradicted by conflict/taint (defect). ` +
     `Grey line = AND-dep; purple dashed = OR-route. Click a node to drill down.</div>` +
     `<div style="overflow:auto"><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ` +
     `role="img" aria-label="AND/OR dependency graph">${edges.join("")}${nodes}</svg></div>`
