@@ -126,7 +126,11 @@ on the session, not as separate flat-prompt processes.
   `src/drive/session.ts`'s `validateSessionRequest` rejects a mismatch on ANY field, and the
   review's own failure scenario ("a verifier request resumes a prover session... nothing binds
   sessionId to (backend/model, role, tier, claim)") is now a dedicated, named test
-  (`test/drive/session.test.ts`, "THE core failure scenario"). A `dispatchModel: "flat"` backend
+  (`test/drive/session.test.ts`, "THE core failure scenario"). The concrete create-once store
+  implementing this — global sessionId uniqueness, tuple recorded at creation, every resume
+  validated against it — is `src/drive/session-manager.ts` (M3.3), property-tested against an
+  independent ground-truth model over 1000 seeded random operations
+  (`test/drive/session-manager.test.ts`). A `dispatchModel: "flat"` backend
   requesting `session.mode: "resume"` is rejected unconditionally — it receives a fresh synthetic
   attempt id via `session.mode: "new"` on every turn instead.
 - **`claimId` and `turnId` are both required on every request** (review blocker 2). `claimId`
@@ -187,7 +191,9 @@ WorkerResult {                          // src/drive/worker-result.ts — the PR
   exit:  number                         // the backend process's own exit code — AUTHORITATIVE
   usage: { input, output, cache_read, cache_creation }
   rawText?: string                      // what the process printed; absent iff nothing usable was
-}                                        // produced (killed, crashed, true timeout)
+                                        // produced (killed, crashed, true timeout)
+  dispatchModel?: "session" | "flat"    // adapter-set (M3.2), mirrors capabilities.sessionResume;
+}                                        // lets accounting cost declared-flat turns honestly
 ```
 
 `schemas/verdict.v1.json`'s document (shape (b) above) is what's INSIDE `rawText` once every
@@ -223,6 +229,14 @@ post-hoc classification of why a call didn't apply:
 Any other nonzero code the backend's own process naturally returns (crash, killed) is treated as
 13 by the driver's wrapper, never surfaced as a silent success.
 
+Reality note (M3.2 live-fire, docs/memos/2026-07-19-m3.2-backend-livefire.md): codes 10-13 are
+ADAPTER-COMPUTED classifications of raw process/timeout/API-error behavior — no real CLI emits
+them natively; the adapter maps observed behavior onto this table. Code 11 specifically is a
+post-hoc heuristic for both current adapters (`usage.output >= maxOutputTokens` after the fact),
+since neither CLI exposes a per-turn output-token cap flag — a known contract-vs-reality gap
+until a WP finds an enforcement mechanism; the budget is therefore a detection threshold, not a
+hard limit, and campaign budgeting must not assume mid-turn cutoffs.
+
 ## (d) Caching obligations (driver-side, from the M3.0 spike)
 
 **Wording discipline (follow-ups 2-7): every claim below is tagged MEASURED, INFERRED, or POLICY
@@ -238,11 +252,25 @@ so explicitly rather than implying more confidence than the data supports.
    point, not a proof of universal race behavior. The "await first streamed token" mechanic and
    "no escape/no configuration override" are POLICY choices this contract adopts conservatively
    given that one data point and the documented worst case, not additional measured facts.
+   SCOPE AS IMPLEMENTED (M3.3, `src/drive/scheduler.ts`): "sharing that prefix" is read
+   CAMPAIGN-WIDE — every first-call in a schedule is globally serialized, not merely first-calls
+   within the same content group — because the spike's Finding 5 showed a common CLI-level root
+   prefix is shared by every call regardless of group content. This is the conservative reading;
+   it can bottleneck a large multi-group batch, and same-group-only serialization is the flagged
+   alternative for the M3 milestone review to ratify or relax.
 2. **Shared-context group floor: >= 3 items — POLICY, pricing-derived, not a measured batch
    result.** Given the MEASURED 1-hour cache-write tier (see item 5), a write costs 2x; a group
    of 1-2 items is arithmetically not a caching win. No 3-item (or larger) batch was actually run
    through this spike — this is a scheduling heuristic sound on the measured per-token economics,
    not itself a measured outcome.
+
+   CONCRETE VALUES AS IMPLEMENTED (M3.3, `src/drive/scheduler-defaults.ts`, pending promotion to
+   `.rk/config`): prefix staleness threshold 45 min (conservatively inside the OBSERVED 1-hour
+   tier — scheduling never assumes survival near an unmeasured boundary), shared-context floor 3,
+   burst 4, per-tier concurrency caps 6 (L5 soft) / 3 (hard). NORMATIVE cache-fraction
+   definition (M3.9 reports this; `src/drive/accounting.ts` computes it):
+   `cacheFraction = cache_read / (input + cache_read + cache_creation)`, token-weighted, output
+   tokens excluded.
 3. **Minimum cacheable prefix: ~4096 tokens — DOCUMENTED BACKGROUND, not measured by this spike,
    and model-specific.** This threshold comes from `shared/prompt-caching.md`'s stated minimum
    for the tested model tier; the spike did not probe the boundary directly. Treat "shared
