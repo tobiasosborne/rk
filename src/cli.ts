@@ -14,6 +14,7 @@ import { doctorCommand } from "./cli/doctor";
 import { phaseCommand } from "./cli/phase";
 import { initCommand, initHelp } from "./cli/init";
 import { upgradeCommand } from "./cli/upgrade";
+import { graphCommand } from "./cli/graph";
 import type { Out } from "./cli/args";
 import { defaultOut, hasHelpFlag } from "./cli/args";
 
@@ -26,6 +27,7 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   phase: phaseCommand,
   init: initCommand,
   upgrade: upgradeCommand,
+  graph: graphCommand,
 };
 
 // rk-1r6: `-h`/`--help` handling for every subcommand, kept independent of check.ts (out of
@@ -64,6 +66,18 @@ function phaseHelp(out: Out): number {
   return 0;
 }
 
+function graphHelp(out: Out): number {
+  out.log("rk graph — terminal projection views over the M2.5 graph document (PRD C5)");
+  out.log("  usage: rk graph --focus <id> [--root <dir>]");
+  out.log("         rk graph --critical-path [--north-star <id>] [--root <dir>]");
+  out.log("         rk graph --blocks [--north-star <id>] [--root <dir>]");
+  out.log("         rk graph --taint [<id>] [--root <dir>]");
+  out.log('  --north-star overrides .rk/config.json\'s "northStarId" when both are given.');
+  out.log("  Read-only: builds a GraphDocument from the repo (registry+af+fr+bd) and never writes.");
+  out.log("  next: 'rk graph --focus <id>' with a real registry id (see argument/**/*.md).");
+  return 0;
+}
+
 const HELP: Record<string, (out: Out) => number> = {
   refs: refsHelp,
   check: checkHelp,
@@ -71,6 +85,7 @@ const HELP: Record<string, (out: Out) => number> = {
   phase: phaseHelp,
   init: initHelp,
   upgrade: upgradeHelp,
+  graph: graphHelp,
 };
 
 function topHelp(out: Out): number {
@@ -81,6 +96,7 @@ function topHelp(out: Out): number {
   out.log("  rk check [--root <dir>]    run all six M0 gates (docs/gate-contracts.md)");
   out.log("  rk check --selftest [--root <dir>]  run rk's own red-fixture corpus (default <root>/corpus)");
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
+  out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  every subcommand accepts -h/--help for its own usage (side-effect-free, exits 0).");
   out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");
