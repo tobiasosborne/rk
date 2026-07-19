@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/generated.v1.json",
+  "title": "rk generated-artifact manifest (v1)",
+  "description": "`.rk/generated.json` — the declared manifest src/gates/freshness.ts (Gate 7, IMPLEMENTATION_PLAN.md M2.6, docs/gate-contracts.md's Gate 7 section) reads: one entry per generated artifact a repo has adopted the freshness mechanism for. Untrusted, hand-editable JSON, same edge-trust posture as .rk/config.json — a malformed manifest is never a crash and never a silent no-op; the gate reports one ERROR per malformation. Optional file: its total absence is a legitimate, presence-conditional green state (the mechanism simply has not been adopted), never a finding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "A version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture."
+    },
+    "entries": {
+      "type": "array",
+      "description": "One row per adopted generated artifact. Order is not significant; the gate reports findings in array order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "generator"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative path to the generated artifact, e.g. \"argument/INDEX.md\"."
+          },
+          "generator": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Generator id this rk binary must recognize to regenerate `path`. Known ids as of M2.6: \"linker-index\" (argument/INDEX.md's render), \"linker-dag\" (argument/DAG.md's render) — src/gates/freshness.ts's GENERATORS map. An id this binary does not recognize is reported as 'not adopted' on the gate's coverage line, never silently dropped and never an ERROR by itself (see docs/gate-contracts.md's Gate 7 section)."
+          }
+        }
+      }
+    }
+  }
+}

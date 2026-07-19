@@ -20,6 +20,7 @@ import {
   scanWorkspaces,
 } from "./linker-graph";
 import { checkGenerated } from "./linker-render";
+import { freshnessSupersededPaths } from "./freshness";
 
 export const linkerGate: Gate = {
   name: "linker",
@@ -43,7 +44,12 @@ export const linkerGate: Gate = {
       }
     }
 
-    const { findings: generatedFindings, mirrorStatus } = checkGenerated(snapshot, lemmas);
+    // M2.6 (bead-tracked via docs/gate-contracts.md's Gate 7 "Check 11 boundary"): a manifest
+    // entry supersedes Check 11's own byte-diff for its path ONLY when src/gates/freshness.ts
+    // recognizes that entry's generator — never merely because SOME .rk/generated.json exists
+    // (see freshness.ts's own doc comment for why the boundary is drawn per-path, not per-repo).
+    const superseded = freshnessSupersededPaths(snapshot);
+    const { findings: generatedFindings, mirrorStatus } = checkGenerated(snapshot, lemmas, superseded);
 
     const findings = [
       ...parseErrors,
@@ -70,7 +76,10 @@ export const linkerGate: Gate = {
     // present or absent — never a silent skip when a repo hasn't adopted the transitional
     // markdown mirror (docs/gate-contracts.md Gate 2 Check 11).
     const mirrorsNote = mirrorStatus
-      .map((m) => `${m.label} ${m.present ? "present" : "absent (not adopted)"}`)
+      .map(
+        (m) =>
+          `${m.label} ${m.superseded ? "superseded (see freshness gate)" : m.present ? "present" : "absent (not adopted)"}`,
+      )
       .join(", ");
 
     return {

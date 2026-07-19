@@ -14,10 +14,11 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-/** The six gate directory names under corpus/ — matches each gate's `name` in src/gates/index.ts
+/** The gate directory names under corpus/ — matches each gate's `name` in src/gates/index.ts
  * and the fixture-id prefix (corpus/README.md: "<gate> is one of defs, linker, refs, provenance,
- * runs, shards"). */
-export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards"] as const;
+ * runs, shards"). `freshness` (M2.6, Gate 7, src/gates/freshness.ts) is the second synthetic
+ * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. */
+export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards", "freshness"] as const;
 export type GateDir = (typeof GATE_DIRS)[number];
 
 export function discoverFixtures(corpusRoot: string, gateDir: string): string[] {
@@ -69,5 +70,11 @@ export function totalFixtureCount(corpusRoot: string): number {
  * (rk-wc3: multi-line YAML deps with unknown id must ERROR; malformed frontmatter line is loud),
  * `config-01` + `config-02` (rk-xbm: typo'd `phase` / malformed `shardsMaxLines` in
  * `.rk/config.json` are blocking ERRORs, never silent fallback) — "config" also added to
- * GATE_DIRS as the synthetic seventh gate's corpus directory. */
-export const EXPECTED_FIXTURE_COUNT = 98;
+ * GATE_DIRS as the synthetic seventh gate's corpus directory.
+ * 103 (+5 over the then-pinned 98): M2.6 addition — `freshness-01`..`freshness-05` (Gate 7,
+ * src/gates/freshness.ts, docs/gate-contracts.md's Gate 7 section): the regenerate-and-diff
+ * mechanism over a declared `.rk/generated.json` manifest — clean-regenerate golden pass, a
+ * hand-edited generated file, a declared-but-missing generated file, a malformed manifest, and
+ * the no-manifest presence-conditional golden pass. `freshness` added to GATE_DIRS as the second
+ * synthetic (no AISM check-all.sh counterpart) gate's corpus directory. */
+export const EXPECTED_FIXTURE_COUNT = 103;
