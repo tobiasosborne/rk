@@ -99,7 +99,9 @@ stop — do not improvise from memory.
    provenance row, or a ledger stale is incomplete work, not a follow-up.
 8. **Generated and authored are never mixed.** Every document declares its class in a
    ROLE/UPDATE-POLICY/TRIGGER header: `authored-append-only`, `rewritten-whole`, or `generated`.
-   `build/` outputs are never hand-edited; hand-editing a generated file fails `rk check`.
+   `build/` outputs are never hand-edited by convention; a freshness check that fails `rk check`
+   on a hand-edited generated file arrives in a later rk release (not in this binary — run
+   `rk --help` for what exists today).
 9. **No overclaim.** Never silently promote a `proved-mod-audit`, `numerical`, or `conjecture`
    to `proved`. State which evidence a claim rests on.
 
