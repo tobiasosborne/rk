@@ -400,6 +400,57 @@ export function buildFrCollapseDocument(bucketEntries: "one" | "two"): GraphDocu
   };
 }
 
+/** M2-boundary-review blocker 7's scenario: two SIBLING banked-without-oracle-eligible fr cycles
+ * on two DIFFERENT nodes — cycle 1 resolves to `lem-old`, cycle 2 resolves to `lem-new` and
+ * (when `superseded` is true) carries `supersedes: 1`. Two distinct nodes, not one, so the
+ * exclusion under test (a superseded cycle must stop contributing a conflict at all) is provable
+ * independently of blocker 8's same-node coalescing question: `superseded: true` must yield
+ * exactly ONE conflict (`lem-new` only — `lem-old`'s superseded cycle produces none); `superseded:
+ * false` must yield TWO (both cycles are live siblings, neither superseding the other). */
+export function buildSupersededFrDocument(superseded: boolean): GraphDocument {
+  const mkNode = (id: string) => ({
+    id,
+    kind: "lemma" as const,
+    af: "none" as const,
+    contract: `${id}'s claim.`,
+    path: `argument/lemmas/${id}.md`,
+    deps: [],
+    routes: [],
+    defs: [],
+    balloons: { count: 0, classifications: [] },
+  });
+  return {
+    schema_version: "1",
+    nodes: [mkNode("lem-new"), mkNode("lem-old")],
+    edges: {
+      af: [],
+      bd: [],
+      fr: [
+        {
+          cycle: 1,
+          artifact: "argument/lemmas/lem-old.md",
+          resolutionMethod: "path",
+          resolvedNodeId: "lem-old",
+          outcome: "banked",
+          verdict: "claimed",
+        },
+        {
+          cycle: 2,
+          artifact: "argument/lemmas/lem-new.md",
+          resolutionMethod: "path",
+          resolvedNodeId: "lem-new",
+          outcome: "banked",
+          verdict: "claimed",
+          supersedes: superseded ? 1 : undefined,
+        },
+      ],
+      report: [],
+    },
+    unresolved: [],
+    conflicts: [],
+  };
+}
+
 /** Tier A review blocker 4's "lem-ghost case": a RESOLVED fr edge naming a `resolvedNodeId` that
  * is not actually a node in this document. */
 export function buildFrGhostDocument(): GraphDocument {

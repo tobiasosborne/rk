@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConflictRecord, GraphDocument } from "../../src/graph/types";
 import { canonicalizeGraphDocument } from "../../src/graph/serialize";
 import { validateGraphDocument } from "../../src/graph/validate";
+import { computeExpectedConflicts } from "../../src/graph/validate-conflicts";
 import {
   buildAfEvidenceDocument,
   buildAfRootMismatchDocument,
@@ -17,6 +18,7 @@ import {
   buildProvedConflictDocument,
   buildRenameHazardDocument,
   buildSampleDocument,
+  buildSupersededFrDocument,
   provedConflictRecords,
 } from "./fixtures";
 
@@ -165,6 +167,39 @@ describe("validateGraphDocument — Tier A review blocker 3: conflict recomputat
   test('M2-boundary-review blocker 6 (red): verdict:"banked" with verdictFresh UNDEFINED (never recomputed — e.g. the ledger-fallback path) is NOT oracle-backed; undefined must not be treated as fresh', () => {
     const issues = errors(buildBankedDocument("banked", undefined, []));
     expect(issues.some((i) => i.message.includes("missing conflict record: banked-without-oracle"))).toBe(true);
+  });
+});
+
+describe("validateGraphDocument — M2-boundary-review blocker 7: superseded fr evidence is excluded from conflicts", () => {
+  test("red: an UNsuperseded sibling still yields its own conflict, a SUPERSEDED sibling must not (two distinct nodes)", () => {
+    const conflicts = computeExpectedConflicts(buildSupersededFrDocument(true));
+    expect(conflicts).toEqual([
+      { kind: "banked-without-oracle", edge: "fr", nodeId: "lem-new", registryValue: "banked", otherValue: "claimed" },
+    ]);
+    // the superseded cycle (1, resolving to lem-old) must contribute NOTHING — not even a
+    // suppressed-but-present entry.
+    expect(conflicts.some((c) => c.nodeId === "lem-old")).toBe(false);
+  });
+
+  test("green counterpart: two UNRELATED (non-superseding) siblings both still conflict independently", () => {
+    const conflicts = computeExpectedConflicts(buildSupersededFrDocument(false));
+    expect(conflicts).toHaveLength(2);
+    expect(conflicts.some((c) => c.nodeId === "lem-old")).toBe(true);
+    expect(conflicts.some((c) => c.nodeId === "lem-new")).toBe(true);
+  });
+
+  test("end-to-end via validateGraphDocument: the superseded sibling's conflict record must be ABSENT, not just unrecorded", () => {
+    const doc = buildSupersededFrDocument(true);
+    doc.conflicts = [
+      { kind: "banked-without-oracle", edge: "fr", nodeId: "lem-new", registryValue: "banked", otherValue: "claimed", message: "m" },
+    ];
+    expect(errors(doc)).toEqual([]); // exactly one recorded, exactly one computed — clean
+
+    // recording a conflict for the SUPERSEDED cycle's node is itself now unsupported (the
+    // condition it claims no longer holds once superseded exclusion is applied).
+    doc.conflicts.push({ kind: "banked-without-oracle", edge: "fr", nodeId: "lem-old", registryValue: "banked", otherValue: "claimed", message: "m" });
+    const issues = errors(doc);
+    expect(issues.some((i) => i.message.includes("is not supported by any computed conflict"))).toBe(true);
   });
 });
 

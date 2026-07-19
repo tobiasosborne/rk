@@ -66,10 +66,22 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
     }
   }
 
+  // M2-boundary-review blocker 7 (2026-07-19): derive the FULL set of superseded cycle ids from
+  // every edge's own `supersedes` field (types-edges.ts:101-106 — a consumer derives "is this
+  // cycle superseded" by scanning for another edge's `supersedes` pointing at it; there is no
+  // `supersededBy` mirror stored). A superseded cycle is never promotion/conflict-bearing —
+  // excluded from the computation below — but it stays fully visible in `doc.edges.fr` itself;
+  // only the CONFLICT computation ignores it.
+  const supersededCycles = new Set<number>();
+  for (const e of doc.edges.fr) {
+    if (e.supersedes !== undefined) supersededCycles.add(e.supersedes);
+  }
+
   for (const e of doc.edges.fr) {
     if (e.outcome !== "banked") continue;
     if (e.resolutionMethod === "unresolved") continue; // no node to anchor a conflict to; the
     // unresolved-bucket accounting (validate-fr.ts) already flags this cycle elsewhere.
+    if (supersededCycles.has(e.cycle)) continue; // superseded — never promotion/conflict-bearing.
     // M2-boundary-review blocker 6 (2026-07-19): `verdictFresh` MUST be REQUIRED true, not merely
     // "not false" — `undefined` (the primary export path with no matching oracle verdict record
     // at all, or ANY ledger-fallback edge, which never recomputes freshness — src/store/
