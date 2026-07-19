@@ -63,6 +63,64 @@ describe("rk render — CLI edge", () => {
     expect(existsSync(join(root, "public", "index.html"))).toBe(true);
   });
 
+  // M2 boundary review, ratified verdict (e): --out must be a repo-relative MANAGED path.
+  test("BLOCKER: an absolute --out is rejected (never written), self-teaching, exit nonzero", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const absOut = join(tmpdir(), "rk-render-absolute-escape");
+    const code = await renderCommand(["--root", root, "--out", absOut], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("repo-relative");
+    expect(existsSync(absOut)).toBe(false);
+  });
+
+  test("BLOCKER: a '..'-escaping --out is rejected, never written, exit nonzero", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root, "--out", "../escape"], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("..");
+    expect(existsSync(join(root, "..", "escape"))).toBe(false);
+  });
+
+  test("adopts its output in .rk/generated.json (creates the manifest, generator render-site-v1)", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    const manifestPath = join(root, ".rk", "generated.json");
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    expect(manifest.schema_version).toBe("1");
+    expect(manifest.entries).toEqual([{ path: "build/site/index.html", generator: "render-site-v1" }]);
+    expect(lines.join("\n")).toContain("adopted build/site/index.html");
+  });
+
+  test("re-running adopts the entry in place, preserving every other manifest entry byte-exactly", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    const preexisting = { schema_version: "1", entries: [{ path: "argument/INDEX.md", generator: "linker-index" }] };
+    writeFileSync(join(root, ".rk", "generated.json"), JSON.stringify(preexisting));
+    const { out } = capture();
+    await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT }); // twice: idempotent upsert
+    const manifest = JSON.parse(readFileSync(join(root, ".rk", "generated.json"), "utf8"));
+    expect(manifest.entries).toContainEqual({ path: "argument/INDEX.md", generator: "linker-index" });
+    expect(manifest.entries).toContainEqual({ path: "build/site/index.html", generator: "render-site-v1" });
+    expect(manifest.entries.length).toBe(2); // no duplicate on the second run
+  });
+
+  test("a pre-existing manifest that is not valid JSON is never silently clobbered", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "generated.json"), "{ not json");
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    expect(lines.join("\n")).toContain("not valid JSON");
+    expect(readFileSync(join(root, ".rk", "generated.json"), "utf8")).toBe("{ not json");
+  });
+
   test("--north-star threads into the what-blocks summary", async () => {
     const root = repo();
     const { out } = capture();
