@@ -210,9 +210,12 @@ complete turn and applies it only after, IN ORDER:
 
 **On failure at ANY stage, every verdict from that call is discarded — never partially applied.**
 Previously-committed turns for the same claim are untouched by a later turn's rejection (a
-driver-loop invariant, out of this WP's scope to implement but stated here as the norm this
-contract requires); a rejected or never-attempted item is reported explicitly, never silently
-dropped, consistent with PRD C5's "never silently dropped" ethos applied to this domain.
+driver-loop invariant — implemented by M3.6's `src/drive/driver-run.ts`, which consumes this
+two-shape pipeline end-to-end; `src/drive/driver-verdict-map.ts` is the bound-verdict →
+af-apply-item translation, deliberately tiny and isolated because it decides what becomes a
+validated ledger event — L6-flagged for the M3 boundary Tier A review before any live-fire); a
+rejected or never-attempted item is reported explicitly, never silently dropped, consistent with
+PRD C5's "never silently dropped" ethos applied to this domain.
 
 **Exit-code discipline (self-teaching, af-style)** — this table is about the WORKER PROCESS's own
 exit code (`WorkerResult.exit`), distinct from `TurnOutcome.stage`, which is `resolveTurn`'s own
