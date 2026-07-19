@@ -151,3 +151,35 @@ dry-run + dagre vendoring remain before full M2 acceptance. Tree at close: 1070 
   (author identity on nodes, verifier identity + batch id on validations,
   byte-identical replay across all 44 workspaces, export fields additive; pushed).
   V2/V3 queued in vibefeld's tracker.
+
+## 2026-07-19 — M3 built through its boundary review; graceful stop (orchestration session 2, final)
+
+- M3.2 backends (claude session-resume + codex declared-flat adapters, registry with
+  validated workers config, zero-fix live-fire memo), M3.3 session/cache manager
+  (create-once store proven against an independent ground-truth model, conservative
+  45-min TTL, campaign-wide stagger), M3.4 batch composer (all C3 guardrails
+  mutation-proven, content-addressed batch ids, vibefeld seam fixture), M3.6 hard-tier
+  driver pass 1 (guardrails, balloon loop with repeat-forcing, byte-surgical
+  frontmatter, honest live-dispatch stub), M3.7 L5 verdict store (append-only,
+  hash-bound freshness computed at read, correction-pending never promotable), M3.9
+  report instrument (per-session cache-write amortization, no fabricated SC4 ratios;
+  found the driver log had been aspirational and made it real) — all landed on master.
+- M3.8 cross-vendor rule built on branch worktree-agent-a9b12837c0ead0e82 (apply-time
+  fail-closed + linker continuous check + grandfathering; AISM confirmed 0/44 per-node
+  identities). M3.5 prep: live-dispatch wiring on branch worktree-agent-a79b59394bee01511
+  (flag-gated --live, safety valves, cache-stable prompts); lemma selection + scratch
+  staging at ../rk-m3.5-baseline (lem-weighted-min, lem-mass-split,
+  lem-starvation-completion-obstruction; runbook memo committed, dry-run verified 3/3).
+- TJO explicitly authorized the M3.5 real-token spend (bd memory
+  m3-5-spend-authorization-tjo-2026-07-19).
+- M3 boundary review (codex gpt-5.6-sol high, ONE round): 8 landing-blockers, 5
+  follow-ups, verdict: closable after the single repair wave; machinery NOT yet safe
+  for the M3.5 spend (content re-binding at apply, accounting, spend guards). All four
+  session reviews banked in docs/reviews/. Repair wave filed as the P0 bead and is the
+  NEXT session's first move — deliberately NOT dispatched at stop (anti-Zeno: the wave
+  + mechanical verification + branch merges belong to one uninterrupted session).
+- Stop state: master green (1581 tests / 0 fail / 1 skip at the M3.9 tip; the two
+  unmerged branches are green in their worktrees at 1610 and 1594); selftest OK
+  (117/117 fixtures on the M3.8 branch, 109/109 on master); dist/rk current.
+  THREE lines touch src/drive/driver-run.ts (master usage-logging, M3.8 cross-vendor
+  wiring, live-wiring async injection) — the repair session reconciles all three.
