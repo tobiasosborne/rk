@@ -2,58 +2,103 @@
 // rigour-coloured nodes (from the ONE styling source, src/render/styling.ts), AND-deps drawn
 // distinctly from OR-route edges, each node a hash link into its own drill-down panel.
 //
-// LAYOUT ENGINE — deliberate deviation, flagged for the M2 boundary review. The plan names dagre
-// "vendored at build time". This first pass uses a small PURE built-in longest-path layered layout
-// instead, for three reasons: (1) it keeps L4 (zero runtime deps) and L3 (a trivially
-// grep-verifiable pure core) pristine — dagre is CommonJS + lodash and bundling it under
-// `bun build --compile` is real, un-budgeted risk; (2) the layout QUALITY is not validity-bearing
-// — the rigour colouring and AND/OR distinction (which ARE the point) come from the styling map
-// regardless of engine, so a swap to vendored dagre later is a pure-internal change behind
-// `computeLayers`/`renderDag`; (3) rule 11 (don't grind). Trade-off accepted: no edge-routing /
-// crossing minimisation (edges are straight lines, may cross on a dense graph). If edge-routing
-// quality matters, vendoring dagre behind this same interface is the follow-up.
+// LAYOUT ENGINE — vendored dagre (rk-fhd, M2 boundary review, 2026-07-19). The M2.4 first pass
+// shipped a small pure built-in longest-path layered layout instead of the plan's resolved
+// "dagre vendored at build time" (research-workflows/IMPLEMENTATION_PLAN.md resolved-question 1);
+// the review REJECTED that as permanent (no crossing minimisation, no SC5 usability result
+// overturns the settled decision) and ordered this swap. `dagre` is a devDependency (package.json
+// `dependencies` stays `{}` per L4 — the plan's own text names build-time vendoring, and
+// `bun build --compile` bundles it into the single binary same as any other source module; a
+// standalone-binary size probe showed a negligible delta against the ~90 MB bun-runtime baseline,
+// so the checked-in-browser-dist fallback this header used to flag as a contingency was not
+// needed). Layout still happens at RENDER time in TypeScript — positions are baked into the
+// static SVG, nothing runs in-browser, so the "self-contained, no CDN" CSP property is unaffected.
+//
+// DETERMINISM: dagre's layered layout is insertion-order-sensitive (verified empirically — feeding
+// the same logical graph in a different node/edge insertion order moved node positions). Byte-
+// identical renders (asserted in test/render/site.test.ts) therefore require a canonical,
+// content-derived insertion order, not upstream array order: `edgeRefs` and `buildDagreGraph`
+// below sort node ids and edge endpoints before ever calling into dagre. See
+// test/render/dag.test.ts's shuffled-input-order property test for the proof.
 
-import { isNodeAvailable, requiredIds } from "../graph/query-shared";
+import dagre from "dagre";
+import { isNodeAvailable } from "../graph/query-shared";
 import { computeTaintTrace, type TaintEntry } from "../graph/query-taint";
 import type { GraphDocument, RegistryNode } from "../graph/types";
 import { esc } from "./html";
 import { effectivePresentation } from "./styling";
 import { nodePanelId } from "./node-view";
 
-const COL = 210;
-const ROW = 66;
-const NW = 168;
-const NH = 34;
+const NODE_W = 168;
+const NODE_H = 34;
+const RANKSEP = 42; // gap between rank (layer) columns — modest, matches the old column gap
+const NODESEP = 32; // gap between nodes within the same rank — modest, matches the old row gap
 const PAD = 16;
 
-/** Longest-path layering: a node's layer is 1 + the max layer of its requirements (deps + route
- * members, via query-shared.ts's requiredIds), so every node sits strictly below all it depends
- * on. Memoized depth-first, cycle-safe (an in-progress revisit degrades to layer 0 rather than
- * looping — acyclicity is Gate 2's job, not this view's to assume). A requirement id absent from
- * the document contributes no depth (referential integrity is validate.ts's job). */
-export function computeLayers(doc: GraphDocument): Map<string, number> {
+interface DagEdgeRef {
+  from: string;
+  to: string;
+  kind: "and" | "or";
+}
+
+/** Every requirement -> dependent precedence pair (an AND-dep, or an OR-route member), sorted by
+ * (to, kind, from) so the SAME logical graph yields the SAME edge list regardless of the order
+ * doc.nodes / a node's deps / a node's routes happen to be built in. Kept per-occurrence (not
+ * deduped) so a requirement referenced from multiple route slots still draws every line, matching
+ * the pre-dagre behaviour. A requirement id absent from the document contributes no edge
+ * (referential integrity is validate.ts's job, same as before). */
+function edgeRefs(doc: GraphDocument): DagEdgeRef[] {
   const byId = new Map(doc.nodes.map((nd) => [nd.id, nd]));
-  const layer = new Map<string, number>();
-  const inProgress = new Set<string>();
-
-  function resolve(id: string): number {
-    const cached = layer.get(id);
-    if (cached !== undefined) return cached;
-    if (inProgress.has(id)) return 0;
-    const nd = byId.get(id);
-    if (!nd) return 0;
-    inProgress.add(id);
-    let max = -1;
-    for (const req of requiredIds(nd)) {
-      if (byId.has(req)) max = Math.max(max, resolve(req));
+  const refs: DagEdgeRef[] = [];
+  for (const nd of doc.nodes) {
+    for (const d of nd.deps) if (byId.has(d)) refs.push({ from: d, to: nd.id, kind: "and" });
+    for (const route of nd.routes) {
+      for (const m of route) if (byId.has(m)) refs.push({ from: m, to: nd.id, kind: "or" });
     }
-    inProgress.delete(id);
-    const value = max + 1;
-    layer.set(id, value);
-    return value;
   }
+  refs.sort((a, b) =>
+    a.to !== b.to ? a.to.localeCompare(b.to) : a.kind !== b.kind ? a.kind.localeCompare(b.kind) : a.from.localeCompare(b.from),
+  );
+  return refs;
+}
 
-  for (const nd of doc.nodes) resolve(nd.id);
+/** Builds a dagre graph deterministically: nodes are inserted in sorted-id order, edges in the
+ * order `edgeRefs` already canonicalised (deduped here since dagre's ranker only needs one edge
+ * per precedence pair — the per-occurrence list is for drawing, not layout). */
+function buildDagreGraph(doc: GraphDocument, refs: DagEdgeRef[]): dagre.graphlib.Graph {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "LR", nodesep: NODESEP, ranksep: RANKSEP, marginx: PAD, marginy: PAD });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const id of [...doc.nodes.map((nd) => nd.id)].sort()) g.setNode(id, { width: NODE_W, height: NODE_H });
+  const seen = new Set<string>();
+  for (const r of refs) {
+    const key = `${r.from} ${r.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    g.setEdge(r.from, r.to);
+  }
+  return g;
+}
+
+/** A node's layer: its rank in dagre's layered layout (0-based, left-to-right), derived from the
+ * laid-out x-coordinate (rankdir "LR" places rank on the x-axis). Cycle-safe: dagre's own acyclic
+ * step temporarily reverses back-edges before ranking and restores them after, so a cyclic input
+ * (acyclicity is Gate 2's job, not this view's to assume) still lays out without throwing.
+ *
+ * Semantics note: this is no longer the old pure longest-path-from-sources (ASAP) ranking — dagre
+ * pulls a node with no predecessors toward its consumer to shorten edges (ALAP-ish), so an
+ * isolated leaf feeding only a late node may land at a LATER layer than a leaf feeding an early
+ * one. The one invariant that IS still guaranteed (and is the only one validity depends on): a
+ * node's layer is always strictly greater than every one of its requirements' layers. */
+export function computeLayers(doc: GraphDocument): Map<string, number> {
+  const layer = new Map<string, number>();
+  if (doc.nodes.length === 0) return layer;
+  const refs = edgeRefs(doc);
+  const g = buildDagreGraph(doc, refs);
+  dagre.layout(g);
+  const xs = [...new Set(g.nodes().map((id) => Math.round(g.node(id).x)))].sort((a, b) => a - b);
+  const rankOf = new Map(xs.map((x, i) => [x, i]));
+  for (const id of g.nodes()) layer.set(id, rankOf.get(Math.round(g.node(id).x))!);
   return layer;
 }
 
@@ -61,21 +106,6 @@ interface Placed {
   n: RegistryNode;
   cx: number;
   cy: number;
-}
-
-function place(doc: GraphDocument, layers: Map<string, number>): Map<string, Placed> {
-  const rows = new Map<number, RegistryNode[]>();
-  for (const nd of [...doc.nodes].sort((a, b) => a.id.localeCompare(b.id))) {
-    const l = layers.get(nd.id) ?? 0;
-    (rows.get(l) ?? rows.set(l, []).get(l)!).push(nd);
-  }
-  const placed = new Map<string, Placed>();
-  for (const [l, group] of rows) {
-    group.forEach((nd, i) => {
-      placed.set(nd.id, { n: nd, cx: PAD + l * COL + NW / 2, cy: PAD + i * ROW + NH / 2 });
-    });
-  }
-  return placed;
 }
 
 function edge(from: Placed, to: Placed, kind: "and" | "or"): string {
@@ -88,8 +118,8 @@ function edge(from: Placed, to: Placed, kind: "and" | "or"): string {
 
 function nodeSvg(p: Placed, hasConflict: boolean, taint: TaintEntry["taint"]): string {
   const st = effectivePresentation(p.n.status, hasConflict, taint);
-  const x = p.cx - NW / 2;
-  const y = p.cy - NH / 2;
+  const x = p.cx - NODE_W / 2;
+  const y = p.cy - NODE_H / 2;
   // Effective rigour drives the visual class, not the raw declared status (M2 boundary review
   // blocker #1) — a defect gets ITS OWN class, never silently folded into "non-rigorous".
   const rigCls = st.isDefect ? "rk-dag-defect" : st.rigorous ? "rk-dag-rigorous" : "rk-dag-nonrigorous";
@@ -102,7 +132,7 @@ function nodeSvg(p: Placed, hasConflict: boolean, taint: TaintEntry["taint"]): s
   const tierWord = st.isDefect ? " (defect: see title)" : st.rigorous ? " (rigorous)" : " (not rigorous)";
   return (
     `<a href="#${esc(nodePanelId(p.n.id))}" class="rk-dag-node ${rigCls}">` +
-    `<rect x="${x}" y="${y}" width="${NW}" height="${NH}" rx="5" fill="${st.colour}" ` +
+    `<rect x="${x}" y="${y}" width="${NODE_W}" height="${NODE_H}" rx="5" fill="${st.colour}" ` +
     `stroke="#111" stroke-width="${strokeW}" ${dash}style="${avail}"/>` +
     `<text x="${p.cx}" y="${p.cy + 4}" text-anchor="middle" fill="#fff">${esc(label)}</text>` +
     `<title>${esc(p.n.id)} — ${esc(st.label)}${tierWord}</title>` +
@@ -110,54 +140,48 @@ function nodeSvg(p: Placed, hasConflict: boolean, taint: TaintEntry["taint"]): s
   );
 }
 
-/** Renders the whole DAG as one inline SVG. Straight-line edges (AND solid grey, OR dashed purple)
- * drawn first, rigour-coloured node boxes on top, each a hash link to its drill-down panel.
- * `taint` (optional) is the doc-wide taint trace — pass the one `render/site.ts` already computed
- * once per render; recomputed when omitted so existing call sites keep working. */
+/** Renders the whole DAG as one inline SVG, laid out by dagre (crossing-minimising layered
+ * layout; see the file header for the vendoring rationale and the determinism argument). Edges
+ * (AND solid grey, OR dashed purple) drawn first, rigour-coloured node boxes on top, each a hash
+ * link to its drill-down panel. `taint` (optional) is the doc-wide taint trace — pass the one
+ * `render/site.ts` already computed once per render; recomputed when omitted so existing call
+ * sites keep working. */
 export function renderDag(doc: GraphDocument, taint?: ReadonlyMap<string, TaintEntry>): string {
   if (doc.nodes.length === 0) return `<p class="rk-none">no nodes to graph.</p>`;
-  const layers = computeLayers(doc);
-  const placed = place(doc, layers);
+  const refs = edgeRefs(doc);
+  const g = buildDagreGraph(doc, refs);
+  dagre.layout(g);
+
+  const byId = new Map(doc.nodes.map((nd) => [nd.id, nd]));
+  const placed = new Map<string, Placed>();
+  for (const id of [...doc.nodes.map((nd) => nd.id)].sort()) {
+    const pos = g.node(id);
+    placed.set(id, { n: byId.get(id)!, cx: pos.x, cy: pos.y });
+  }
+
   const t = taint ?? computeTaintTrace(doc);
   const conflicted = new Set(doc.conflicts.map((c) => c.nodeId).filter((id): id is string => id !== undefined));
 
-  const edges: string[] = [];
-  for (const nd of doc.nodes) {
-    const to = placed.get(nd.id)!;
-    for (const d of nd.deps) {
-      const from = placed.get(d);
-      if (from) edges.push(edge(from, to, "and"));
-    }
-    for (const route of nd.routes) {
-      for (const m of route) {
-        const from = placed.get(m);
-        if (from) edges.push(edge(from, to, "or"));
-      }
-    }
-  }
-
+  const edges = refs
+    .map((r) => {
+      const from = placed.get(r.from);
+      const to = placed.get(r.to);
+      return from && to ? edge(from, to, r.kind) : "";
+    })
+    .join("");
   const nodes = [...placed.values()]
     .map((p) => nodeSvg(p, conflicted.has(p.n.id), t.get(p.n.id)?.taint ?? "clean"))
     .join("");
-  const maxLayer = Math.max(0, ...[...layers.values()]);
-  const maxRow = Math.max(1, ...[...countRows(doc, layers).values()]);
-  const width = PAD * 2 + (maxLayer + 1) * COL;
-  const height = PAD * 2 + maxRow * ROW;
+
+  const gAttrs = g.graph();
+  const width = gAttrs.width ?? PAD * 2 + NODE_W;
+  const height = gAttrs.height ?? PAD * 2 + NODE_H;
 
   return (
     `<div class="rk-dag-legend rk-muted">solid box + thick border = rigorous; dashed = not; ` +
     `red dashed outline = declared status contradicted by conflict/taint (defect). ` +
     `Grey line = AND-dep; purple dashed = OR-route. Click a node to drill down.</div>` +
     `<div style="overflow:auto"><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ` +
-    `role="img" aria-label="AND/OR dependency graph">${edges.join("")}${nodes}</svg></div>`
+    `role="img" aria-label="AND/OR dependency graph">${edges}${nodes}</svg></div>`
   );
-}
-
-function countRows(doc: GraphDocument, layers: Map<string, number>): Map<number, number> {
-  const counts = new Map<number, number>();
-  for (const nd of doc.nodes) {
-    const l = layers.get(nd.id) ?? 0;
-    counts.set(l, (counts.get(l) ?? 0) + 1);
-  }
-  return counts;
 }

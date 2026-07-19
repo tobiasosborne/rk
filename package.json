@@ -8,5 +8,8 @@
   "scripts": {
     "test": "bun test",
     "selftest": "bun run scripts/selftest.ts"
+  },
+  "devDependencies": {
+    "dagre": "^0.8.5"
   }
 }
