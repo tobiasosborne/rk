@@ -1,0 +1,149 @@
+// PURITY: pure — no fs/network/clock (L3). THE single source of truth for how an rk render maps a
+// rigour-ladder status (PRD §5) to visual identity. Every surface — the dashboard status counts,
+// a node drill-down badge, the DAG node fill, the legend, the inline CSS — reads status -> class/
+// label/colour/tier from HERE and nowhere else. This is the WP's reason to exist (PRD C6): "the
+// renderer is itself a trust surface: a bug that paints a `stated` node with `proved` styling
+// defeats the whole artifact silently." Concentrating the map in one module makes that class of
+// bug a single-file, corpus-covered edit rather than a drift spread across templates.
+//
+// Two invariants are load-bearing and pinned by test/render/styling.test.ts +
+// corpus/render/rigour-ladder:
+//   1. The rigorous/non-rigorous partition equals PRD §5's "rigorous" column EXACTLY
+//      (cited/proved/consensus rigorous; everything else not) — encoded in `RIGOROUS_STATUSES`.
+//   2. A non-rigorous status NEVER shares a `tierClass` or a `colour` with a rigorous one, so
+//      "is this claim actually rigorous" is answerable from the emitted markup alone.
+
+import { RIGOUR_STATUSES, type RigourStatus } from "../graph/types";
+
+/** The tier class is a two-valued partition stamped on every rendered node; a reader (or a test)
+ * can answer "is this claim rigorous?" from the class list alone, never needing to re-derive it
+ * from the status string. Kept deliberately coarse (exactly two values) — the per-status class
+ * carries the finer identity. */
+export const RIGOROUS_TIER_CLASS = "rk-rigorous";
+export const NONRIGOROUS_TIER_CLASS = "rk-nonrigorous";
+
+/** PRD §5's "rigorous" column, verbatim: only these three statuses are rigorous. `proved-mod-audit`
+ * (paper-proved, not re-verified here), `numerical` (a permanent ceiling), and the frontier/
+ * graveyard statuses are all explicitly NOT rigorous. */
+export const RIGOROUS_STATUSES: ReadonlySet<RigourStatus> = new Set<RigourStatus>([
+  "cited", "proved", "consensus",
+]);
+
+export function isRigorous(status: RigourStatus): boolean {
+  return RIGOROUS_STATUSES.has(status);
+}
+
+export interface StatusStyle {
+  status: RigourStatus;
+  /** Unique per-status CSS class (`rk-s-<status>`) — the fine-grained visual identity. */
+  cssClass: string;
+  /** Coarse two-valued tier class (`RIGOROUS_TIER_CLASS` | `NONRIGOROUS_TIER_CLASS`). */
+  tierClass: string;
+  rigorous: boolean;
+  /** Human-readable badge/legend label (ASCII only — CLAUDE.md rule 6, no emoji). */
+  label: string;
+  /** Fill/accent colour. Rigorous statuses draw from a palette disjoint from the non-rigorous
+   * one (invariant 2 above), so no non-rigorous node can ever borrow a rigorous colour. */
+  colour: string;
+  /** One-line meaning, straight from PRD §5 — shown in the legend and node panel. */
+  meaning: string;
+}
+
+function mk(
+  status: RigourStatus, label: string, colour: string, meaning: string,
+): StatusStyle {
+  return {
+    status,
+    cssClass: `rk-s-${status}`,
+    tierClass: isRigorous(status) ? RIGOROUS_TIER_CLASS : NONRIGOROUS_TIER_CLASS,
+    rigorous: isRigorous(status),
+    label,
+    colour,
+    meaning,
+  };
+}
+
+// Rigorous palette: blues/greens/teal. Non-rigorous palette: ambers/purples/greys/reds. The two
+// sets share no colour (test/render/styling.test.ts asserts it), so a rigorous fill can never be
+// reused for a non-rigorous status by a copy-paste slip.
+export const STATUS_STYLES: Record<RigourStatus, StatusStyle> = {
+  cited: mk("cited", "cited", "#1d4ed8", "byte-matched to a hashed local source (C7)"),
+  proved: mk("proved", "proved", "#15803d", "af-validated: root validated, taint clean"),
+  consensus: mk("consensus", "consensus", "#0f766e", "recorded human sign-off"),
+  "proved-mod-audit": mk("proved-mod-audit", "proved (mod audit)", "#b45309", "paper-proved, not yet re-verified here"),
+  stated: mk("stated", "stated", "#a16207", "honestly labeled non-result"),
+  conjecture: mk("conjecture", "conjecture", "#9333ea", "honestly labeled non-result"),
+  heuristic: mk("heuristic", "heuristic", "#7c3aed", "honestly labeled non-result"),
+  numerical: mk("numerical", "numerical", "#c2410c", "evidence bundle with invariant; a ceiling, never a rung"),
+  open: mk("open", "open", "#64748b", "frontier: not yet attempted or in progress"),
+  obstruction: mk("obstruction", "obstruction", "#b91c1c", "graveyard: a recorded barrier"),
+  disproved: mk("disproved", "disproved", "#7f1d1d", "graveyard: shown false"),
+};
+
+export function statusStyle(status: RigourStatus): StatusStyle {
+  return STATUS_STYLES[status];
+}
+
+/** The style for a node whose `status` frontmatter field is absent — rendered as its own visibly
+ * distinct "unset" identity, NEVER silently folded into any real status (that would be the exact
+ * truthfulness failure this module exists to prevent). Not part of the rigour ladder, so it is not
+ * in `STATUS_STYLES`; kept here so every surface renders "unset" identically. */
+export const UNSET_STYLE = {
+  cssClass: "rk-s-unset",
+  tierClass: NONRIGOROUS_TIER_CLASS,
+  rigorous: false,
+  label: "unset",
+  colour: "#94a3b8",
+  meaning: "no status declared on this shard",
+} as const;
+
+/** Resolves a possibly-absent status to a renderable style — the ONE place "unset" is decided, so
+ * no caller ever defaults an absent status to a rigorous one. */
+export function styleForOptional(status: RigourStatus | undefined): {
+  cssClass: string; tierClass: string; rigorous: boolean; label: string; colour: string; meaning: string;
+} {
+  return status === undefined ? UNSET_STYLE : statusStyle(status);
+}
+
+/** CSS rules for every status class + the two tier classes — generated FROM the map above, so the
+ * stylesheet and the class names a node carries can never disagree. Inlined into the site's
+ * `<style>` (CSP-safe, no external sheet). */
+export function renderStatusCss(): string {
+  const rules: string[] = [];
+  for (const s of RIGOUR_STATUSES) {
+    const st = statusStyle(s as RigourStatus);
+    rules.push(`.${st.cssClass}{--rk-status-colour:${st.colour};}`);
+  }
+  rules.push(`.${UNSET_STYLE.cssClass}{--rk-status-colour:${UNSET_STYLE.colour};}`);
+  rules.push(`.${RIGOROUS_TIER_CLASS} .rk-badge{border-left:4px solid var(--rk-status-colour);}`);
+  rules.push(`.${NONRIGOROUS_TIER_CLASS} .rk-badge{border-left:4px dashed var(--rk-status-colour);}`);
+  return rules.join("\n");
+}
+
+/** The rigour-ladder legend as an HTML fragment: one row per status naming its swatch (coloured
+ * from the map), class, label, tier word, and meaning. Rendered on the dashboard so a reader can
+ * decode every node colour without leaving the page. Rigorous rows are grouped before
+ * non-rigorous ones and labelled as such. */
+export function renderLegend(): string {
+  const rows = (title: string, statuses: RigourStatus[]): string => {
+    const items = statuses.map((s) => {
+      const st = statusStyle(s);
+      return (
+        `<li class="rk-legend-item ${st.tierClass} ${st.cssClass}">` +
+        `<span class="rk-swatch" style="background:${st.colour}"></span>` +
+        `<span class="rk-legend-label">${st.label}</span>` +
+        `<span class="rk-legend-meaning">${st.meaning}</span>` +
+        `</li>`
+      );
+    }).join("");
+    return `<div class="rk-legend-group"><h4>${title}</h4><ul>${items}</ul></div>`;
+  };
+  const rigorous = RIGOUR_STATUSES.filter(isRigorous);
+  const nonrigorous = RIGOUR_STATUSES.filter((s) => !isRigorous(s));
+  return (
+    `<div class="rk-legend">` +
+    rows("rigorous (PRD §5)", rigorous) +
+    rows("not rigorous", nonrigorous) +
+    `</div>`
+  );
+}

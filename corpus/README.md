@@ -435,6 +435,22 @@ cannot silently collapse two real conflicts into one entry either. This is the e
 auto-resolved" acceptance line, run through the real `build-graph.ts` -> `assemble.ts` ->
 `validate.ts` pipeline for all four closed `ConflictKind`s.
 
+## Render fixtures (M2.4) — a third distinct harness, the rendering-truthfulness corpus
+
+`corpus/render/` holds the **rendering-truthfulness** fixtures PRD C6 mandates ("the renderer is
+itself a trust surface ... one node per status, asserted against emitted markup"). Same footing as
+`corpus/graph/`: a distinct harness, NOT `src/corpus/run.ts`'s six-gate `Gate` runner (there is no
+`Finding[]`/verdict to compare — the output is HTML markup), so these are not discovered by the
+gate runner and do NOT count toward `bun run selftest`'s `checked corpus: N/N gate fixtures` line.
+Each gets a hand-written `test/render/` test. The fixture is a valid canonical `GraphDocument`
+(`graph.json`, generated through `computeExpectedConflicts` + `validateGraphDocument` so it is
+self-consistent by construction), not a `repo/` tree — the render core (src/render/) consumes a
+projected `GraphDocument`, one join layer above the store readers.
+
+| fixture id | harness | what it proves | status |
+|---|---|---|---|
+| `render/rigour-ladder` | `test/render/corpus-rigour-ladder.test.ts` | One node per rigour-ladder status (PRD §5: cited, proved, consensus, proved-mod-audit, stated, conjecture, heuristic, numerical, open, obstruction, disproved) plus taint (`n-tainted`), conflict (`n-conflict`, contract-mismatch), and unresolved-workspace (`n-orphan`) cases. Each node's drill-down panel (`src/render/node-view.ts`) is rendered and asserted against EMITTED MARKUP: the node badge carries that status's own `rk-s-<status>` class and label, the correct rigour tier class (`rk-rigorous` for cited/proved/consensus ONLY, `rk-nonrigorous` for the rest — PRD §5's rigorous column verbatim), and NO other status's class. The load-bearing assertion is the exact forbidden case — a `stated` node is never painted with `proved`'s class or the rigorous tier. Taint/conflict/unresolved render as first-class `rk-defect` markup, never hidden. Styling flows from the ONE source of truth `src/render/styling.ts` (`STATUS_STYLES`/`RIGOROUS_STATUSES`). Mutation-proven red-first two ways: (a) adding `stated` to `RIGOROUS_STATUSES` turns the forbidden-case test red; (b) making `styleForOptional` map `stated`->`proved` turns the per-status and forbidden-case tests red; reverted after confirming. `test/render/styling.test.ts` additionally pins the map's invariants directly (distinct classes, disjoint rigorous/non-rigorous colour+tier partition). | landed |
+
 ## Empty-directory fixtures (rk-399)
 
 Git cannot store an empty directory, but two contract checks turn on directory existence

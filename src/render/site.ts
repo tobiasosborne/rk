@@ -1,0 +1,102 @@
+// PURITY: pure — no fs/network/clock (L3). Assembles the self-contained static site (PRD C6): one
+// index.html carrying inline CSS + inline JS, a dashboard, an AND/OR DAG, and a pre-rendered
+// drill-down panel for every registry node. No server, no external CDN, no timestamps — CSP-safe
+// and deterministic (the same GraphDocument renders byte-identically, matching the canonical-
+// serializer discipline src/graph/serialize.ts set). The edge (src/cli/render.ts) writes
+// `files[].path` under the output dir; the core never touches fs.
+//
+// Drill-down state in a no-server page is the WP's budgeted hard problem. The chosen mechanism is
+// deliberately boring and testable: every top-level view (dashboard, dag, each node panel) is a
+// pre-rendered `.rk-route-target` section; a ~12-line inline hash router shows the one matching
+// `location.hash` and hides the rest. No framework, no fetch, no build step — a `#node-<id>` link
+// anywhere (dashboard, dep list, conflict row) just works.
+
+import { computeTaintTrace } from "../graph/query-taint";
+import type { GraphDocument } from "../graph/types";
+import { renderDashboard } from "./dashboard";
+import { renderDag } from "./dag";
+import { esc } from "./html";
+import { nodePanelId, renderNodePanel } from "./node-view";
+import { renderStatusCss } from "./styling";
+
+export interface RenderedFile {
+  path: string;
+  contents: string;
+}
+export interface RenderedSite {
+  files: RenderedFile[];
+}
+export interface RenderSiteOptions {
+  northStarId?: string;
+  /** Shown in the header only — NOT part of node identity, so it never affects determinism of a
+   * node's own markup. */
+  title?: string;
+}
+
+const BASE_CSS = `
+:root{color-scheme:light dark;--rk-fg:#111;--rk-bg:#fff;--rk-muted:#555;--rk-line:#ddd;--rk-defect:#b91c1c;--rk-ok:#15803d;}
+@media (prefers-color-scheme:dark){:root{--rk-fg:#e8e8e8;--rk-bg:#161616;--rk-muted:#aaa;--rk-line:#333;}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--rk-fg);background:var(--rk-bg)}
+header{padding:.6rem 1rem;border-bottom:1px solid var(--rk-line);position:sticky;top:0;background:var(--rk-bg);z-index:2}
+header a{margin-right:1rem;text-decoration:none;color:inherit;font-weight:600}
+main{padding:1rem;max-width:70rem;margin:0 auto}
+h1{font-size:1.2rem;margin:0}
+h2{font-size:1.05rem;border-bottom:1px solid var(--rk-line);padding-bottom:.2rem;margin-top:1.6rem}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:.25rem .5rem;border-bottom:1px solid var(--rk-line)}
+code{background:rgba(127,127,127,.14);padding:0 .2rem;border-radius:3px}
+.rk-swatch{display:inline-block;width:.8rem;height:.8rem;border-radius:2px;margin-right:.35rem;vertical-align:middle}
+.rk-badge{padding:.05rem .45rem;border-radius:3px;background:rgba(127,127,127,.1);font-weight:600}
+.rk-defect{color:var(--rk-defect)}
+.rk-ok{color:var(--rk-ok)}
+.rk-none,.rk-muted{color:var(--rk-muted)}
+.rk-contract{border-left:3px solid var(--rk-line);margin:.5rem 0;padding:.2rem .8rem;color:var(--rk-muted)}
+.rk-tier{font-size:.8rem;color:var(--rk-muted)}
+.rk-legend ul{list-style:none;padding-left:0}
+.rk-legend-item{margin:.15rem 0}
+.rk-legend-meaning{color:var(--rk-muted);margin-left:.4rem;font-size:.9rem}
+.rk-route-target{display:none}
+#dashboard{display:block}
+.rk-dag-node{cursor:pointer}
+.rk-dag text{font:11px sans-serif;fill:var(--rk-fg)}
+`;
+
+// The hash router. Kept tiny and dependency-free — see this file's header. `\\n` avoided; single
+// line to stay clear of any template-literal escaping surprises.
+const ROUTER_JS =
+  "function rkRoute(){var h=(location.hash||'').replace(/^#/,'')||'dashboard';" +
+  "var t=document.querySelectorAll('.rk-route-target');for(var i=0;i<t.length;i++)t[i].style.display='none';" +
+  "var el=document.getElementById(h);if(!el||!el.classList.contains('rk-route-target'))el=document.getElementById('dashboard');" +
+  "if(el)el.style.display='';window.scrollTo(0,0);}" +
+  "window.addEventListener('hashchange',rkRoute);rkRoute();";
+
+function nav(doc: GraphDocument, title: string): string {
+  const nodeLinks = doc.nodes
+    .map((nd) => `<li><a href="#${esc(nodePanelId(nd.id))}">${esc(nd.id)}</a></li>`)
+    .join("");
+  return (
+    `<header><h1>${esc(title)}</h1>` +
+    `<nav><a href="#dashboard">dashboard</a><a href="#dag">DAG</a>` +
+    `<details style="display:inline-block;vertical-align:top"><summary style="cursor:pointer;display:inline">nodes (${doc.nodes.length})</summary>` +
+    `<ul style="position:absolute;background:var(--rk-bg);border:1px solid var(--rk-line);max-height:60vh;overflow:auto;padding:.5rem 1.4rem">${nodeLinks}</ul></details>` +
+    `</nav></header>`
+  );
+}
+
+export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}): RenderedSite {
+  const title = options.title ?? "rk campaign report";
+  const taint = computeTaintTrace(doc);
+  const panels = doc.nodes.map((nd) => renderNodePanel(doc, nd.id, taint.get(nd.id))).join("\n");
+  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId)}</div>`;
+  const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc)}</section>`;
+
+  const contents =
+    `<!doctype html>\n<html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>${esc(title)}</title><style>${BASE_CSS}${renderStatusCss()}</style></head>` +
+    `<body>${nav(doc, title)}<main>${dashboard}${dag}${panels}</main>` +
+    `<script>${ROUTER_JS}</script></body></html>\n`;
+
+  return { files: [{ path: "index.html", contents }] };
+}

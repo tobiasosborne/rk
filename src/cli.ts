@@ -15,6 +15,7 @@ import { phaseCommand } from "./cli/phase";
 import { initCommand, initHelp } from "./cli/init";
 import { upgradeCommand } from "./cli/upgrade";
 import { graphCommand } from "./cli/graph";
+import { renderCommand } from "./cli/render";
 import type { Out } from "./cli/args";
 import { defaultOut, hasHelpFlag } from "./cli/args";
 
@@ -28,6 +29,7 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   init: initCommand,
   upgrade: upgradeCommand,
   graph: graphCommand,
+  render: renderCommand,
 };
 
 // rk-1r6: `-h`/`--help` handling for every subcommand, kept independent of check.ts (out of
@@ -78,6 +80,15 @@ function graphHelp(out: Out): number {
   return 0;
 }
 
+function renderHelp(out: Out): number {
+  out.log("rk render — generate the self-contained HTML campaign site (M2.4, PRD C6)");
+  out.log("  usage: rk render [--out <dir>] [--north-star <id>] [--title <text>] [--root <dir>]");
+  out.log("  --out defaults to build/site (relative to --root). Writes index.html: dashboard,");
+  out.log("  AND/OR DAG, and a drill-down panel per node. No server, no CDN; open the file directly.");
+  out.log("  next: 'rk render' in a stamped repo, then open build/site/index.html.");
+  return 0;
+}
+
 const HELP: Record<string, (out: Out) => number> = {
   refs: refsHelp,
   check: checkHelp,
@@ -86,6 +97,7 @@ const HELP: Record<string, (out: Out) => number> = {
   init: initHelp,
   upgrade: upgradeHelp,
   graph: graphHelp,
+  render: renderHelp,
 };
 
 function topHelp(out: Out): number {
@@ -97,6 +109,7 @@ function topHelp(out: Out): number {
   out.log("  rk check --selftest [--root <dir>]  run rk's own red-fixture corpus (default <root>/corpus)");
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
+  out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  every subcommand accepts -h/--help for its own usage (side-effect-free, exits 0).");
   out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");
