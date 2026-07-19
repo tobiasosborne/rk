@@ -90,6 +90,12 @@ function verifyHelp(out: Out): number {
   out.log("  workspace to convergence with the prover-overreach/stuck/retry guardrails and the");
   out.log("  balloon feedback loop (bd task / mandatory-review mark on a ballooned contract).");
   out.log("  next: 'rk verify --af <id> --dry-run' with a real registry id (see argument/**/*.md).");
+  out.log("  usage: rk verify --report [--baseline <memo.json>] [--root <dir>] (M3.9, PRD C9)");
+  out.log("  --report reads .rk/driver-log.jsonl and prints tokens/calls/cache-fraction/verdicts/");
+  out.log("  balloons per node, claim, and campaign; honest 'never measured' if the log is absent or");
+  out.log("  carries zero usage records. --baseline compares against M3.5's future baseline memo");
+  out.log("  ({lemma, tokens, calls}[]) for SC4; omitted, it prints the honest caveat, never a");
+  out.log("  fabricated ratio.");
   return 0;
 }
 
