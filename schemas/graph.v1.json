@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/graph.v1.json",
+  "title": "rk unified projection graph document (v1)",
+  "description": "Read-only, deterministic, stateless projection of one rk research campaign (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry (argument/**/*.md shards) is the spine (`nodes`); the other three stores — af, bd, fr — and the generated report join to it by DIFFERENT keys per edge (`edges.af` / `edges.bd` / `edges.fr` / `edges.report`) — there is no universal join key, do not invent one. `unresolved` is a first-class bucket every edge kind's failed lookups land in (never a silent drop). `conflicts` is a first-class defect record (registry-vs-af disagreement, contract mismatch, taint-vs-status inconsistency, fr banked-without-oracle); M2.3 populates it, this schema only reserves the shape. See docs/memos/2026-07-19-graph-schema-v1.md for the design rationale and src/graph/{types,serialize,validate}.ts for the TS mirror + canonical serializer + structural validator (this JSON Schema alone cannot express referential integrity, unresolved-bucket completeness, or canonical sort order — those are src/graph/validate.ts's job).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "nodes", "edges", "unresolved", "conflicts"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Consumers must check this before parsing the rest of the document; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Mirrors the convention set by ../vibefeld's `af export --graph json` (docs/export-graph-v1.md)."
+    },
+    "nodes": {
+      "type": "array",
+      "description": "The registry spine, one entry per argument/**/*.md shard. MUST be sorted by `id` ascending in the canonical form (src/graph/serialize.ts) — this is part of the document's identity, not a rendering nicety.",
+      "items": { "$ref": "#/$defs/registryNode" }
+    },
+    "edges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["af", "bd", "fr", "report"],
+      "description": "The four per-edge joins (PRD C5 table). Each array's canonical sort order is defined in src/graph/serialize.ts, not here.",
+      "properties": {
+        "af": {
+          "type": "array",
+          "description": "registry↔af: contract byte-match, LOCATED VIA the shard's `workspace:` field (never the registry id — workspace directories can be renamed independently of the registry id; see ../vibefeld/docs/export-graph-v1.md's `workspace.id` note). Known hazard: workspace dir ≠ id after a rename (legal) — keyed on `workspace:`, always.",
+          "items": { "$ref": "#/$defs/afEdge" }
+        },
+        "bd": {
+          "type": "array",
+          "description": "registry↔bd: registry id IS the bd issue key (linker-synced issues). No known hazard.",
+          "items": { "$ref": "#/$defs/bdEdge" }
+        },
+        "fr": {
+          "type": "array",
+          "description": "registry↔fr: `evidence.artifact` path resolution + `graduates`/oracle ids. Known hazard: free-text paths — expect a real unresolved-reference bucket, never silently dropped.",
+          "items": { "$ref": "#/$defs/frEdge" }
+        },
+        "report": {
+          "type": "array",
+          "description": "registry↔report: shard label/id anchors (as check-provenance.py's own anchor resolution does today). Known hazard: anchors are ids, not contracts.",
+          "items": { "$ref": "#/$defs/reportEdge" }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "description": "The first-class unresolved-reference bucket (PRD C5): every edge kind's failed lookups land here, `(edge, ref)`-keyed. A consumer must be able to answer \"what did rk try to join and fail\" from this array alone, without re-deriving it from the edge arrays' `resolved` flags.",
+      "items": { "$ref": "#/$defs/unresolvedRef" }
+    },
+    "conflicts": {
+      "type": "array",
+      "description": "First-class defect records — registry-status vs af-epistemic-state disagreement, contract byte-mismatch, taint vs status inconsistency, fr banked-claim without oracle verdict. M2.3 populates these; this schema (M2.1) only reserves the shape. Conflicts are rendered, never auto-resolved.",
+      "items": { "$ref": "#/$defs/conflictRecord" }
+    }
+  },
+  "$defs": {
+    "registryKind": {
+      "enum": ["lemma", "proposition", "theorem", "corollary", "open-problem", "obstruction"]
+    },
+    "rigourStatus": {
+      "enum": [
+        "cited", "proved", "consensus", "proved-mod-audit", "stated", "conjecture", "heuristic",
+        "numerical", "open", "obstruction", "disproved"
+      ]
+    },
+    "afFlag": {
+      "enum": ["none", "seeded", "validated"]
+    },
+    "balloonClassification": {
+      "enum": ["missing-fact", "dag-dep", "genuine-gap"]
+    },
+    "balloonCounter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "classifications"],
+      "description": "Reserved (PRD C9 / M3.6 balloon feedback loop): present and zero-valued from M2.1 on, populated only once M3.6 lands.",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "classifications": { "type": "array", "items": { "$ref": "#/$defs/balloonClassification" } }
+      }
+    },
+    "registryNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "path", "contract", "af", "deps", "routes", "defs", "balloons"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/registryKind" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "repo-relative path to this shard's own file. Never a join key itself — `id` and `workspace` are."
+        },
+        "status": { "$ref": "#/$defs/rigourStatus" },
+        "contract": { "type": "string" },
+        "owner": { "type": "string" },
+        "workspace": {
+          "type": "string",
+          "description": "THE join key into af. Raw `workspace:` frontmatter value, e.g. \"proofs/lem-x\". Absent iff the shard never declared one. NEVER assumed equal to `id` — see edges.af's description and the rename-hazard note above."
+        },
+        "af": { "$ref": "#/$defs/afFlag" },
+        "deps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "AND-edges: registry ids. Semantically a SET — canonical order is sorted, not insertion order."
+        },
+        "routes": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string" } },
+          "description": "OR-groups: each inner array is one route (AND); the outer array is the disjunction (any one route suffices). `[]` when the shard declares no routes."
+        },
+        "defs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Layer-0 definitions/*.md ids this node cites."
+        },
+        "balloons": { "$ref": "#/$defs/balloonCounter" }
+      }
+    },
+    "afEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "workspace", "resolved"],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "workspace": {
+          "type": "string",
+          "description": "Copied from the owning node's own `workspace:` field — MUST be byte-identical to it (src/graph/validate.ts enforces this cross-check; a drift means a producer re-derived the join key from `id` instead of copying the field, the exact rename-hazard bug class)."
+        },
+        "resolved": {
+          "type": "boolean",
+          "description": "true iff an af export was found for `workspace` AND its contract byte-matched some node's `statement` in that export. false MUST carry a companion entry in the top-level `unresolved` array (edge:\"af\", ref:workspace)."
+        },
+        "afNodeId": { "type": "string", "description": "Which af node's `statement` matched, when resolved (usually \"1\", the root)." },
+        "contractMatch": {
+          "type": "boolean",
+          "description": "Explicit byte-match verdict, independent of `resolved`: a workspace can resolve (an export was found) while its statement no longer matches — that is a CONFLICT (M2.3), not an unresolved reference."
+        },
+        "epistemicState": { "type": "string" },
+        "taintState": { "type": "string" },
+        "nodeCount": { "type": "integer", "minimum": 0 },
+        "afSchemaVersion": {
+          "type": "string",
+          "description": "The af export document's own schema_version (../vibefeld/docs/export-graph-v1.md), echoed for traceability — NOT this document's schema_version."
+        }
+      }
+    },
+    "bdEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "resolved"],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "issueId": { "type": "string" },
+        "status": { "type": "string" },
+        "resolved": { "type": "boolean" }
+      }
+    },
+    "frEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle", "artifact", "resolutionMethod"],
+      "description": "Keyed by fr's own `cycle` (fr's log.jsonl identity), NOT by registry id — one fr cycle resolves to zero or one registry node.",
+      "properties": {
+        "cycle": { "type": "integer", "minimum": 0 },
+        "artifact": { "type": "string", "description": "The free-text `evidence.artifact` value from fr's LogRecord — the known hazard (free-text paths)." },
+        "resolvedNodeId": { "type": "string" },
+        "resolutionMethod": { "enum": ["path", "graduates", "oracle", "unresolved"] },
+        "oracleId": { "type": "string" }
+      }
+    },
+    "reportEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "anchor", "resolved"],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "anchor": { "type": "string", "description": "The report label/id anchor — an id, not a contract." },
+        "resolved": { "type": "boolean" }
+      }
+    },
+    "unresolvedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge", "ref", "reason"],
+      "properties": {
+        "edge": { "enum": ["af", "bd", "fr", "report"] },
+        "ref": { "type": "string", "description": "The raw reference text that failed to resolve — a workspace path (af), a registry id (bd), a free-text artifact string (fr), or an anchor (report)." },
+        "reason": { "type": "string" },
+        "nodeId": { "type": "string", "description": "The registry node this unresolved lookup was attempted FROM, when known." },
+        "sourceCycle": { "type": "integer", "minimum": 0, "description": "fr's own cycle number, when edge==\"fr\"." }
+      }
+    },
+    "conflictRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "edge", "message"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open vocabulary — M2.1 reserves the shape only. Known values as of M2.1 (populated starting M2.3): \"status-mismatch\", \"contract-mismatch\", \"taint-status-mismatch\", \"banked-without-oracle\"."
+        },
+        "edge": { "enum": ["af", "bd", "fr", "report"] },
+        "nodeId": { "type": "string" },
+        "registryValue": { "type": "string" },
+        "otherValue": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}
