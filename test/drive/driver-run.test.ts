@@ -127,6 +127,40 @@ describe("verify cycle — bottom-up convergence with fake accepts", () => {
   });
 });
 
+describe("M3.9: usage logging", () => {
+  test("a turn carrying usage appends a 'usage' record with the claim/contract/node/session identity", () => {
+    const h = harness({
+      workspaces: [ws([node("1.1")])],
+      config: { maxRounds: 1 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0, usage: { input: 10, output: 5, cache_read: 100, cache_creation: 0 } }),
+    });
+    runVerifyDriver(h.deps);
+    const usageLines = h.logs.filter((l) => l.includes('"kind":"usage"')).map((l) => JSON.parse(l));
+    expect(usageLines).toHaveLength(1);
+    expect(usageLines[0]).toEqual({
+      kind: "usage", at: "2026-07-19T00:00:00Z", contractId: "lem-x", claimId: "claim-lem-x", nodeId: "1.1", role: "verifier", sessionId: "s1",
+      usage: { input: 10, output: 5, cache_read: 100, cache_creation: 0 },
+    });
+  });
+
+  test("no usage on the dispatched turn -> no 'usage' record appended (never fabricates a zero)", () => {
+    const h = harness({ workspaces: [ws([node("1.1")])], config: { maxRounds: 1 } }); // default dispatchVerify carries no `usage`
+    runVerifyDriver(h.deps);
+    expect(h.logs.some((l) => l.includes('"kind":"usage"'))).toBe(false);
+  });
+
+  test("usage is logged even when the turn is later discarded (prover overreach) — tokens were spent regardless", () => {
+    const h = harness({
+      workspaces: [ws([node("1.1")])],
+      config: { maxStuckRounds: 1, maxRounds: 1 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" } }, role: "prover", exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } }),
+    });
+    runVerifyDriver(h.deps);
+    expect(h.logs.some((l) => l.includes('"kind":"usage"'))).toBe(true);
+    expect(h.logs.some((l) => l.includes("prover-overreach"))).toBe(true);
+  });
+});
+
 describe("guardrails inside the loop", () => {
   test("a PROVER turn that emits a verdict is discarded + logged, and drives the loop to a stuck abort", () => {
     const h = harness({

@@ -17,6 +17,11 @@
 // (see the WP report's deferred-split list). Batching over hard-tier nodes is likewise deferred:
 // every hard-tier node gets per-node cross-vendor treatment (the correct default), so pass-1
 // `batchEligibleIds` is empty.
+//
+// M3.9 flagged driver-file addition: `verifyOneNode` now appends one `{kind:"usage",...}` line per
+// dispatched turn (when the dispatcher supplies `DispatchedTurn.usage`) — the ONE new record kind
+// this WP adds to this log; every existing kind/shape below is untouched. src/drive/report.ts is
+// the pure reader of the full log, including this new kind.
 
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
 import { deriveBatchId } from "./batch-composer";
@@ -46,6 +51,7 @@ import type { AfWorkspaceView, ApplyReport, FilledVerdictFile, VerdictItemOutcom
 import type { AfParseResult } from "./driver-af";
 import type { BalloonClassification } from "../graph/types";
 import type { Role } from "./vocab";
+import type { WorkerUsage } from "./worker-result";
 
 export interface DriverConfig {
   balloonCap: number;
@@ -62,11 +68,16 @@ export const DEFAULT_DRIVER_CONFIG: DriverConfig = {
 };
 
 /** One dispatched verifier turn's already-parsed result (the injected dispatcher owns the spawn +
- * JSON parse). `raw` is shape (a) worker output; `role` and `exit` mirror the worker contract. */
+ * JSON parse). `raw` is shape (a) worker output; `role` and `exit` mirror the worker contract.
+ * `usage` (M3.9, additive/optional so every pre-existing test harness still type-checks) is the
+ * turn's token accounting, if the dispatcher captured it — logged verbatim to `.rk/driver-log.jsonl`
+ * as a `"usage"` record (src/drive/report.ts's data source) regardless of the turn's eventual
+ * outcome: tokens are spent whether or not the verdict that came back was ever applied. */
 export interface DispatchedTurn {
   raw: unknown;
   role: Role;
   exit: number;
+  usage?: WorkerUsage;
 }
 
 export interface DriverDeps {
@@ -168,6 +179,12 @@ function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): Driv
 function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): { item: AfApplyItem } | { skip: string } {
   const turn = deps.dispatchVerify(node);
   if (turn === undefined) return { skip: "no worker available" };
+  // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,
+  // independent of whether the resulting verdict is ever applied (src/drive/report.ts reads this
+  // "usage" kind; every other kind this loop appends is untouched by this addition).
+  if (turn.usage !== undefined) {
+    deps.appendLog(JSON.stringify({ kind: "usage", at: deps.now(), contractId: deps.contractId, claimId: deps.claimId, nodeId: node.id, role: turn.role, sessionId: deps.identity.sessionId, usage: turn.usage }));
+  }
   const overreach = detectProverOverreach(turn.role, turn.raw);
   if (overreach.discard) {
     deps.appendLog(JSON.stringify({ kind: "prover-overreach", at: deps.now(), node: node.id, reason: overreach.reason }));
