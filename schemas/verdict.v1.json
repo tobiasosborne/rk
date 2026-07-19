@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/verdict.v1.json",
+  "title": "rk worker verdict document (v1)",
+  "description": "The wire contract for `rk verify`'s worker responses (PRD C9, IMPLEMENTATION_PLAN.md M3.1, docs/worker-contract.md section (c)). One document per worker turn/reply; consumed by the M3.7 L5 verdict store (stale-on-edit via `contentHash`) and by `af verdicts apply` (../vibefeld V2, which needs `verifier.identity`/`batchId` for the recorded-and-checkable provenance V1 already added to the af kernel — see ../vibefeld/handoff.md's 2026-07-19 V0/V1 session). additionalProperties:false throughout (the M2 freshness-gate lesson: runtime MUST be able to enforce the full surface, not just the documented shape) — src/drive/verdict-schema.ts is the runtime validator that enforces every constraint this file states, including the ones JSON Schema alone expresses awkwardly (mandatory non-blank justification, discriminated tier shapes).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verifier", "verdicts"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Consumers must check this before parsing the rest of the document; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Mirrors the convention set by schemas/graph.v1.json and ../vibefeld's `af export --graph json`."
+    },
+    "batchId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional. Present iff this verdict document was produced as part of a batch dispatch (PRD C3 / M3.4's batch composer); every item in `verdicts` produced by the same batch call shares this id, mirroring ../vibefeld's `NodeValidated.BatchID`/`ChallengeRaised.BatchID` (both `json:\"batch_id,omitempty\"`) so `af verdicts apply` (V2) can thread one BatchID through a mixed accept/challenge outcome set regardless of per-item result. Absent for a routine single-item (non-batched) turn."
+    },
+    "verifier": { "$ref": "#/$defs/verifierIdentity" },
+    "verdicts": {
+      "type": "array",
+      "description": "One or more per-item verdicts. A worker turn that dispatched items but returns an empty array here is a schema-invalid response per docs/worker-contract.md section (c) (exit 12, not 0) — this schema does not itself enforce non-emptiness (a driver-side check, since 'items were dispatched' is call-context this document alone cannot see), but src/drive/verdict-schema.ts's caller is expected to treat verdicts:[] as suspicious in that context.",
+      "items": { "$ref": "#/$defs/verdictItem" }
+    }
+  },
+  "$defs": {
+    "verifierIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelFamily", "model", "backend", "sessionId"],
+      "description": "Driver-supplied provenance (docs/worker-contract.md section (e)) — recorded and mechanically checkable, NOT adversary-proof (PRD C3 honesty rule, restated exactly at this strength, no further). `modelFamily` feeds the M3.8 cross-vendor rule (promotion to `proved` requires verifier family != prover family for load-bearing claims); it MUST be a normalized value, not a raw model string, so the comparison is a plain inequality check.",
+      "properties": {
+        "modelFamily": {
+          "type": "string",
+          "enum": ["claude", "codex", "gpt", "gemini", "other"],
+          "description": "Normalized vendor/family identity for the M3.8 cross-vendor rule. `other` is the deliberate escape hatch for a future backend not yet named here — closed enum plus an explicit catch-all, not open free text, because this field is a validity-surface comparison key (same rationale as schemas/graph.v1.json's closed afEpistemicState/afTaintState enums)."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The specific model identifier the backend reported (e.g. a full model id string). Free text — this is provenance detail, not a comparison key; `modelFamily` is what M3.8 compares."
+        },
+        "backend": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which registered backend executed this call (the `.rk/config` oracle-registry vocabulary, e.g. 'claude', 'codex', 'human', 'fr' — src/scaffold/config-stub.ts). Distinct from `modelFamily`: two different backends could in principle front the same model family."
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The backend session/conversation id this verdict was produced under (docs/worker-contract.md section (a) — a claude `--resume` session id, or a driver-generated synthetic id for a backend that declared `dispatchModel: \"flat\"` and has no native session concept). Never reused across roles or across an unrelated claim — see the contract doc's role-isolation law."
+        }
+      }
+    },
+    "verdictItem": {
+      "description": "Discriminated on `tier` (docs/worker-contract.md): 'l5' carries a plain VALID/VALID-WITH-CORRECTION/INVALID verdict string; 'hard' carries an accept/challenge object with mandatory challenge detail. Both share itemId/contentHash/justification.",
+      "oneOf": [
+        { "$ref": "#/$defs/verdictItemL5" },
+        { "$ref": "#/$defs/verdictItemHard" }
+      ]
+    },
+    "verdictItemL5": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "tier", "contentHash", "justification", "verdict"],
+      "properties": {
+        "itemId": { "$ref": "#/$defs/itemId" },
+        "tier": { "const": "l5" },
+        "contentHash": { "$ref": "#/$defs/contentHash" },
+        "justification": { "$ref": "#/$defs/justification" },
+        "verdict": {
+          "enum": ["VALID", "VALID-WITH-CORRECTION", "INVALID"],
+          "description": "The rigour ladder's L5 soft-tier verdict (PRD C9 'L5 soft tier'). Closed enum: an unrecognized value is a validity-surface bug, not tolerated free text."
+        }
+      }
+    },
+    "verdictItemHard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "tier", "contentHash", "justification", "verdict"],
+      "properties": {
+        "itemId": { "$ref": "#/$defs/itemId" },
+        "tier": { "const": "hard" },
+        "contentHash": { "$ref": "#/$defs/contentHash" },
+        "justification": { "$ref": "#/$defs/justification" },
+        "verdict": {
+          "description": "Discriminated on `outcome`. PRD C3: 'per item accept | challenge(target, severity, reason), with mandatory per-item justification (no blanket accepts)' — `justification` above satisfies the mandatory-justification half for BOTH outcomes (an accept still carries one); this object's own fields are the challenge's own target/severity/reason detail, additional to (not a substitute for) `justification`.",
+          "oneOf": [
+            { "$ref": "#/$defs/hardAccept" },
+            { "$ref": "#/$defs/hardChallenge" }
+          ]
+        }
+      }
+    },
+    "hardAccept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": { "const": "accept" },
+        "note": {
+          "type": "string",
+          "description": "Optional acceptance note (partial acceptance), mirroring ../vibefeld's `NodeValidated.Note` (`json:\"note,omitempty\"`)."
+        }
+      }
+    },
+    "hardChallenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "target", "severity", "reason"],
+      "properties": {
+        "outcome": { "const": "challenge" },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the challenge targets (an af node id, a specific claim within the item, etc.), mirroring ../vibefeld's `ChallengeRaised.Target`."
+        },
+        "severity": {
+          "enum": ["critical", "major", "minor", "note"],
+          "description": "Mirrors ../vibefeld's `ChallengeSeverity` enum exactly (internal/schema/severity.go) — critical/major block node acceptance there; minor/note do not. Kept byte-identical so a verdict document maps onto `af verdicts apply` (V2) without a translation table."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The challenge's own free-text reason, mirroring ../vibefeld's `ChallengeRaised.Reason`. Distinct from the sibling `justification` field (verdictItemHard level): `reason` explains the challenge itself; `justification` is the mandatory per-item justification PRD C3 requires regardless of outcome."
+        },
+        "category": {
+          "enum": ["gap", "missing", "dependency", "incorrect", "unclear", "other"],
+          "description": "Optional typed classification, mirroring ../vibefeld's `ChallengeCategory` enum (internal/schema/category.go) exactly. Omitted means uncategorized, matching af's own optional-field convention (`json:\"category,omitempty\"`)."
+        }
+      }
+    },
+    "itemId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The registry shard id or af node id this verdict is about (docs/worker-contract.md section (b)'s `item.itemId`)."
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex SHA-256 of the exact content this verdict is bound to (the shard/node content the worker was shown) — hash-binding field. The M3.7 L5 verdict store stales a verdict on any edit that changes this hash for the same itemId; format matches src/gates/sha256.ts / src/refs/hash.ts's existing convention (plain lowercase hex, no algorithm prefix)."
+    },
+    "justification": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MANDATORY per-item justification (PRD C3: 'no blanket accepts'). A blank or whitespace-only string is a validity-surface violation this schema's minLength catches structurally; src/drive/verdict-schema.ts additionally rejects a whitespace-only value (minLength:1 alone would accept a single space)."
+    }
+  }
+}
