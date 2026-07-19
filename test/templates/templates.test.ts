@@ -199,8 +199,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.2.0 for the M1 repair wave's template content changes (rk-huq/rk-19i/rk-gvx/rk-mdx)", () => {
-    expect(manifest.template_version).toBe("1.2.0");
+  test("template_version was bumped to 1.3.0 for the M2.6 freshness-gate constitution update (rk-19i)", () => {
+    expect(manifest.template_version).toBe("1.3.0");
   });
 
   test("definitions/README.md and argument/README.md are stamped, rewritten-whole (rk-o1y)", () => {
@@ -292,8 +292,17 @@ describe("templates / (f) constitution truthfulness (rk-huq, rk-19i)", () => {
     expect(section).toContain("docs/worklog.md");
   });
 
-  test("build/ tamper-checking is hedged as a future capability, not claimed to fail rk check today (rk-19i)", () => {
-    expect(claude).not.toContain("hand-editing a generated file fails `rk check`");
-    expect(claude).toContain("arrives in a later rk release");
+  // rk-19i (M2.6): the freshness gate now exists — the constitution must say so plainly, never
+  // hedge it as a future promise. `rk render` itself (the M2.4 HTML output) may still be absent
+  // from a given binary, which the text is allowed to say; the freshness GATE's own present-tense
+  // behavior (hand-editing a DECLARED generated file fails `rk check` today) must not be hedged.
+  test("freshness-gate behavior is stated as present-tense fact, not hedged as a future capability (rk-19i)", () => {
+    expect(claude).toContain("hand-editing one of those\n> files fails `rk check` today");
+    expect(claude).toContain(".rk/generated.json");
+    expect(claude.toLowerCase()).not.toContain("a freshness check that fails");
+  });
+
+  test("rk render (the HTML rendering command) may still be honestly hedged as not-yet-shipped", () => {
+    expect(claude).toContain("may not exist yet in this binary");
   });
 });

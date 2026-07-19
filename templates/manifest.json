@@ -1,5 +1,5 @@
 {
-  "template_version": "1.2.0",
+  "template_version": "1.3.0",
   "slot_syntax": "{{RK_SLOT_<NAME>}}",
   "unfilled_slot_grep": "\\{\\{RK_SLOT_",
   "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure).",
