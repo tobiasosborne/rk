@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/verdict.v1.json",
+  "title": "rk worker verdict document (v1) — shape (b), the DRIVER-CONSTRUCTED artifact",
+  "description": "Shape (b) of the M3.1 worker contract's two-shape data flow (docs/worker-contract.md's data-flow section; Tier A review landing-blocker 1, 2026-07-19 repair wave). This document is constructed by the DRIVER (src/drive/bind-verdicts.ts's `bindVerdicts`) by injecting itemId/contentHash/tier/batchId/verifier-identity from its own immutable dispatch state into a worker's raw, minimal output (shape (a), which has NO room for any of those fields — see the raw shape's own schema note in src/drive/verdict-raw.ts). Nothing in THIS document's fields is ever taken verbatim from untrusted worker output. This document also sits INSIDE a process-level envelope (`WorkerResult` — src/drive/worker-result.ts: `{exit, usage, rawText}`) that is NOT part of this schema: `exit`/`usage` are process-level facts checked BEFORE this document is even parsed (a nonzero exit or missing output discards the turn before reaching this schema at all — review blocker 7). Exactly one verdict per document under the session/turn dispatch model (blocker 3 / Q5 ruling: a session turn produces exactly one verdict; the batch cap limits TURNS per claim, not verdicts-per-reply). Consumed by the M3.7 L5 verdict store (stale-on-edit via `contentHash`) and by `af verdicts apply` (../vibefeld V2, which needs `verifier`/`batchId` for the recorded-and-checkable provenance V1 already added to the af kernel — see ../vibefeld/handoff.md's 2026-07-19 V0/V1 session, and src/drive/identity.ts's seam encoding for how this document's `verifier` object becomes ../vibefeld's free-text `verified_by`/`raised_by` string). additionalProperties:false throughout (the M2 freshness-gate lesson) — src/drive/verdict-schema.ts is the runtime validator enforcing every constraint here, including the ones expressed only in prose (mandatory non-blank justification, discriminated tier/verdict shapes, the correction-field transition rule).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verifier", "verdicts"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Consumers must check this before parsing the rest of the document; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Mirrors the convention set by schemas/graph.v1.json and ../vibefeld's `af export --graph json`."
+    },
+    "batchId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional. Present iff this verdict document was produced as part of a batch dispatch (PRD C3 / M3.4's batch composer); every document produced under the same batch shares this id, mirroring ../vibefeld's `NodeValidated.BatchID`/`ChallengeRaised.BatchID` (both `json:\"batch_id,omitempty\"`) so `af verdicts apply` (V2) can thread one BatchID through a mixed accept/challenge outcome set regardless of per-item result. Absent for a routine single-item (non-batched) turn. This is a DRIVER-owned field (src/drive/bind-verdicts.ts's `DispatchState.batchId`), never worker output."
+    },
+    "verifier": { "$ref": "#/$defs/verifierIdentity" },
+    "verdicts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "description": "EXACTLY one verdict (review blocker 3): under the session/turn dispatch model, one call = one dispatched item = one verdict. `minItems:1` rejects a call that dispatched an item but returns none (schema-invalid — src/drive/worker-result.ts's `resolveTurn` treats this as a 'parse'/'binding' stage rejection, never an empty success); `maxItems:1` rejects a reply claiming to have verified more than one item in a single turn (the batch cap, M3.4, limits TURNS per claim, not verdicts inside one reply).",
+      "items": { "$ref": "#/$defs/verdictItem" }
+    }
+  },
+  "$defs": {
+    "verifierIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelFamily", "model", "backend", "sessionId"],
+      "description": "Driver-supplied provenance (docs/worker-contract.md section (e)) — recorded and mechanically checkable, NOT adversary-proof (PRD C3 honesty rule, restated exactly at this strength, no further). This entire object is DRIVER-CONSTRUCTED from immutable dispatch state (src/drive/bind-verdicts.ts) — never read from worker output (worker output, shape (a), has no room for any identity field at all).",
+      "properties": {
+        "modelFamily": {
+          "type": "string",
+          "enum": ["claude", "gpt", "gemini"],
+          "description": "Normalized model-LINEAGE identity for the M3.8 cross-vendor rule — a DRIVER-REGISTRY value (`.rk/config`'s backend registry, M3.2), never worker output (review blocker 5: a worker claiming its own family would let the same underlying model report inconsistent or self-serving families, defeating the cross-vendor comparison). Closed to REAL vendor lineages only: `codex` is deliberately absent (it is a backend/product name — OpenAI models fronted by codex have family `gpt`, not a family of their own) and `other` is deliberately absent (a catch-all cannot distinguish one future family from another, which is exactly the false-cross-vendor-independence risk the review flagged). Extending this enum is a schema_version bump plus a fixture (CLAUDE.md rule 10), never a silent string addition. src/drive/identity.ts's `encodeVerifierSeam`/`decodeVerifierSeam` is THE canonical, lossless encoding of this whole object into ../vibefeld's free-text `verified_by`/`raised_by` fields (`family|backend|model|sessionId`) — M3.8 decodes that string back through the same function, never a bespoke parse."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The specific model identifier the backend reported (e.g. a full model id string). Free text — this is provenance detail, not a comparison key; `modelFamily` is what M3.8 compares."
+        },
+        "backend": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which registered backend executed this call (the `.rk/config` oracle-registry vocabulary, e.g. 'claude', 'codex', 'human', 'fr' — src/scaffold/config-stub.ts). Distinct from `modelFamily`: two different backends could in principle front the same model family (this is exactly why `modelFamily` and `backend` are two separate fields, not one — see blocker 5)."
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The backend session/conversation id this verdict was produced under (docs/worker-contract.md section (a) — a claude `--resume` session id, or a driver-generated synthetic id for a backend that declared `dispatchModel: \"flat\"` and has no native session concept). Never reused across roles or across an unrelated claim — mechanically enforced by src/drive/session.ts's `validateSessionRequest`, not prose alone."
+        }
+      }
+    },
+    "verdictItem": {
+      "description": "Discriminated on `tier`, and (for `tier:\"l5\"`) further discriminated on `verdict`: a plain 'l5' item (verdict VALID/INVALID) carries no `correction`; a 'l5' item with `verdict:\"VALID-WITH-CORRECTION\"` REQUIRES one (review blocker 6); a 'hard' item carries an accept/challenge object with mandatory challenge detail. All three share itemId/contentHash/justification.",
+      "oneOf": [
+        { "$ref": "#/$defs/verdictItemL5Plain" },
+        { "$ref": "#/$defs/verdictItemL5Correction" },
+        { "$ref": "#/$defs/verdictItemHard" }
+      ]
+    },
+    "verdictItemL5Plain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "tier", "contentHash", "justification", "verdict"],
+      "properties": {
+        "itemId": { "$ref": "#/$defs/itemId" },
+        "tier": { "const": "l5" },
+        "contentHash": { "$ref": "#/$defs/l5ContentHash" },
+        "justification": { "$ref": "#/$defs/justification" },
+        "verdict": {
+          "enum": ["VALID", "INVALID"],
+          "description": "The rigour ladder's L5 soft-tier verdict, EXCLUDING the correction case (see `verdictItemL5Correction` — a document with verdict VALID-WITH-CORRECTION must carry a `correction` field, so it is a structurally different variant, not an optional addition to this one)."
+        }
+      }
+    },
+    "verdictItemL5Correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "tier", "contentHash", "justification", "verdict", "correction"],
+      "description": "Review blocker 6: 'require structured correction detail for VALID-WITH-CORRECTION and forbid promotion until the corrected bytes are re-bound.' `correction` is REQUIRED here (there is no plain VALID-WITH-CORRECTION without one) — src/drive/bind-verdicts.ts's `correctionRequiresReVerificationBeforePromotion` states the promotion-forbidden rule as a callable code artifact for the M3.7 verdict store (not yet built) to depend on.",
+      "properties": {
+        "itemId": { "$ref": "#/$defs/itemId" },
+        "tier": { "const": "l5" },
+        "contentHash": { "$ref": "#/$defs/l5ContentHash" },
+        "justification": { "$ref": "#/$defs/justification" },
+        "verdict": { "const": "VALID-WITH-CORRECTION" },
+        "correction": { "$ref": "#/$defs/correctionDetail" }
+      }
+    },
+    "correctionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "correctedContentHash"],
+      "description": "Worker-authored content that passes through `bindVerdicts` UNMODIFIED from raw output (shape (a)) — it is not driver-owned, unlike every sibling field on the enclosing verdict item.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What changed, in the worker's own words."
+        },
+        "correctedContentHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hex of the CORRECTED bytes, in the same pinned hash domain as the item's own `contentHash` (see `l5ContentHash`/`hardContentHash`). PROMOTION ON THIS VERDICT IS FORBIDDEN until a fresh dispatch re-verifies against exactly this hash and produces a fresh, re-bound verdict — the original `contentHash` above refers to the PRE-correction bytes, so promoting on the strength of that hash while the corrected bytes were never independently re-checked is exactly the false-freshness failure mode blocker 6 guards against. This is a normative statement for M3.7 (the L5 verdict store, not yet built); this schema only enforces the field's presence and shape."
+        }
+      }
+    },
+    "verdictItemHard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "tier", "contentHash", "justification", "verdict"],
+      "properties": {
+        "itemId": { "$ref": "#/$defs/itemId" },
+        "tier": { "const": "hard" },
+        "contentHash": { "$ref": "#/$defs/hardContentHash" },
+        "justification": { "$ref": "#/$defs/justification" },
+        "verdict": {
+          "description": "Discriminated on `outcome`. PRD C3: 'per item accept | challenge(target, severity, reason), with mandatory per-item justification (no blanket accepts)' — `justification` above satisfies the mandatory-justification half for BOTH outcomes (an accept still carries one); this object's own fields are the challenge's own target/severity/reason detail, additional to (not a substitute for) `justification`. Review blocker 6, stated plainly: a `challenge` here means NOT-ACCEPTED-THIS-TURN, regardless of `severity` — there is no accept-with-advisory-challenge shape in v1 (a possible v2 addition, out of scope here; src/drive/bind-verdicts.ts's `hardChallengeAcceptsThisTurn` always returns `false`, matching this rule as a callable code artifact, not prose alone).",
+          "oneOf": [
+            { "$ref": "#/$defs/hardAccept" },
+            { "$ref": "#/$defs/hardChallenge" }
+          ]
+        }
+      }
+    },
+    "hardAccept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": { "const": "accept" },
+        "note": {
+          "type": "string",
+          "description": "Optional acceptance note (partial acceptance), mirroring ../vibefeld's `NodeValidated.Note` (`json:\"note,omitempty\"`)."
+        }
+      }
+    },
+    "hardChallenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "target", "severity", "reason"],
+      "properties": {
+        "outcome": { "const": "challenge" },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the challenge targets (an af node id, a specific claim within the item, etc.), mirroring ../vibefeld's `ChallengeRaised.Target`."
+        },
+        "severity": {
+          "enum": ["critical", "major", "minor", "note"],
+          "description": "Mirrors ../vibefeld's `ChallengeSeverity` enum exactly (internal/schema/severity.go: SeverityCritical/Major/Minor/Note = \"critical\"/\"major\"/\"minor\"/\"note\"). Kept byte-identical so a verdict document maps onto `af verdicts apply` (V2) without a translation table; test/drive/vibefeld-seam-fixture.test.ts reads that Go source directly and fails on drift. NOTE (blocker 6): unlike af's OWN `SeverityBlocksAcceptance` (which lets minor/note NOT block), this contract's `challenge` always means not-accepted-this-turn for EVERY severity — severity here is provenance/routing detail (how urgently it should be triaged), not an acceptance switch."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The challenge's own free-text reason, mirroring ../vibefeld's `ChallengeRaised.Reason`. Distinct from the sibling `justification` field (verdictItemHard level): `reason` explains the challenge itself; `justification` is the mandatory per-item justification PRD C3 requires regardless of outcome — non-blank is checked STRUCTURALLY only (a worker replying `\"OK\"` passes; substantive per-item reasoning is not, and cannot be, mechanically established by this schema)."
+        },
+        "category": {
+          "enum": ["gap", "missing", "dependency", "incorrect", "unclear", "other"],
+          "description": "Optional typed classification, mirroring ../vibefeld's `ChallengeCategory` enum (internal/schema/category.go) exactly. Omitted means uncategorized, matching af's own optional-field convention (`json:\"category,omitempty\"`). Same cross-repo seam fixture as `severity` guards this against drift."
+        }
+      }
+    },
+    "itemId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The registry shard id or af node id this verdict is about. DRIVER-INJECTED from immutable dispatch state (src/drive/bind-verdicts.ts) — never read from worker output, which has no `itemId` field at all (review blocker 1: a worker cannot forge which item it is answering about)."
+    },
+    "l5ContentHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "PINNED HASH DOMAIN (review blocker 4) for the L5 tier: lowercase hex SHA-256 of the RAW SHARD-FILE BYTES, with NO normalization (no whitespace trimming, no re-encoding, no frontmatter parsing) — exactly the bytes on disk at dispatch time. This is the SAME domain the M3.7 L5 verdict store recomputes to decide staleness, and it is DIFFERENT from `hardContentHash` below (af's canonical field-concatenation hash) — the two must never be compared to each other. DRIVER-INJECTED from immutable dispatch state; the driver verifies the current source hash matches this value both BEFORE dispatch (so a stale prompt is never sent) and BEFORE apply (so an edit landing mid-flight cannot be silently absorbed)."
+    },
+    "hardContentHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "PINNED HASH DOMAIN (review blocker 4) for the hard tier: ../vibefeld's OWN `Node.ComputeContentHash()` value (internal/node/node.go) — SHA-256 hex over the canonical string `type:<type>|statement:<statement>[|latex:<latex>]|inference:<inference>[|context:<sorted,joined>][|dependencies:<sorted,joined>][|validation_deps:<sorted,joined>]` (af's own field concatenation, NOT the rendered prompt bytes an L5 dispatch would hash). This is DIFFERENT from `l5ContentHash` above — af's hash already excludes workflow/provenance metadata (Author, ValidatedBy, ValidationBatchID) by construction, so it is stable across those fields changing, but it is NOT the same domain as a raw shard file's bytes. The driver re-verifies this against a fresh `node.ComputeContentHash()` (or `af export --graph json`'s `content_hash` field) both before dispatch and before apply, same discipline as the L5 domain. A future canonical `inputHash` covering the FULL verification input (dependency/rubric changes too, not just the node's own content) is a reserved possible field, deliberately NOT built here (blocker 4's explicit scope limit) — `schema_version` bumps if it is ever added."
+    },
+    "justification": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MANDATORY per-item justification (PRD C3: 'no blanket accepts'). A blank or whitespace-only string is a validity-surface violation this schema's minLength catches structurally; src/drive/verdict-schema.ts additionally rejects a whitespace-only value (minLength:1 alone would accept a single space). Checked STRUCTURALLY ONLY (follow-up 1): `\"OK\"` passes this check; substantive per-item reasoning is NOT mechanically verified by this schema or its validator — that remains a human/audit-time judgment (`rk audit`, M5.1), not a wire-contract guarantee."
+    }
+  }
+}
