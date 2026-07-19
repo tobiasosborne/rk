@@ -1,7 +1,8 @@
-<!-- ROLE: normative contract for rk's gate suite (`rk check`) — the six ported AISM gates.
+<!-- ROLE: normative contract for rk's gate suite (`rk check`) — the six ported AISM gates plus
+     the two synthetic rk-only gates (config, M1; freshness, M2.6).
      UPDATE POLICY: authored, rewritten-whole per gate section when that gate's checks change;
      a code change that alters check semantics without updating this doc is incomplete work
-     (CLAUDE.md Rule 7). The seventh gate (freshness) is reserved, not specified, until M2.6.
+     (CLAUDE.md Rule 7).
      TRIGGER: before implementing or modifying any gate in src/gates/; before writing a corpus
      fixture (corpus/README.md must stay in lockstep — every fixture named here has a row there). -->
 
@@ -52,14 +53,19 @@ already named several of these gates' failure modes and known limitations in pro
 is preserved and cited as characterization of the incidents this contract guards against, not
 paraphrased away.
 
-This WP specs the **six** M0 gates: defs, argument/linker, refs, provenance, runs,
-report-shards. A **seventh gate, freshness**, is created in M2 (M2.6: regenerate-and-diff
-replaces mirror-check gates once `rk render` exists) — it is reserved here, not specified.
-Two of the six gates already contain a narrow freshness-style check today (argument/linker's
-`check_generated` on its own two generated files) — that is in scope now, ported as part of the
-linker gate; it is not the general M2.6 mechanism.
+This document specs the **six** M0 gates ported from AISM (defs, argument/linker, refs,
+provenance, runs, report-shards) plus **two synthetic rk-only gates with no AISM
+check-all.sh counterpart**: `config` (M1, rk-xbm — untrusted `.rk/config.json` validation)
+and **Gate 7, freshness** (M2.6 — see its own section below), the general regenerate-and-diff
+mechanism IMPLEMENTATION_PLAN M2.6 names. Gate 2 (argument/linker) already contains a narrow
+freshness-style check of its own — `check_generated`/Check 11, unconditionally ERROR-ing on
+its two generated mirror files (argument.py's port) — that predates and is narrower than Gate
+7: Check 11 is file-specific and hardcoded to exactly `argument/INDEX.md`/`DAG.md`; Gate 7 is a
+declared-manifest mechanism any generator can register into. Gate 7's own section documents the
+boundary between the two precisely (never double-reporting the same staleness under two gate
+names).
 
-## Shared conventions (all six gates)
+## Shared conventions (all six ported gates, plus `config` and `freshness`)
 
 **Finding format.** One line per finding: `SEVERITY path:line message`. `SEVERITY` is `ERROR`
 or `WARN`. `path` is repo-relative. `line` is 1-indexed; where the underlying check does not
@@ -128,10 +134,14 @@ precondition from silently defeating composition:
 **Out of scope for `rk check`.** `check-all.sh` also runs `gen-current-pointer.py --check`
 (`CURRENT.md` freshness against the registry, check-all.sh:20) and a tooling-test loop over
 `scripts/tests/test_*.py` (check-all.sh:33-37) as part of the same local-CI invocation. Neither
-is one of the six gates this contract specifies, and `rk check` deliberately excludes both — the
-first belongs with a future freshness-style mechanism (Gate 7, reserved for M2.6), the second is
-a test suite, not a gate over repo content. Recorded here explicitly so M0.5's AISM-parity
-divergence bookkeeping excludes them on purpose, not by oversight.
+is one of the six ported gates this contract specifies, and `rk check` deliberately excludes
+both — the second is a test suite, not a gate over repo content, out of scope permanently. The
+first (`CURRENT.md` freshness) is a narrower instance of the general problem **Gate 7 —
+freshness** (below) now solves for any repo that declares an equivalent artifact in
+`.rk/generated.json` — rk has no `CURRENT.md` concept of its own, so this specific AISM script
+invocation has no direct rk counterpart to adopt, but the mechanism it wanted is no longer
+absent. Recorded here explicitly so M0.5's AISM-parity divergence bookkeeping excludes both on
+purpose, not by oversight.
 
 **Per-repo parameters (this WP's scope).** Two config values are explicitly per-repo, not
 global constants, ported from AISM's hardcoded defaults:
@@ -243,13 +253,20 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
+| **Gate 7 — freshness** (M2.6) | (none) | manifest-malformation findings, per-entry STALE, per-entry declared-but-missing | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. Classified WHOLE-GATE non-structural for the same reason Gates 4-6 are: the subject matter (a repo's own adopted generated-output convention) is consolidation-shaped by construction, not a per-check carve-out |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
 ids/aliases" class, and Gate 2's Check 12 (brittleness) and Gate 1's Checks 10-11/13-14 are
 already WARN-only in both phases (nothing to demote) — noted here so their absence from the tables
 above reads as a deliberate, considered call, not an oversight: the WHOLE-GATE non-structural
-classification for Gates 4-6 is a deliberate policy choice (their subject matter is inherently
-consolidation-shaped), not a per-check omission.
+classification for Gates 4-6 (and now Gate 7) is a deliberate policy choice (their subject matter
+is inherently consolidation-shaped), not a per-check omission.
+
+The synthetic `config` gate (M1, rk-xbm) is deliberately absent from this table: its one finding
+class (a malformed/unknown `.rk/config.json` field) is unconditionally `structural: true` — see
+"Config validation" above — because a config error changes what "structural" and "non-structural"
+even MEAN for every other gate's own findings in the same run; it cannot itself be phase-demoted
+without threatening to hide the exact severity-policy drift M1.3 exists to make mechanical.
 
 **Mutation-proof discipline.** A change to this table is a validity-semantics change (CLAUDE.md
 L6) — it moves a check between "always blocks" and "advisory during exploration." Any edit here
@@ -1498,9 +1515,144 @@ KEYWORDS/SUMMARY`) has not changed across AISM's history at time of reading.
 
 ---
 
-## Gate 7 — freshness (reserved, M2.6)
+## Gate 7 — freshness (`.rk/generated.json` ↔ any declared generated artifact)
 
-Not specified in this document. Per IMPLEMENTATION_PLAN M2.6: regenerate-and-diff replaces the
-manual mirror-check gates (INDEX/CATALOG/DAG files become build outputs of `rk render`); the
-AISM mirror files are deleted at that point. Do not implement or write fixtures against a
-seventh gate before M2 lands `rk render` (C6) — there is nothing yet to regenerate against.
+**Purpose.** IMPLEMENTATION_PLAN M2.6: "regenerate-and-diff replaces mirror-check gates." A
+repo may adopt any number of generated artifacts — today, Gate 2's own `argument/INDEX.md`/
+`DAG.md` mirrors; in the future, M2.4's `rk render` HTML output, or any other renderer this
+binary or a later one adds. Rather than hand-writing one hardcoded per-file mirror check per
+artifact (Gate 2 Check 11's own shape), Gate 7 reads one **declared manifest**,
+`.rk/generated.json`, listing `{path, generator}` pairs, regenerates each with the named
+generator, and byte-diffs the result against what is on disk. Adding a future generator is a
+one-line addition to `src/gates/freshness.ts`'s `GENERATORS` map — no change to this gate's
+shape, its coverage-line format, or `rk check`'s CLI wiring.
+
+**Scope note (this WP, 2026-07-19).** AISM cutover — deleting AISM's own markdown mirrors and
+migrating its live campaign onto this manifest — is explicitly OUT of this WP's scope (a
+standing TJO directive defers the AISM staged cutover indefinitely; see CLAUDE.md Rule 3 and
+HANDOFF.md). IMPLEMENTATION_PLAN M2.6's acceptance clause "AISM mirrors deleted" is therefore
+inapplicable here; this WP's bar is the fixture bar below (a hand-edited generated file fails
+`rk check`, a clean one passes, absence is presence-conditional and named). `rk render` (M2.4)
+is being built concurrently in a separate worktree and is NOT integrated with by this gate —
+Gate 7 is designed over the declared manifest specifically so M2.4's HTML outputs can register
+their own generator id later without any change here.
+
+**Failure mode guarded.** The same one Gate 2 Check 11 already guards for its two files,
+generalized: a generated artifact (a rendered index, a dependency graph, any build output a
+repo has declared) silently drifts out of sync with the source data it was rendered from, and a
+reader or downstream tool trusts the stale copy. CLAUDE.md Rule 9: "Generated vs authored, never
+mixed... `build/` outputs are never hand-edited." This gate is the mechanical enforcement of
+that rule for any artifact a repo opts into declaring.
+
+**Inputs.**
+- `.rk/generated.json` (schema `schemas/generated.v1.json`): `{"schema_version": "1", "entries":
+  [{"path": <repo-relative string>, "generator": <string>}, ...]}`. Optional file — read via the
+  same `RepoSnapshot` every other gate reads (`src/store/snapshot-load.ts` gained a one-level
+  `.rk/` include rule for exactly this; `.rk/config.json` keeps its own separate edge path,
+  `src/store/config-load.ts`, unaffected).
+- **Recognized generators** (`src/gates/freshness.ts`'s `GENERATORS` map), each a pure
+  `(snapshot) => string` reproducing a fresh render byte-for-byte: `linker-index` (renders
+  `argument/INDEX.md` via `src/gates/linker-render.ts`'s `renderIndex`, over the same
+  `parseRegistry` every Gate 2 run computes independently), `linker-dag` (`DAG.md` /
+  `renderDag`, same source). A manifest entry naming any OTHER generator id is not an error by
+  itself — see Checks, below — it is simply an id this binary does not (yet) know how to
+  regenerate.
+
+**Checks.**
+1. **Manifest shape.** `.rk/generated.json` absent ⇒ no finding at all (the whole-mechanism
+   presence-conditional case, below). Present but not valid JSON, not a JSON object, or missing
+   an `entries` array ⇒ ONE ERROR at `.rk/generated.json:1` naming the shape defect, and the
+   manifest is treated as declaring ZERO entries for every other check (never silently read as
+   "absent" — a malformed manifest is a real, visible defect, a different state from "never
+   adopted"). An individual `entries[i]` that is not `{path: non-empty string, generator:
+   non-empty string}` ⇒ one ERROR per malformed entry, naming its index; every OTHER,
+   well-formed entry in the same manifest is still individually checked (same "flag, never
+   silently exclude the rest" discipline Gate 1's DRIFT dedup and Gate 2's duplicate-id check
+   already use).
+2. **Whole-mechanism presence-conditional.** `.rk/generated.json` entirely absent from the repo
+   ⇒ zero findings, coverage line `checked freshness: 0/0 generated artifacts (manifest not
+   adopted: .rk/generated.json absent)`. This generalizes Gate 2 Check 11's own per-file
+   precedent (R14, rk-1rv) and Gate 6's `report/`-root precedent (R13, rk-au6) to the gate as a
+   whole: a repo that has never adopted the manifest mechanism has, by construction, nothing
+   declared for this gate to check — never a finding, never a silent `0/0` with no explanation
+   (CLAUDE.md L2).
+3. **Per-entry regenerate-and-diff**, for every well-formed entry whose `generator` is
+   recognized: if `path` is absent from the repo ⇒ ERROR `<path> is declared in
+   .rk/generated.json (generator '<gen>') but is absent from the repo — regenerate it or remove
+   the manifest entry`. If present, regenerate via the named generator and byte-compare; a
+   mismatch ⇒ ERROR `<path> is STALE (regenerate via '<gen>') — first difference at line <n>:
+   have "...", want "..."` — naming both the file and the first differing line (line-based diff,
+   1-indexed; when one render is a strict prefix of the other, the divergence is reported at the
+   line immediately past the shared prefix). An exact byte match ⇒ no finding.
+4. **Unrecognized generator.** A well-formed entry whose `generator` id is not in
+   `GENERATORS` ⇒ never an ERROR (this binary genuinely cannot verify it, either direction) and
+   never silently dropped: named on the coverage line as "not adopted", with the path and
+   generator id, and excluded from the numerator (`checked`) but included in the denominator
+   (`total`) — the forward-compatibility case for a manifest entry declaring, e.g., a
+   not-yet-landed `rk render` output on an older binary.
+
+**Coverage line.** `checked freshness: <checked>/<total> generated artifacts[ (<K> not adopted:
+<path> (generator '<id>' not available), ...)]`. `total` is every well-formed manifest entry;
+`checked` is the subset whose generator this binary recognizes (attempted, whether the result
+was clean or an ERROR); the parenthetical is present only when `K > 0`. The
+whole-mechanism-absent case (Check 2) uses its own fixed text, `0/0 generated artifacts
+(manifest not adopted: .rk/generated.json absent)`, distinguishing "never adopted" from
+"adopted, zero entries declared yet" (`0/0 generated artifacts`, no parenthetical) and from
+"adopted, malformed" (a manifest-shape ERROR, `0/0`, no parenthetical either — the ERROR itself
+is what signals the difference from a clean empty adoption).
+
+**Check 11 boundary** (the one thing this gate changes about a PRE-EXISTING check, Gate 2 Check
+11, `src/gates/linker-render.ts`'s `checkGenerated`). Both a per-repo whole-manifest boundary and
+a per-path boundary were considered; **per-path is the one implemented**, for a concrete safety
+reason: — a path is superseded out of Check 11 (Check 11 stops byte-diffing it itself) **if and
+only if** `.rk/generated.json` declares that exact path AND names a `generator` this gate
+recognizes (`src/gates/freshness.ts`'s `freshnessSupersededPaths`). Declaring the SAME manifest
+file with zero entries, or with an entry naming an unrecognized generator, supersedes nothing —
+Check 11 keeps covering `argument/INDEX.md`/`DAG.md` exactly as before. This is deliberately
+**stricter** than a simpler "any manifest present turns Check 11 off entirely" rule: under that
+simpler rule, a freshly-adopted-but-not-yet-populated manifest (e.g. `.rk/generated.json`
+stamped empty, or declaring only an unrelated artifact) would silently stop Gate 2 from ever
+byte-diffing `argument/INDEX.md`/`DAG.md` again, while Gate 7 also has no entry for them yet —
+a real, silent double-gap neither gate would report. Keying supersession to the SPECIFIC path
+(and specifically to a generator this binary can actually verify) closes that gap by
+construction: a path is only ever unchecked by NEITHER gate if it is simultaneously absent from
+the repo tree (nothing to check) — the only state that was always a non-finding under Check 11
+too. `mirrorStatus` entries for a superseded path report `superseded (see freshness gate)` on
+Gate 2's own coverage line, rather than `present`/`absent (not adopted)`, so a reader always sees
+which gate is responsible for that path's staleness. This decision is unreviewed at Tier A as of
+this WP (freshness is new validity-semantics surface, CLAUDE.md L6) — flagged explicitly for the
+M2 boundary review; see this WP's final report for the exact open question.
+
+**Known limitations.**
+- `linker-index`/`linker-dag` re-derive `parseRegistry(snapshot)` independently of Gate 2's own
+  run over the same snapshot (same "deliberately re-implemented, not imported, to preserve
+  independent re-parse" discipline `provenance-20`'s fix already established for Gate 4) — a
+  parse-time ERROR in a shard (e.g. a duplicate id) does not prevent Gate 7 from still attempting
+  a regenerate-and-diff against whatever partial/best-effort lemma set `parseRegistry` produces;
+  this mirrors Gate 2 Check 11's own pre-existing behavior (`checkGenerated` already renders
+  against `lemmas` regardless of `parseErrors`), unchanged by this WP.
+- A manifest entry's `generator` id space is a flat, unnamespaced string with no registry of
+  "known-but-not-yet-shipped" ids — a typo in a `generator` value (e.g. `"linker-indx"`) is
+  indistinguishable from a genuine forward-declaration of a not-yet-landed generator; both read
+  as "not adopted" on the coverage line, never an ERROR. Accepted for this WP (a typo'd id is a
+  visible, named, non-blocking state — CLAUDE.md L2's coverage-reporting bar is met — rather than
+  a new sub-mechanism to detect it); flagged as a residual concern for a later WP if it proves to
+  bite in practice.
+
+**Divergences from AISM (triage).** N/A by construction — Gate 7 is a NEW rk-only mechanism with
+no AISM script counterpart to characterize or diverge from (AISM's `argument.py --generate`/
+`--check` pair is the un-generalized, hardcoded precursor this gate supersedes for repos that
+adopt the manifest; it is cited as prior art in Gate 2's own section, not repeated here).
+
+**Historical schema-drift tolerance.** N/A — this is a new schema (`generated.v1.json`) with no
+prior history to tolerate drift against.
+
+**Corpus fixtures required** (landed this WP, M2.6):
+
+| id | violation |
+|---|---|
+| `freshness-01` | clean regenerate golden case — `argument/INDEX.md` byte-identical to a fresh render, manifest declares it under `linker-index` ⇒ zero findings, `checked=1/1` |
+| `freshness-02` | **hand-edited generated file** [M2.6-mandatory, IMPLEMENTATION_PLAN M2.6's acceptance clause] — `argument/INDEX.md` hand-edited so it diverges from a fresh render ⇒ ERROR naming the file and the first differing line |
+| `freshness-03` | declared-but-missing — the manifest declares `argument/INDEX.md`, the file does not exist in the repo ⇒ ERROR, distinct from the presence-conditional golden case below |
+| `freshness-04` | no-manifest presence-conditional golden case — `.rk/generated.json` entirely absent ⇒ zero findings, coverage names the non-adoption (sibling to `linker-25`/`shards-15`'s per-file/per-directory precedent) |
+| `freshness-05` | malformed manifest (not valid JSON) ⇒ one loud ERROR, never silently read as "absent" (would otherwise misroute into `freshness-04`'s golden-pass state) |
