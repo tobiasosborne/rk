@@ -75,3 +75,50 @@ match its own command line (burned 1.5 h); codex review took ~17 min wall-clock.
   with explicit `-- <paths>` under shared-tree parallelism.
 
 Tree at acceptance: 743 tests / 0 fail / 1 skip; selftest OK (98/98); dist/rk rebuilt.
+
+## 2026-07-19 — M2 built end-to-end: schema, readers, conflicts, queries, render, freshness (orchestration session 2, continued)
+
+- M2.1 graph schema v1: drafted in a worktree, Tier A codex review (4 MAJOR blockers:
+  af-evidence requirement, root-only contract match, workspaceResolved/contractMatch
+  split with recomputed closed-enum conflicts, fr one-to-one unresolved accounting),
+  single repair wave, mechanically verified, merged (06ad2ea).
+- M2.2 store readers + pure join boundary: registry/af/fr/bd readers, total-conversion
+  property tests, repo-level rename-hazard corpus fixture. AISM live-fire (read-only):
+  200/200 shards, af 44/44 joins, fr resolution 8.0% honest baseline (185 unresolved,
+  1:1 accounted), 113 conflicts, zero crashes (memo committed).
+- M2.3: one repo-level corpus fixture per conflict class through the full pipeline +
+  21-case never-auto-resolved property test; zero changes to the reviewed Tier A files.
+- M2.5: pure query cores (focus, critical path, taint trace, what-blocks) + rk graph
+  CLI. Critical-path rule: over-inclusive across OR-routes (under-inclusion would be
+  the M3.4 validity bug). AISM agreement 200/200 vs linker ground truth. northStarId
+  config field added in the shardsPrefix pattern (Tier A flagged, reviewed).
+- M2.4 first pass (Opus, worktree): single styling source of truth + rendering-
+  truthfulness corpus (one fixture per rigour status), dashboard, hash-routed no-server
+  drill-down, layered DAG (dagre deviation — review REJECTED as permanent, vendoring
+  scheduled, rk-fhd), rk render CLI. AISM render: 200 nodes, badge distribution matches
+  source exactly, conflicts/unresolved surfaced as defects. Breadth views deferred to
+  pass 2 (bead filed).
+- M2.6 (worktree): Gate 7 freshness — regenerate-and-diff over .rk/generated.json,
+  per-path Check-11 supersession (ratified), presence-conditional, 5 fixtures;
+  template_version 1.3.0 (constitution freshness hedge flipped to present tense).
+- M2 boundary review (codex gpt-5.6-sol high, ONE round): 9 landing-blockers, 8
+  follow-ups, all 6 design questions answered. Branches merged first, then ONE repair
+  wave in three parallel lanes (join/conflicts, render/CLI, freshness), all blockers
+  red-first + mutation-proven: effective presentation state (conflicted/tainted proved
+  = defect styling, excluded from rigorous counts); refuse-to-render on structural
+  loss + degraded-source banners; byte-exact contract match; verdictFresh === true;
+  superseded-cycle exclusion; per-node banked-conflict coalescing; honest fr line
+  accounting; unknown generator = blocking ERROR; render-site-v1 verification (pure
+  gate + edge regeneration); full manifest schema enforcement; repo-relative --out.
+- Reconciliation: corpus 109 fixtures (8 gate dirs) + 3 graph-harness fixtures;
+  ledgers + memo addendum synced. Follow-ups: beads (verdicts recorded on rk-fhd,
+  rk-rgp, rk-b09, rk-tns; new: afRecordsIn accounting, .rk include regression test,
+  six-gates wording sweep, snapshot-load build/site gap).
+- Cross-repo: V4 af export --graph json (vibefeld c266dae, pushed); F7 fr export
+  (knowledge-frontier 0d5f4df, pushed); both schema-versioned, deterministic,
+  read-only-proven.
+
+M2 status: M2.1-M2.3, M2.5, M2.6 COMPLETE; M2.4 first pass complete, pass 2 (breadth
+views: graveyard, run gallery, provenance chains, conventions view) + SC5 third-party
+dry-run + dagre vendoring remain before full M2 acceptance. Tree at close: 1070 tests /
+0 fail / 1 skip; selftest OK (109/109); dist/rk rebuilt.
