@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rk.tools/schemas/graph.v1.json",
   "title": "rk unified projection graph document (v1)",
-  "description": "Read-only, deterministic, stateless projection of one rk research campaign (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry (argument/**/*.md shards) is the spine (`nodes`); the other three stores — af, bd, fr — and the generated report join to it by DIFFERENT keys per edge (`edges.af` / `edges.bd` / `edges.fr` / `edges.report`) — there is no universal join key, do not invent one. `unresolved` is a first-class bucket every edge kind's failed lookups land in (never a silent drop). `conflicts` is a first-class defect record (registry-vs-af disagreement, contract mismatch, taint-vs-status inconsistency, fr banked-without-oracle); M2.3 populates it, this schema only reserves the shape. See docs/memos/2026-07-19-graph-schema-v1.md for the design rationale and src/graph/{types,serialize,validate}.ts for the TS mirror + canonical serializer + structural validator (this JSON Schema alone cannot express referential integrity, unresolved-bucket completeness, or canonical sort order — those are src/graph/validate.ts's job).",
+  "description": "Read-only, deterministic, stateless projection of one rk research campaign (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry (argument/**/*.md shards) is the spine (`nodes`); the other three stores — af, bd, fr — and the generated report join to it by DIFFERENT keys per edge (`edges.af` / `edges.bd` / `edges.fr` / `edges.report`) — there is no universal join key, do not invent one. `unresolved` is a first-class bucket every edge kind's failed lookups land in (never a silent drop). `conflicts` is a first-class defect record, CLOSED to four settled kinds (registry-vs-af disagreement, contract mismatch, taint-vs-status inconsistency, fr banked-without-oracle) as of the Tier A review repair wave (2026-07-19) — src/graph/validate.ts RECOMPUTES these from the raw node/edge data and treats a missing/duplicate/inconsistent recorded conflict as an ERROR. See docs/memos/2026-07-19-graph-schema-v1.md for the design rationale (including the review's four landing-blocker repairs) and src/graph/{types,serialize,validate}.ts for the TS mirror + canonical serializer + structural validator (this JSON Schema alone cannot express cross-array cardinality — e.g. 'exactly one af edge per af!=none node' — referential integrity, unresolved-bucket exact accounting, conflict recomputation, or canonical sort order — those are src/graph/validate.ts's job).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "nodes", "edges", "unresolved", "conflicts"],
@@ -24,7 +24,7 @@
       "properties": {
         "af": {
           "type": "array",
-          "description": "registry↔af: contract byte-match, LOCATED VIA the shard's `workspace:` field (never the registry id — workspace directories can be renamed independently of the registry id; see ../vibefeld/docs/export-graph-v1.md's `workspace.id` note). Known hazard: workspace dir ≠ id after a rename (legal) — keyed on `workspace:`, always.",
+          "description": "registry↔af: contract byte-match, LOCATED VIA the shard's `workspace:` field (never the registry id — workspace directories can be renamed independently of the registry id; see ../vibefeld/docs/export-graph-v1.md's `workspace.id` note), targeting ONLY the af export's ROOT node (id \"1\" — af's hierarchical numbering roots there unconditionally), never a descendant lemma and never `workspace.conjecture`. Every registry node with `af != \"none\"` MUST have EXACTLY ONE entry here (a cross-array cardinality rule src/graph/validate.ts enforces — this JSON Schema cannot express it). Known hazards: workspace dir ≠ id after a rename (legal) — keyed on `workspace:`, always; contract matching against a non-root node (guarded by the `afRootNodeId` const below).",
           "items": { "$ref": "#/$defs/afEdge" }
         },
         "bd": {
@@ -34,7 +34,7 @@
         },
         "fr": {
           "type": "array",
-          "description": "registry↔fr: `evidence.artifact` path resolution + `graduates`/oracle ids. Known hazard: free-text paths — expect a real unresolved-reference bucket, never silently dropped.",
+          "description": "registry↔fr: `evidence.artifact` path resolution + `graduates`/oracle ids. Known hazard: free-text paths — expect a real unresolved-reference bucket, never silently dropped; two distinct unresolved cycles may legitimately name the identical artifact text, so completeness is keyed on `(edge, sourceCycle, ref)`, never `(edge, ref)` alone.",
           "items": { "$ref": "#/$defs/frEdge" }
         },
         "report": {
@@ -46,12 +46,12 @@
     },
     "unresolved": {
       "type": "array",
-      "description": "The first-class unresolved-reference bucket (PRD C5): every edge kind's failed lookups land here, `(edge, ref)`-keyed. A consumer must be able to answer \"what did rk try to join and fail\" from this array alone, without re-deriving it from the edge arrays' `resolved` flags.",
+      "description": "The first-class unresolved-reference bucket (PRD C5): every edge kind's failed lookups land here. af/bd/report are keyed on `(edge, nodeId)` (an edge names exactly one node); fr is keyed on `(edge, sourceCycle, ref)` (`sourceCycle` is REQUIRED for `edge:\"fr\"` — see `unresolvedRefFr` below) so two distinct unresolved cycles naming the same artifact text stay two distinct rows, never collapsed into one. A consumer must be able to answer \"what did rk try to join and fail\" from this array alone, without re-deriving it from the edge arrays' resolution flags.",
       "items": { "$ref": "#/$defs/unresolvedRef" }
     },
     "conflicts": {
       "type": "array",
-      "description": "First-class defect records — registry-status vs af-epistemic-state disagreement, contract byte-mismatch, taint vs status inconsistency, fr banked-claim without oracle verdict. M2.3 populates these; this schema (M2.1) only reserves the shape. Conflicts are rendered, never auto-resolved.",
+      "description": "First-class defect records — registry-status vs af-epistemic-state disagreement, contract byte-mismatch, taint vs status inconsistency, fr banked-claim without a fresh oracle verdict. CLOSED to these four kinds (Tier A review, memo question 1: a new conflict class needs a schema_version bump, not silent vocabulary extension — typo tolerance is the wrong tradeoff on a validity surface). src/graph/validate.ts recomputes the conflict set the raw data implies and ERRORs on a missing, duplicate, or inconsistent recorded entry. Conflicts are rendered, never auto-resolved.",
       "items": { "$ref": "#/$defs/conflictRecord" }
     }
   },
@@ -67,6 +67,14 @@
     },
     "afFlag": {
       "enum": ["none", "seeded", "validated"]
+    },
+    "afEpistemicState": {
+      "enum": ["pending", "validated", "admitted", "refuted", "archived", "needs_refinement", "draft"],
+      "description": "af's own epistemic_state axis (../vibefeld/docs/export-graph-v1.md). CLOSED enum (Tier A review blocker 1/3) — an unrecognized value is a validity-surface bug, not tolerated free text."
+    },
+    "afTaintState": {
+      "enum": ["clean", "self_admitted", "tainted", "unresolved"],
+      "description": "af's own taint_state axis (../vibefeld/docs/export-graph-v1.md). CLOSED enum, same rationale as afEpistemicState."
     },
     "balloonClassification": {
       "enum": ["missing-fact", "dag-dep", "genuine-gap"]
@@ -120,31 +128,57 @@
       }
     },
     "afEdge": {
+      "description": "A discriminated union on `workspaceResolved` (Tier A review blocker 1: 'unresolved workspace requires a bucket entry; resolved workspace requires af schema version, root-node identity, contract-match verdict, enumerated epistemic/taint states, and node count' — a partial 'resolved' record cannot validate against either branch below).",
+      "oneOf": [
+        { "$ref": "#/$defs/afEdgeUnresolved" },
+        { "$ref": "#/$defs/afEdgeResolved" }
+      ]
+    },
+    "afEdgeUnresolved": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodeId", "workspace", "resolved"],
+      "required": ["nodeId", "workspace", "workspaceResolved"],
       "properties": {
         "nodeId": { "type": "string" },
         "workspace": {
           "type": "string",
           "description": "Copied from the owning node's own `workspace:` field — MUST be byte-identical to it (src/graph/validate.ts enforces this cross-check; a drift means a producer re-derived the join key from `id` instead of copying the field, the exact rename-hazard bug class)."
         },
-        "resolved": {
-          "type": "boolean",
-          "description": "true iff an af export was found for `workspace` AND its contract byte-matched some node's `statement` in that export. false MUST carry a companion entry in the top-level `unresolved` array (edge:\"af\", ref:workspace)."
+        "workspaceResolved": {
+          "const": false,
+          "description": "No af export was found for `workspace` at all. MUST carry a companion entry in the top-level `unresolved` array (edge:\"af\", nodeId, ref:workspace) — never a silent drop (PRD C5)."
+        }
+      }
+    },
+    "afEdgeResolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodeId", "workspace", "workspaceResolved", "afSchemaVersion", "afRootNodeId",
+        "contractMatch", "epistemicState", "taintState", "nodeCount"
+      ],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "workspace": {
+          "type": "string",
+          "description": "Copied from the owning node's own `workspace:` field — MUST be byte-identical to it (src/graph/validate.ts enforces this cross-check)."
         },
-        "afNodeId": { "type": "string", "description": "Which af node's `statement` matched, when resolved (usually \"1\", the root)." },
-        "contractMatch": {
-          "type": "boolean",
-          "description": "Explicit byte-match verdict, independent of `resolved`: a workspace can resolve (an export was found) while its statement no longer matches — that is a CONFLICT (M2.3), not an unresolved reference."
-        },
-        "epistemicState": { "type": "string" },
-        "taintState": { "type": "string" },
-        "nodeCount": { "type": "integer", "minimum": 0 },
+        "workspaceResolved": { "const": true, "description": "An af export WAS found for `workspace`." },
         "afSchemaVersion": {
           "type": "string",
           "description": "The af export document's own schema_version (../vibefeld/docs/export-graph-v1.md), echoed for traceability — NOT this document's schema_version."
-        }
+        },
+        "afRootNodeId": {
+          "const": "1",
+          "description": "MUST be the literal string \"1\" — af's hierarchical numbering roots there unconditionally (../vibefeld/docs/export-graph-v1.md: dotted ids `1`/`1.2`/`1.2.3`..., only `1` ever has no parent_id). Its presence at this exact value is the mechanical proof the contract byte-match targeted the export's ACTUAL root, never an internal lemma and never `workspace.conjecture` (Tier A review blocker 2)."
+        },
+        "contractMatch": {
+          "type": "boolean",
+          "description": "Byte-match verdict between the registry `contract` and the root node's `statement`. MANDATORY once resolved — 'resolved storage, mismatched contract' is a real state (contractMatch:false), requiring a mandatory `contract-mismatch` conflict record, never an unresolved-bucket item."
+        },
+        "epistemicState": { "$ref": "#/$defs/afEpistemicState" },
+        "taintState": { "$ref": "#/$defs/afTaintState" },
+        "nodeCount": { "type": "integer", "minimum": 0, "description": "af export's validation.total_nodes for this workspace." }
       }
     },
     "bdEdge": {
@@ -159,16 +193,52 @@
       }
     },
     "frEdge": {
+      "description": "A discriminated union on `resolutionMethod` (Tier A review blocker 4): `resolvedNodeId` is FORBIDDEN when unresolved and REQUIRED otherwise.",
+      "oneOf": [
+        { "$ref": "#/$defs/frEdgeUnresolved" },
+        { "$ref": "#/$defs/frEdgeResolved" }
+      ]
+    },
+    "frEdgeShared": {
+      "cycle": { "type": "integer", "minimum": 0 },
+      "artifact": { "type": "string", "description": "The free-text `evidence.artifact` value from fr's LogRecord — the known hazard (free-text paths)." },
+      "oracleId": { "type": "string" },
+      "outcome": { "type": "string", "description": "fr's own outcome for this cycle (open vocabulary, mirrors ../knowledge-frontier's Outcome) — needed to compute the banked-without-oracle conflict class." },
+      "verdict": { "type": "string", "description": "fr's own evidence.verdict for this cycle (mirrors ../knowledge-frontier's Verdictish: claimed | audited | banked)." },
+      "verdictFresh": { "type": "boolean", "description": "Whether `verdict` is still fresh (non-stale) at projection time." },
+      "supersedes": { "type": "integer", "minimum": 0, "description": "cycle of a prior fr record this one supersedes (mirrors LogRecord.supersedes; raw, no supersededBy mirror)." }
+    },
+    "frEdgeUnresolved": {
       "type": "object",
       "additionalProperties": false,
       "required": ["cycle", "artifact", "resolutionMethod"],
-      "description": "Keyed by fr's own `cycle` (fr's log.jsonl identity), NOT by registry id — one fr cycle resolves to zero or one registry node.",
+      "description": "Keyed by fr's own `cycle` (fr's log.jsonl identity), NOT by registry id. No candidate registry node resolved for this cycle's artifact at all.",
       "properties": {
-        "cycle": { "type": "integer", "minimum": 0 },
-        "artifact": { "type": "string", "description": "The free-text `evidence.artifact` value from fr's LogRecord — the known hazard (free-text paths)." },
+        "cycle": { "$ref": "#/$defs/frEdgeShared/cycle" },
+        "artifact": { "$ref": "#/$defs/frEdgeShared/artifact" },
+        "resolutionMethod": { "const": "unresolved" },
+        "oracleId": { "$ref": "#/$defs/frEdgeShared/oracleId" },
+        "outcome": { "$ref": "#/$defs/frEdgeShared/outcome" },
+        "verdict": { "$ref": "#/$defs/frEdgeShared/verdict" },
+        "verdictFresh": { "$ref": "#/$defs/frEdgeShared/verdictFresh" },
+        "supersedes": { "$ref": "#/$defs/frEdgeShared/supersedes" }
+      }
+    },
+    "frEdgeResolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle", "artifact", "resolutionMethod", "resolvedNodeId"],
+      "description": "Keyed by fr's own `cycle`. A candidate registry node WAS resolved for this cycle's artifact.",
+      "properties": {
+        "cycle": { "$ref": "#/$defs/frEdgeShared/cycle" },
+        "artifact": { "$ref": "#/$defs/frEdgeShared/artifact" },
+        "resolutionMethod": { "enum": ["path", "graduates", "oracle"] },
         "resolvedNodeId": { "type": "string" },
-        "resolutionMethod": { "enum": ["path", "graduates", "oracle", "unresolved"] },
-        "oracleId": { "type": "string" }
+        "oracleId": { "$ref": "#/$defs/frEdgeShared/oracleId" },
+        "outcome": { "$ref": "#/$defs/frEdgeShared/outcome" },
+        "verdict": { "$ref": "#/$defs/frEdgeShared/verdict" },
+        "verdictFresh": { "$ref": "#/$defs/frEdgeShared/verdictFresh" },
+        "supersedes": { "$ref": "#/$defs/frEdgeShared/supersedes" }
       }
     },
     "reportEdge": {
@@ -182,27 +252,45 @@
       }
     },
     "unresolvedRef": {
+      "description": "A discriminated union on `edge` (Tier A review blocker 4): `edge:\"fr\"` REQUIRES `sourceCycle`; the other three edges never carry it.",
+      "oneOf": [
+        { "$ref": "#/$defs/unresolvedRefFr" },
+        { "$ref": "#/$defs/unresolvedRefOther" }
+      ]
+    },
+    "unresolvedRefFr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge", "ref", "reason", "sourceCycle"],
+      "properties": {
+        "edge": { "const": "fr" },
+        "ref": { "type": "string", "description": "The free-text artifact string that failed to resolve." },
+        "reason": { "type": "string" },
+        "nodeId": { "type": "string", "description": "The registry node this unresolved lookup was attempted FROM, when known." },
+        "sourceCycle": { "type": "integer", "minimum": 0, "description": "fr's own cycle number — REQUIRED: two distinct unresolved cycles may name the identical artifact text, so this field is what keeps them two distinct bucket entries." }
+      }
+    },
+    "unresolvedRefOther": {
       "type": "object",
       "additionalProperties": false,
       "required": ["edge", "ref", "reason"],
       "properties": {
-        "edge": { "enum": ["af", "bd", "fr", "report"] },
-        "ref": { "type": "string", "description": "The raw reference text that failed to resolve — a workspace path (af), a registry id (bd), a free-text artifact string (fr), or an anchor (report)." },
+        "edge": { "enum": ["af", "bd", "report"] },
+        "ref": { "type": "string", "description": "The raw reference text that failed to resolve — a workspace path (af), a registry id (bd), or an anchor (report)." },
         "reason": { "type": "string" },
-        "nodeId": { "type": "string", "description": "The registry node this unresolved lookup was attempted FROM, when known." },
-        "sourceCycle": { "type": "integer", "minimum": 0, "description": "fr's own cycle number, when edge==\"fr\"." }
+        "nodeId": { "type": "string", "description": "The registry node this unresolved lookup was attempted FROM." }
       }
+    },
+    "conflictKind": {
+      "enum": ["status-mismatch", "contract-mismatch", "taint-status-mismatch", "banked-without-oracle"],
+      "description": "CLOSED as of the Tier A review (memo question 1). A new conflict class requires a schema_version bump."
     },
     "conflictRecord": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "edge", "message"],
       "properties": {
-        "kind": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Open vocabulary — M2.1 reserves the shape only. Known values as of M2.1 (populated starting M2.3): \"status-mismatch\", \"contract-mismatch\", \"taint-status-mismatch\", \"banked-without-oracle\"."
-        },
+        "kind": { "$ref": "#/$defs/conflictKind" },
         "edge": { "enum": ["af", "bd", "fr", "report"] },
         "nodeId": { "type": "string" },
         "registryValue": { "type": "string" },

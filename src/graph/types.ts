@@ -1,19 +1,33 @@
 // PURITY: pure — no fs/network/clock (L3). Shared TS types mirroring `schemas/graph.v1.json` —
 // rk's unified projection graph document (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry
-// (argument/**/*.md shards, src/gates/linker-parse.ts's `Lemma`) is the spine; `edges.{af,bd,fr,
-// report}` are the four PER-EDGE joins from the PRD C5 table — there is no universal join key,
-// do not invent one (CLAUDE.md §5). `unresolved` is the first-class bucket every edge kind
-// reports into when a lookup fails to resolve (never a silent drop, CLAUDE.md L2); `conflicts`
-// is the first-class defect record M2.3 populates — this WP (M2.1) only reserves the shape.
+// (argument/**/*.md shards, src/gates/linker-parse.ts's `Lemma`) is the spine, defined here;
+// `edges.{af,bd,fr,report}` (the four PER-EDGE joins from the PRD C5 table — there is no
+// universal join key, do not invent one, CLAUDE.md §5), `unresolved` (the first-class bucket
+// every edge kind reports into when a lookup fails to resolve, never a silent drop, CLAUDE.md
+// L2), and `conflicts` (the first-class defect record, closed to four settled kinds) live in
+// ./types-edges.ts, re-exported below so callers keep ONE import surface ("./types") — split out
+// only to stay clear of CLAUDE.md's 280-line shard cap, same pattern src/gates/linker-graph.ts
+// uses for linker-workspace.ts.
 //
 // Determinism (docs/memos/2026-07-19-graph-schema-v1.md + schemas/graph.v1.json
 // "Determinism"): two GraphDocuments describing the same projected state serialize to the SAME
 // bytes via src/graph/serialize.ts — sorted object keys, nodes sorted by id, every edge array
-// sorted by its own natural key, no timestamp field anywhere in this file. af's own v1 export
-// (../vibefeld/docs/export-graph-v1.md) took the same stance: a `generated_at`-style field is
-// export-time metadata, not content, and is deliberately absent from identity-bearing structure.
-// rk's graph document follows the same discipline for the same reason — a round-trip test must
-// see byte-identical output across two exports of unchanged state.
+// sorted by its own natural key PLUS a full-value tie-breaker (Tier A review follow-up 1), no
+// timestamp field anywhere in this file. af's own v1 export
+// (../vibefeld/docs/export-graph-v1.md) took the same stance on timestamps; rk's graph document
+// follows the same discipline for the same reason — a round-trip test must see byte-identical
+// output across two exports of unchanged state.
+
+export {
+  AF_EPISTEMIC_STATES, AF_ROOT_NODE_ID, AF_TAINT_STATES, CONFLICT_KINDS,
+} from "./types-edges";
+export type {
+  AfEdge, AfEpistemicState, AfTaintState, BdEdge, ConflictKind, ConflictRecord, FrEdge,
+  GraphEdges, ReportEdge, ResolvedAfEdge, ResolvedFrEdge, UnresolvedAfEdge, UnresolvedFrEdge,
+  UnresolvedFrRef, UnresolvedOtherRef, UnresolvedRef,
+} from "./types-edges";
+
+import type { GraphEdges, UnresolvedRef, ConflictRecord } from "./types-edges";
 
 export const GRAPH_SCHEMA_VERSION = "1";
 
@@ -37,7 +51,7 @@ export const RIGOUR_STATUSES = [
 export type RigourStatus = (typeof RIGOUR_STATUSES)[number];
 
 /** The registry's own af flag (frontmatter `af:` field) — a coarse tri-state, distinct from
- * af's own richer `epistemic_state`/`taint_state` axes carried on `AfEdge` below. */
+ * af's own richer `epistemic_state`/`taint_state` axes carried on `AfEdge` (./types-edges.ts). */
 export const AF_FLAGS = ["none", "seeded", "validated"] as const;
 export type AfFlag = (typeof AF_FLAGS)[number];
 
@@ -56,7 +70,11 @@ export interface BalloonCounter {
 /** One registry shard (argument/**\/*.md), the graph's spine node. Mirrors
  * src/gates/linker-parse.ts's `Lemma` field-for-field where a field already exists there — the
  * graph projection layer is read-only over the SAME ground truth (PRD D1: "no shared ledger"),
- * it does not invent a parallel registry model. */
+ * it does not invent a parallel registry model. Kept deliberately SEPARATE from `Lemma` (never
+ * unified) — Tier A review, memo question 5: `Lemma` carries linker-specific parse-recovery
+ * shape (fields optional to tolerate a partially-broken shard mid-parse); `src/graph` must not
+ * depend on gate-parser recovery types. M2.2's store reader is the ONE place a `Lemma` is ever
+ * converted to a `RegistryNode`. */
 export interface RegistryNode {
   id: string;
   kind: RegistryKind;
@@ -73,7 +91,7 @@ export interface RegistryNode {
    * workspace directories can be renamed independently of the registry id
    * (../vibefeld/docs/export-graph-v1.md's `workspace.id` note: af records no rename-stable
    * identifier of its own). A consumer keys off THIS field, never off `id` or any derived guess
-   * — see the rename-hazard fixture in test/graph/ and `AfEdge` below. */
+   * — see the rename-hazard fixture in test/graph/ and `AfEdge` (./types-edges.ts). */
   workspace?: string;
   af: AfFlag;
   /** AND-edges: registry ids this node unconditionally depends on. Semantically a SET (dep
@@ -88,124 +106,11 @@ export interface RegistryNode {
   balloons: BalloonCounter;
 }
 
-// ---------------------------------------------------------------------------------------
-// Edges — PRD C5's per-edge join-key table. No universal join key; each edge keys differently.
-// ---------------------------------------------------------------------------------------
-
-/** registry↔af: contract byte-match, LOCATED VIA the shard's `workspace:` field (never the
- * registry id — see `RegistryNode.workspace`). `workspace` is copied here from the owning node
- * for join-locality (a consumer filtering `edges.af` never has to re-join against `nodes` just
- * to learn which directory it means) — src/graph/validate.ts cross-checks the copy never drifts
- * from the node's own field. Contract byte-match target is af's `nodes[].statement`, NEVER
- * `workspace.conjecture` (../vibefeld/docs/export-graph-v1.md: the conjecture field can go
- * stale post-init; the root statement is amendable and is the live truth). */
-export interface AfEdge {
-  nodeId: string;
-  workspace: string;
-  /** true iff an af export was found for `workspace` AND its contract byte-matched some node's
-   * `statement` in that export. false must always carry a companion `unresolved` bucket entry
-   * (edge:"af", ref:workspace) — never a silent drop (PRD C5). */
-  resolved: boolean;
-  /** Which af node's `statement` matched, when resolved (usually "1", the root — af nodes are
-   * hierarchical, so a match need not be the root). */
-  afNodeId?: string;
-  /** Explicit byte-match verdict, independent of `resolved`: a workspace can resolve (an export
-   * was found) while its statement no longer matches — that is a CONFLICT (M2.3), not an
-   * unresolved reference; the two failure shapes are deliberately distinguishable. */
-  contractMatch?: boolean;
-  epistemicState?: string;
-  taintState?: string;
-  /** af export's `validation.total_nodes` for this workspace, when resolved. */
-  nodeCount?: number;
-  /** The af export document's own `schema_version` (../vibefeld/docs/export-graph-v1.md),
-   * echoed for traceability — NOT this document's `schema_version`. */
-  afSchemaVersion?: string;
-}
-
-/** registry↔bd: registry id IS the bd issue key (linker-synced issues) — the one edge with no
- * hazard on record (PRD C5). */
-export interface BdEdge {
-  nodeId: string;
-  issueId?: string;
-  status?: string;
-  resolved: boolean;
-}
-
-/** registry↔fr: `evidence.artifact` path resolution + `graduates`/oracle ids (PRD C5). Keyed by
- * fr's own `cycle` (fr's log.jsonl identity — see ../knowledge-frontier/src/types.ts's
- * `LogRecord`), NOT by registry id: one fr cycle resolves to zero or one registry node, and that
- * resolution is itself the fact being recorded. Free-text `artifact` values are the hazard the
- * PRD names explicitly; `resolutionMethod: "unresolved"` is expected to be common on a real
- * campaign's early history, not a bug (M2.2's acceptance bar measures the resolution rate, it
- * does not assume 100%). */
-export interface FrEdge {
-  cycle: number;
-  artifact: string;
-  resolvedNodeId?: string;
-  resolutionMethod: "path" | "graduates" | "oracle" | "unresolved";
-  oracleId?: string;
-}
-
-/** registry↔report: shard label/id anchors, as check-provenance.py's own anchor resolution does
- * today (PRD C5) — anchors are ids, not contracts. */
-export interface ReportEdge {
-  nodeId: string;
-  anchor: string;
-  resolved: boolean;
-}
-
-/** The first-class unresolved-reference bucket (PRD C5: "expect a real unresolved-reference
- * bucket, surfaced as its own view, never silently dropped"). Every edge kind's failed lookups
- * land here; `(edge, ref)` is the key src/graph/validate.ts cross-checks for completeness
- * against each edge array's own `resolved`/`resolutionMethod` flag. */
-export interface UnresolvedRef {
-  edge: "af" | "bd" | "fr" | "report";
-  /** The raw reference text that failed to resolve — a workspace path (af), a registry id
-   * (bd), a free-text artifact string (fr), or an anchor (report). */
-  ref: string;
-  reason: string;
-  /** The registry node this unresolved lookup was attempted FROM, when known (absent for an fr
-   * cycle whose artifact string named no candidate node at all). */
-  nodeId?: string;
-  /** fr's own cycle number, when `edge === "fr"` — lets a consumer jump straight to the log
-   * record without re-deriving it from `ref`. */
-  sourceCycle?: number;
-}
-
-/** A first-class conflict — registry-status vs af-epistemic-state disagreement, contract
- * byte-mismatch, taint vs status inconsistency, fr banked-claim without oracle verdict (PRD C5).
- * M2.3 populates these; this WP (M2.1) only reserves the shape. `kind` is deliberately an open
- * string, not a closed enum: a new M2.3 conflict class must never force a schema_version bump
- * (CLAUDE.md rule 10 reserves version bumps for actual shape changes) — see the design memo's
- * open questions for the reviewer. Conflicts render as first-class defects and are NEVER
- * auto-resolved (PRD C5). */
-export interface ConflictRecord {
-  /** Open vocabulary; known values as of M2.1 (populated starting M2.3): "status-mismatch",
-   * "contract-mismatch", "taint-status-mismatch", "banked-without-oracle". */
-  kind: string;
-  edge: "af" | "bd" | "fr" | "report";
-  nodeId?: string;
-  registryValue?: string;
-  otherValue?: string;
-  message: string;
-}
-
-// ---------------------------------------------------------------------------------------
-// The document
-// ---------------------------------------------------------------------------------------
-
-export interface GraphEdges {
-  af: AfEdge[];
-  bd: BdEdge[];
-  fr: FrEdge[];
-  report: ReportEdge[];
-}
-
 /** The top-level unified projection graph document — `schemas/graph.v1.json`'s runtime mirror.
  * Read-only, deterministic, stateless (PRD C5 / D1). Producers canonicalize + serialize via
  * src/graph/serialize.ts; src/graph/validate.ts checks structural invariants the JSON Schema
- * itself cannot express (referential integrity, unresolved-bucket completeness, canonical
- * order). */
+ * itself cannot express (referential integrity, unresolved-bucket exact accounting, conflict
+ * recomputation, canonical form). */
 export interface GraphDocument {
   schema_version: typeof GRAPH_SCHEMA_VERSION;
   nodes: RegistryNode[];

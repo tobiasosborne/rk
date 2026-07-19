@@ -21,7 +21,7 @@ M2.1 only fixes the shape both of them, and every consumer downstream, build aga
 |---|---|---|---|
 | registry↔af | contract byte-match, LOCATED VIA the shard's `workspace:` field | `RegistryNode.workspace` (the source field) + `edges.af[].workspace` (the copy an af-edge record carries) | Workspace dir ≠ id after a rename (legal in af — confirmed by export-graph-v1.md's own note that af records no rename-stable identifier). `src/graph/validate.ts`'s `checkAfEdges` cross-checks `edges.af[].workspace === RegistryNode.workspace` byte-for-byte and ERRORs on drift — this is the concrete guard against a producer bug that re-derives the join key from `id` instead of copying the field. The **required rename-hazard fixture** (`lem-halo-collapse`, `test/graph/fixtures.ts`'s `buildRenameHazardDocument`) proves this both ways (correct copy → clean; id-derived → ERROR), mutation-proven red-first (see the WP's commit history: the cross-check was temporarily disabled and the red case confirmed it goes RED, then restored). |
 | registry↔bd | registry id | `edges.bd[].nodeId` | None known (PRD C5 says so explicitly) — `BdEdge` is the simplest edge type in the schema, deliberately. |
-| registry↔fr | `evidence.artifact` path resolution + `graduates`/oracle ids | `edges.fr[]` (keyed by fr's own `cycle`, NOT by registry id) + `unresolved` (`edge:"fr"`) | Free-text `artifact` values (fr's `Evidence.artifact` is "a resolvable ref: repo-relative path \| registry id \| arXiv/DOI \| Lean lemma", per `../knowledge-frontier/src/types.ts`) — a fr cycle can name a string that resolves to zero registry nodes. `FrEdge.resolutionMethod: "unresolved"` is a first-class, EXPECTED value (M2.2's acceptance bar is a measured resolution rate, not 100%), and `checkUnresolvedBucketCompleteness` requires every such edge to have a companion `unresolved` bucket entry — never silently dropped. |
+| registry↔fr | `evidence.artifact` path resolution + `graduates`/oracle ids | `edges.fr[]` (keyed by fr's own `cycle`, NOT by registry id) + `unresolved` (`edge:"fr"`, `sourceCycle` REQUIRED as of the repair wave — blocker 4 below) | Free-text `artifact` values (fr's `Evidence.artifact` is "a resolvable ref: repo-relative path \| registry id \| arXiv/DOI \| Lean lemma", per `../knowledge-frontier/src/types.ts`) — a fr cycle can name a string that resolves to zero registry nodes. `FrEdge.resolutionMethod: "unresolved"` is a first-class, EXPECTED value (M2.2's acceptance bar is a measured resolution rate, not 100%), and `src/graph/validate-fr.ts`'s `checkFrUnresolvedBucket` requires EXACT one-to-one accounting keyed on `(edge, sourceCycle, ref)` — never silently dropped, and never collapsed across two cycles sharing artifact text (the collapse bug the Tier A review caught; see "Review outcomes" below). |
 | registry↔report | shard label/id anchors | `edges.report[]` | Anchors are ids, not contracts (PRD C5) — `ReportEdge.anchor` is untyped free text on purpose; the schema does not attempt to validate anchor syntax, only presence/resolution. |
 
 Conflicts are a fifth, cross-cutting concept, not a fifth edge: `ConflictRecord.edge` names WHICH
@@ -35,10 +35,14 @@ shape only; M2.3 is the WP that actually detects and populates conflicts.
   `readGraphFromRepo()` function yet. M2.2 builds the impure readers (`argument/**/*.md` shards,
   `af export --graph json` per workspace with a direct-ledger-JSON fallback, fr's `log.jsonl`,
   beads JSONL) that populate a `GraphDocument`; this WP only fixes what they populate INTO.
-- **No conflict detection logic.** `ConflictRecord`'s shape is fixed (`kind` deliberately an open
-  string, not a closed enum — see "Open questions" below); M2.3 writes the actual comparisons
-  (registry-status vs af-epistemic-state, contract byte-mismatch, taint-vs-status, fr
-  banked-without-oracle).
+- **No FULL conflict detection logic.** `ConflictRecord.kind` is now a CLOSED enum (see "Review
+  outcomes" below — this changed from the open-string design originally proposed in "Open
+  questions"), and `src/graph/validate-conflicts.ts` recomputes a MINIMAL subset of the four
+  kinds (a `status:"proved"` node's af-edge consistency; an fr `outcome:"banked"` edge's
+  oracle-verdict freshness) sufficient to make the Tier A review's own fixture pass. M2.3 is
+  still the WP that builds the FULL detector against real repo/af/fr data (every status value,
+  not just `"proved"`; every conflict-worthy state combination, not just the two triggers this
+  WP's repair wave needed).
 - **No render/terminal-view code.** M2.4 (`rk render`) and M2.5 (`rk graph --focus`/critical-path)
   consume a `GraphDocument`; this WP does not touch either.
 - **No JSON-Schema-validator library.** `schemas/graph.v1.json` is hand-written and intended for
@@ -118,3 +122,126 @@ DOES change the output, proving the test isn't vacuously trivial).
    clean projection type shouldn't inherit. Confirm this boundary is correct: should M2.2's store
    reader (which WILL import `linker-parse.ts`'s `parseRegistry`) be the only place a `Lemma` is
    ever converted to a `RegistryNode`, with the two types never unified?
+
+## Review outcomes (2026-07-19 repair wave)
+
+Tier A codex (gpt-5.6-sol) review of commit `335d5e7` returned four MAJOR landing-blockers, all
+validity semantics, plus five follow-ups and direct answers to all five open questions above.
+ONE repair wave landed all four blockers with red fixtures (CLAUDE.md's anti-Zeno cap); this
+section is that repair's record, not a re-review.
+
+**Blocker 1 — af-evidence requirement.** Fixed: `AfEdge` is now a discriminated union on
+`workspaceResolved` (`UnresolvedAfEdge` / `ResolvedAfEdge`, `src/graph/types-edges.ts`) —
+`ResolvedAfEdge` makes `afSchemaVersion`/`afRootNodeId`/`contractMatch`/`epistemicState`/
+`taintState`/`nodeCount` all MANDATORY at the type level. `src/graph/validate-af.ts`'s
+`checkAfEdges` additionally enforces at runtime (a document assembled from untyped JSON bypasses
+TS entirely) that every `RegistryNode` with `af != "none"` carries EXACTLY ONE af edge — zero is
+an ERROR (`"has no edges.af entry"`), two is an ERROR (`"duplicate af edge"`), and an edge on an
+`af:"none"` node is also an ERROR (the symmetric direction, added during repair). Red fixture:
+`test/graph/fixtures.ts`'s `buildAfEvidenceDocument(false)` — the review's own scenario
+(`status:"proved"`, `af:"validated"`, a workspace, zero `edges.af`) — verified in
+`test/graph/validate.test.ts`'s "Tier A review blocker 1" describe block; green counterpart
+`buildAfEvidenceDocument(true)`. Mutation-proven: the cardinality loop, the af:"none" check, and
+the duplicate check were each disabled (`if (false && ...)`) and confirmed their tests go RED,
+then restored byte-identical.
+
+**Blocker 2 — contract match targets the af root only.** Fixed: `afNodeId` renamed to
+`afRootNodeId`, typed as the string LITERAL `"1"` (`AF_ROOT_NODE_ID`) — af's hierarchical
+numbering roots there unconditionally (`../vibefeld/docs/export-graph-v1.md`'s dotted-id scheme:
+only `"1"` ever has no `parent_id`), so this is a mechanical proof, not a convention. Red fixture:
+`buildAfRootMismatchDocument("1.2")` (an internal-lemma id) — needs one `as unknown as
+GraphDocument` cast, documented inline, since a well-typed `ResolvedAfEdge` literally cannot
+express a non-"1" `afRootNodeId`; the cast constructs the value anyway to prove
+`src/graph/validate-af.ts`'s runtime check independently catches it. Green: `("1")`. Mutation-
+proven (the `afRootNodeId !== AF_ROOT_NODE_ID` check disabled, confirmed RED, restored).
+
+**Blocker 3 — conflict recomputation.** Fixed: `ConflictRecord.kind` closed to the four settled
+kinds (memo question 1, answered below); `src/graph/validate-conflicts.ts` RECOMPUTES the
+conflict set two triggers imply — `status:"proved"` nodes checked against their (now-mandatory)
+af edge's `contractMatch`/`epistemicState`/`taintState`, and fr edges with `outcome:"banked"`
+checked against `verdict`/`verdictFresh` (the fr shape gained `outcome`/`verdict`/`verdictFresh`/
+`supersedes` fields for exactly this) — and ERRORs on a missing, duplicate, or inconsistent
+recorded entry, plus an "unsupported" recorded entry backed by no real condition. Red fixture:
+`buildProvedConflictDocument([])` — the review's own scenario (`proved` + `pending` epistemic +
+`tainted` + `contractMatch:false` + `conflicts:[]`) — expects three missing-conflict ERRORs
+(contract-mismatch, status-mismatch, taint-status-mismatch); green counterpart
+`buildProvedConflictDocument(provedConflictRecords())`; plus dedicated duplicate/inconsistent/
+unsupported/banked-without-oracle red+green pairs. Mutation-proven: `computeExpectedConflicts`
+gutted to `return []`, confirmed exactly the seven conflict-dependent tests go RED (no others),
+restored byte-identical. Scope stated honestly in `validate-conflicts.ts`'s header: this is the
+MINIMAL recomputation the fixture requires, not M2.3's full detector — a documented known
+limitation (two banked-without-oracle-eligible fr edges resolving to the same node would
+collapse under one identity) is left for M2.3, not silently inherited as if it were solved.
+
+**Blocker 4 — fr unresolved exact accounting.** Fixed: `FrEdge` and `UnresolvedRef` are each
+discriminated unions (`resolutionMethod` / `edge`) — `resolvedNodeId` is a compile-time error on
+an unresolved `FrEdge`, and `sourceCycle` is compile-time REQUIRED on an `edge:"fr"`
+`UnresolvedRef`. `src/graph/validate-fr.ts` additionally runtime-checks (untyped-JSON backstop)
+exact one-to-one accounting keyed on `(edge:"fr", sourceCycle, ref:artifact)` — never `(edge,
+ref)` alone, which is exactly the collapse bug. Red fixtures: `buildFrCollapseDocument("one")`
+(two distinct unresolved cycles, 5 and 9, naming the identical artifact text, only cycle 5's
+bucket entry present — cycle 9's silently missing) with green counterpart `("two")`;
+`buildFrGhostDocument()` (a resolved fr edge naming `resolvedNodeId:"lem-ghost"`, not a real
+node). A third bonus red fixture (resolvedNodeId present on an unresolved edge, via cast) proves
+the runtime backstop for the compile-time-forbidden case too. Mutation-proven: the
+`resolvedNodeId` referential-integrity + forbidden-on-unresolved checks disabled (confirmed both
+their tests RED), then the bucket key narrowed back to `(edge, ref)` (confirmed the collapse-case
+test RED, plus expected collateral on tests sharing that fixture), then everything restored
+byte-identical.
+
+**Follow-ups folded into this wave (batched, plain fixes per CLAUDE.md's tiering — not
+landing-blockers):**
+- **(a) Total tie-breakers.** `src/graph/serialize.ts`'s every sort (`af`/`bd`/`fr`/`report`
+  edges, `unresolved`, `conflicts`, `nodes`) now falls back to `fullTiebreak` — a comparison over
+  the COMPLETE canonicalized JSON text of the two elements — after its own primary key(s), so two
+  entries tied on their natural key (e.g. two `bd` edges sharing `nodeId`, or two `conflicts`
+  sharing `kind`+`edge`+`nodeId`) still serialize deterministically regardless of input order.
+  `test/graph/serialize.test.ts` gained a dedicated describe block with tied-`bd` and
+  tied-`conflicts` fixtures proving order-independence plus one negative control.
+- **(b) Canonical-order validation scope.** `checkCanonicalNodeOrder` (nodes only) replaced by
+  `checkCanonicalForm`, which compares EVERY array in the document (nodes, all four edge arrays,
+  `unresolved`, `conflicts`) against `canonicalizeGraphDocument`'s own output — the single source
+  of truth for "canonical" can never drift from what the serializer actually produces. Test
+  added: an out-of-order `edges.bd` array is now flagged, not just out-of-order `nodes`.
+- **(c) Memo answers.** See directly below — question 1 (closed enum, adopted), question 2
+  (`supersedes?: number` reserved raw, no `supersededBy` mirror, adopted), question 5 (keep
+  `RegistryNode`/`Lemma` separate, M2.2 the total conversion boundary, confirmed as designed —
+  no code change needed). Question 3 renamed rather than re-decided (see below). Question 4's
+  own answer (keep the unit fixture, no dead `corpus/graph/` directory yet) is unchanged, but
+  the review adds: M2.2 must still add a REAL repo-level rename-hazard corpus fixture before
+  reader acceptance — tracked, not actioned in this wave (M2.2 has not started).
+
+**Review-follow-ups NOT folded into this wave** (tracked for later WPs, per the coordinator's
+explicit scope — this repair wave addressed only blockers 1–4 plus (a)/(b)/(c) above):
+content-addressing digest (review follow-up 3, a hash of `serializeGraphDocument`'s bytes stored
+OUTSIDE the hashed document — M2.2/M2.4 territory), the af-workspace/proof-provenance drill-down
+section C6 will need (review follow-up 4 — M2.4 territory), and the real repo-level rename-hazard
+corpus fixture (review follow-up 5 — M2.2's acceptance bar, not M2.1's).
+
+**Memo question 1 — conflict vocabulary: ANSWERED, adopted.** Closed enum
+(`CONFLICT_KINDS`/`ConflictKind`, four settled kinds). A new conflict class needs a
+`schema_version` bump; typo tolerance was the wrong tradeoff on a validity surface. `kind`'s
+schema/type both changed from open string to closed enum.
+
+**Memo question 2 — fr identity and supersession: ANSWERED, adopted.** `cycle` stays record
+identity (unchanged). `FrEdgeBase` gained `supersedes?: number` (raw cycle reference, no
+`supersededBy` mirror stored — a consumer derives "is this cycle superseded" by scanning for
+another edge's `supersedes` pointing at it). Superseded evidence must not be promotion-bearing;
+`validate-conflicts.ts`'s banked-without-oracle computation does not yet filter on this (M2.2/
+M2.3 territory once real fr data exists to filter), but the field is reserved now, matching the
+`balloons` precedent.
+
+**Memo question 3 — `resolved` vs `contractMatch`: ANSWERED, renamed not re-decided.** The
+distinction is kept (as the memo argued), but `resolved` is renamed to `workspaceResolved`
+throughout (`AfEdge`'s discriminant) — a found workspace with a root contract mismatch is
+workspace-resolved storage PLUS `contractMatch:false` and now a MANDATORY conflict record
+(blocker 3's recomputation enforces this), never an unresolved-bucket item. This is a naming/
+enforcement fix, not a reversal of the memo's original design call.
+
+**Memo question 4 — fixture placement: ANSWERED, confirmed.** Keep the pure unit fixture now; no
+dead `corpus/graph/` directory without a reader harness. M2.2 must add the real repo-level rename
+fixture before reader acceptance (tracked as a review follow-up, not actioned here).
+
+**Memo question 5 — `RegistryNode` vs `Lemma`: ANSWERED, confirmed.** Keep the interfaces
+separate; M2.2 is the explicit, total conversion boundary. No code change was needed — this WP's
+original design call stands.

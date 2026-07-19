@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { GraphDocument } from "../../src/graph/types";
+import type { ConflictRecord, GraphDocument } from "../../src/graph/types";
 import { canonicalizeGraphDocument, serializeGraphDocument } from "../../src/graph/serialize";
 import { buildSampleDocument } from "./fixtures";
 
@@ -108,5 +108,58 @@ describe("serializeGraphDocument — determinism property (key/array order indep
     const doc = buildSampleDocument();
     doc.nodes[1]!.contract = "A different statement entirely.";
     expect(serializeGraphDocument(doc)).not.toBe(canonical);
+  });
+});
+
+describe("serializeGraphDocument — total tie-breaker over tied primary-key entries (Tier A review follow-up 1)", () => {
+  // Two `bd` edges legitimately share `nodeId` in today's shape (no "exactly one bd edge per
+  // node" rule exists, unlike af) — the primary sort key alone is NOT enough to order them
+  // deterministically; the serializer must fall back to a total tie-breaker over the complete
+  // element, not just accept whatever order the input happened to arrive in.
+  function tiedBdDocument(order: "ab" | "ba"): GraphDocument {
+    const a = { nodeId: "lem-x", issueId: "rk-aaa", status: "open", resolved: true };
+    const b = { nodeId: "lem-x", issueId: "rk-bbb", status: "closed", resolved: false };
+    return {
+      schema_version: "1",
+      nodes: [],
+      edges: { af: [], bd: order === "ab" ? [a, b] : [b, a], fr: [], report: [] },
+      unresolved: [],
+      conflicts: [],
+    };
+  }
+
+  test("two bd edges tied on nodeId still serialize identically regardless of input order", () => {
+    expect(serializeGraphDocument(tiedBdDocument("ab"))).toBe(serializeGraphDocument(tiedBdDocument("ba")));
+  });
+
+  test("mutation-proof: the tied-bd serialization is not vacuous — changing one tied element's content changes the bytes", () => {
+    const doc = tiedBdDocument("ab");
+    doc.edges.bd[0]!.issueId = "rk-changed";
+    expect(serializeGraphDocument(doc)).not.toBe(serializeGraphDocument(tiedBdDocument("ab")));
+  });
+
+  // Two `conflicts` records legitimately share (kind, edge, nodeId) only in an invalid document
+  // (validateGraphDocument would flag the duplicate) — but the SERIALIZER must still produce a
+  // deterministic order for such an in-flight/not-yet-valid document, per the review's own
+  // framing ("a real duplicate is itself an ERROR validate.ts catches, but the serializer must
+  // still produce one deterministic order").
+  function tiedConflictDocument(order: "ab" | "ba"): GraphDocument {
+    const a: ConflictRecord = {
+      kind: "contract-mismatch", edge: "af", nodeId: "lem-x", registryValue: "proved", otherValue: "aaa", message: "m1",
+    };
+    const b: ConflictRecord = {
+      kind: "contract-mismatch", edge: "af", nodeId: "lem-x", registryValue: "proved", otherValue: "bbb", message: "m2",
+    };
+    return {
+      schema_version: "1",
+      nodes: [],
+      edges: { af: [], bd: [], fr: [], report: [] },
+      unresolved: [],
+      conflicts: order === "ab" ? [a, b] : [b, a],
+    };
+  }
+
+  test("two conflicts tied on (kind, edge, nodeId) still serialize identically regardless of input order", () => {
+    expect(serializeGraphDocument(tiedConflictDocument("ab"))).toBe(serializeGraphDocument(tiedConflictDocument("ba")));
   });
 });

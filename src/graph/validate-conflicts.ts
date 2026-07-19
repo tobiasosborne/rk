@@ -1,0 +1,136 @@
+// PURITY: pure — no fs/network/clock (L3). Conflict recomputation — Tier A review blocker 3
+// (2026-07-19, docs/memos/2026-07-19-graph-schema-v1.md's "review outcomes"): "Contradictory
+// proof state can validate with an empty conflict list... have validation recompute the known
+// conflicts so missing, duplicate, or inconsistent conflict records are errors." Split out of
+// validate.ts to stay clear of CLAUDE.md's 280-line shard cap.
+//
+// SCOPE (stated honestly, not over-claimed): this is the MINIMAL recomputation the review's own
+// red fixture requires — not M2.3's full conflict-detection feature (M2.3 is still the WP that
+// builds out a richer detector against real repo/af/fr data). Two triggers are recomputed here:
+//   1. `status: "proved"` nodes (PRD §5: "proved | yes | af-validated (root validated, taint
+//      clean)") checked against their (blocker-1-mandatory) af edge: `af !== "validated"` or a
+//      workspace that never resolved, `contractMatch`, `epistemicState`, `taintState`.
+//   2. fr edges with `outcome === "banked"` (../knowledge-frontier's `Outcome`) checked against
+//      `verdict`/`verdictFresh` — fr's own bank-gate ("▣ banked needs an audit verdict from an
+//      oracle other than the author", ../knowledge-frontier/docs/concepts.md).
+// Any OTHER status/state combination (e.g. an `open` node with a `validated` af edge) is a real
+// but DIFFERENT anomaly, left to M2.3. Known limitation, documented rather than silently
+// papered over: `banked-without-oracle`'s identity is `(kind, edge, nodeId)`, same as the af-side
+// kinds — TWO distinct banked-without-oracle-eligible fr edges resolving to the SAME node would
+// collapse under one identity. Narrow enough for M2.1 (a real occurrence needs its own WP), but
+// worth flagging for M2.3, not silently inherited.
+
+import type { ConflictKind, ConflictRecord, GraphDocument, RegistryNode } from "./types";
+import { err, type GraphIssue } from "./validate-issue";
+
+interface ExpectedConflict {
+  kind: ConflictKind;
+  edge: "af" | "fr";
+  nodeId?: string;
+  registryValue?: string;
+  otherValue?: string;
+}
+
+function identity(kind: ConflictKind, edge: "af" | "bd" | "fr" | "report", nodeId: string | undefined): string {
+  return `${kind} ${edge} ${nodeId ?? ""}`;
+}
+
+function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[] {
+  const out: ExpectedConflict[] = [];
+  const afByNode = new Map(doc.edges.af.map((e) => [e.nodeId, e]));
+
+  for (const n of doc.nodes) {
+    if (n.status !== "proved") continue;
+    const e = afByNode.get(n.id);
+    if (n.af !== "validated" || !e) {
+      out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: n.af });
+      continue;
+    }
+    if (!e.workspaceResolved) {
+      out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: "workspace-unresolved" });
+      continue;
+    }
+    if (!e.contractMatch) {
+      out.push({ kind: "contract-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: "contractMatch:false" });
+    }
+    if (e.epistemicState !== "validated") {
+      out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: e.epistemicState });
+    }
+    if (e.taintState !== "clean") {
+      out.push({ kind: "taint-status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: e.taintState });
+    }
+  }
+
+  for (const e of doc.edges.fr) {
+    if (e.outcome !== "banked") continue;
+    if (e.resolutionMethod === "unresolved") continue; // no node to anchor a conflict to; the
+    // unresolved-bucket accounting (validate-fr.ts) already flags this cycle elsewhere.
+    const oracleBacked = e.verdict === "banked" && e.verdictFresh !== false;
+    if (!oracleBacked) {
+      out.push({
+        kind: "banked-without-oracle",
+        edge: "fr",
+        nodeId: e.resolvedNodeId,
+        registryValue: "banked",
+        otherValue: e.verdict ?? "none",
+      });
+    }
+  }
+
+  return out;
+}
+
+/** Recomputes the conflict set the raw node/edge data implies and ERRORs on: a computed conflict
+ * with no matching recorded entry (missing); more than one recorded entry sharing an identity
+ * (duplicate); a recorded entry whose `registryValue`/`otherValue` disagree with the computed
+ * values (inconsistent); or a recorded entry whose identity matches no computed conflict at all
+ * (unsupported — the underlying condition does not actually hold). */
+export function checkConflicts(doc: GraphDocument, nodeById: ReadonlyMap<string, RegistryNode>, issues: GraphIssue[]): void {
+  const expected = computeExpectedConflicts(doc);
+
+  const recordedByKey = new Map<string, ConflictRecord[]>();
+  for (const c of doc.conflicts) {
+    if (c.nodeId !== undefined && !nodeById.has(c.nodeId)) {
+      issues.push(err(`conflict (${c.kind}) references unknown node '${c.nodeId}'`, c.nodeId));
+    }
+    const key = identity(c.kind, c.edge, c.nodeId);
+    const list = recordedByKey.get(key) ?? [];
+    list.push(c);
+    recordedByKey.set(key, list);
+  }
+
+  const expectedKeys = new Set<string>();
+  for (const e of expected) {
+    const key = identity(e.kind, e.edge, e.nodeId);
+    expectedKeys.add(key);
+    const recorded = recordedByKey.get(key);
+    const label = `${e.kind} (${e.edge}${e.nodeId ? `, node '${e.nodeId}'` : ""})`;
+    if (!recorded || recorded.length === 0) {
+      issues.push(err(`missing conflict record: ${label} — registry='${e.registryValue}' vs other='${e.otherValue}'`, e.nodeId));
+      continue;
+    }
+    if (recorded.length > 1) {
+      issues.push(err(`duplicate conflict record: ${label} recorded ${recorded.length} times`, e.nodeId));
+    }
+    for (const c of recorded) {
+      if (c.registryValue !== e.registryValue || c.otherValue !== e.otherValue) {
+        issues.push(
+          err(
+            `conflict record ${label} inconsistent with computed state: recorded registry=` +
+              `'${c.registryValue}'/other='${c.otherValue}', computed registry='${e.registryValue}'/other='${e.otherValue}'`,
+            e.nodeId,
+          ),
+        );
+      }
+    }
+  }
+
+  for (const [key, recorded] of recordedByKey) {
+    if (expectedKeys.has(key)) continue;
+    for (const c of recorded) {
+      issues.push(
+        err(`conflict record ${c.kind} (${c.edge}${c.nodeId ? `, node '${c.nodeId}'` : ""}) is not supported by any computed conflict`, c.nodeId),
+      );
+    }
+  }
+}
