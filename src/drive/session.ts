@@ -47,6 +47,20 @@ export interface SessionIssue {
   message: string;
 }
 
+/** The isolation tuple's canonical string key (M3.3 extension): `(backend, model, role, tier,
+ * claimId, dispatchModel)` joined on a single-space separator (backend/model/role/tier/claimId/
+ * dispatchModel are all single-token strings in practice; a space is a legible, low-risk join —
+ * unlike identity.ts's seam encoding, this key is never parsed back apart, only compared for
+ * equality, so lossless round-tripping is not a requirement here). Exported so
+ * src/drive/session-manager.ts's create-once/global-uniqueness store can key its maps on EXACTLY
+ * the same tuple this module already treats as the isolation boundary — one definition of "the
+ * tuple," never two independently-maintained ones that could silently drift apart. */
+export function sessionIsolationKey(
+  r: Pick<SessionRecord, "backend" | "model" | "role" | "tier" | "claimId" | "dispatchModel">,
+): string {
+  return [r.backend, r.model, r.role, r.tier, r.claimId, r.dispatchModel].join(" ");
+}
+
 function validateIdentityShape(request: WorkerRequestIdentity, issues: SessionIssue[]): void {
   if (!isNonBlankString(request.backend)) issues.push({ path: "backend", message: "must be a non-blank string" });
   if (!isNonBlankString(request.model)) issues.push({ path: "model", message: "must be a non-blank string" });
