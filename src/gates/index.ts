@@ -11,6 +11,13 @@
 // depends on (a malformed `phase` would otherwise change what "passing" means for all six), so a
 // reader scanning `rk check` output top-to-bottom sees config problems before anything they might
 // explain.
+//
+// M2.6: `freshnessGate` (src/gates/freshness.ts, docs/gate-contracts.md Gate 7) is likewise a
+// synthetic entry with no check-all.sh counterpart — AISM never had a general regenerate-and-diff
+// mechanism, only the per-file mirror check Gate 2 Check 11 still carries. Placed LAST: it
+// consults `linkerGate`'s own parse (via `parseRegistry`) to regenerate the artifacts it
+// diffs against, so a reader sees the underlying registry's own findings before the derived
+// staleness findings that depend on it.
 
 import type { Gate } from "./framework";
 import { configGate } from "./config";
@@ -20,6 +27,7 @@ import { linkerGate } from "./linker";
 import { runsGate } from "./runs";
 import { provenanceGate } from "./provenance";
 import { shardsGate } from "./shards";
+import { freshnessGate } from "./freshness";
 
 export const GATES: readonly Gate[] = [
   configGate,
@@ -29,4 +37,5 @@ export const GATES: readonly Gate[] = [
   runsGate,
   provenanceGate,
   shardsGate,
+  freshnessGate,
 ];

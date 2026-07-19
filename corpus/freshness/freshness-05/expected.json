@@ -1,0 +1,11 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "malformed .rk/generated.json: not valid JSON" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — .rk/generated.json is rk-only (M2.6); no AISM equivalent to diverge from.",
+  "notes": "Malformed-manifest ERROR (rk-xbm precedent, config-01/config-02's untrusted-JSON posture applied to this manifest): .rk/generated.json present but not valid JSON at all. Proves a malformed manifest is a loud, counted ERROR, never a crash and never silently read as 'absent' (which would wrongly route it to freshness-04's presence-conditional green). Mutation-proven red-first (temporarily catching the JSON.parse failure and returning {entries: [], findings: []} — i.e. silently treating malformed as absent — turns this fixture green when it must be red; reverted after confirming)."
+}

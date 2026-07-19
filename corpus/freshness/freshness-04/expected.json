@@ -1,0 +1,9 @@
+{
+  "gate": "freshness",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["manifest not adopted"] },
+  "aism_behavior": "differs (deliberate, not triaged into rk-stricter-intended/rk-bug/ambiguous — same footing as linker-25/shards-15's R14/R13 amendments): AISM has no manifest concept, only the unconditional per-file check_generated; a repo that never adopted the M2.6 mechanism has nothing declared for it to check, and non-adoption is never a finding.",
+  "notes": "No-manifest presence-conditional golden case: one valid lemma shard, no .rk/generated.json anywhere in the repo. Proves the whole-mechanism presence-conditional guard (generalizing Gate 2 Check 11's per-file precedent to the gate as a whole): zero findings, coverage names the non-adoption explicitly, never a silent 0/0 with no explanation. Sibling: linker-25, shards-15 (per-file / per-directory versions of the same non-adoption story). Mutation-proven red-first (temporarily treating manifest-absent as if it declared a stale argument/INDEX.md turns this fixture red; reverted after confirming)."
+}

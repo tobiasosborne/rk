@@ -101,6 +101,20 @@ const ROOT_SKIP_DIR = ".git";
  *                                       is exactly the loader's job, not kitchen-sink bloat.
  * - `runs/**`                        — runs gate (Gate 5 Inputs)
  * - `report/**\/*.{tex,md}`          — provenance + report-shards gates (Gate 4 / Gate 6 Inputs)
+ * - `.rk/` (one level only)          — M2.6: the freshness gate's declared manifest,
+ *                                       `.rk/generated.json` (Gate 7 Inputs, src/gates/
+ *                                       freshness.ts). Non-recursive: the manifest is a single
+ *                                       literal file directly under `.rk/`, same shape as the
+ *                                       repo-root `INDEX.md` rule below, just folded into the
+ *                                       directory-rule list instead of handled as a one-off
+ *                                       (`.rk/config.json`'s own reading stays on its separate
+ *                                       edge path, `src/store/config-load.ts` — this rule only
+ *                                       adds `.rk/*` files to the snapshot's TEXT map so a PURE
+ *                                       gate can read `.rk/generated.json` the same way every
+ *                                       other gate reads its own declared Inputs; no other gate
+ *                                       filters over unprefixed snapshot keys, so this is a
+ *                                       strict addition, never a behavior change for the six
+ *                                       pre-M2.6 gates).
  * plus the repo-root `INDEX.md` (runs gate's reverse-lookup input), handled separately below
  * since it is a single literal file, not a directory rule.
  *
@@ -115,6 +129,7 @@ const INCLUDE_RULES: IncludeRule[] = [
   { dir: "refs", recursive: true },
   { dir: "runs", recursive: true },
   { dir: "report", recursive: true, extensions: [".tex", ".md"] },
+  { dir: ".rk", recursive: false },
 ];
 
 interface Accum {

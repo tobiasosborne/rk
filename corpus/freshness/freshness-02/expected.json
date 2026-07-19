@@ -1,0 +1,12 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "argument/INDEX.md", "message_pattern": "is STALE" },
+    { "severity": "ERROR", "path_pattern": "argument/INDEX.md", "message_pattern": "first difference at line" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "differs (mechanism-level): AISM's argument.py --check has no declared-manifest concept at all; its own check_generated (argument.py:632-642) would ERROR the identical byte-divergence unconditionally under Gate 2 Check 11 — the same underlying failure mode (a hand-edited generated file), caught here via the general M2.6 mechanism instead of the file-specific one.",
+  "notes": "The M0.2/M2.6-mandatory 'hand-edited generated file' fixture, exercised through the freshness gate itself: same lemma shard and manifest as freshness-01, but argument/INDEX.md's contract cell hand-edited so it diverges from a fresh render at line 6. Proves the gate names both the file and the first differing line, never a bare pass/fail with no locator. Mutation-proven red-first (temporarily short-circuiting the have!==want check to never fire turns this fixture green when it must be red; reverted after confirming)."
+}

@@ -1,0 +1,12 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "argument/INDEX.md", "message_pattern": "declared in .rk/generated.json" },
+    { "severity": "ERROR", "path_pattern": "argument/INDEX.md", "message_pattern": "absent from the repo" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — .rk/generated.json is rk-only (M2.6); AISM's check_generated (argument.py:632-642) treats an absent argument/INDEX.md as maximally stale and ERRORs too, but has no concept of a 'declared, not yet generated' state distinct from 'never adopted' — this fixture is deliberately gate-specific, not a port.",
+  "notes": "Declared-but-missing: the manifest declares argument/INDEX.md under 'linker-index', but the file is entirely absent from the repo (same lemma shard as freshness-01, no argument/INDEX.md at all). Proves a manifest entry naming a nonexistent file is a real, counted ERROR distinct from freshness-04's presence-conditional non-adoption — declaring a path and never generating it is a defect, not a legitimate unadopted state. Mutation-proven red-first (temporarily treating have===undefined as a silent skip, same as an absent manifest, turns this fixture green when it must be red; reverted after confirming)."
+}

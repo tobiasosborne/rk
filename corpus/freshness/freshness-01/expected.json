@@ -1,0 +1,9 @@
+{
+  "gate": "freshness",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — .rk/generated.json and the regenerate-and-diff mechanism are rk-only (M2.6); AISM's argument.py has no declared-manifest concept, only the unconditional per-file check_generated Gate 2 Check 11 ports.",
+  "notes": "Clean-regenerate golden pass: one valid lemma shard, argument/INDEX.md byte-identical to a fresh render of it, .rk/generated.json declaring exactly that path under the 'linker-index' generator. Proves the gate's regenerate-and-diff mechanism reports zero findings on a genuinely fresh artifact. Mutation-proven red-first: temporarily forcing the have!==want comparison to always report STALE turns this fixture red; reverted after confirming."
+}

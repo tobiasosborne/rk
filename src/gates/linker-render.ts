@@ -129,11 +129,15 @@ const GENERATED_FILES: Array<[string, (lemmas: Lemma[]) => string]> = [
 
 /** One mirror file's adoption status, for the linker gate's coverage line (R14: absence must be
  * visible, never a silent skip — CLAUDE.md L2). `label` is the bare filename stem ("INDEX",
- * "DAG"). */
+ * "DAG"). `superseded` (M2.6, bead-tracked in docs/gate-contracts.md's Gate 7 boundary note): true
+ * iff `.rk/generated.json` declares this path with a generator `src/gates/freshness.ts`
+ * recognizes — Check 11 no longer byte-diffs this path itself once that gate has taken it over,
+ * to avoid double-reporting the identical staleness under two gate names. */
 export interface MirrorStatus {
   path: string;
   label: string;
   present: boolean;
+  superseded?: boolean;
 }
 
 export interface GeneratedCheckResult {
@@ -145,13 +149,27 @@ export interface GeneratedCheckResult {
  * (R14, bead rk-1rv — see this file's header comment). A mirror file absent from the snapshot is
  * read as "convention not adopted": no finding, `mirrorStatus` records it for the coverage line.
  * A PRESENT mirror file must still byte-equal a fresh render of the current shard set — unchanged
- * from the pre-R14 contract. */
-export function checkGenerated(snapshot: RepoSnapshot, lemmas: Lemma[]): GeneratedCheckResult {
+ * from the pre-R14 contract.
+ *
+ * `superseded` (M2.6, bead rk-19i's freshness gate — see docs/gate-contracts.md's Gate 7 "Check
+ * 11 boundary"): paths in this set are skipped here entirely (no finding, no present/absent
+ * byte-diff) — `src/gates/freshness.ts`'s Gate 7 has already taken over checking them. Defaults
+ * to empty, so every pre-M2.6 caller (and every pre-M2.6 corpus fixture, none of which carries a
+ * `.rk/generated.json`) is byte-identical to before this parameter existed. */
+export function checkGenerated(
+  snapshot: RepoSnapshot,
+  lemmas: Lemma[],
+  superseded: ReadonlySet<string> = new Set(),
+): GeneratedCheckResult {
   const findings: Finding[] = [];
   const mirrorStatus: MirrorStatus[] = [];
   for (const [path, render] of GENERATED_FILES) {
-    const present = snapshot.has(path);
     const label = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    if (superseded.has(path)) {
+      mirrorStatus.push({ path, label, present: snapshot.has(path), superseded: true });
+      continue;
+    }
+    const present = snapshot.has(path);
     mirrorStatus.push({ path, label, present });
     if (!present) continue; // R14: absent mirror = not adopted, never a finding.
     const have = snapshot.get(path)!;

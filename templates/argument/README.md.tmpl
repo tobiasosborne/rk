@@ -17,6 +17,20 @@ excluding only files whose basename is exactly `README.md`, `INDEX.md`, or `DAG.
 `argument/lemmas/` is a common convention for grouping shards, not a requirement; a shard directly
 at `argument/lem-foo.md` is exactly as valid as one nested under `argument/lemmas/lem-foo.md`.
 
+**`argument/INDEX.md`/`DAG.md` (optional, generated, never hand-edited).** Neither file is
+stamped by `rk init` — adoption is manual. To adopt: generate the two files once, then declare
+them in `.rk/generated.json` (not stamped either; create it yourself):
+```json
+{ "schema_version": "1", "entries": [
+  { "path": "argument/INDEX.md", "generator": "linker-index" },
+  { "path": "argument/DAG.md", "generator": "linker-dag" }
+] }
+```
+Once declared, `rk check`'s freshness gate regenerates and byte-diffs both on every run — a
+hand-edit or a stale copy is an ERROR, an absent declared file is an ERROR, and the whole
+mechanism is silently skipped (never a finding) only when `.rk/generated.json` itself does not
+exist. A campaign that never adopts either file is not penalized for it.
+
 ## Frontmatter
 
 Flat `key: value` lines between two `---` lines, at the top of the file.

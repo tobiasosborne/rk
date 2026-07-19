@@ -124,11 +124,20 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `shards-15` | report-shards | `report/` ROOT directory entirely absent (fresh-scaffold-shaped repo with a real `argument/lemmas` shard) ⇒ golden pass, coverage names the non-adoption | **R13** / bead rk-au6 (M1, `docs/memos/2026-07-18-aism-residue-audit.md` section R13): the `report/` LaTeX layout is not in rk's scaffold (PRD.md:79-85) — a general research tool must not force every repo to hand-create it. Every check in `shards.ts` is now bound only when `report/` (the ROOT directory) exists; absence is "not adopted", never a finding, surfaced in the coverage line (`report/: absent (not adopted)`), never a silent skip (L2). This is the incident fixture: an orchestrator live-fire (2026-07-18) found a fresh `rk init` + `rk phase consolidation` repo failing `rk check` on exactly this state (6 ERRORs: 4 from this gate, 2 from `linker-25`'s sibling case). `aism_behavior: differs` — `check-report-shards.sh:22-25` requires `MASTER`/`SECTIONS_DIR`/`README`/`CATALOG` unconditionally, with no report/-absent no-op; this is the AISM residue the bead removes, not a stricter baseline, so it is not triaged into the usual rk-stricter-intended/rk-bug/ambiguous triad. Mutation-proven red-first (inverting the root guard so Check 1 runs unconditionally turns this fixture red — four missing-file/dir ERRORs; reverted after confirming). Sibling: `linker-25`. | landed |
 | `config-01` | config | typo'd `phase` value in `.rk/config.json` ⇒ one loud structural ERROR at `.rk/config.json:1`; `phase` falls back to strict "consolidation", never silently exploration | **rk-xbm** (M1 review B1, BLOCKER): pre-fix, `config-load.ts`'s unvalidated `as Partial<GateConfig>` cast let `"typo"` through and `phase.ts`'s `if (phase === "consolidation")` treated ANY other value as exploration — silently demoting every non-structural ERROR across all gates to WARN, a silent severity-policy change (CLAUDE.md L6). `validateConfigOverrides` (`src/gates/config.ts`) now rejects at the loading edge; findings surface through the synthetic `config` gate (registered first in `src/gates/index.ts`). `aism_behavior: n/a` — `.rk/config.json` is an rk-only concept. Mutation-proven red-first per the config lane's three live perturbations (see the commit). | landed |
 | `config-02` | config | malformed `shardsMaxLines` (`"garbage"`) in `.rk/config.json` ⇒ one loud ERROR; the line-cap check keeps working against the numeric default (280) | **rk-xbm** companion: pre-fix, `shards.ts`'s `lineCount > config.shardsMaxLines` compared against NaN — always false, a false-green on the line cap regardless of shard length. Rejected at the loading edge, plus defense-in-depth hardening inside Check 7 itself for callers that bypass `loadGateConfig`. `aism_behavior: differs` — AISM's `check-report-shards.sh` reads MAX_LINES from an env var with no validation either, but there is no AISM counterpart to this config path. Mutation-proven red-first (the "over-length shard still caught with garbage config" test). | landed |
+| `freshness-01` | freshness | clean regenerate golden case: `argument/INDEX.md` byte-identical to a fresh render, `.rk/generated.json` declares it under `linker-index` ⇒ zero findings, `checked=1/1` | **M2.6** (Gate 7, `src/gates/freshness.ts`, `docs/gate-contracts.md` Gate 7 section): the regenerate-and-diff mechanism's golden pass. `aism_behavior: n/a` — `.rk/generated.json` is rk-only; no AISM counterpart. Mutation-proven red-first (forcing the byte-comparison to always report STALE turns this fixture red; reverted after confirming). | landed |
+| `freshness-02` | freshness | **hand-edited generated file** [M2.6-mandatory] — `argument/INDEX.md`'s contract cell hand-edited so it diverges from a fresh render at line 6 ⇒ ERROR naming the file and the first differing line | **M2.6**: the M0.2/M2.6-mandatory "hand-edited generated file" fixture, exercised through the general mechanism (contrast `linker-16`, the same failure mode through Gate 2 Check 11's file-specific predecessor). `aism_behavior: differs` (mechanism-level) — AISM's `check_generated` would ERROR the identical divergence unconditionally under its own hardcoded check; same underlying failure mode, caught here via the declared-manifest mechanism instead. Mutation-proven red-first (short-circuiting the STALE check to never fire turns this fixture green when it must be red; reverted after confirming). | landed |
+| `freshness-03` | freshness | declared-but-missing: the manifest declares `argument/INDEX.md` under `linker-index`, the file is entirely absent from the repo ⇒ ERROR | **M2.6**: proves a manifest entry naming a nonexistent file is a real, counted ERROR — distinct from `freshness-04`'s presence-conditional non-adoption; declaring a path and never generating it is a defect, not a legitimate unadopted state. Mutation-proven red-first (treating a missing declared file as a silent skip, same as an absent manifest, turns this fixture green when it must be red; reverted after confirming). | landed |
+| `freshness-04` | freshness | no-manifest presence-conditional golden case: one valid lemma shard, `.rk/generated.json` entirely absent ⇒ zero findings, coverage names the non-adoption | **M2.6**: generalizes Gate 2 Check 11's per-file precedent (`linker-25`) and Gate 6's `report/`-root precedent (`shards-15`) to the whole gate — a repo that never adopted the manifest mechanism has nothing declared to check. `aism_behavior: differs` (deliberate, not triaged into rk-stricter-intended/rk-bug/ambiguous — same footing as `linker-25`/`shards-15`): AISM has no manifest concept at all. Mutation-proven red-first (removing the whole-mechanism presence guard turns this fixture red; reverted after confirming). Siblings: `linker-25`, `shards-15`. | landed |
+| `freshness-05` | freshness | malformed manifest: `.rk/generated.json` present but not valid JSON ⇒ one loud ERROR at `.rk/generated.json:1`, never silently read as "absent" | **M2.6** (rk-xbm's `.rk/config.json` untrusted-JSON posture applied to this manifest): proves a malformed manifest is a real, counted defect, never a crash and never misrouted into `freshness-04`'s golden-pass state. `aism_behavior: n/a` — no AISM counterpart. Mutation-proven red-first (catching the JSON parse failure and silently returning an empty, findings-free manifest — i.e. treating malformed as absent — turns this fixture green when it must be red; reverted after confirming). | landed |
 
 Totals: 2 config + 15 defs + 30 argument/linker + 8 refs + 20 provenance + 8 runs +
-15 report-shards = **98 fixtures** across the seven gates named in `docs/gate-contracts.md`'s
-per-gate tables (`config` is the synthetic seventh gate added by rk-xbm; its directory is wired
-into `src/corpus/discovery.ts`'s `GATE_DIRS`). `shards-14`
+15 report-shards + 5 freshness = **103 fixtures** across the eight gates named in
+`docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
+with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
+are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).
+`freshness-01`..`freshness-05` (+5 over the then-pinned 98) are the M2.6 addition: Gate 7's
+regenerate-and-diff mechanism over a declared `.rk/generated.json` manifest — see their own rows
+above and `docs/gate-contracts.md`'s new Gate 7 section. `shards-14`
 (+1 over the previously-pinned 87) is the M1 R12 addition: bead rk-psm / audit landing-blocker R12
 (`docs/memos/2026-07-18-aism-residue-audit.md`), removing `shardsPrefix`'s `"AISM"` default — see
 its own row above and `docs/gate-contracts.md` Gate 6's updated Inputs/Divergences sections.
@@ -195,7 +204,9 @@ has since **landed as M0.7** — see the note above.
 
 Every fixture lives at `corpus/<gate>/<fixture-id>/`, where `<gate>` is one of `defs`, `linker`,
 `refs`, `provenance`, `runs`, `shards` (the fixture-id prefix, not the "argument/linker" or
-"report-shards" prose name used in `docs/gate-contracts.md`'s section headers). Two files:
+"report-shards" prose name used in `docs/gate-contracts.md`'s section headers), plus the two
+synthetic rk-only gates with no AISM script counterpart: `config` (M1, rk-xbm) and `freshness`
+(M2.6). Two files:
 
 ```
 corpus/<gate>/<fixture-id>/
@@ -343,7 +354,7 @@ brittle noise unrelated to what the fixture proves. The criterion: a fixture get
 expectation iff its own row in `docs/gate-contracts.md`'s "Corpus fixtures required" table, or
 a named Divergences entry, explicitly frames the fixture's POINT as the coverage line's
 truthfulness or visibility — not merely "the gate happens to also emit a coverage line" (true of
-all 98 fixtures, and not by itself a reason to assert on it). By that criterion:
+all 103 fixtures, and not by itself a reason to assert on it). By that criterion:
 
 | fixture | why | `docs/gate-contracts.md` anchor |
 |---|---|---|
@@ -359,6 +370,7 @@ all 98 fixtures, and not by itself a reason to assert on it). By that criterion:
 | `shards-15` | `report/` ROOT absent ⇒ coverage line must name the non-adoption visibly, never a silent skip (R13) | Gate 6 fixture table + Gate 6 Check 1 |
 | `provenance-20` | root-level shard discovery ⇒ coverage must read `1/1` where the pre-fix lemmas-only scan produced a vacuous `0/0` green (rk-2t8) | Gate 4 fixture table + Gate 4 Inputs/Divergences |
 | `config-01`, `config-02` | the config gate's coverage line must count the validated config exactly once and carry the loud ERROR — a malformed field can never be a silent fallback (rk-xbm) | Config-validation section (Authority) |
+| `freshness-01`..`freshness-05` | every Gate 7 fixture's point IS the coverage line: `checked`/`total` and the exact "not adopted"/"manifest not adopted" wording distinguish never-adopted, adopted-but-empty, adopted-with-entries, and malformed-manifest states from one another — none of the four is expressible by the findings list alone | Gate 7 section |
 
 **Known gap CLOSED (rk-4uw, 2026-07-18, N4).** This section previously flagged that
 `registrySkipReport`'s frontmatter-invalid-registry-shard path (rk-v18) had red-first proof only
@@ -368,7 +380,7 @@ corpus fixture driving `skipped.length > 0` — a live L2 gap (2026-07-18 M0.3 r
 closes it: one valid lemma plus one lemma with no frontmatter at all, asserting both the aggregate
 WARN and the honest `1/2` coverage denominator end-to-end through the corpus runner.
 
-Every other fixture (the remaining 84 = 98 total − 14 with an asserted `coverage` expectation) is a
+Every other fixture (the remaining 84 = 103 total − 19 with an asserted `coverage` expectation) is a
 purely finding-shaped fixture per this criterion and carries no `coverage` field — its
 `checked`/`total` values are whatever the gate happens to produce, asserted nowhere, same as
 before this WP.
