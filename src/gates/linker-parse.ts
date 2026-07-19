@@ -43,6 +43,13 @@ export interface Lemma {
   af: string;
   contract: string;
   owner?: string;
+  /** Freeform, "not parsed here" (Gate 4's own field — docs/gate-contracts.md Gate 2 Inputs).
+   * M3.8 (EDIT flagged): Gate 2's own critical-path provenance check reads this RAW value for one
+   * specific token, `legacy-same-family` — the explicit grandfathering marker
+   * (docs/gate-contracts.md Gate 2's "Critical-path provenance" section) — a substring match, not
+   * a grammar this module owns; Gate 4 remains the owner of `provenance:`'s "report <label>"
+   * grammar. */
+  provenance?: string;
   defs: string[];
   deps: string[];
   /** OR-route groups: each inner array is one route (conjunction); the outer array is the
@@ -266,6 +273,7 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
       af,
       contract: fm.fields.contract ?? "",
       owner: fm.fields.owner,
+      provenance: fm.fields.provenance,
       defs: parseList(fm.fields.defs),
       deps: parseList(fm.fields.deps),
       routes: parseRoutes(fm.fields.routes),
