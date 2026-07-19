@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "entries": [
+    { "path": "build/site/index.html", "generator": "render-site-v1" }
+  ]
+}

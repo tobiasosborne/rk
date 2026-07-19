@@ -1,0 +1,12 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "build/site/index.html", "message_pattern": "cannot be regenerated for verification (generator 'render-site-v1')" },
+    { "severity": "ERROR", "path_pattern": "build/site/index.html", "message_pattern": "no edge-prepared expected bytes were supplied" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — render-site-v1 (M2.4 rk render's HTML output, verified via M2.6's Gate 7) is rk-only; no AISM equivalent.",
+  "notes": "M2 boundary review blocker #3: render-site-v1 is RECOGNIZED (unlike freshness-06's truly unknown generator) but this pure gate never regenerates it itself — src/cli/check.ts's prepareRenderSiteExternalRegen prepares the expected bytes at the edge and supplies them via runFreshnessGate's externalRegen parameter. This fixture exercises the gate through the PLAIN 2-arg Gate interface the corpus harness always uses (src/corpus/run.ts calls gate.run(snapshot, config) directly, never through the edge), so externalRegen is always empty here — proving 'if regeneration is impossible at check time, the entry gets a loud ERROR, never a silent pass or skip'. The full edge pipeline (real GraphDocument build + renderSite, both the clean-pass and hand-edited-STALE cases) is proven end-to-end in test/cli-check.test.ts's 'render-site-v1' describe block instead, since only src/cli/check.ts (not this pure-gate corpus harness) ever supplies externalRegen. Mutation-proven red-first (temporarily defaulting an absent externalRegen entry to 'skip silently' instead of ERROR turns this fixture green when it must be red; reverted after confirming)."
+}

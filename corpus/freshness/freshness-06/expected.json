@@ -1,0 +1,11 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "argument/INDEX.md", "message_pattern": "unrecognized generator 'render-html-v2'" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 unrecognized generator", "render-html-v2"] },
+  "aism_behavior": "n/a — .rk/generated.json is rk-only (M2.6); no AISM concept of a declared-but-unverifiable generator id.",
+  "notes": "M2 boundary review blocker #3a: flips the pre-repair behavior. A manifest entry naming a generator id this binary does not recognize used to report the benign 'not adopted' state (zero findings, checked excluded, exit 0) — a typo'd or unregistered generator therefore green-lit an entirely unchecked artifact at checked 0/1. Now a BLOCKING manifest ERROR: this binary cannot verify the declared artifact, and a manifest declaring an unverifiable artifact must never exit green. argument/INDEX.md is not even required to exist on disk for this ERROR to fire — the unrecognized-generator check never reaches the have/want comparison. Mutation-proven red-first (temporarily reverting the unrecognized-generator branch to the old 'notAdopted, no finding' behavior turns this fixture green when it must be red; reverted after confirming)."
+}
