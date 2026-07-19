@@ -182,6 +182,43 @@ describe("rk render — CLI edge", () => {
     expect(html).toContain("what blocks the north star (thm-main)");
   });
 
+  // M2.4 pass 2 (rk-c2q): the run gallery + definitions/conventions edges thread through.
+  test("no runs/ or definitions/ at all: both routes degrade honestly, exit still 0", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("0/0 run bundle(s), 0 definition(s), no CONVENTIONS.md");
+    const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
+    // the edge DID run (data supplied, just empty) -- an honest empty state, not the "omitted" note.
+    expect(html).toContain("no run bundles found under runs/");
+    expect(html).toContain("no definitions found under definitions/");
+  });
+
+  test("a run bundle + a definition + CONVENTIONS.md on disk reach the rendered site", async () => {
+    const root = repo();
+    mkdirSync(join(root, "runs", "2026-07-10-x"), { recursive: true });
+    writeFileSync(
+      join(root, "runs", "2026-07-10-x", "README.md"),
+      "**Hypothesis.** x\n**Command.** `y`\n**Finding.** z\n**Invariant.** known-value check.\n**Next.** w\n",
+    );
+    writeFileSync(join(root, "INDEX.md"), "2026-07-10-x referenced here.\n");
+    mkdirSync(join(root, "definitions"), { recursive: true });
+    writeFileSync(
+      join(root, "definitions", "def-x.md"),
+      "---\nid: def-x\nterm: X\nkind: consensus\nstatus: draft\nconsensus: agreed\n---\n\nX.\n",
+    );
+    writeFileSync(join(root, "CONVENTIONS.md"), "# CONVENTIONS\n\n## Ledger\n[2026-07-10] a convention.\n");
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("1/1 run bundle(s), 1 definition(s), CONVENTIONS.md present");
+    const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
+    expect(html).toContain("2026-07-10-x");
+    expect(html).toContain("def-x");
+    expect(html).toContain("[2026-07-10] a convention.");
+  });
+
   test("registered on the top-level dispatcher; --help is side-effect-free", async () => {
     const { out, lines } = capture();
     const code = await run(["render", "--help"], { out });

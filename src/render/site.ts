@@ -15,10 +15,15 @@ import { computeTaintTrace } from "../graph/query-taint";
 import type { GraphDocument } from "../graph/types";
 import { renderDashboard } from "./dashboard";
 import { renderDag } from "./dag";
+import type { DefRecord, DefsData } from "./defs-edge";
+import { renderDefsIndex } from "./defs-view";
 import { renderDegradedBanner, renderSourcesBlock, type SourceStatuses } from "./diagnostics-view";
 import { renderGraveyard } from "./graveyard-view";
 import { esc } from "./html";
 import { nodePanelId, renderNodePanel } from "./node-view";
+import { renderProvenanceChains } from "./provenance-view";
+import { renderRunGallery } from "./run-gallery-view";
+import type { RunGalleryData } from "./runs-edge";
 import { renderStatusCss } from "./styling";
 
 export interface RenderedFile {
@@ -39,6 +44,14 @@ export interface RenderSiteOptions {
    * A degraded/absent source is visibly distinguished from an authoritative-empty one via a
    * site-level banner plus a per-source line on the dashboard, never silently folded together. */
   sources?: SourceStatuses;
+  /** M2.4 pass 2 (rk-c2q): run-bundle gallery data (src/render/runs-edge.ts's EDGE output).
+   * Omitted degrades to an honest "not loaded for this render" note on the runs route — never
+   * silently treated as "no run bundles exist". */
+  runGallery?: RunGalleryData;
+  /** M2.4 pass 2: definitions + conventions data (src/render/defs-edge.ts's EDGE output). Also
+   * feeds the provenance-chains view's "refs" step (keyed by def id) when supplied. Omitted
+   * degrades the same honest way as `runGallery`. */
+  defsData?: DefsData;
 }
 
 const BASE_CSS = `
@@ -87,7 +100,8 @@ function nav(doc: GraphDocument, title: string): string {
   return (
     `<header><h1>${esc(title)}</h1>` +
     `<nav><a href="#dashboard">dashboard</a><a href="#dag">DAG</a>` +
-    `<a href="#graveyard">graveyard</a>` +
+    `<a href="#graveyard">graveyard</a><a href="#runs">runs</a>` +
+    `<a href="#provenance">provenance</a><a href="#defs">defs</a>` +
     `<details style="display:inline-block;vertical-align:top"><summary style="cursor:pointer;display:inline">nodes (${doc.nodes.length})</summary>` +
     `<ul style="position:absolute;background:var(--rk-bg);border:1px solid var(--rk-line);max-height:60vh;overflow:auto;padding:.5rem 1.4rem">${nodeLinks}</ul></details>` +
     `</nav></header>`
@@ -102,6 +116,25 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
   const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}${sourcesBlock}</div>`;
   const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
   const graveyard = `<section id="graveyard" class="rk-route-target">${renderGraveyard(doc)}</section>`;
+
+  // M2.4 pass 2 (rk-c2q): run gallery / definitions+conventions / provenance chains. `runGallery`/
+  // `defsData` are OPTIONAL edge-supplied data (this core stays pure — see file header); omitted
+  // degrades honestly rather than fabricating "no data exists".
+  const runsSection = options.runGallery
+    ? renderRunGallery(options.runGallery)
+    : `<div class="rk-run-gallery"><h2>run-bundle gallery</h2><p class="rk-none">run-bundle data not loaded for this render.</p></div>`;
+  const runs = `<section id="runs" class="rk-route-target">${runsSection}</section>`;
+
+  const defsById: ReadonlyMap<string, DefRecord> | undefined = options.defsData
+    ? new Map(options.defsData.defs.map((d) => [d.id, d]))
+    : undefined;
+  const defsSection = options.defsData
+    ? renderDefsIndex(options.defsData)
+    : `<div class="rk-defs"><h2>definitions index</h2><p class="rk-none">definitions data not loaded for this render.</p></div>`;
+  const defs = `<section id="defs" class="rk-route-target">${defsSection}</section>`;
+
+  const provenance = `<section id="provenance" class="rk-route-target">${renderProvenanceChains(doc, { defsById, taint })}</section>`;
+
   // M2 boundary review blocker #2: the degraded-source banner sits OUTSIDE the hash-routed
   // sections (`.rk-route-target`), so it stays visible no matter which view a reader lands on —
   // never only on the dashboard.
@@ -111,7 +144,7 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
     `<!doctype html>\n<html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
     `<title>${esc(title)}</title><style>${BASE_CSS}${renderStatusCss()}</style></head>` +
-    `<body>${nav(doc, title)}${banner}<main>${dashboard}${dag}${graveyard}${panels}</main>` +
+    `<body>${nav(doc, title)}${banner}<main>${dashboard}${dag}${graveyard}${runs}${provenance}${defs}${panels}</main>` +
     `<script>${ROUTER_JS}</script></body></html>\n`;
 
   return { files: [{ path: "index.html", contents }] };

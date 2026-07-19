@@ -26,11 +26,19 @@
 // untouched. `RENDER_SITE_GENERATOR`/`MANIFEST_PATH`/`MANIFEST_SCHEMA_VERSION` are imported
 // read-only from src/gates/freshness.ts (the freshness lane's contract); this file never edits
 // that gate.
+//
+// M2.4 pass 2 (rk-c2q): also invokes src/render/runs-edge.ts's `loadRunGallery` and
+// src/render/defs-edge.ts's `loadDefsData` -- small, presence-conditional fs edges that read
+// data the GraphDocument itself does not carry (runs/**, definitions/*.md, CONVENTIONS.md) --
+// and threads their output into `renderSite`'s options. Both degrade honestly (empty result,
+// never a crash) when their inputs are absent.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { MANIFEST_PATH, MANIFEST_SCHEMA_VERSION, RENDER_SITE_GENERATOR } from "../gates/freshness";
+import { loadDefsData } from "../render/defs-edge";
 import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
+import { loadRunGallery } from "../render/runs-edge";
 import { renderSite } from "../render/site";
 import { buildGraphDocument } from "../store/build-graph";
 import { loadGateConfig } from "../store/config-load";
@@ -173,7 +181,14 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
   }
 
   const northStarId = await resolveNorthStar(root, northStarFlag);
-  const site = renderSite(doc, { northStarId, title: titleFlag, sources: diagnostics.sources });
+  // M2.4 pass 2 (rk-c2q): the run gallery + definitions/conventions views read presence-
+  // conditional data OUTSIDE the GraphDocument (runs/**, definitions/*.md, CONVENTIONS.md) via
+  // their own small edges (src/render/runs-edge.ts, src/render/defs-edge.ts) -- day-1 vacuity
+  // (no runs/, no definitions/) degrades to an empty-but-honest result, never a crash, same
+  // stance every other reader in this codebase takes.
+  const runGallery = loadRunGallery(root);
+  const defsData = loadDefsData(root);
+  const site = renderSite(doc, { northStarId, title: titleFlag, sources: diagnostics.sources, runGallery, defsData });
 
   const outRoot = join(root, outDir);
   for (const file of site.files) {
@@ -197,6 +212,8 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
       `${northStarId ? `, north star ${northStarId}` : ", no north star configured"}.`,
   );
   for (const line of sourceStatusLines(diagnostics.sources)) out.log(`  ${line}`);
+  out.log(`  ${runGallery.coverage.checked}/${runGallery.coverage.total} run bundle(s), ${defsData.defs.length} definition(s)` +
+    `${defsData.conventions !== undefined ? ", CONVENTIONS.md present" : ", no CONVENTIONS.md"}.`);
   out.log(`  adopted ${manifestEntryPath} in ${MANIFEST_PATH} (generator '${RENDER_SITE_GENERATOR}') for Gate 7.`);
   out.log(`  open ${join(outDir, "index.html")} in a browser (self-contained, no server needed).`);
   out.log("  next: 'rk render --north-star <id>' to include the what-blocks summary if unset.");
