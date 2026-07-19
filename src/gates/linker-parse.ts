@@ -147,6 +147,14 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
   const lemmas: Lemma[] = [];
   const ignored: string[] = [];
   const candidates: string[] = [];
+  // rk-sj6 (M1 review B3): id -> the MOST RECENTLY registered path claiming it, so recursive
+  // discovery (rk-9pk) can no longer let two files at different paths silently share one `id`
+  // (each individually passes its own id==stem check; only the CROSS-file collision needs
+  // catching here, at the parse boundary, before linker-graph.ts's Map/Set construction ever gets
+  // a chance to collapse the two into one overwritten identity). Same rolling-owner shape as
+  // defs.ts's DRIFT dedup map (checkShard's `aliasOwner`): every occurrence after the first is
+  // flagged against whichever path most recently held the id, not fixed to the very first one.
+  const idOwner = new Map<string, string>();
 
   for (const rel of listArgumentMdFilesRelative(snapshot)) {
     const base = rel.slice(rel.lastIndexOf("/") + 1);
@@ -185,6 +193,25 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
     if (id !== stem) {
       errors.push({ severity: "ERROR", path, message: `id '${id}' != filename stem '${stem}'`, structural: true });
     }
+
+    // rk-sj6 (M1 review B3): a SECOND (or later) file claiming an id already registered by an
+    // EARLIER-processed file (candidates are walked in sorted argument/-relative order) is
+    // structural — duplicate ids are explicitly one of the four structural classes
+    // (docs/gate-contracts.md:186: "parse errors, dependency cycles, duplicate ids/aliases, or
+    // broken cross-shard references"). Gate 1 precedent (defs.ts checkShard's DRIFT check): flag,
+    // do not silently exclude — the shard still registers into `lemmas` below so every other
+    // check still runs against it; the duplicate-id ERROR itself is structural and blocks the
+    // gate regardless of phase.
+    const priorOwner = idOwner.get(id);
+    if (priorOwner !== undefined) {
+      errors.push({
+        severity: "ERROR",
+        path,
+        message: `duplicate id '${id}': claimed by both ${priorOwner} and ${path}`,
+        structural: true,
+      });
+    }
+    idOwner.set(id, path);
 
     // [rk-aft, 2026-07-18 review finding 3] `kind` is required (gate-contracts.md:303, same row
     // shape as `id`). The old `if (kind && ...)` gate skipped validation entirely when `kind` was

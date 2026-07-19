@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/nested/lem-x.md",
+      "message_pattern": "duplicate id 'lem-x': claimed by both argument/lem-x.md and argument/nested/lem-x.md"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same: argument.py's parse_registry (scripts/argument.py:127-148, `../almost-idempotent-stochastic-maps`) has NO duplicate-id check at all -- it unconditionally `lemmas.append(fm)`s every parsed shard regardless of id collisions, so two files sharing an id both register silently; its own id==stem sub-check only fires per-file (`if fm.get(\"id\") and fm[\"id\"] != path.stem`), which is truistically satisfied by BOTH files here (each file's id equals its OWN stem). Every downstream consumer that builds an id-keyed dict from `lemmas` (e.g. a `{l[\"id\"]: l for l in lemmas}` comprehension, the shape check_acyclic/check_contracts/check_orphans all use) would silently collapse to whichever entry appears last in traversal order -- the exact silent-overwrite failure this fixture guards against, just never diagnosed by AISM at all.",
+  "notes": "rk-sj6 (M1 review B3, MAJOR, 2026-07-18 codex gpt-5.6-sol milestone review): recursive discovery (rk-9pk) walks all of argument/, so argument/lem-x.md and argument/nested/lem-x.md can both declare `id: lem-x` -- each individually passes its own id==stem check, so pre-fix both were silently pushed into `lemmas` with ZERO findings and truthful-looking 2/2 coverage; linker-graph.ts's Map/Set construction (`byId`, `ids`) then collapsed the two into one entry (whichever sorted-last), so acyclicity/status/contract/orphan checks all silently ran against an OVERWRITTEN identity rather than the true two-file state. Duplicate ids are explicitly one of the four structural classes named at docs/gate-contracts.md:186 (\"parse errors, dependency cycles, duplicate ids/aliases, or broken cross-shard references\"). Fixed: linker-parse.ts's parseRegistry now tracks a rolling id->path owner map (same shape as defs.ts checkShard's DRIFT `aliasOwner`) and emits a structural ERROR the moment a SECOND file claims an already-registered id, naming both paths; the shard still registers (Gate 1 DRIFT precedent: flag, don't silently exclude), so the structural ERROR itself is what blocks the run. Mutation-proven red-first (test/gates/linker.test.ts: disabling the duplicate-owner check turns both duplicate-detection unit tests red; reverted after confirming)."
+}

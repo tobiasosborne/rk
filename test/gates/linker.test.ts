@@ -234,6 +234,60 @@ describe("parseRegistry / recursive argument/**/*.md discovery (rk-9pk)", () => 
   });
 });
 
+// rk-sj6 (M1 review B3, MAJOR): recursive discovery (rk-9pk) walks all of argument/, so two
+// files at DIFFERENT paths can declare the SAME `id:`. Each file individually passes its own
+// id==stem check, so pre-fix both were silently pushed into `lemmas` with no finding at all —
+// downstream Map/Set construction keyed on `id` (linker-graph.ts's `byId`/`ids`) then collapsed
+// the two into one entry (last-registered wins), so acyclicity/status/orphan checks silently ran
+// against an OVERWRITTEN identity, never the true two-file state. Duplicate ids are explicitly
+// structural per docs/gate-contracts.md:186 ("parse errors, dependency cycles, duplicate
+// ids/aliases, or broken cross-shard references"). corpus/linker/linker-28 covers this
+// end-to-end through the corpus runner; these tests isolate parseRegistry's own detection.
+describe("parseRegistry / duplicate registry id across recursive discovery (rk-sj6)", () => {
+  test("two files at different paths both declaring the same id ⇒ a structural ERROR naming both paths", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/nested/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { lemmas, errors, total } = parseRegistry(snapshot);
+    expect(total).toBe(2);
+    const dupErrors = errors.filter((e) => e.message.includes("duplicate id"));
+    expect(dupErrors).toHaveLength(1);
+    expect(dupErrors[0]?.severity).toBe("ERROR");
+    expect(dupErrors[0]?.structural).toBe(true);
+    // Attributed to the SECOND (lexicographically later) path, naming the first as the prior
+    // claimant — mirrors Gate 1's DRIFT message convention ("claimed by both X and Y").
+    expect(dupErrors[0]?.path).toBe("argument/nested/lem-x.md");
+    expect(dupErrors[0]?.message).toContain("lem-x");
+    expect(dupErrors[0]?.message).toContain("argument/lem-x.md");
+    // Both shards still register (Gate 1 precedent for DRIFT: flag, don't silently exclude) — the
+    // duplicate-id ERROR is itself blocking (structural), so the run fails regardless.
+    expect(lemmas.filter((l) => l.id === "lem-x")).toHaveLength(2);
+  });
+
+  test("three files sharing one id ⇒ two duplicate ERRORs, chained (2nd vs 1st, 3rd vs 2nd)", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/a-lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/b-lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/c-lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { errors } = parseRegistry(snapshot);
+    const dupErrors = errors.filter((e) => e.message.includes("duplicate id"));
+    expect(dupErrors).toHaveLength(2);
+    expect(dupErrors[0]?.path).toBe("argument/b-lem-x.md");
+    expect(dupErrors[1]?.path).toBe("argument/c-lem-x.md");
+  });
+
+  test("distinct ids across recursive discovery register with no duplicate finding (no false positive)", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/nested/lem-y.md": "---\nid: lem-y\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { errors } = parseRegistry(snapshot);
+    expect(errors.filter((e) => e.message.includes("duplicate id"))).toEqual([]);
+  });
+});
+
 describe("linkerGate coverage line / ignored-file count (rk-9pk)", () => {
   test("the coverage line names the ignored-file count and their names, even when zero " +
     "(never a silent omission, CLAUDE.md L2)", () => {
