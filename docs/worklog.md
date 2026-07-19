@@ -35,3 +35,43 @@ M1 built end-to-end in one session, five parallel dispatch waves, all WPs landed
 Tree at close: 671 tests / 0 fail / 1 skip; selftest OK (92/92 fixtures, purity clean).
 Process notes: bd `--notes` REPLACES (dossier nearly lost); a `pgrep -f` watcher can
 match its own command line (burned 1.5 h); codex review took ~17 min wall-clock.
+
+## 2026-07-19 — M1 repair wave + acceptance (orchestration session 2)
+
+- Repair wave, ONE wave per the anti-Zeno cap, five parallel Sonnet lanes with disjoint
+  file scopes on the shared tree (shared docs single-writer: orchestrator): rk-xbm
+  (config runtime validation, synthetic seventh gate, blocking ERROR on malformed
+  fields), rk-2t8 (Gate 4 recursive argument/**/*.md discovery, mirrors Gate 2,
+  independent re-parse preserved), rk-sj6 (duplicate registry id = structural ERROR
+  naming both paths), rk-wc3 (parseFrontmatter accepts multi-line YAML block lists;
+  Gate 2 reports malformedLines), rk-huq (rk phase consolidation logs worklog + fr
+  orient with visible skips), rk-19i/rk-gvx/rk-mdx/rk-czv/rk-ax5 (template/CLI
+  truthfulness + init conflict set). Every validity fix mutation-proven red-first.
+- Orchestrator reconciliation: corpus wired to 98 fixtures (config 2, linker 30,
+  provenance 20); gate-contracts.md gained the config-validation section, Gate 2
+  Checks 2a/2b + multi-line grammar, Gate 4 recursive-discovery text; restored the
+  provenance-19 fixture row the round-3 wave never added. template_version 1.1.0→1.2.0
+  (repair wave changed stamped template content — rule 10 compat event the lanes
+  missed).
+- Mechanical verification (NO re-review, per cap): selftest 98/98; live-fire on a
+  scratch campaign — bad config exits 1 with honest 0/2 coverage, phase transition
+  writes worklog + fr orient, multi-line deps yield the unknown-dep ERROR dogfood-2
+  never got, re-init conflicts on settings.json/pre-commit, CLAUDE==AGENTS
+  byte-identical.
+- Dogfood session 3 (../rk-dogfood-1, user seat): all six verification items PASS;
+  upgrade 1.1.0→1.2.0 followed literally with zero campaign-content loss; shards
+  committed in the now-documented multi-line style; real increment (first fr arm
+  registered, budget/model slots filled). SC1 question answered yes. **M1 ACCEPTED**
+  (rk-bi4 closed).
+- Parallel M2 entry: V4 landed in vibefeld (c266dae, pushed) — af export --graph json,
+  schema_version 1, deterministic, read-only-proven; reader caveats captured as a bead
+  (workspace.id is a path; contract match targets nodes[].statement). M2.1 graph
+  schema v1 drafting started in an isolated worktree, Tier A codex review to follow.
+- New beads: rk-45m (unparseable config JSON still silent — known residual, documented
+  in contract), rk-3af (no in-repo teacher for report labels at consolidation),
+  M2.2 reader notes, vibefeld integration-suite breakage (filed in vibefeld's tracker).
+- Process: `git commit` with no pathspec commits the WHOLE index — one lane swept
+  another's staged files, caught via git show --stat and recomposed; always commit
+  with explicit `-- <paths>` under shared-tree parallelism.
+
+Tree at acceptance: 743 tests / 0 fail / 1 skip; selftest OK (98/98); dist/rk rebuilt.
