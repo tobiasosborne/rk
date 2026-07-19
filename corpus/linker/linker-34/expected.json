@@ -1,0 +1,9 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart).",
+  "notes": "M3.8 Check 13, GOLDEN PASS: a critical-path node (thm-main IS the north star) validated cross-vendor -- author claude|claude-code|opus|s1 (family claude), verifier gpt|codex|gpt-5.6|s2 (family gpt), both parseable seams, DIFFERENT families -- satisfies the cross-vendor rule, zero findings. Proves the check does not false-positive on the case it is designed to let through cleanly. Ledger built with a real af binary rebuilt from ../vibefeld HEAD (af init --author + af accept --agent), script-verified via af export --graph json. Sibling: linker-31 (same shape but SAME family -> ERROR)."
+}

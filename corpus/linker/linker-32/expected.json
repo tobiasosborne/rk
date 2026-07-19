@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "legacy-same-family"
+    }
+  ],
+  "exit_code": 0,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM never had identity provenance) -- but this fixture's ledger IS AISM's real historical shape: built with the globally-installed pre-V1 af binary (0.1.5, predating ../vibefeld's identity-provenance commits), so node_created carries no node.author and node_validated carries no verified_by/batch_id, byte-identical in shape to a spot-check of AISM's own proofs/*/ledger/*.json (0/44 workspaces carry these fields at all, per this WP's report). proof_initialized's OWN top-level author ('orchestrator') is a DIFFERENT, pre-existing field and is correctly never read as the root's identity.",
+  "notes": "M3.8 Check 13, GRANDFATHERING golden case: a critical-path node validated with NO parseable cross-vendor seam at all -> WARNING 'legacy-same-family', never an ERROR or a demotion (PRD C9's standing directive: 'all 44 AISM workspaces are codex-prover+codex-verifier ... not demoted'). Recommended cutover semantics (docs/gate-contracts.md Gate 2): absence of a parseable seam = legacy = warning."
+}

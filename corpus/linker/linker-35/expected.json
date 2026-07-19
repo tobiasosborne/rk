@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lem-l5-valid.md",
+      "message_pattern": "L5 promotable: 'lem-l5-valid' has a fresh VALID L5 verdict"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "class-driven (no AISM counterpart -- the L5 verdict store is M3.7's own deliverable, orphaned in v1, first wired to a gate here).",
+  "notes": "M3.8 deliverable 3: a 'status: stated' shard with a FRESH (hash-bound to current bytes) VALID L5 verdict on file -> WARN 'L5 promotable', never an ERROR (this is a status-computation NUDGE, not a validity violation -- see src/gates/linker-l5.ts's header). l5ContentHash was computed as the raw sha256 of this exact shard file's bytes (sha256sum), matching the l5ContentHash domain (docs/worker-contract.md section (f): raw shard-file bytes, no normalization) that src/gates/snapshot.ts's fileSha256 also reports."
+}

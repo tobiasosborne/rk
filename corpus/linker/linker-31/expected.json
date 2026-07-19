@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "critical-path node 'thm-main' validated same-family (prover=verifier=gpt)"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM never had identity provenance at all; see the legacy-shape fixtures linker-32/linker-38 for AISM's real 44-workspace shape)",
+  "notes": "M3.8 Check 13: a critical-path node (thm-main IS the configured north star) validated POST-convention same-family (author gpt|codex|gpt-5.6|s1, verifier gpt|codex|gpt-5.9|s2, both parseable seams of the SAME family) with no explicit 'legacy-same-family' provenance marker -> ERROR, per the recommended cutover semantics: a parseable seam that is same-family is a genuine, avoidable violation, not grandfathered data. Ledger built with a REAL af binary rebuilt from ../vibefeld HEAD (af init --author + af accept --agent), script-verified: af export --graph json for this exact tree reports author/validated_by exactly as embedded here. Sibling: linker-34 (cross-family golden pass), linker-38 (same shape but WITH the explicit marker -> WARN not ERROR)."
+}

@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "validated as part of batch 'batch-7'"
+    }
+  ],
+  "exit_code": 0,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's ledgers predate batch validation entirely; 0/44 workspaces carry batch_id).",
+  "notes": "M3.8 Check 14 (C3's critical-path exclusion, checked after the fact): a critical-path node (thm-main IS the north star) validated via 'af verdicts apply' with a batch_id -- WARNING, regardless of family (author claude|claude-code|opus|s1, verifier gpt|codex|gpt-5.6|s9 -- DIFFERENT families, so no separate same-family ERROR fires here; this isolates the batch finding). Ledger built with a real af binary rebuilt from ../vibefeld HEAD via 'af verdicts apply' (the V2 kernel verb), script-verified: af export --graph json reports validation_batch_id exactly as embedded here. C3's own rule says critical-path nodes should always get per-node treatment; a batch id here means that did not happen -- caught retrospectively by this check, exactly the 'checked continuously... because path membership changes' scenario PRD C2 names."
+}

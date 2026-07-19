@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "class-driven (no AISM counterpart).",
+  "notes": "M3.8 deliverable 3: a 'status: stated' shard whose L5 store record is bound to a DIFFERENT hash than the shard's current bytes (l5ContentHash is all-zeros, deliberately not this file's real sha256) -- STALE, never promotes, zero findings (a stale record is simply silent, not itself a defect gate-side; the researcher edited the shard after the verdict, which is ordinary workflow, not a violation). Sibling: linker-35 (fresh VALID, same shard shape, promotes)."
+}
