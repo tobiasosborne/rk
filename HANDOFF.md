@@ -3,15 +3,19 @@
 
 # HANDOFF
 
-## State (2026-07-19, session close — M1 accepted; M2 built and review-repaired)
+## State (2026-07-19, session close — M1 and M2 both ACCEPTED; M3 groundwork in)
 
-**M1 is ACCEPTED** (repair wave + mechanical verification + dogfood session 3, all six
-user-seat checks PASS, rk-bi4 closed). **M2 is functionally complete through its single
-boundary review and repair wave**; M2.4 pass 2 + SC5 dry-run + dagre vendoring remain
-before full M2 acceptance (see scorecard). Tree: 1070 tests / 0 fail / 1 skip;
-`bun run selftest` OK (109/109 fixtures across 8 gate dirs + 3 graph-harness fixtures +
-render truthfulness corpus); dist/rk current. No rk git remote (TJO: add one if pushing
-is wanted). vibefeld and knowledge-frontier ARE pushed (V4 c266dae, F7 0d5f4df).
+**M1 ACCEPTED** (repair wave + mechanical verification + dogfood-3 all-PASS).
+**M2 ACCEPTED**: all six WPs, one boundary review + one repair wave (9/9 blockers
+mechanically verified), M2.4 pass 2 landed, SC5 dry-run marginal PASS (fresh-context
+third party answered all five questions; usability beads filed), dagre vendored
+(690bebc). M3 groundwork already landed: M3.0 caching-spike memo (session-resume is a
+HARD requirement for the worker contract; 1h TTL; stagger confirmed — see
+../research-workflows/NOTES-2026-07-19-m3.0-caching-spike.md), V0 struck, V1 shipped in
+vibefeld (identity schema, byte-identical replay on all 44 AISM workspaces, pushed).
+Tree: 1115 tests / 0 fail / 1 skip; selftest OK (109/109 + graph/render harnesses);
+dist/rk current. No rk git remote (TJO: add one if pushing is wanted). vibefeld pushed
+through 22bd056; knowledge-frontier pushed through 0d5f4df.
 
 ## Milestone scorecard
 
@@ -27,11 +31,12 @@ is wanted). vibefeld and knowledge-frontier ARE pushed (V4 c266dae, F7 0d5f4df).
 - **M2.5 queries**: rk graph --focus/--critical-path/--taint/--blocks; over-inclusive
   OR-route critical path (ratified; M3.4 depends on it); AISM agreement 200/200;
   northStarId config field (validated, reviewed).
-- **M2.4 render**: FIRST PASS done (styling single-source-of-truth + effective
-  presentation state, truthfulness corpus, dashboard, hash-routed drill-down, layered
-  DAG, rk render CLI, manifest adoption, repo-relative --out). REMAINING: pass 2 breadth
-  (graveyard, run gallery, provenance chains, conventions view — bead), SC5 third-party
-  <10min dry-run, dagre vendoring (review rejected built-in as permanent, rk-fhd).
+- **M2.4 render**: COMPLETE. Pass 1 (styling single-source-of-truth + effective
+  presentation state, truthfulness corpus, dashboard, hash-routed drill-down, rk render
+  CLI, manifest adoption, repo-relative --out) + pass 2 (graveyard, run gallery,
+  provenance chains, defs index + verbatim conventions) + dagre vendored (devDep,
+  deterministic via canonical insertion order). SC5 dry-run: marginal PASS; usability
+  beads filed (dashboard ordering P1, vocabulary P2, fr residual carry-through P2).
 - **M2.6 freshness (Gate 7)**: regenerate-and-diff over .rk/generated.json; per-path
   Check-11 supersession RATIFIED; unknown generator = blocking ERROR; full manifest
   schema enforcement; render-site-v1 verified via edge regeneration (pure gate, edge
@@ -43,13 +48,14 @@ is wanted). vibefeld and knowledge-frontier ARE pushed (V4 c266dae, F7 0d5f4df).
 
 ## Next steps (in order)
 
-1. **M2 acceptance remainder**: M2.4 pass 2 (breadth views bead, P1); then SC5 dry-run
-   on the AISM site (third party answers the five questions <10 min); dagre vendoring
-   (rk-fhd) behind computeLayers/renderDag.
-2. **M3 entry (verification driver)**: M3.0 caching spike FIRST (plan sequencing —
-   before M3.3 design freezes); worker contract spec M3.1; V1-V3 kernel verbs in
-   ../vibefeld (author identity, af verdicts apply, unvalidate --batch) needed by M3.4.
-   M2.5's critical-path query is ready for M3.4's batch exclusion.
+1. **M3.1 worker contract + verdict schema** (Tier A, worktree + review before merge):
+   design around the M3.0 spike — session/turn dispatch model (session-resume, never
+   flat prompt_parts concatenation), role isolation (a session NEVER crosses roles),
+   1h-TTL scheduling, stagger rule, verdict.v1.json schema-validated at the boundary.
+2. **V2/V3 in vibefeld** (queued in its tracker, V2=vibefeld-lzop, V3=vibefeld-h4ad):
+   af verdicts apply calls AcceptNodeWithVerifier/NewChallengeRaisedWithBatch with one
+   BatchID per batch; unvalidate --batch filters Node.ValidationBatchID. Then M3.2
+   backends, M3.3 session manager, M3.4 composer (M2.5 critical-path query ready).
 3. **Backlog highlights**: rk-45m (unparseable config JSON silent), rk-3af (report-label
    teaching doc), snapshot-load build/site include gap (+ .rk include regression test
    bead — pair them), afRecordsIn accounting, six-gates wording sweep, selftest lines
