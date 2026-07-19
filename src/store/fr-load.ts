@@ -45,8 +45,19 @@ interface FrExportDoc {
 export interface FrSource {
   present: true;
   degraded: boolean;
+  /** RAW nonblank row count — every nonblank line on the ledger-fallback path (regardless of
+   * whether it parsed), or the export doc's own `log` array length on the primary path.
+   * M2-boundary-review blocker 9: this MUST count every candidate row, not just the ones that
+   * parsed, or a corrupted banked record vanishes from accounting entirely. */
   totalLogRecords: number;
   records: FrSourceRecord[];
+  /** Nonblank rows that failed `JSON.parse` on the ledger-fallback path — always `[]` on the
+   * primary `fr export` path (a whole-document parse failure there is a total `error`/absence,
+   * not a per-line concern). `totalLogRecords === records.length + malformedLines.length +
+   * (rows naming no resolvable reference at all)` — a malformed row is a STRUCTURAL reader
+   * diagnostic, carried here so a caller (src/store/build-graph.ts's `diagnostics.structuralLoss`)
+   * can surface it rather than silently treating a degraded-but-corrupt source as authoritative. */
+  malformedLines: { lineNo: number; snippet: string }[];
 }
 export interface FrAbsent {
   present: false;
@@ -110,17 +121,31 @@ function runLedgerFallback(root: string): FrSource | FrAbsent {
     return { present: false, reason: "fr binary unavailable and no .frontier/log.jsonl found" };
   }
   const log: FrLogRecord[] = [];
-  for (const line of text.split("\n")) {
+  const malformedLines: { lineNo: number; snippet: string }[] = [];
+  let rawNonblankCount = 0;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (line.trim().length === 0) continue;
+    rawNonblankCount++;
     try {
       log.push(JSON.parse(line) as FrLogRecord);
     } catch {
-      // a corrupt line in the raw log is a real parse hazard the fallback cannot recover from
-      // per-line; it is skipped (never silently pretended parseable), counted in totalLogRecords
-      // via the line scan below regardless.
+      // M2-boundary-review blocker 9 (2026-07-19): a corrupt line in the raw log is a real parse
+      // hazard the fallback cannot recover from per-line — it is skipped from `log` (never
+      // silently pretended parseable), but MUST stay counted in `totalLogRecords` (the raw
+      // nonblank scan above, not `log.length`) and be carried forward as a structural diagnostic
+      // so a corrupted banked record can never silently vanish from accounting.
+      malformedLines.push({ lineNo: i + 1, snippet: line.slice(0, 120) });
     }
   }
-  return { present: true, degraded: true, totalLogRecords: log.length, records: recordsFromLog(log, []) };
+  return {
+    present: true,
+    degraded: true,
+    totalLogRecords: rawNonblankCount,
+    records: recordsFromLog(log, []),
+    malformedLines,
+  };
 }
 
 /** Reads `root`'s fr state. `frCommand` defaults to `["fr"]`, overridable so a test can force the
@@ -132,5 +157,12 @@ export function loadFrSource(root: string, frCommand: readonly string[] = ["fr"]
   if ("error" in viaExport) return { present: false, reason: viaExport.error };
   const log = viaExport.doc.log ?? [];
   const verdicts = viaExport.doc.verdicts ?? [];
-  return { present: true, degraded: false, totalLogRecords: log.length, records: recordsFromLog(log, verdicts) };
+  return {
+    present: true,
+    degraded: false,
+    totalLogRecords: log.length,
+    records: recordsFromLog(log, verdicts),
+    malformedLines: [], // a whole-document parse failure on this path is a total error/absence,
+    // never a per-line concern (see runFrExport's own JSON.parse try/catch above).
+  };
 }

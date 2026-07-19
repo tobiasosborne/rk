@@ -73,4 +73,59 @@ describe("loadFrSource (edge: direct .frontier/log.jsonl fallback when the fr bi
     expect(source.present).toBe(false);
     rmSync(root, { recursive: true, force: true });
   });
+
+  test("M2-boundary-review blocker 9: a malformed nonblank line is counted in totalLogRecords and surfaced as a structural diagnostic, never silently dropped from accounting", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    const lines = [
+      JSON.stringify({ cycle: 1, outcome: "banked", evidence: { artifact: "argument/lemmas/lem-corrupt.md", verdict: "claimed" } }),
+      "{not valid json at all",
+      JSON.stringify({ cycle: 3, outcome: "orient" }),
+    ].join("\n");
+    writeFileSync(join(root, ".frontier", "log.jsonl"), `${lines}\n`);
+    const source = loadFrSource(root, ["definitely-not-a-real-fr-binary-xyz"]);
+    expect(source.present).toBe(true);
+    if (!source.present) throw new Error("unreachable");
+    // three RAW nonblank rows total — the malformed one must not vanish from the count.
+    expect(source.totalLogRecords).toBe(3);
+    expect(source.records).toHaveLength(1); // cycle 1 resolves; cycle 3 (orient) names nothing
+    expect(source.malformedLines).toEqual([{ lineNo: 2, snippet: "{not valid json at all" }]);
+  });
+
+  test("accounting property: totalLogRecords == raw nonblank line count == successfully-parsed lines + malformedLines.length, for every shape", () => {
+    const shapes: string[][] = [
+      [], // no lines at all
+      [JSON.stringify({ cycle: 1, outcome: "orient" })], // one valid line, nothing malformed
+      ["}}} not json", "{{{ also not json"], // every line malformed
+      [
+        JSON.stringify({ cycle: 1, outcome: "banked", evidence: { artifact: "a.md", verdict: "claimed" } }),
+        "not json",
+        JSON.stringify({ cycle: 3, outcome: "orient" }),
+        "still not json",
+        JSON.stringify({ cycle: 5, outcome: "graduate", graduated_to: "b" }),
+      ],
+    ];
+    for (const lines of shapes) {
+      const root = tempRoot();
+      mkdirSync(join(root, ".frontier"), { recursive: true });
+      const rawNonblankCount = lines.filter((l) => l.trim().length > 0).length;
+      let independentlyParsed = 0;
+      for (const l of lines) {
+        if (l.trim().length === 0) continue;
+        try {
+          JSON.parse(l);
+          independentlyParsed++;
+        } catch {
+          // counted via malformedLines instead
+        }
+      }
+      writeFileSync(join(root, ".frontier", "log.jsonl"), lines.length > 0 ? `${lines.join("\n")}\n` : "");
+      const source = loadFrSource(root, ["definitely-not-a-real-fr-binary-xyz"]);
+      expect(source.present).toBe(true);
+      if (!source.present) throw new Error("unreachable");
+      expect(source.totalLogRecords).toBe(rawNonblankCount);
+      expect(source.totalLogRecords).toBe(independentlyParsed + source.malformedLines.length);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
