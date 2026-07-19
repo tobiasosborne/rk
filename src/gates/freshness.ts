@@ -1,16 +1,35 @@
-// PURITY: pure — no fs/network/clock (L3). Gate 7 — freshness (M2.6). Ground truth:
-// docs/gate-contracts.md "Gate 7 — freshness". Regenerate-and-diff over a DECLARED manifest of
-// generated artifacts (`.rk/generated.json`) — the general mechanism IMPLEMENTATION_PLAN M2.6
-// names ("regenerate-and-diff replaces mirror-check gates"), designed so a FUTURE generator (an
-// M2.4 `rk render` HTML output, or any later renderer) registers by adding one entry to
-// `GENERATORS` below — no other gate code, no CoverageLine shape, no CLI wiring changes.
+// PURITY: pure — no fs/network/clock (L3). Gate 7 — freshness (M2.6, repaired M2 boundary
+// review blockers #3/#4). Ground truth: docs/gate-contracts.md "Gate 7 — freshness".
+// Regenerate-and-diff over a DECLARED manifest of generated artifacts (`.rk/generated.json`) —
+// the general mechanism IMPLEMENTATION_PLAN M2.6 names ("regenerate-and-diff replaces
+// mirror-check gates"). Two recognized-generator SHAPES now exist:
+//   - PURE generators (`GENERATORS` below) — a `(snapshot) => string` this gate calls itself.
+//     `linker-index`/`linker-dag` are the only two.
+//   - EDGE-SUPPLIED generators — `render-site-v1` (M2.4 `rk render`'s HTML output) is the first.
+//     Rendering the site needs a real GraphDocument (af/fr subprocess calls, fs) this file must
+//     never perform itself (L3) — the edge (src/cli/check.ts) regenerates it and hands this gate
+//     the resulting bytes (or a structured failure) via `runFreshnessGate`'s third parameter,
+//     `externalRegen`. This gate never regenerates render-site-v1 itself; it only diffs SUPPLIED
+//     bytes. `freshnessGate.run` (the plain 2-arg `Gate` interface every OTHER caller — the
+//     corpus harness, `src/gates/index.ts`'s registry — uses) always passes an EMPTY
+//     `externalRegen` map, so a render-site-v1 entry run through that plain interface always
+//     reports "cannot be regenerated for verification" — never a silent pass (M2 boundary review
+//     blocker #3: "the entry gets a loud ERROR ..., NEVER a silent pass or skip").
 //
 // Manifest shape (schemas/generated.v1.json): `{"schema_version":"1","entries":[{"path":...,
-// "generator":...}]}`. Untrusted, hand-editable JSON — same edge-trust posture as
-// `.rk/config.json` (src/gates/config.ts's rk-xbm precedent): a malformed manifest is never a
-// crash and never a silent no-op. It produces one loud ERROR per malformation and the affected
+// "generator":...}]}`, `additionalProperties:false` at BOTH the top level and per-entry.
+// Untrusted, hand-editable JSON — same edge-trust posture as `.rk/config.json`
+// (src/gates/config.ts's rk-xbm precedent): a malformed manifest is never a crash and never a
+// silent no-op. It produces one loud ERROR per malformation (wrong/missing `schema_version`, an
+// unrecognized top-level or per-entry key, a malshaped entry — blocker #4) and the affected
 // entry is dropped from the checked set (never silently treated as "absent" — a malformed
 // manifest is a real, visible defect, distinct from "never adopted").
+//
+// Unrecognized generator (blocker #3a, M2 boundary review): a declared entry whose `generator`
+// id this binary does not recognize AT ALL (neither a pure `GENERATORS` entry nor
+// `render-site-v1`) is now a BLOCKING manifest ERROR, never the old silent "not adopted" green
+// state — a typo'd or unregistered generator id must never green-light an unchecked artifact at
+// `checked 0/1`.
 //
 // Check-11 boundary (documented in full in docs/gate-contracts.md's Gate 7 section): a manifest
 // entry's `path` is superseded out of Gate 2 Check 11 (src/gates/linker-render.ts's
@@ -26,11 +45,24 @@ import { parseRegistry } from "./linker-parse";
 import { renderDag, renderIndex } from "./linker-render";
 
 export const MANIFEST_PATH = ".rk/generated.json";
+export const MANIFEST_SCHEMA_VERSION = "1";
+
+/** The recognized-but-edge-supplied generator id for M2.4 `rk render`'s HTML output (`rk
+ * render` upserts a manifest entry `{"path": "<out>/index.html", "generator":
+ * "render-site-v1"}`). See this file's header for why this is NOT a `GENERATORS` entry. */
+export const RENDER_SITE_GENERATOR = "render-site-v1";
 
 export interface ManifestEntry {
   path: string;
   generator: string;
 }
+
+/** The edge's answer to "what would a fresh `render-site-v1` regenerate produce for this path,
+ * right now" (src/cli/check.ts's `prepareRenderSiteExternalRegen`) — supplied to
+ * `runFreshnessGate`'s `externalRegen` map. `ok:false` covers every reason the edge could not
+ * produce trustworthy expected bytes (structurally incomplete build, a thrown exception) — this
+ * gate turns EITHER outcome into a loud, per-path finding, never a silent pass. */
+export type ExternalRegenResult = { readonly ok: true; readonly bytes: string } | { readonly ok: false; readonly reason: string };
 
 /** The one extension point. Each function takes the snapshot and returns the exact bytes a fresh
  * regenerate of its declared artifact would produce — byte-for-byte, no trailing-newline
@@ -49,15 +81,39 @@ interface ParsedManifest {
   findings: Finding[];
 }
 
-function isEntryShape(e: unknown): e is ManifestEntry {
-  return (
-    typeof e === "object" &&
-    e !== null &&
-    typeof (e as Record<string, unknown>).path === "string" &&
-    ((e as Record<string, unknown>).path as string).length > 0 &&
-    typeof (e as Record<string, unknown>).generator === "string" &&
-    ((e as Record<string, unknown>).generator as string).length > 0
-  );
+/** schemas/generated.v1.json's exact top-level / per-entry key sets (`additionalProperties:
+ * false` at both levels) — blocker #4 (M2 boundary review): the runtime parser previously
+ * under-enforced the schema (no `schema_version` check, no extra-key rejection at either level). */
+const TOP_LEVEL_KEYS: ReadonlySet<string> = new Set(["schema_version", "entries"]);
+const ENTRY_KEYS: ReadonlySet<string> = new Set(["path", "generator"]);
+
+type EntryShapeResult = { ok: true; entry: ManifestEntry } | { ok: false; message: string };
+
+function checkEntryShape(e: unknown, index: number): EntryShapeResult {
+  const shapeMessage = `malformed ${MANIFEST_PATH}: entries[${index}] must be {"path": non-empty string, "generator": non-empty string}`;
+  if (typeof e !== "object" || e === null || Array.isArray(e)) {
+    return { ok: false, message: shapeMessage };
+  }
+  const rec = e as Record<string, unknown>;
+  const extraKeys = Object.keys(rec).filter((k) => !ENTRY_KEYS.has(k));
+  if (extraKeys.length > 0) {
+    return {
+      ok: false,
+      message:
+        `malformed ${MANIFEST_PATH}: entries[${index}] has unrecognized propert${extraKeys.length === 1 ? "y" : "ies"} ` +
+        `${extraKeys.map((k) => `"${k}"`).join(", ")} — schemas/generated.v1.json's entry shape is exactly ` +
+        `{path, generator}, additionalProperties:false`,
+    };
+  }
+  if (
+    typeof rec.path !== "string" ||
+    rec.path.length === 0 ||
+    typeof rec.generator !== "string" ||
+    rec.generator.length === 0
+  ) {
+    return { ok: false, message: shapeMessage };
+  }
+  return { ok: true, entry: { path: rec.path, generator: rec.generator } };
 }
 
 /** Parses + validates `.rk/generated.json`. Never throws, never silently drops a malformation:
@@ -81,12 +137,23 @@ function parseManifest(snapshot: RepoSnapshot): ParsedManifest {
     };
   }
 
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    !Array.isArray((parsed as Record<string, unknown>).entries)
-  ) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {
+      entries: [],
+      findings: [
+        {
+          severity: "ERROR",
+          path: MANIFEST_PATH,
+          line: 1,
+          message: `malformed ${MANIFEST_PATH}: expected a JSON object with "schema_version" and "entries"`,
+        },
+      ],
+    };
+  }
+
+  const obj = parsed as Record<string, unknown>;
+
+  if (!Array.isArray(obj.entries)) {
     return {
       entries: [],
       findings: [
@@ -100,20 +167,49 @@ function parseManifest(snapshot: RepoSnapshot): ParsedManifest {
     };
   }
 
-  const rawEntries = (parsed as { entries: unknown[] }).entries;
-  const entries: ManifestEntry[] = [];
   const findings: Finding[] = [];
+
+  // Blocker #4 (M2 boundary review): the runtime parser used to accept a manifest missing
+  // `schema_version` entirely, a wrong version (e.g. `"2"`), or extra top-level/per-entry keys —
+  // under-enforcing schemas/generated.v1.json's `const "1"` + `additionalProperties:false` at
+  // both levels. A future incompatible manifest shape must never silently run under v1 semantics.
+  if (!("schema_version" in obj)) {
+    findings.push({
+      severity: "ERROR",
+      path: MANIFEST_PATH,
+      line: 1,
+      message: `malformed ${MANIFEST_PATH}: missing required "schema_version" (schemas/generated.v1.json requires the exact const "${MANIFEST_SCHEMA_VERSION}")`,
+    });
+  } else if (obj.schema_version !== MANIFEST_SCHEMA_VERSION) {
+    findings.push({
+      severity: "ERROR",
+      path: MANIFEST_PATH,
+      line: 1,
+      message: `malformed ${MANIFEST_PATH}: "schema_version" is ${JSON.stringify(obj.schema_version)}, expected exactly "${MANIFEST_SCHEMA_VERSION}" (schemas/generated.v1.json) — an incompatible manifest must never silently run under v1 semantics`,
+    });
+  }
+
+  const extraTop = Object.keys(obj).filter((k) => !TOP_LEVEL_KEYS.has(k));
+  if (extraTop.length > 0) {
+    findings.push({
+      severity: "ERROR",
+      path: MANIFEST_PATH,
+      line: 1,
+      message:
+        `malformed ${MANIFEST_PATH}: unrecognized top-level propert${extraTop.length === 1 ? "y" : "ies"} ` +
+        `${extraTop.map((k) => `"${k}"`).join(", ")} — schemas/generated.v1.json requires additionalProperties:false`,
+    });
+  }
+
+  const rawEntries = obj.entries as unknown[];
+  const entries: ManifestEntry[] = [];
   rawEntries.forEach((e, i) => {
-    if (!isEntryShape(e)) {
-      findings.push({
-        severity: "ERROR",
-        path: MANIFEST_PATH,
-        line: 1,
-        message: `malformed ${MANIFEST_PATH}: entries[${i}] must be {"path": non-empty string, "generator": non-empty string}`,
-      });
+    const result = checkEntryShape(e, i);
+    if (!result.ok) {
+      findings.push({ severity: "ERROR", path: MANIFEST_PATH, line: 1, message: result.message });
       return;
     }
-    entries.push(e);
+    entries.push(result.entry);
   });
 
   return { entries, findings };
@@ -125,10 +221,22 @@ function parseManifest(snapshot: RepoSnapshot): ParsedManifest {
  * empty, stale, or not-yet-updated manifest never opens a silent gap for `argument/INDEX.md`/
  * `DAG.md` (see this file's header comment and docs/gate-contracts.md's Gate 7 boundary note).
  * Malformed manifest content contributes no superseded paths (same reasoning: if this gate cannot
- * even parse the declaration, it cannot be said to have taken the path over). */
+ * even parse the declaration, it cannot be said to have taken the path over). Deliberately scoped
+ * to `GENERATORS` (the pure map) only — `render-site-v1` never supersedes anything here; Check 11
+ * only ever covered `argument/INDEX.md`/`DAG.md`, never any HTML site output. */
 export function freshnessSupersededPaths(snapshot: RepoSnapshot): ReadonlySet<string> {
   const { entries } = parseManifest(snapshot);
   return new Set(entries.filter((e) => e.generator in GENERATORS).map((e) => e.path));
+}
+
+/** Repo-relative paths declared in `.rk/generated.json` under exactly `generator`, from
+ * well-formed entries only (a malformed manifest/entry contributes no paths here — same
+ * conservative posture as `freshnessSupersededPaths`). Lets the edge (`src/cli/check.ts`)
+ * discover which artifacts need edge-prepared "expected bytes" — see `ExternalRegenResult` —
+ * BEFORE invoking this pure gate, without duplicating manifest-parsing logic at the edge. */
+export function declaredGeneratorPaths(snapshot: RepoSnapshot, generator: string): string[] {
+  const { entries } = parseManifest(snapshot);
+  return entries.filter((e) => e.generator === generator).map((e) => e.path);
 }
 
 /** 1-indexed line number of the first line at which `have` and `want` diverge — matching by
@@ -149,70 +257,141 @@ function snippet(line: string | undefined): string {
   return line.length > 80 ? `${line.slice(0, 80)}…` : line;
 }
 
-export const freshnessGate: Gate = {
-  name: "freshness",
-  run(snapshot: RepoSnapshot, _config: GateConfig): GateResult {
-    if (!snapshot.has(MANIFEST_PATH)) {
-      // Presence-conditional, whole-mechanism (generalizing the per-file precedent set by Gate 2
-      // Check 11 / Gate 6's report/ guard — linker-25, shards-15): a repo that has never adopted
-      // the freshness manifest has nothing declared to check. Never a finding; the non-adoption
-      // is named on the coverage line, never a silent skip (CLAUDE.md L2).
-      const coverage: CoverageLine[] = [
-        { gate: "freshness", unit: `generated artifacts (manifest not adopted: ${MANIFEST_PATH} absent)`, checked: 0, total: 0 },
-      ];
-      return { findings: [], coverage };
-    }
+function missingFinding(path: string, generatorId: string): Finding {
+  return {
+    severity: "ERROR",
+    path,
+    line: 1,
+    message: `${path} is declared in ${MANIFEST_PATH} (generator '${generatorId}') but is absent from the repo — regenerate it or remove the manifest entry`,
+  };
+}
 
-    const { entries, findings: manifestFindings } = parseManifest(snapshot);
-    const findings: Finding[] = [...manifestFindings];
-    let checked = 0;
-    const notAdopted: string[] = [];
+function staleFinding(path: string, generatorId: string, have: string, want: string): Finding {
+  const line = firstDiffLine(have, want);
+  const haveLines = have.split("\n");
+  const wantLines = want.split("\n");
+  return {
+    severity: "ERROR",
+    path,
+    line,
+    message:
+      `${path} is STALE (regenerate via '${generatorId}') — first difference at line ${line}: ` +
+      `have "${snippet(haveLines[line - 1])}", want "${snippet(wantLines[line - 1])}"`,
+  };
+}
 
-    for (const entry of entries) {
-      const generate = GENERATORS[entry.generator];
-      if (!generate) {
-        // A declared entry this binary doesn't know how to regenerate — e.g. a forward-declared
-        // M2.4 render output on a binary predating that generator. Named, never silently dropped;
-        // never an ERROR (this binary genuinely cannot verify it, one way or the other).
-        notAdopted.push(`${entry.path} (generator '${entry.generator}' not available)`);
-        continue;
-      }
+/** The pure core of Gate 7 (M2 boundary review blockers #3/#4). `externalRegen` carries the
+ * edge-prepared "expected bytes" (or a structured failure reason) for every `render-site-v1`
+ * entry the manifest declares — see this file's header and `ExternalRegenResult`'s own doc
+ * comment. Defaults to an empty map so `freshnessGate.run` (the plain 2-arg `Gate` interface) can
+ * still be called directly (the corpus harness, `src/gates/index.ts`'s registry) — under that
+ * default, ANY declared `render-site-v1` entry reports "cannot be regenerated for verification",
+ * never a silent pass, because this pure function never regenerates it itself. */
+export function runFreshnessGate(
+  snapshot: RepoSnapshot,
+  _config: GateConfig,
+  externalRegen: ReadonlyMap<string, ExternalRegenResult> = new Map(),
+): GateResult {
+  if (!snapshot.has(MANIFEST_PATH)) {
+    // Presence-conditional, whole-mechanism (generalizing the per-file precedent set by Gate 2
+    // Check 11 / Gate 6's report/ guard — linker-25, shards-15): a repo that has never adopted
+    // the freshness manifest has nothing declared to check. Never a finding; the non-adoption
+    // is named on the coverage line, never a silent skip (CLAUDE.md L2).
+    const coverage: CoverageLine[] = [
+      { gate: "freshness", unit: `generated artifacts (manifest not adopted: ${MANIFEST_PATH} absent)`, checked: 0, total: 0 },
+    ];
+    return { findings: [], coverage };
+  }
+
+  const { entries, findings: manifestFindings } = parseManifest(snapshot);
+  const findings: Finding[] = [...manifestFindings];
+  let checked = 0;
+  const unrecognized: string[] = [];
+
+  for (const entry of entries) {
+    const pureGenerate = GENERATORS[entry.generator];
+    if (pureGenerate) {
       checked += 1;
       const have = snapshot.get(entry.path);
       if (have === undefined) {
+        findings.push(missingFinding(entry.path, entry.generator));
+        continue;
+      }
+      const want = pureGenerate(snapshot);
+      if (have !== want) findings.push(staleFinding(entry.path, entry.generator, have, want));
+      continue;
+    }
+
+    if (entry.generator === RENDER_SITE_GENERATOR) {
+      // Blocker #3 (M2 boundary review): recognized, but this pure gate never regenerates it
+      // itself — the edge (src/cli/check.ts) must have supplied the expected bytes (or a
+      // structured failure) via `externalRegen`. Counted in `checked` either way: this binary DID
+      // recognize the generator and attempt verification, whether that verification succeeded,
+      // found staleness, or could not be performed at all.
+      checked += 1;
+      const regen = externalRegen.get(entry.path);
+      if (!regen) {
         findings.push({
           severity: "ERROR",
           path: entry.path,
           line: 1,
-          message: `${entry.path} is declared in ${MANIFEST_PATH} (generator '${entry.generator}') but is absent from the repo — regenerate it or remove the manifest entry`,
+          message:
+            `${entry.path} cannot be regenerated for verification (generator '${RENDER_SITE_GENERATOR}'): ` +
+            `no edge-prepared expected bytes were supplied for this entry — this pure gate never regenerates ` +
+            `'${RENDER_SITE_GENERATOR}' itself (src/cli/check.ts prepares it at the edge before invoking the ` +
+            `gate); a manifest declaring this path must never silently pass unverified`,
         });
         continue;
       }
-      const want = generate(snapshot);
-      if (have !== want) {
-        const line = firstDiffLine(have, want);
-        const haveLines = have.split("\n");
-        const wantLines = want.split("\n");
+      if (!regen.ok) {
         findings.push({
           severity: "ERROR",
           path: entry.path,
-          line,
-          message:
-            `${entry.path} is STALE (regenerate via '${entry.generator}') — first difference at line ${line}: ` +
-            `have "${snippet(haveLines[line - 1])}", want "${snippet(wantLines[line - 1])}"`,
+          line: 1,
+          message: `${entry.path} cannot be regenerated for verification (generator '${RENDER_SITE_GENERATOR}'): ${regen.reason}`,
         });
+        continue;
       }
+      const have = snapshot.get(entry.path);
+      if (have === undefined) {
+        findings.push(missingFinding(entry.path, entry.generator));
+        continue;
+      }
+      if (have !== regen.bytes) findings.push(staleFinding(entry.path, entry.generator, have, regen.bytes));
+      continue;
     }
 
-    const total = entries.length;
-    const unit =
-      notAdopted.length === 0
-        ? "generated artifacts"
-        : `generated artifacts (${notAdopted.length} not adopted: ${notAdopted.join(", ")})`;
+    // Blocker #3a (M2 boundary review): a truly unrecognized generator id used to report the
+    // benign "not adopted" state with NO finding and exit green at `checked 0/1` — a typo'd or
+    // unregistered generator therefore green-lit an entirely unchecked artifact. Now a BLOCKING
+    // manifest ERROR, excluded from `checked` (never attempted) but still counted in `total`.
+    unrecognized.push(`${entry.path} (generator '${entry.generator}')`);
+    findings.push({
+      severity: "ERROR",
+      path: entry.path,
+      line: 1,
+      message:
+        `${entry.path} is declared in ${MANIFEST_PATH} with an unrecognized generator '${entry.generator}' — ` +
+        `this binary cannot verify it, and a manifest declaring an unverifiable artifact must never exit green ` +
+        `(register '${entry.generator}' in src/gates/freshness.ts's GENERATORS, or fix the manifest entry)`,
+    });
+  }
 
-    return {
-      findings,
-      coverage: [{ gate: "freshness", unit, checked, total }],
-    };
+  const total = entries.length;
+  const unit =
+    unrecognized.length === 0
+      ? "generated artifacts"
+      : `generated artifacts (${unrecognized.length} unrecognized generator: ${unrecognized.join(", ")})`;
+
+  return {
+    findings,
+    coverage: [{ gate: "freshness", unit, checked, total }],
+  };
+}
+
+export const freshnessGate: Gate = {
+  name: "freshness",
+  run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
+    return runFreshnessGate(snapshot, config);
   },
 };

@@ -5,7 +5,15 @@
 // against hand-built snapshots, faster to iterate on than a fixture directory.
 
 import { describe, expect, test } from "bun:test";
-import { freshnessGate, freshnessSupersededPaths, MANIFEST_PATH } from "../../src/gates/freshness";
+import {
+  declaredGeneratorPaths,
+  freshnessGate,
+  freshnessSupersededPaths,
+  MANIFEST_PATH,
+  RENDER_SITE_GENERATOR,
+  runFreshnessGate,
+  type ExternalRegenResult,
+} from "../../src/gates/freshness";
 import { checkGenerated, renderIndex } from "../../src/gates/linker-render";
 import { parseRegistry } from "../../src/gates/linker-parse";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
@@ -91,18 +99,178 @@ describe("freshnessGate: regenerate-and-diff over a declared linker-index entry"
     expect(result.findings[0]!.message).toContain("absent from the repo");
   });
 
-  test("unrecognized generator id: never an ERROR, named 'not adopted' on the coverage line, excluded from checked", () => {
+  // Blocker #3a (M2 boundary review): flips the old expectation. An unrecognized generator id
+  // used to be a benign, non-blocking "not adopted" state (checked 0/1, zero findings) — a
+  // typo'd or unregistered generator therefore green-lit an entirely unchecked artifact. It is
+  // now a BLOCKING manifest ERROR: never silently exit green over an unverifiable declaration.
+  test("unrecognized generator id: a BLOCKING ERROR, excluded from checked but counted in total", () => {
     const snapshot = snapshotFromFiles({
       "argument/lemmas/lem-simple.md": LEMMA,
       "build/site/index.html": "<html></html>",
       [MANIFEST_PATH]: manifest([{ path: "build/site/index.html", generator: "render-html-v2" }]),
     });
     const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
-    expect(result.findings).toEqual([]);
+    expect(result.findings.length).toBe(1);
+    const f = result.findings[0]!;
+    expect(f.severity).toBe("ERROR");
+    expect(f.path).toBe("build/site/index.html");
+    expect(f.message).toContain("unrecognized generator 'render-html-v2'");
     expect(result.coverage[0]!.checked).toBe(0);
     expect(result.coverage[0]!.total).toBe(1);
-    expect(result.coverage[0]!.unit).toContain("1 not adopted");
+    expect(result.coverage[0]!.unit).toContain("1 unrecognized generator");
     expect(result.coverage[0]!.unit).toContain("render-html-v2");
+  });
+});
+
+describe("freshnessGate: render-site-v1 (edge-supplied bytes, M2 boundary review blocker #3)", () => {
+  function repoWithSite(siteContent: string | undefined) {
+    return snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      ...(siteContent === undefined ? {} : { "build/site/index.html": siteContent }),
+      [MANIFEST_PATH]: manifest([{ path: "build/site/index.html", generator: RENDER_SITE_GENERATOR }]),
+    });
+  }
+
+  test("plain freshnessGate.run (no externalRegen supplied): render-site-v1 is recognized but ALWAYS reports 'cannot be regenerated for verification' — never a silent pass", () => {
+    const snapshot = repoWithSite("<html>whatever</html>");
+    const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("cannot be regenerated for verification");
+    expect(result.findings[0]!.message).toContain("no edge-prepared expected bytes were supplied");
+    // Recognized (unlike a truly unknown generator): counted in checked, not named "unrecognized".
+    expect(result.coverage[0]!.checked).toBe(1);
+    expect(result.coverage[0]!.total).toBe(1);
+    expect(result.coverage[0]!.unit).not.toContain("unrecognized generator");
+  });
+
+  test("runFreshnessGate with externalRegen ok:true, matching bytes -> clean (the 'clean regenerated site -> green' case)", () => {
+    const bytes = "<html>fresh render</html>";
+    const snapshot = repoWithSite(bytes);
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: true, bytes }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings).toEqual([]);
+    expect(result.coverage).toEqual([{ gate: "freshness", unit: "generated artifacts", checked: 1, total: 1 }]);
+  });
+
+  test("runFreshnessGate with externalRegen ok:true, mismatched bytes -> STALE ERROR (the 'hand-edited site HTML -> ERROR' case)", () => {
+    const snapshot = repoWithSite("<html>hand-edited nonsense</html>");
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: true, bytes: "<html>fresh render</html>" }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.path).toBe("build/site/index.html");
+    expect(result.findings[0]!.message).toContain("is STALE");
+    expect(result.findings[0]!.message).toContain(`regenerate via '${RENDER_SITE_GENERATOR}'`);
+  });
+
+  test("runFreshnessGate with externalRegen ok:false -> ERROR naming the edge's own reason, never a silent pass/skip", () => {
+    const snapshot = repoWithSite("<html>whatever</html>");
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: false, reason: "structurally incomplete build (2 registrySkipped)" }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("cannot be regenerated for verification");
+    expect(result.findings[0]!.message).toContain("structurally incomplete build (2 registrySkipped)");
+  });
+
+  test("declared but missing from disk, even with ok:true supplied bytes -> the ordinary declared-but-missing ERROR", () => {
+    const snapshot = repoWithSite(undefined);
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: true, bytes: "<html>fresh render</html>" }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.message).toContain("declared in .rk/generated.json");
+    expect(result.findings[0]!.message).toContain("absent from the repo");
+  });
+});
+
+describe("declaredGeneratorPaths: the edge-discovery helper for externally-regenerated entries", () => {
+  test("returns exactly the well-formed paths declared under the given generator", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      [MANIFEST_PATH]: manifest([
+        { path: "argument/INDEX.md", generator: "linker-index" },
+        { path: "build/site/index.html", generator: RENDER_SITE_GENERATOR },
+      ]),
+    });
+    expect(declaredGeneratorPaths(snapshot, RENDER_SITE_GENERATOR)).toEqual(["build/site/index.html"]);
+    expect(declaredGeneratorPaths(snapshot, "linker-index")).toEqual(["argument/INDEX.md"]);
+  });
+
+  test("a malformed manifest contributes no paths", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      [MANIFEST_PATH]: "{ not json ,,, }",
+    });
+    expect(declaredGeneratorPaths(snapshot, RENDER_SITE_GENERATOR)).toEqual([]);
+  });
+
+  test("manifest absent contributes no paths", () => {
+    const snapshot = snapshotFromFiles({ "argument/lemmas/lem-simple.md": LEMMA });
+    expect(declaredGeneratorPaths(snapshot, RENDER_SITE_GENERATOR)).toEqual([]);
+  });
+});
+
+describe("freshnessGate: manifest schema enforcement (M2 boundary review blocker #4)", () => {
+  test("missing schema_version -> ERROR, never silently accepted", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      [MANIFEST_PATH]: JSON.stringify({ entries: [] }),
+    });
+    const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain('missing required "schema_version"');
+  });
+
+  test('wrong schema_version ("2") -> ERROR, never silently run under v1 semantics', () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      [MANIFEST_PATH]: JSON.stringify({ schema_version: "2", entries: [] }),
+    });
+    const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.message).toContain('"schema_version" is "2"');
+    expect(result.findings[0]!.message).toContain('expected exactly "1"');
+  });
+
+  test("extra top-level property -> ERROR, additionalProperties:false enforced", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      [MANIFEST_PATH]: JSON.stringify({ schema_version: "1", entries: [], extra_top: "nope" }),
+    });
+    const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.message).toContain("unrecognized top-level property");
+    expect(result.findings[0]!.message).toContain('"extra_top"');
+  });
+
+  test("extra per-entry property -> per-entry ERROR, well-formed siblings still checked", () => {
+    const { lemmas } = parseRegistry(snapshotFromFiles({ "argument/lemmas/lem-simple.md": LEMMA }));
+    const fresh = renderIndex(lemmas);
+    const snapshot = snapshotFromFiles({
+      "argument/lemmas/lem-simple.md": LEMMA,
+      "argument/INDEX.md": fresh,
+      [MANIFEST_PATH]: JSON.stringify({
+        schema_version: "1",
+        entries: [{ path: "argument/INDEX.md", generator: "linker-index", extra_entry: "nope" }],
+      }),
+    });
+    const result = freshnessGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0]!.message).toContain("unrecognized property");
+    expect(result.findings[0]!.message).toContain('"extra_entry"');
+    // The malformed entry is dropped entirely (never partially trusted) -- checked=0/0.
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(result.coverage[0]!.total).toBe(0);
   });
 });
 

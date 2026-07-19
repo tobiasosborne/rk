@@ -1532,10 +1532,58 @@ migrating its live campaign onto this manifest — is explicitly OUT of this WP'
 standing TJO directive defers the AISM staged cutover indefinitely; see CLAUDE.md Rule 3 and
 HANDOFF.md). IMPLEMENTATION_PLAN M2.6's acceptance clause "AISM mirrors deleted" is therefore
 inapplicable here; this WP's bar is the fixture bar below (a hand-edited generated file fails
-`rk check`, a clean one passes, absence is presence-conditional and named). `rk render` (M2.4)
-is being built concurrently in a separate worktree and is NOT integrated with by this gate —
-Gate 7 is designed over the declared manifest specifically so M2.4's HTML outputs can register
-their own generator id later without any change here.
+`rk check`, a clean one passes, absence is presence-conditional and named).
+
+**Repair wave (M2 boundary review blockers #3/#4, this session).** The M2 boundary review found
+two holes the first landing left open, both repaired here:
+- **#3 — `rk render`'s actual HTML output was unprotected, and an unrecognized generator id
+  green-lit an unchecked artifact.** `rk render` (M2.4) now upserts a manifest entry
+  `{"path": "<out>/index.html", "generator": "render-site-v1"}` (src/cli/render.ts, render lane).
+  `render-site-v1` is a NEW kind of recognized generator — **edge-supplied**, not pure — see
+  "Edge-supplied generators" below. Separately, a manifest entry naming a generator id this
+  binary recognizes NEITHER as a pure `GENERATORS` entry NOR as `render-site-v1` is now a
+  BLOCKING manifest ERROR (Check 4, below) — the pre-repair behavior ("not adopted", zero
+  findings, excluded from `checked`) let a typo'd or unregistered generator id exit green at
+  `checked 0/1`; that state no longer exists.
+- **#4 — the runtime manifest parser under-enforced `schemas/generated.v1.json`.** Missing
+  `schema_version`, a wrong version (e.g. `"2"`), and extra top-level/per-entry keys were all
+  silently accepted. Check 1 (below) now enforces the schema's full surface: the exact
+  `schema_version` const, and `additionalProperties:false` at BOTH the top level and per entry.
+
+**Edge-supplied generators (`render-site-v1`).** `src/gates/freshness.ts` stays PURE (L3: no fs/
+network/clock) — it cannot itself build a `GraphDocument` (af/fr subprocess calls) or call
+`src/render/site.ts`'s `renderSite`. So unlike `linker-index`/`linker-dag` (pure functions of
+the snapshot, computed INSIDE this gate), `render-site-v1`'s expected bytes are computed at the
+EDGE, `src/cli/check.ts`'s `prepareRenderSiteExternalRegen`: it builds the real `GraphDocument`
+(`src/store/build-graph.ts`'s `buildGraphDocument`, imported unmodified), renders it
+(`src/render/site.ts`'s `renderSite`, imported unmodified, `northStarId` sourced from
+`.rk/config.json` the same way `rk render` itself defaults it — `rk check` has no CLI
+equivalent of `rk render`'s own `--title`/`--north-star` overrides, a known limitation below),
+and hands the pure gate the result via `runFreshnessGate`'s third parameter, `externalRegen: Map<
+path, {ok:true, bytes} | {ok:false, reason}>`. The pure gate never regenerates `render-site-v1`
+itself; it only diffs SUPPLIED bytes. Consequently `freshnessGate.run` (the plain 2-arg `Gate`
+interface every OTHER caller uses — `src/gates/index.ts`'s registry, the corpus harness) always
+passes an EMPTY `externalRegen` map, so a `render-site-v1` entry run through that plain interface
+always reports "cannot be regenerated for verification" (`freshness-07`) — never a silent pass.
+If the edge cannot produce trustworthy expected bytes (a structurally incomplete build — today,
+any non-empty `AssembleReport.registrySkipped`; consumed tolerantly for whatever OTHER
+structural-diagnostics surface a future build result carries — or an unexpected exception from
+`buildGraphDocument`/`renderSite`), every declared `render-site-v1` path gets a loud, named
+`ok:false` ERROR, never a silent pass or skip.
+
+**Edge-only wrinkle: the snapshot text map doesn't cover `build/`.** `src/store/
+snapshot-load.ts`'s `RepoSnapshot` text map is bounded to the six pre-M2.6 gates' declared
+Inputs (`definitions/`, `argument/`, `proofs/`, `refs/`, `runs/`, `report/`, `.rk/`) — `rk
+render`'s default output directory, `build/site/`, is not among them, so `snapshot.get("build/
+site/index.html")` would be `undefined` even when the file exists on disk. Widening
+`src/store/snapshot-load.ts`'s include rules is join-lane territory (`src/store/**`) this WP does
+not touch. Instead, `src/cli/check.ts`'s `augmentSnapshotForRenderSite` reads the handful of
+declared `render-site-v1` paths directly at the edge and hands ONLY Gate 7's own invocation an
+augmented snapshot carrying those extra entries (read via plain `fs.readFileSync`, never through
+`loadSnapshot`'s include-rule walk) — every OTHER gate still sees the original, unaugmented
+snapshot. Flagged here as a residual gap for a future WP to close properly (a `build/` — or,
+better, a "declared generated artifact" catch-all — include rule in `src/store/
+snapshot-load.ts` itself), not something this repair wave resolves at the root.
 
 **Failure mode guarded.** The same one Gate 2 Check 11 already guards for its two files,
 generalized: a generated artifact (a rendered index, a dependency graph, any build output a
@@ -1550,25 +1598,34 @@ that rule for any artifact a repo opts into declaring.
   same `RepoSnapshot` every other gate reads (`src/store/snapshot-load.ts` gained a one-level
   `.rk/` include rule for exactly this; `.rk/config.json` keeps its own separate edge path,
   `src/store/config-load.ts`, unaffected).
-- **Recognized generators** (`src/gates/freshness.ts`'s `GENERATORS` map), each a pure
-  `(snapshot) => string` reproducing a fresh render byte-for-byte: `linker-index` (renders
+- **Recognized generators.** Two SHAPES: (a) `src/gates/freshness.ts`'s `GENERATORS` map — pure
+  `(snapshot) => string` functions this gate calls itself: `linker-index` (renders
   `argument/INDEX.md` via `src/gates/linker-render.ts`'s `renderIndex`, over the same
   `parseRegistry` every Gate 2 run computes independently), `linker-dag` (`DAG.md` /
-  `renderDag`, same source). A manifest entry naming any OTHER generator id is not an error by
-  itself — see Checks, below — it is simply an id this binary does not (yet) know how to
-  regenerate.
+  `renderDag`, same source). (b) `RENDER_SITE_GENERATOR` — `render-site-v1`, EDGE-SUPPLIED (see
+  "Edge-supplied generators" above): recognized, but this gate never regenerates it itself. A
+  manifest entry naming any OTHER generator id (neither (a) nor (b)) is now a BLOCKING ERROR —
+  see Check 4, below (M2 boundary review blocker #3a; flipped from the pre-repair "not an error
+  by itself" state).
 
 **Checks.**
-1. **Manifest shape.** `.rk/generated.json` absent ⇒ no finding at all (the whole-mechanism
+1. **Manifest shape and schema enforcement** (M2 boundary review blocker #4 hardened the version/
+   key checks). `.rk/generated.json` absent ⇒ no finding at all (the whole-mechanism
    presence-conditional case, below). Present but not valid JSON, not a JSON object, or missing
    an `entries` array ⇒ ONE ERROR at `.rk/generated.json:1` naming the shape defect, and the
    manifest is treated as declaring ZERO entries for every other check (never silently read as
    "absent" — a malformed manifest is a real, visible defect, a different state from "never
-   adopted"). An individual `entries[i]` that is not `{path: non-empty string, generator:
-   non-empty string}` ⇒ one ERROR per malformed entry, naming its index; every OTHER,
-   well-formed entry in the same manifest is still individually checked (same "flag, never
-   silently exclude the rest" discipline Gate 1's DRIFT dedup and Gate 2's duplicate-id check
-   already use).
+   adopted"). Given a JSON object with an `entries` array, THREE further schema checks each fire
+   independently (any subset may fire together on the same manifest): missing `schema_version`
+   ⇒ ERROR; `schema_version` present but not exactly the const `"1"` (`schemas/generated.v1.json`)
+   ⇒ ERROR naming the actual and expected values (a future incompatible manifest version must
+   never silently run under today's v1 semantics); any top-level key other than `schema_version`/
+   `entries` ⇒ ERROR naming the extra key(s) (`additionalProperties:false`). An individual
+   `entries[i]` that is not EXACTLY `{path: non-empty string, generator: non-empty string}` —
+   including one carrying any THIRD key — ⇒ one ERROR per malformed entry, naming its index (and,
+   for an extra key, the key itself); every OTHER, well-formed entry in the same manifest is still
+   individually checked (same "flag, never silently exclude the rest" discipline Gate 1's DRIFT
+   dedup and Gate 2's duplicate-id check already use).
 2. **Whole-mechanism presence-conditional.** `.rk/generated.json` entirely absent from the repo
    ⇒ zero findings, coverage line `checked freshness: 0/0 generated artifacts (manifest not
    adopted: .rk/generated.json absent)`. This generalizes Gate 2 Check 11's own per-file
@@ -1577,24 +1634,35 @@ that rule for any artifact a repo opts into declaring.
    declared for this gate to check — never a finding, never a silent `0/0` with no explanation
    (CLAUDE.md L2).
 3. **Per-entry regenerate-and-diff**, for every well-formed entry whose `generator` is
-   recognized: if `path` is absent from the repo ⇒ ERROR `<path> is declared in
+   recognized (either shape): if `path` is absent from the repo ⇒ ERROR `<path> is declared in
    .rk/generated.json (generator '<gen>') but is absent from the repo — regenerate it or remove
-   the manifest entry`. If present, regenerate via the named generator and byte-compare; a
-   mismatch ⇒ ERROR `<path> is STALE (regenerate via '<gen>') — first difference at line <n>:
-   have "...", want "..."` — naming both the file and the first differing line (line-based diff,
-   1-indexed; when one render is a strict prefix of the other, the divergence is reported at the
-   line immediately past the shared prefix). An exact byte match ⇒ no finding.
-4. **Unrecognized generator.** A well-formed entry whose `generator` id is not in
-   `GENERATORS` ⇒ never an ERROR (this binary genuinely cannot verify it, either direction) and
-   never silently dropped: named on the coverage line as "not adopted", with the path and
-   generator id, and excluded from the numerator (`checked`) but included in the denominator
-   (`total`) — the forward-compatibility case for a manifest entry declaring, e.g., a
-   not-yet-landed `rk render` output on an older binary.
+   the manifest entry`. If present, regenerate (a `GENERATORS` entry computes this itself; a
+   `render-site-v1` entry reads the edge-supplied bytes) and byte-compare; a mismatch ⇒ ERROR
+   `<path> is STALE (regenerate via '<gen>') — first difference at line <n>: have "...", want
+   "..."` — naming both the file and the first differing line (line-based diff, 1-indexed; when
+   one render is a strict prefix of the other, the divergence is reported at the line immediately
+   past the shared prefix). An exact byte match ⇒ no finding. For `render-site-v1` specifically,
+   if the edge could not supply expected bytes at all (no `externalRegen` entry for this path —
+   always true through the plain `Gate.run` interface — or an `ok:false` structured failure) ⇒
+   ERROR `<path> cannot be regenerated for verification (generator 'render-site-v1'): <reason>`,
+   checked before the have/want comparison ever runs.
+4. **Unrecognized generator** (M2 boundary review blocker #3a — flips the pre-repair behavior). A
+   well-formed entry whose `generator` id is recognized as NEITHER a `GENERATORS` entry NOR
+   `render-site-v1` ⇒ now a BLOCKING ERROR: `<path> is declared in .rk/generated.json with an
+   unrecognized generator '<gen>' — ...`. Named on the coverage line as "unrecognized generator",
+   with the path and generator id; excluded from the numerator (`checked`, since this binary never
+   attempted verification) but included in the denominator (`total`). Pre-repair this was the
+   benign "not adopted" state (zero findings, exit green at `checked 0/1`) — the forward-
+   compatibility rationale (a manifest entry declaring a not-yet-landed generator on an older
+   binary) is no longer accepted: a typo'd or genuinely-unregistered id is indistinguishable from
+   that forward-declaration case either way, so the safe direction is to ERROR both, never to
+   green-light either.
 
-**Coverage line.** `checked freshness: <checked>/<total> generated artifacts[ (<K> not adopted:
-<path> (generator '<id>' not available), ...)]`. `total` is every well-formed manifest entry;
+**Coverage line.** `checked freshness: <checked>/<total> generated artifacts[ (<K> unrecognized
+generator: <path> (generator '<id>'), ...)]`. `total` is every well-formed manifest entry;
 `checked` is the subset whose generator this binary recognizes (attempted, whether the result
-was clean or an ERROR); the parenthetical is present only when `K > 0`. The
+was clean, STALE, declared-but-missing, or — for `render-site-v1` — could not be regenerated for
+verification at all); the parenthetical is present only when `K > 0`. The
 whole-mechanism-absent case (Check 2) uses its own fixed text, `0/0 generated artifacts
 (manifest not adopted: .rk/generated.json absent)`, distinguishing "never adopted" from
 "adopted, zero entries declared yet" (`0/0 generated artifacts`, no parenthetical) and from
@@ -1619,9 +1687,17 @@ construction: a path is only ever unchecked by NEITHER gate if it is simultaneou
 the repo tree (nothing to check) — the only state that was always a non-finding under Check 11
 too. `mirrorStatus` entries for a superseded path report `superseded (see freshness gate)` on
 Gate 2's own coverage line, rather than `present`/`absent (not adopted)`, so a reader always sees
-which gate is responsible for that path's staleness. This decision is unreviewed at Tier A as of
-this WP (freshness is new validity-semantics surface, CLAUDE.md L6) — flagged explicitly for the
-M2 boundary review; see this WP's final report for the exact open question.
+which gate is responsible for that path's staleness.
+
+**Ratified (M2 boundary review, this session's repair wave).** The per-path (not whole-manifest)
+Check-11 supersession rule above, the declared-but-missing semantics (Check 3), and
+`freshness-05` (malformed-manifest-is-never-silently-absent) were all flagged unreviewed-at-Tier-A
+by the first landing. The M2 boundary review examined all three and ratified them as permanent,
+unchanged: "the per-path Check-11 supersession rule itself is ratified, declared-but-missing
+semantics are correct... keep `freshness-05` permanently." No code change accompanies this
+paragraph — it closes the open Tier-A question the first landing's own text flagged (see this
+section's prior revision for the exact wording of that question) and bd rk-9lg (the bead tracking
+it).
 
 **Known limitations.**
 - `linker-index`/`linker-dag` re-derive `parseRegistry(snapshot)` independently of Gate 2's own
@@ -1631,13 +1707,27 @@ M2 boundary review; see this WP's final report for the exact open question.
   a regenerate-and-diff against whatever partial/best-effort lemma set `parseRegistry` produces;
   this mirrors Gate 2 Check 11's own pre-existing behavior (`checkGenerated` already renders
   against `lemmas` regardless of `parseErrors`), unchanged by this WP.
-- A manifest entry's `generator` id space is a flat, unnamespaced string with no registry of
-  "known-but-not-yet-shipped" ids — a typo in a `generator` value (e.g. `"linker-indx"`) is
-  indistinguishable from a genuine forward-declaration of a not-yet-landed generator; both read
-  as "not adopted" on the coverage line, never an ERROR. Accepted for this WP (a typo'd id is a
-  visible, named, non-blocking state — CLAUDE.md L2's coverage-reporting bar is met — rather than
-  a new sub-mechanism to detect it); flagged as a residual concern for a later WP if it proves to
-  bite in practice.
+- **Resolved this session (was a Known limitation; superseded by Check 4, above):** a manifest
+  entry's `generator` id space is still a flat, unnamespaced string with no registry of
+  "known-but-not-yet-shipped" ids — a typo in a `generator` value (e.g. `"linker-indx"`) remains
+  indistinguishable from a genuine forward-declaration of a not-yet-landed generator. The pre-
+  repair acceptance of that ambiguity (both read as benign "not adopted", never an ERROR) is what
+  the M2 boundary review's blocker #3a rejected: both cases now ERROR identically, on the
+  reasoning that an unverifiable declared artifact must never exit green regardless of WHY this
+  binary cannot verify it. A repo that legitimately wants to forward-declare a not-yet-landed
+  generator id must accept a blocking ERROR until it upgrades — there is no longer a silent,
+  non-blocking middle state.
+- `render-site-v1` verification depends on `src/cli/check.ts`'s `northStarId` defaulting
+  (`.rk/config.json` only) matching whatever `rk render` itself was actually invoked with. A
+  render invoked with an explicit `--north-star`/`--title` CLI override (`rk check` has no
+  equivalent flags) will legitimately diff against this config-only regeneration — a false STALE,
+  not a real one. Accepted for this repair wave, flagged as a residual concern; the eventual fix
+  either records the options used in the manifest entry itself (a schema addition) or drops the
+  override flags from `rk render` in favor of `.rk/config.json`-only configuration.
+- The `RepoSnapshot` text-map / `build/` gap this session's edge-side `augmentSnapshotForRenderSite`
+  works around (see "Edge-supplied generators" above) is a workaround, not a fix — the proper fix
+  (widening `src/store/snapshot-load.ts`'s include rules) is join-lane territory this WP does not
+  touch, flagged as a residual concern for a later WP.
 
 **Divergences from AISM (triage).** N/A by construction — Gate 7 is a NEW rk-only mechanism with
 no AISM script counterpart to characterize or diverge from (AISM's `argument.py --generate`/
@@ -1647,7 +1737,10 @@ adopt the manifest; it is cited as prior art in Gate 2's own section, not repeat
 **Historical schema-drift tolerance.** N/A — this is a new schema (`generated.v1.json`) with no
 prior history to tolerate drift against.
 
-**Corpus fixtures required** (landed this WP, M2.6):
+**Corpus fixtures required** (landed this WP, M2.6; `freshness-06`..`freshness-11` landed the
+M2 boundary review repair wave, blockers #3/#4 — see this WP's final report for the proposed
+`corpus/README.md`/`src/corpus/discovery.ts` `EXPECTED_FIXTURE_COUNT` delta these six add, not
+yet applied here since both files are out of this repair wave's scope):
 
 | id | violation |
 |---|---|
@@ -1656,3 +1749,9 @@ prior history to tolerate drift against.
 | `freshness-03` | declared-but-missing — the manifest declares `argument/INDEX.md`, the file does not exist in the repo ⇒ ERROR, distinct from the presence-conditional golden case below |
 | `freshness-04` | no-manifest presence-conditional golden case — `.rk/generated.json` entirely absent ⇒ zero findings, coverage names the non-adoption (sibling to `linker-25`/`shards-15`'s per-file/per-directory precedent) |
 | `freshness-05` | malformed manifest (not valid JSON) ⇒ one loud ERROR, never silently read as "absent" (would otherwise misroute into `freshness-04`'s golden-pass state) |
+| `freshness-06` | **blocker #3a** — unrecognized generator id (`render-html-v2`) declared for `argument/INDEX.md` ⇒ BLOCKING ERROR, `checked=0/1`, never the pre-repair silent "not adopted" green exit |
+| `freshness-07` | **blocker #3** — `render-site-v1` declared for `build/site/index.html`, exercised through the plain 2-arg `Gate` interface (no edge-supplied bytes, exactly what the corpus harness always uses) ⇒ ERROR "cannot be regenerated for verification"; the full edge pipeline (clean-pass / hand-edited-STALE) is proven separately in `test/cli-check.test.ts`'s render-site-v1 suite, since only `src/cli/check.ts` ever supplies `externalRegen` |
+| `freshness-08` | **blocker #4** — manifest missing `schema_version` entirely ⇒ ERROR |
+| `freshness-09` | **blocker #4** — manifest `schema_version: "2"` (wrong version) ⇒ ERROR naming both the actual and expected value |
+| `freshness-10` | **blocker #4** — manifest carries an extra top-level property ⇒ ERROR (`additionalProperties:false`) |
+| `freshness-11` | **blocker #4** — a manifest entry carries an extra property beyond `path`/`generator` ⇒ per-entry ERROR, entry dropped entirely (`checked=0/0`) |
