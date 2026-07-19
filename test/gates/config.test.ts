@@ -105,6 +105,21 @@ describe("validateConfigOverrides — the other four fields + unknown keys", () 
     expect(r.total).toBe(0);
   });
 
+  test("northStarId (M2.5): a non-empty string passes through", () => {
+    const r = validateConfigOverrides({ northStarId: "thm-north-star" });
+    expect(r.overrides.northStarId).toBe("thm-north-star");
+    expect(r.findings).toEqual([]);
+  });
+
+  test("northStarId: malformed (non-string / empty) value rejected -- treated as unconfigured", () => {
+    for (const bad of [7, "", null]) {
+      const r = validateConfigOverrides({ northStarId: bad });
+      expect(r.overrides.northStarId).toBeUndefined();
+      expect(r.findings).toHaveLength(1);
+      expect(mergeGateConfig(r.overrides).northStarId).toBeUndefined();
+    }
+  });
+
   test("an unrecognized key is dropped and reported, never silently applied", () => {
     const r = validateConfigOverrides({ shardsMxLines: 999 });
     expect((r.overrides as Record<string, unknown>).shardsMxLines).toBeUndefined();

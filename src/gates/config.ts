@@ -74,6 +74,14 @@ export interface GateConfig {
    * rule lives in `src/refs/quote.ts`'s `wholeQuoteMatch` and must be called, never re-derived,
    * per the carry-forward note in docs/reviews/2026-07-17-tier-a-boundary-review.md). */
   refsMinRunReportingLength: number;
+  /** M2.5 (`rk graph --critical-path`/`--blocks`, src/cli/graph.ts): the campaign's north-star
+   * contract's registry id — PRD C1's constitution slot, made mechanically readable here rather
+   * than only living in stamped prose. Optional, same "no default" stance as `shardsPrefix`: a
+   * general tool must never guess which registry id is a specific campaign's north star.
+   * Required-when-consumed: absent means `rk graph --critical-path`/`--blocks` fall back to an
+   * explicit `--north-star <id>` argument, one loud message, never a silent guess; an explicit
+   * `--north-star` flag always overrides this field when both are given. */
+  northStarId?: string;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
    * `validateConfigOverrides`'s findings (plus a checked/total pair) from the point they're
@@ -122,6 +130,7 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "shardsPrefix",
   "shardsMaxLines",
   "refsMinRunReportingLength",
+  "northStarId",
 ]);
 
 const CONFIG_PATH = ".rk/config.json";
@@ -278,6 +287,23 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
         configError(
           `refsMinRunReportingLength: invalid value ${JSON.stringify(v)} -- must be a positive ` +
             `number; falling back to default ${DEFAULT_GATE_CONFIG.refsMinRunReportingLength}`,
+        ),
+      );
+    }
+  }
+
+  if ("northStarId" in raw) {
+    total++;
+    const v = raw.northStarId;
+    if (isNonEmptyString(v)) {
+      overrides.northStarId = v;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `northStarId: invalid value ${JSON.stringify(v)} -- must be a non-empty string when ` +
+            `set; treating as unconfigured (M2.5's own "no default" contract, never a malformed ` +
+            `sentinel)`,
         ),
       );
     }
