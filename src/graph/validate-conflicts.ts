@@ -23,7 +23,7 @@
 import type { ConflictKind, ConflictRecord, GraphDocument, RegistryNode } from "./types";
 import { err, type GraphIssue } from "./validate-issue";
 
-interface ExpectedConflict {
+export interface ExpectedConflict {
   kind: ConflictKind;
   edge: "af" | "fr";
   nodeId?: string;
@@ -35,7 +35,12 @@ function identity(kind: ConflictKind, edge: "af" | "bd" | "fr" | "report", nodeI
   return `${kind} ${edge} ${nodeId ?? ""}`;
 }
 
-function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[] {
+/** Exported for src/graph/assemble.ts (M2.2): the store-reader assembly boundary needs the SAME
+ * recomputation this validator checks against, so a freshly-assembled `GraphDocument`'s
+ * `conflicts` array is populated from one source of truth rather than a second hand-maintained
+ * copy of this logic. The function body is UNCHANGED by this export — a pure visibility change,
+ * not a validity-semantics edit. */
+export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[] {
   const out: ExpectedConflict[] = [];
   const afByNode = new Map(doc.edges.af.map((e) => [e.nodeId, e]));
 
