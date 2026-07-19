@@ -401,7 +401,7 @@ selftest`), and — since 2026-07-18, rk-bdd finding 7 — the actual `rk check 
 runs in well under a second (86 in-memory gate runs against small fixture trees); the whole
 script, purity grep included, is comfortably under CLAUDE.md's `<10s` bar.
 
-## Graph fixtures (M2.2) — a distinct harness, not `src/corpus/run.ts`'s `Gate` runner
+## Graph fixtures (M2.2/M2.3) — a distinct harness, not `src/corpus/run.ts`'s `Gate` runner
 
 `corpus/graph/` holds fixtures for `src/store/build-graph.ts`'s "repo root -> `GraphDocument`"
 pipeline (M2.2 store readers + `src/graph/assemble.ts`'s pure join boundary) — a different shape
@@ -417,6 +417,23 @@ to run fixtures through; M2.2's `build-graph.ts` is that harness.
 | fixture id | harness | violation | status |
 |---|---|---|---|
 | `graph/rename-hazard` | `test/graph/corpus-rename-hazard.test.ts` | end-to-end proof that the registry↔af join reads the shard's `workspace:` field, never its `id` — a shard (`lem-halo-collapse`) whose id names one directory (`proofs/lem-halo-collapse/`, present with a DECOY ledger carrying a deliberately wrong contract/node-count) while `workspace:` names a different, real one (`proofs/halo-collapse-v2/`, the correct ledger). Bead rk-bsj (Tier A M2.1 review follow-up 5): the existing unit fixture (`test/graph/fixtures.ts`'s `buildRenameHazardDocument`) proves the SCHEMA/VALIDATOR catch a rename-hazard edge once one exists as a hand-built document — it cannot catch a READER that derives the join key from `id` in the first place. Mutation-proven red-first (temporarily deriving the workspace-discovery list from `id` in `build-graph.ts` turns this fixture red — `workspaceResolved: false` instead of a correct resolve; reverted after confirming). | landed |
+| `graph/conflict-status-mismatch` | `test/graph/corpus-conflict-status-mismatch.test.ts` | M2.3 class (a) — registry-status vs af-epistemic-state disagreement: `lem-a` (`status: proved`, `af: validated`) against a deterministically-stubbed `af export` (`fake-af`, invoked via `afCommand`, never a real af binary) reporting root `epistemic_state: "pending"`; `contractMatch`/`taintState` held at non-conflicting values so this fixture isolates `status-mismatch` alone. Drives `build-graph.ts` end to end. Mutation-proven red-first (commenting out `validate-conflicts.ts`'s `epistemicState !== "validated"` push turns this fixture red — `conflicts: []` where one is expected, plus the `test/graph/corpus-conflict-never-resolved.test.ts` property test's baseline/drop cases for this class; reverted after confirming). | landed |
+| `graph/conflict-contract-mismatch` | `test/graph/corpus-conflict-contract-mismatch.test.ts` | M2.3 class (b) — contract byte-mismatch: `lem-b`'s registry `contract` and the stubbed af export's root `statement` name related but byte-different claims (`contractMatch: false`) on an otherwise-resolved workspace; `epistemicState`/`taintState` held at non-conflicting values so this fixture isolates `contract-mismatch` alone — the MANDATORY conflict record on a resolved-but-mismatched workspace (Tier A review blocker 3), never demoted to the unresolved bucket. Mutation-proven red-first (commenting out the `!e.contractMatch` push turns this fixture red; reverted after confirming). | landed |
+| `graph/conflict-taint-status` | `test/graph/corpus-conflict-taint-status.test.ts` | M2.3 class (c) — taint vs status inconsistency: `lem-c` (`status: proved`) against a stubbed af export reporting `epistemic_state: "validated"`, `contractMatch: true`, but `taint_state: "tainted"`; isolates `taint-status-mismatch` alone. Mutation-proven red-first (commenting out the `e.taintState !== "clean"` push turns this fixture red; reverted after confirming). | landed |
+| `graph/conflict-banked-without-oracle` | `test/graph/corpus-conflict-banked-without-oracle.test.ts` | M2.3 class (d) — fr banked-claim without a fresh oracle verdict: `lem-d` (`af: none`, no af edge at all) named by `repo/.frontier/log.jsonl`'s one cycle (`outcome: "banked"`, `evidence.verdict: "claimed"`, read via fr's direct-ledger fallback, `frCommand` pointed at a guaranteed-absent binary) — the bank-gate's own oracle-verdict requirement is unmet. Mutation-proven red-first (short-circuiting `oracleBacked` to always-`true` in `validate-conflicts.ts` turns this fixture red; reverted after confirming). | landed |
+
+`test/graph/corpus-conflict-never-resolved.test.ts` is a fifth, property-shaped harness (no `repo/`
+of its own — it reuses the four fixtures above): for each of the four real assembled documents, it
+asserts a clean baseline (`validateGraphDocument(doc) === []`, recorded conflicts == recomputed
+exactly) and then tampers with the ASSEMBLED `conflicts` array four ways — drop, duplicate,
+edit-`otherValue`, and swap-`kind` — asserting `validateGraphDocument` ERRORs on every tamper, for
+every one of the four conflict classes (never a class-specific gap). A fifth block combines TWO
+fixtures' real assembled output (`conflict-status-mismatch` + `conflict-contract-mismatch`) into
+one document and drops one of the two independently-computed conflicts, proving a "merge" step
+cannot silently collapse two real conflicts into one entry either. This is the end-to-end
+(not hand-built-`GraphDocument`-level) proof of the WP's "conflicts render as defects, never
+auto-resolved" acceptance line, run through the real `build-graph.ts` -> `assemble.ts` ->
+`validate.ts` pipeline for all four closed `ConflictKind`s.
 
 ## Empty-directory fixtures (rk-399)
 

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Deterministic af-export stub for corpus/graph/conflict-status-mismatch (M2.3, bead/WP conflict
+# detection). Real `af export --graph json --dir <ws>` shells out to a live af workspace; this
+# fixture instead pins the EXACT epistemic/taint/contract triple the conflict-detection test needs
+# to isolate class (a) — "registry-status vs af-epistemic-state disagreement" — independent of any
+# live af binary's own behavior, so the fixture's target conflict is not entangled with any OTHER
+# conflict class. Ignores every argv (export --graph json --dir <abs>): always emits the same
+# root-node facts, exactly mirroring the shape src/store/af-load.ts's `runAfExport` parses
+# (AfExportDoc: schema_version, nodes[].{id,statement,epistemic_state,taint_state},
+# validation.total_nodes). See test/graph/corpus-conflict-status-mismatch.test.ts.
+cat <<'JSON'
+{"schema_version":"1","nodes":[{"id":"1","statement":"Every bounded orbit accumulates at a fixed point.","epistemic_state":"pending","taint_state":"clean"}],"validation":{"total_nodes":1}}
+JSON

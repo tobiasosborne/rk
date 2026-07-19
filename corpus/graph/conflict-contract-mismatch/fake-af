@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Deterministic af-export stub for corpus/graph/conflict-contract-mismatch (M2.3). Isolates class
+# (b) — "contract byte-mismatch (registry contract != af root statement)": epistemic_state and
+# taint_state are held at their non-conflicting values ("validated"/"clean") so this fixture
+# exercises ONLY the `contract-mismatch` push. See fake-af in the status-mismatch fixture's
+# sibling directory for the full rationale; this script is the same pattern with a deliberately
+# DIFFERENT `statement` than the registry shard's `contract` field.
+cat <<'JSON'
+{"schema_version":"1","nodes":[{"id":"1","statement":"The sequence converges to zero in the sup norm, under a strictly weaker hypothesis.","epistemic_state":"validated","taint_state":"clean"}],"validation":{"total_nodes":1}}
+JSON

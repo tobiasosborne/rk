@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Deterministic af-export stub for corpus/graph/conflict-taint-status (M2.3). Isolates class (c)
+# — "taint vs status inconsistency (proved + tainted)": contractMatch and epistemic_state are held
+# at their non-conflicting values (`statement` byte-matches the registry contract,
+# epistemic_state "validated") so this fixture exercises ONLY the `taint-status-mismatch` push.
+# See fake-af in the status-mismatch fixture's sibling directory for the full rationale.
+cat <<'JSON'
+{"schema_version":"1","nodes":[{"id":"1","statement":"No two distinct primes p, q > 2 satisfy p^2 - q^2 = 1.","epistemic_state":"validated","taint_state":"tainted"}],"validation":{"total_nodes":1}}
+JSON
