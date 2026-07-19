@@ -199,8 +199,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.1.0 for the shard-schema template addition (rk-o1y)", () => {
-    expect(manifest.template_version).toBe("1.1.0");
+  test("template_version was bumped to 1.2.0 for the M1 repair wave's template content changes (rk-huq/rk-19i/rk-gvx/rk-mdx)", () => {
+    expect(manifest.template_version).toBe("1.2.0");
   });
 
   test("definitions/README.md and argument/README.md are stamped, rewritten-whole (rk-o1y)", () => {
