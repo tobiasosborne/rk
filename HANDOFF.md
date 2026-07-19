@@ -3,94 +3,101 @@
 
 # HANDOFF
 
-## State (2026-07-19, session close — M1 and M2 both ACCEPTED; M3 groundwork in)
+## State (2026-07-19, session close — M1+M2 ACCEPTED; M3 built, review-repaired NEXT)
 
-**M1 ACCEPTED** (repair wave + mechanical verification + dogfood-3 all-PASS).
-**M2 ACCEPTED**: all six WPs, one boundary review + one repair wave (9/9 blockers
-mechanically verified), M2.4 pass 2 landed, SC5 dry-run marginal PASS (fresh-context
-third party answered all five questions; usability beads filed), dagre vendored
-(690bebc). M3 groundwork already landed: M3.0 caching-spike memo (session-resume is a
-HARD requirement for the worker contract; 1h TTL; stagger confirmed — see
-../research-workflows/NOTES-2026-07-19-m3.0-caching-spike.md), V0 struck, V1 shipped in
-vibefeld (identity schema, byte-identical replay on all 44 AISM workspaces, pushed).
-Tree: 1115 tests / 0 fail / 1 skip; selftest OK (109/109 + graph/render harnesses);
-dist/rk current. No rk git remote (TJO: add one if pushing is wanted). vibefeld pushed
-through 22bd056; knowledge-frontier pushed through 0d5f4df.
+**M1 ACCEPTED. M2 ACCEPTED** (all WPs, one review + one repair wave, SC5 marginal pass,
+dagre vendored). **M3 is fully built through its single boundary review**: M3.0 spike,
+M3.1 contract (Tier A reviewed + repaired + merged), M3.2 backends, M3.3 session/cache
+manager, M3.4 batch composer, M3.6 hard-tier driver pass 1, M3.7 L5 verdict store,
+M3.9 report instrument all on master; M3.8 cross-vendor rule and the M3.5 live-dispatch
+wiring sit on two UNMERGED worktree branches (below). The M3 boundary review returned
+**8 landing-blockers** — the repair wave is the P0 bead and the NEXT session's first
+move; per its verdict the machinery is NOT yet safe for the M3.5 real-token run.
+**TJO has explicitly authorized the M3.5 spend** (bd memory
+m3-5-spend-authorization-tjo-2026-07-19) — gated only on the repair wave.
+Master tree: green at the M3.9 tip (1581/0/1, selftest 109/109, dist/rk current).
+No rk git remote (TJO: add one if pushing is wanted). vibefeld pushed through 1320ef6
+(V0-V4 ALL done: identity schema, verdicts apply, unvalidate --batch, graph export);
+knowledge-frontier pushed through 0d5f4df (F7 fr export).
 
-## Milestone scorecard
+## Unmerged branches (both green in their worktrees — MERGE ORDER MATTERS)
 
-- **M1**: ACCEPTED 2026-07-19. Six P1 validity fixes + four follow-ups, mutation-proven;
-  template_version 1.1.0→1.2.0 (orchestrator-caught compat event); dogfood-3 all-PASS.
-- **M2.1 graph schema v1**: Tier A reviewed (4 blockers repaired) + merged. schemas/
-  graph.v1.json ratified; workspaceResolved/contractMatch split; closed conflict enum.
-- **M2.2 readers**: registry/af/fr/bd → GraphDocument, total-conversion property-tested.
-  AISM read-through: 200/200 shards, af 44/44, fr 8.0% resolution honest baseline
-  (memo: docs/memos/2026-07-19-m2.2-aism-readthrough.md).
-- **M2.3 conflicts**: fixture per class through the full pipeline; never-auto-resolved
-  property (21 cases); reviewed Tier A files untouched.
-- **M2.5 queries**: rk graph --focus/--critical-path/--taint/--blocks; over-inclusive
-  OR-route critical path (ratified; M3.4 depends on it); AISM agreement 200/200;
-  northStarId config field (validated, reviewed).
-- **M2.4 render**: COMPLETE. Pass 1 (styling single-source-of-truth + effective
-  presentation state, truthfulness corpus, dashboard, hash-routed drill-down, rk render
-  CLI, manifest adoption, repo-relative --out) + pass 2 (graveyard, run gallery,
-  provenance chains, defs index + verbatim conventions) + dagre vendored (devDep,
-  deterministic via canonical insertion order). SC5 dry-run: marginal PASS; usability
-  beads filed (dashboard ordering P1, vocabulary P2, fr residual carry-through P2).
-- **M2.6 freshness (Gate 7)**: regenerate-and-diff over .rk/generated.json; per-path
-  Check-11 supersession RATIFIED; unknown generator = blocking ERROR; full manifest
-  schema enforcement; render-site-v1 verified via edge regeneration (pure gate, edge
-  prepares bytes); template_version 1.3.0.
-- **M2 boundary review** (codex gpt-5.6-sol high, ONE round + ONE repair wave, no
-  re-review): 9 blockers ALL repaired red-first + mutation-proven; 8 follow-ups filed;
-  6 design verdicts recorded on beads (scratch review file is session-local; substance
-  is in the memo addendum, gate-contracts Gate 7 section, and bead notes).
+- `worktree-agent-a9b12837c0ead0e82` — M3.8 cross-vendor + linker Checks 13/14 +
+  L5-promotion integration + corpus linker-31..38 (count 109→117). Tier A; several
+  review blockers (5, 6) land IN its files.
+- `worktree-agent-a79b59394bee01511` — M3.5 live wiring: --live flag, safety valves,
+  driver-prompts, driver-live, async driver-run injection points.
+- **THREE lines touch src/drive/driver-run.ts**: master (M3.9 usage logging), M3.8
+  branch (cross-vendor apply wiring), live-wiring branch (async injection). The repair
+  session must reconcile all three — recommended order: merge M3.8 first (resolve
+  against master), then live-wiring, then apply the repair wave on the unified tree.
 
-## Next steps (in order)
+## Next steps (in order — next session)
 
-1. **M3.1 worker contract + verdict schema** (Tier A, worktree + review before merge):
-   design around the M3.0 spike — session/turn dispatch model (session-resume, never
-   flat prompt_parts concatenation), role isolation (a session NEVER crosses roles),
-   1h-TTL scheduling, stagger rule, verdict.v1.json schema-validated at the boundary.
-2. **V2/V3 in vibefeld** (queued in its tracker, V2=vibefeld-lzop, V3=vibefeld-h4ad):
-   af verdicts apply calls AcceptNodeWithVerifier/NewChallengeRaisedWithBatch with one
-   BatchID per batch; unvalidate --batch filters Node.ValidationBatchID. Then M3.2
-   backends, M3.3 session manager, M3.4 composer (M2.5 critical-path query ready).
-3. **Backlog highlights**: rk-45m (unparseable config JSON silent), rk-3af (report-label
-   teaching doc), snapshot-load build/site include gap (+ .rk include regression test
-   bead — pair them), afRecordsIn accounting, six-gates wording sweep, selftest lines
-   for graph/render corpora (rk-b09), fr workspace-prefix resolution = graph v2
-   (rk-rgp), fr stale command tables (owning repo has no tracker).
-4. **AISM stance unchanged**: read-only crash-test corpus + incident seed ONLY; rk must
-   serve any campaign (SC7). Dogfood repo ../rk-dogfood-1 is live campaign state.
+1. **M3 repair wave** (the P0 bead lists all 8 with file:line; full text in
+   docs/reviews/2026-07-19-m3-milestone-review-codex.md): (1) re-bind verdicts to
+   authoritative bytes at apply; (2) challenges never count as progress, converged
+   requires validated root; (3) role===verifier exactly + true per-node sessions/
+   applies in per-node mode; (4) codex terminal-event requirement; (5) grandfathering
+   de-gamed (unparseable=ERROR unless exact atomic legacy-same-family token; north-star
+   unresolved fails closed); (6) L5 corruption poisons promotion + promoted shards
+   re-validated continuously; (7) balloon counts persisted + threaded into the graph
+   (from-registry hard-codes balloons:0); (8) SC4 accounting hardening + spend guards
+   (campaign cap, pre-dispatch budget checks — review verdict (c): exit-11 is NOT a
+   spend guard). Merge branches per the order above; ONE wave, mechanical verification,
+   NO re-review; full bun test + selftest + live-fire gates (the review env was
+   read-only and could not run them).
+2. **M3.5 baseline run** (TJO-authorized): follow
+   docs/memos/2026-07-19-m3.5-baseline-runbook.md — staging is DURABLE at
+   ../rk-m3.5-baseline (3 lemma dirs: lem-weighted-min, lem-mass-split,
+   lem-starvation-completion-obstruction; configs validate 3/3; dry-run verified).
+   Per-lemma baseline memos (af node ids collide across dirs — never one combined
+   array); verdict-parity procedure + abort criteria in the runbook. Both worker
+   pairings (workers.reverse.json swap — rk has no --config flag).
+3. **M3 close**: M3.9 SC4 comparison against the baseline; auto-prove.sh disposition
+   in vibefeld (delete or deprecate — D6 stale-tooling trap); worklog + acceptance.
+4. **Then M4** (fr upgrades + bandit experiment, pre-registration doc M4.0 first) and
+   M5 leftovers; render beads (dashboard ordering P1 rk-…, vocabulary, fr residual
+   carry-through) batch into the next render wave.
+
+## Review/bead ledger (this session)
+
+All four codex reviews banked in docs/reviews/ (M2.1, M2 boundary, M3.1, M3 boundary).
+Open highlights: P0 M3-repair-wave bead; P1 dashboard-ordering (SC5); rk-mnp (crux not
+in graph schema); rk-eet/rk-pwv (usage-log gaps); graph-v2 batch (workspace-prefix
+rk-rgp, conflict identity rk-tns closed-by-coalesce, fr residual text); rk-45m
+(config JSON silent); rk-3af (report-label teacher); rk-b09 (selftest lines for
+graph/render corpora); scheduler-knob config promotion; fr stale command tables
+(fr repo has no tracker — filed here). vibefeld-0l3d lives in vibefeld's tracker.
 
 ## Governance (standing, in bd memory)
 
-- Reviews: codex gpt-5.6-sol HIGH suffices; Fable only with explicit TJO permission.
-- Anti-Zeno cap: ONE review round + ONE repair wave per milestone; repairs verified
-  mechanically by the orchestrator, never re-reviewed.
-- Two-list reviews: landing-blockers (validity only) gate; everything else → beads.
-- Breaking changes to fr acceptable; af/fr work unrestricted in service of rk.
+- Reviews: codex gpt-5.6-sol HIGH; Fable only with explicit TJO permission.
+- Anti-Zeno: ONE review round + ONE repair wave per milestone; orchestrator verifies
+  mechanically; residuals → beads → next milestone's single review.
+- Two-list reviews; repair rigor follows the finding's tier.
+- Breaking fr changes acceptable; af/fr work unrestricted in rk's service.
+- AISM: read-only crash-test corpus + incident seed ONLY (SC7 generality is the lens).
+- M3.5 spend: TJO-authorized 2026-07-19, gated on the repair wave only.
 
 ## Standing cautions
 
-- Shared working tree for parallel agents: disjoint file scopes; explicit-path staging
-  AND explicit-path commits — `git commit -m "..." -- <paths>` ALWAYS (a bare
-  `git commit` swept another lane's staged files this session; caught and recomposed).
-  Shared files (corpus/README.md, gate-contracts.md, discovery.ts fixture count,
-  scripts/selftest.ts) are orchestrator-single-writer; lanes report deltas.
-- Cross-lane interfaces: specify the exact type/name contract in BOTH lane briefs
-  before dispatch (BuildDiagnostics and render-site-v1 both landed clean this way).
-- Worktree agents: merge from the REPO ROOT, not from inside a worktree (a merge run
-  inside the worktree merged the branch into itself as a no-op); remove worktrees
-  before deleting their branches; verify `git status -sb` on master afterwards.
-- Shell cwd resets to the project root between tool calls when you cd outside the
+- Parallel agents, shared tree: disjoint file scopes; `git commit -m "..." -- <paths>`
+  ALWAYS (bare commit once swept another lane's staged files). Shared files
+  (corpus/README.md, gate-contracts.md, discovery.ts count, selftest.ts, contract
+  docs) are orchestrator-single-writer; lanes report deltas.
+- Cross-lane interfaces: pin the exact type/name contract in BOTH briefs before
+  dispatch (BuildDiagnostics, WorkerBackend both landed byte-identical this way).
+- Worktree agents: merge from the REPO ROOT (a merge run inside a worktree no-ops
+  into itself); remove worktree before deleting its branch; freeze master commits
+  while a codex review is reading the tree.
+- Shell cwd resets to project root between tool calls when cd'ing outside the
   project; cd + command must share one invocation.
-- bd `update --notes` REPLACES the field — append manually. bd works per-repo; fr has
-  no tracker (file fr items in rk's bd, labeled cross-repo).
-- codex exec: ~17-40 min for milestone-sized reviews at high; `-o <file>`, read the
-  file, never pipe through tail. Two-list output format must be mandated in the prompt.
-- CLAUDE.md==AGENTS.md byte-identity applies to the TEMPLATE and every stamped repo.
-- Template CONTENT changes are compat events: bump template_version (missed by an
-  implementer lane once this session; caught at orchestrator reconciliation).
-- vibefeld `-tags integration` suite is pre-existing broken (bead in vibefeld's bd).
+- bd `update --notes` REPLACES — append manually. bd is per-repo; fr has none.
+- codex exec: 17-60 min for milestone reviews at high; `-o <file>`; the review
+  sandbox is read-only — it CANNOT run bun gates (EROFS), so repairs must run them.
+- Scratchpad is EPHEMERAL per session: bank review outputs into docs/reviews/ and
+  relocate any staging out of /tmp before stopping (done this session).
+- Template CONTENT changes are compat events (bump template_version).
+- Purity grep false-triggers on `node:` param names and `Date.now()` in comments —
+  rename/reword, never touch the guard.
