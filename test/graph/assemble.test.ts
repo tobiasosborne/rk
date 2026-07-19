@@ -122,6 +122,32 @@ describe("assembleGraphDocument — end to end, must satisfy validateGraphDocume
     }
   });
 
+  test("M2-boundary-review blocker 8: two live banked-without-oracle fr cycles resolving to the SAME node coalesce into ONE node-level conflict, document stays valid", () => {
+    const input: RawStoreInput = {
+      lemmas: [lemma({ id: "lem-dup", path: "argument/lemmas/lem-dup.md" })],
+      afRecords: [],
+      frRecords: [
+        { cycle: 1, kind: "artifact", ref: "argument/lemmas/lem-dup.md", outcome: "banked", verdict: "claimed" },
+        { cycle: 2, kind: "artifact", ref: "argument/lemmas/lem-dup.md", outcome: "banked", verdict: "claimed" },
+      ],
+      bdRecords: [],
+    };
+    const { doc } = assembleGraphDocument(input);
+    // both cycles stay visible on edges.fr — coalescing is a CONFLICT-computation concern only.
+    expect(doc.edges.fr).toHaveLength(2);
+    expect(doc.conflicts).toEqual([
+      {
+        kind: "banked-without-oracle",
+        edge: "fr",
+        nodeId: "lem-dup",
+        registryValue: "banked",
+        otherValue: "claimed",
+        message: "banked-without-oracle: registry='banked' vs other='claimed'",
+      },
+    ]);
+    expect(validateGraphDocument(doc)).toEqual([]); // NOT flagged as a duplicate conflict record
+  });
+
   test("registry skip accounting: lemmasIn == nodesOut + registrySkipped.length", () => {
     const input: RawStoreInput = {
       lemmas: [lemma({ id: "a" }), lemma({ id: "b", kind: undefined }), lemma({ id: "c", kind: "bogus" })],

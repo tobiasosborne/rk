@@ -451,6 +451,41 @@ export function buildSupersededFrDocument(superseded: boolean): GraphDocument {
   };
 }
 
+/** M2-boundary-review blocker 8's scenario: TWO distinct unsuperseded banked-without-oracle-
+ * eligible fr cycles resolving to the SAME node (`lem-dup`), with possibly-different `verdict`
+ * text on each (e.g. one "claimed", another "audited") — proving the coalesced entry's
+ * `otherValue` is a deterministic, sorted, comma-joined union rather than an arbitrary single
+ * cycle's value standing in for the whole node. */
+export function buildDualBankedSameNodeDocument(verdictA: string | undefined, verdictB: string | undefined): GraphDocument {
+  return {
+    schema_version: "1",
+    nodes: [
+      {
+        id: "lem-dup",
+        kind: "lemma",
+        af: "none",
+        contract: "A claim banked twice over.",
+        path: "argument/lemmas/lem-dup.md",
+        deps: [],
+        routes: [],
+        defs: [],
+        balloons: { count: 0, classifications: [] },
+      },
+    ],
+    edges: {
+      af: [],
+      bd: [],
+      fr: [
+        { cycle: 1, artifact: "argument/lemmas/lem-dup.md", resolutionMethod: "path", resolvedNodeId: "lem-dup", outcome: "banked", verdict: verdictA },
+        { cycle: 2, artifact: "argument/lemmas/lem-dup.md", resolutionMethod: "path", resolvedNodeId: "lem-dup", outcome: "banked", verdict: verdictB },
+      ],
+      report: [],
+    },
+    unresolved: [],
+    conflicts: [],
+  };
+}
+
 /** Tier A review blocker 4's "lem-ghost case": a RESOLVED fr edge naming a `resolvedNodeId` that
  * is not actually a node in this document. */
 export function buildFrGhostDocument(): GraphDocument {

@@ -16,6 +16,7 @@ import {
   buildFrCollapseDocument,
   buildFrGhostDocument,
   buildProvedConflictDocument,
+  buildDualBankedSameNodeDocument,
   buildRenameHazardDocument,
   buildSampleDocument,
   buildSupersededFrDocument,
@@ -200,6 +201,32 @@ describe("validateGraphDocument — M2-boundary-review blocker 7: superseded fr 
     doc.conflicts.push({ kind: "banked-without-oracle", edge: "fr", nodeId: "lem-old", registryValue: "banked", otherValue: "claimed", message: "m" });
     const issues = errors(doc);
     expect(issues.some((i) => i.message.includes("is not supported by any computed conflict"))).toBe(true);
+  });
+});
+
+describe("validateGraphDocument — M2-boundary-review blocker 8: same-node banked-without-oracle coalesces to one conflict", () => {
+  test("red: two unsuperseded banked cycles on the SAME node -> exactly ONE computed conflict, not two sharing an identity", () => {
+    const conflicts = computeExpectedConflicts(buildDualBankedSameNodeDocument("claimed", "claimed"));
+    expect(conflicts).toEqual([
+      { kind: "banked-without-oracle", edge: "fr", nodeId: "lem-dup", registryValue: "banked", otherValue: "claimed" },
+    ]);
+  });
+
+  test("distinct verdict text across the two cycles is reported as a deterministic sorted union, not one arbitrary cycle's value", () => {
+    const conflicts = computeExpectedConflicts(buildDualBankedSameNodeDocument("claimed", "audited"));
+    expect(conflicts).toEqual([
+      { kind: "banked-without-oracle", edge: "fr", nodeId: "lem-dup", registryValue: "banked", otherValue: "audited,claimed" },
+    ]);
+  });
+
+  test("end-to-end: the freshly-coalesced conflict validates clean; recording it TWICE is still flagged (coalescing is not itself a license for duplicate records)", () => {
+    const doc = buildDualBankedSameNodeDocument("claimed", "claimed");
+    doc.conflicts = [
+      { kind: "banked-without-oracle", edge: "fr", nodeId: "lem-dup", registryValue: "banked", otherValue: "claimed", message: "m" },
+    ];
+    expect(errors(doc)).toEqual([]);
+    doc.conflicts.push({ ...doc.conflicts[0]! });
+    expect(errors(doc).some((i) => i.message.includes("duplicate conflict record"))).toBe(true);
   });
 });
 

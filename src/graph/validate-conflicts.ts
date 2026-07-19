@@ -77,6 +77,15 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
     if (e.supersedes !== undefined) supersededCycles.add(e.supersedes);
   }
 
+  // M2-boundary-review blocker 8 (2026-07-19, bead rk-tns's ratified v1 semantics — the review's
+  // verdict (c): "coalesce v1 conflicts at node level", no schema bump): `banked-without-oracle`'s
+  // identity is (kind, edge, nodeId) — TWO distinct qualifying cycles resolving to the SAME node
+  // must NOT become two recorded conflicts sharing one identity (checkConflicts would then flag
+  // them as duplicates of each other on an otherwise-correct document). v1 defines this as ONE
+  // node-level EXISTENTIAL defect: "this node has at least one live banked claim lacking a fresh
+  // oracle verdict." Qualifying cycles are collected per node and coalesced into a single entry
+  // here; every individual cycle remains fully visible in `doc.edges.fr` regardless.
+  const unbackedVerdictsByNode = new Map<string, Set<string>>();
   for (const e of doc.edges.fr) {
     if (e.outcome !== "banked") continue;
     if (e.resolutionMethod === "unresolved") continue; // no node to anchor a conflict to; the
@@ -88,15 +97,22 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
     // fr-load.ts's own doc comment) is NOT oracle-backed. Treating `undefined !== false` as truthy
     // let a degraded/absent freshness read silently pass the bank-gate.
     const oracleBacked = e.verdict === "banked" && e.verdictFresh === true;
-    if (!oracleBacked) {
-      out.push({
-        kind: "banked-without-oracle",
-        edge: "fr",
-        nodeId: e.resolvedNodeId,
-        registryValue: "banked",
-        otherValue: e.verdict ?? "none",
-      });
-    }
+    if (oracleBacked) continue;
+    const verdicts = unbackedVerdictsByNode.get(e.resolvedNodeId) ?? new Set<string>();
+    verdicts.add(e.verdict ?? "none");
+    unbackedVerdictsByNode.set(e.resolvedNodeId, verdicts);
+  }
+  for (const [nodeId, verdicts] of unbackedVerdictsByNode) {
+    out.push({
+      kind: "banked-without-oracle",
+      edge: "fr",
+      nodeId,
+      registryValue: "banked",
+      // Deterministic even when multiple qualifying cycles on the same node disagree on verdict
+      // text (e.g. one "claimed", another "audited"): every distinct value, sorted, joined — never
+      // an arbitrarily-chosen single cycle's value standing in for the whole node.
+      otherValue: [...verdicts].sort().join(","),
+    });
   }
 
   return out;
