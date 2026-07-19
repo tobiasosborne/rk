@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Deterministic fr-export stub for corpus/graph/conflict-banked-unfresh-export (M2-boundary-review
+# blocker 6, primary-export half). One log record: outcome:"banked", evidence.verdict:"banked" —
+# but `verdicts` names NO claim matching this artifact at all, so src/store/fr-load.ts's
+# `latestVerdictFor` returns `undefined` and `verdictFresh` stays `undefined` on the edge. This is
+# the primary `fr export` path (not the ledger fallback — see the sibling
+# conflict-banked-unfresh-ledger fixture for that half), reproducing "no matching oracle freshness
+# record at all" distinctly from "freshness recomputation is unavailable".
+cat <<'JSON'
+{"schema_version":"1","log":[{"cycle":1,"outcome":"banked","evidence":{"artifact":"argument/lemmas/lem-g.md","verdict":"banked"}}],"verdicts":[]}
+JSON

@@ -70,7 +70,12 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
     if (e.outcome !== "banked") continue;
     if (e.resolutionMethod === "unresolved") continue; // no node to anchor a conflict to; the
     // unresolved-bucket accounting (validate-fr.ts) already flags this cycle elsewhere.
-    const oracleBacked = e.verdict === "banked" && e.verdictFresh !== false;
+    // M2-boundary-review blocker 6 (2026-07-19): `verdictFresh` MUST be REQUIRED true, not merely
+    // "not false" — `undefined` (the primary export path with no matching oracle verdict record
+    // at all, or ANY ledger-fallback edge, which never recomputes freshness — src/store/
+    // fr-load.ts's own doc comment) is NOT oracle-backed. Treating `undefined !== false` as truthy
+    // let a degraded/absent freshness read silently pass the bank-gate.
+    const oracleBacked = e.verdict === "banked" && e.verdictFresh === true;
     if (!oracleBacked) {
       out.push({
         kind: "banked-without-oracle",

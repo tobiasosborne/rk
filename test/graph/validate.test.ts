@@ -161,6 +161,11 @@ describe("validateGraphDocument — Tier A review blocker 3: conflict recomputat
     const issues = errors(buildBankedDocument("banked", false, []));
     expect(issues.some((i) => i.message.includes("missing conflict record: banked-without-oracle"))).toBe(true);
   });
+
+  test('M2-boundary-review blocker 6 (red): verdict:"banked" with verdictFresh UNDEFINED (never recomputed — e.g. the ledger-fallback path) is NOT oracle-backed; undefined must not be treated as fresh', () => {
+    const issues = errors(buildBankedDocument("banked", undefined, []));
+    expect(issues.some((i) => i.message.includes("missing conflict record: banked-without-oracle"))).toBe(true);
+  });
 });
 
 describe("validateGraphDocument — Tier A review blocker 4: fr unresolved exact accounting", () => {
