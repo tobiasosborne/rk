@@ -84,11 +84,17 @@ function graphHelp(out: Out): number {
 
 function verifyHelp(out: Out): number {
   out.log("rk verify — hard-tier verification driver over an af workspace (M3.6, PRD C9)");
-  out.log("  usage: rk verify --af <registry-id> [--dry-run] [--root <dir>]");
-  out.log("  --dry-run plans the workspace (ready set, dispatch plan, balloon tripwire status) with");
-  out.log("  NO worker dispatched and NOTHING written -- the cost-free path. A live run drives the");
-  out.log("  workspace to convergence with the prover-overreach/stuck/retry guardrails and the");
-  out.log("  balloon feedback loop (bd task / mandatory-review mark on a ballooned contract).");
+  out.log("  usage: rk verify --af <registry-id> [--dry-run | --live] [--max-turns <n>] [--max-nodes <n>] [--model <name>] [--root <dir>]");
+  out.log("  --dry-run (the DEFAULT whenever --live is absent) plans the workspace (ready set, dispatch");
+  out.log("  plan, balloon tripwire status) with NO worker dispatched and NOTHING written -- the");
+  out.log("  cost-free path. --dry-run always wins if both flags are given.");
+  out.log("  --live (M3.5-prep) drives the workspace to convergence with REAL backend calls (per");
+  out.log("  .rk/config.json's 'workers.assignments.verifier.hard' entry, docs/worker-contract.md) and");
+  out.log("  the prover-overreach/stuck/retry guardrails + balloon feedback loop (bd task /");
+  out.log("  mandatory-review mark on a ballooned contract). A real spend is NEVER the default --");
+  out.log("  --live must be passed explicitly. --max-turns (default 30) / --max-nodes (default 20) are");
+  out.log("  hard safety-valve ceilings that abort cleanly with a named reason when hit; --model");
+  out.log("  overrides the interim per-backend default model.");
   out.log("  next: 'rk verify --af <id> --dry-run' with a real registry id (see argument/**/*.md).");
   out.log("  usage: rk verify --report [--baseline <memo.json>] [--root <dir>] (M3.9, PRD C9)");
   out.log("  --report reads .rk/driver-log.jsonl and prints tokens/calls/cache-fraction/verdicts/");
