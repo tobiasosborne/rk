@@ -17,7 +17,7 @@ import { join } from "node:path";
 /** The six gate directory names under corpus/ — matches each gate's `name` in src/gates/index.ts
  * and the fixture-id prefix (corpus/README.md: "<gate> is one of defs, linker, refs, provenance,
  * runs, shards"). */
-export const GATE_DIRS = ["defs", "linker", "refs", "provenance", "runs", "shards"] as const;
+export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards"] as const;
 export type GateDir = (typeof GATE_DIRS)[number];
 
 export function discoverFixtures(corpusRoot: string, gateDir: string): string[] {
@@ -62,5 +62,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * incident) — the linker's shard glob widened from `argument/lemmas/*.md` to a recursive
  * `argument/**\/*.md` scan; `linker-26` is the recursive-discovery golden-pass fixture (the
  * dogfood shape: shards directly at `argument/*.md` root), `linker-27` proves a non-excluded
- * stray file is still a parse ERROR, never silently skipped. */
-export const EXPECTED_FIXTURE_COUNT = 92;
+ * stray file is still a parse ERROR, never silently skipped.
+ * 98 (+6 over the then-pinned 92): M1 repair wave (M1 boundary review + dogfood-2, 2026-07-19) —
+ * `provenance-20` (rk-2t8: OVERCLAIM on a root-level shard via recursive discovery),
+ * `linker-28` (rk-sj6: duplicate registry id is a structural ERROR), `linker-29` + `linker-30`
+ * (rk-wc3: multi-line YAML deps with unknown id must ERROR; malformed frontmatter line is loud),
+ * `config-01` + `config-02` (rk-xbm: typo'd `phase` / malformed `shardsMaxLines` in
+ * `.rk/config.json` are blocking ERRORs, never silent fallback) — "config" also added to
+ * GATE_DIRS as the synthetic seventh gate's corpus directory. */
+export const EXPECTED_FIXTURE_COUNT = 98;

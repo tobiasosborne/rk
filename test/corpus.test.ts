@@ -57,14 +57,14 @@ for (const gateDir of GATE_DIRS) {
 }
 
 describe("corpus discovery", () => {
-  test("every one of the six gate directories has at least one fixture", () => {
+  test("every one of the seven gate directories has at least one fixture", () => {
     for (const g of GATE_DIRS) {
       expect(ALL_FIXTURES[g]!.length).toBeGreaterThan(0);
     }
   });
 
-  test("total fixture count matches corpus/README.md's ledger (92)", () => {
+  test("total fixture count matches corpus/README.md's ledger (98)", () => {
     const total = GATE_DIRS.reduce((sum, g) => sum + ALL_FIXTURES[g]!.length, 0);
-    expect(total).toBe(92);
+    expect(total).toBe(98);
   });
 });

@@ -144,6 +144,22 @@ global constants, ported from AISM's hardcoded defaults:
   and **MAX_LINES** (280, already an env-var override in AISM) — see the report-shards gate
   section.
 
+**Config validation (rk-xbm, M1 review B1).** `.rk/config.json` is untrusted, untyped JSON.
+Every field is runtime-validated before use (`src/gates/config.ts`'s `validateConfigOverrides`):
+enum membership for `phase`, positive-finite-number for the numeric fields
+(`linkerBrittlenessSoftCap`, `shardsMaxLines`, `refsMinRunReportingLength`), non-empty-string for
+`provenanceStatusTableFile`/`shardsPrefix`, and unknown-key detection. A malformed or unknown
+field is NEVER silently accepted and NEVER silently kept — it is dropped (falling back to
+`DEFAULT_GATE_CONFIG`'s strict value, so a typo can only ever make checking STRICTER, never
+weaker) and produces exactly one loud, `structural: true` (blocking in both phases) ERROR at
+`.rk/config.json:1`, surfaced by a synthetic `config` gate registered first in
+`src/gates/index.ts`. Invalid config is a BLOCKING ERROR: `rk check` exits 1, same as any other
+gate ERROR. Known residual (deliberate scope boundary, tracked): syntactically unparseable JSON
+still degrades to defaults without a finding — a distinct failure mode from a malformed field.
+Corpus fixtures: `config-01` (typo'd `phase` — pre-fix, `phase.ts` treated any
+non-"consolidation" value as exploration, a silent severity demotion), `config-02` (malformed
+`shardsMaxLines` — pre-fix, the NaN comparison false-greened the line cap).
+
 **Fixture/harness invocation (read before running any AISM script against a fixture or
 historical tree).** Two harness pitfalls surfaced building the M0.2 corpus (recorded in full in
 `corpus/README.md`'s Validation methodology section); M0.3 implementers and the M0.3 robustness
@@ -222,7 +238,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | gate | structural (blocks in both phases) | non-structural (demoted to WARN in exploration) | rationale |
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
-| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class |
+| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class |
 | **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
@@ -262,6 +278,11 @@ incident.
 **Inputs.**
 - Glob: `definitions/*.md`, excluding `README.md`, `INDEX.md` (check-defs.py:27,80).
 - Frontmatter: flat `key: value` per line, terminated by a second `---` line (check-defs.py:30-50).
+  Amendment (rk-wc3, dogfood-2): a list-valued field may equivalently be written as a natural
+  multi-line YAML block list — a `key:` line with an empty value followed by `- item`
+  continuation lines; `parseFrontmatter` (`src/gates/snapshot.ts`) joins the items into the same
+  `;`-separated value string the single-line grammar produces before any gate splits it. Applies
+  uniformly to every list-valued field in every gate that consumes `parseFrontmatter`.
 
 | field | type | required | allowed values |
 |---|---|---|---|
@@ -461,6 +482,24 @@ suffices). A shard may carry `deps:` and `routes:` together; `deps` are required
 route. `all_dep_ids(l) = deps ∪ (∪ routes)` is the edge set used for acyclicity and the
 conservative ancestor/descendant closures (argument.py:93-103).
 
+Multi-line list amendment (rk-wc3, dogfood-2): each `;`-list field above (`defs`, `deps`, and
+`routes` where its value is a plain list) may equivalently be written as a natural multi-line
+YAML block list:
+
+```
+deps:
+  - id-one
+  - id-two
+```
+
+`parseFrontmatter` (`src/gates/snapshot.ts`) joins the `- item` continuation lines of an
+empty-valued key into the same `;`-separated value string the single-line grammar produces,
+before the field-owning gate ever splits it — so both forms are byte-equivalent downstream. A
+`- item` line NOT preceded by an empty-valued key remains genuinely malformed (Check 2b below).
+Incident: dogfood-1's three argument shards used the multi-line style and pre-fix parsed to an
+EMPTY `deps` with zero diagnostic — the DAG/unknown-id checks validated an edgeless graph while
+reporting `3/3 ... 0 errors` (bead rk-wc3; fixtures `linker-29`/`linker-30`).
+
 Config: `NODE_THRESHOLD = af_constants.NODE_SOFT_CAP = 26` — **per-repo parameter**, no depth
 check (af_constants.py:19; argument.py:61; confirmed by `check_brittleness`'s signature, which
 takes only `nodecounts`, never a depth argument — `argument/README.md:80-81`'s "depth>3" prose
@@ -470,6 +509,22 @@ is stale against the code and must not be treated as ground truth).
 1. Frontmatter present ⇒ ERROR if missing/unterminated (argument.py: `_parse_frontmatter`
    returns `None`; parse_registry:136-137).
 2. `id == filename stem` ⇒ ERROR (argument.py:139-140).
+2a. **Duplicate id** (rk-sj6, M1 review B3) — two shards, at any two paths under `argument/`,
+   declaring the same `id` ⇒ structural ERROR `duplicate id '<id>': claimed by both <path1> and
+   <path2>`, emitted at the parse boundary the moment a second file claims an already-registered
+   id (rolling id→path owner map, same shape as Gate 1's DRIFT `aliasOwner`). Duplicate ids are
+   one of the four structural classes named in the per-gate classification above. Both shards
+   still register (Gate 1 DRIFT precedent: flag, never silently exclude) so every other check
+   still runs against both; the structural ERROR itself blocks the run. AISM comparison:
+   `parse_registry` (argument.py:127-148) has no duplicate-id check at all — downstream id-keyed
+   dicts silently collapse to whichever file traverses last. Fixture: `linker-28`.
+2b. **Frontmatter line without `:`** (rk-wc3, dogfood-2) — a line inside a terminated
+   frontmatter block that is neither `key: value` nor a valid multi-line list continuation (see
+   the multi-line list amendment under Inputs) ⇒ one structural ERROR per `fm.malformedLines`
+   entry, `frontmatter line without ':'` — identical message and classification to Gate 1
+   Check 2, which Gate 2 previously never read at all. AISM comparison: `_parse_frontmatter`
+   (argument.py:106-124) silently skips any colon-less line with zero diagnostic. Fixture:
+   `linker-30`.
 3. `kind ∈ KINDS` ⇒ ERROR (argument.py:141-142).
 4. `status ∈ MATH_STATUS` ⇒ ERROR (argument.py:143-144).
 5. `af ∈ {none, seeded, validated}` ⇒ ERROR (argument.py:145-146).
@@ -610,6 +665,23 @@ features layered on the same pure functions, not gate verdicts.
   `linker-26` (root-level shards, the dogfood shape, plus a nested non-shard README ignored
   alongside a root-level one — coverage line names both); `linker-27` (a frontmatter-less stray
   `.md` at `argument/` root, not README/INDEX/DAG — parse ERROR, never a silent skip).
+- **[rk-stricter-intended] Duplicate registry ids are a structural ERROR** (rk-sj6, M1 review
+  B3, 2026-07-19). AISM's `parse_registry` (argument.py:127-148) has no duplicate-id check;
+  both files register and every downstream id-keyed dict silently collapses to the
+  traversal-last entry. rk detects the collision at the parse boundary and ERRORs, naming both
+  claiming paths. Became reachable when discovery went recursive (rk-9pk): two files at
+  different depths can now share a stem. Fixture: `linker-28`. See Check 2a.
+- **[rk-stricter-intended] Malformed frontmatter lines are loud in Gate 2; multi-line YAML
+  block lists parse** (rk-wc3, dogfood-2, 2026-07-19). AISM's `_parse_frontmatter`
+  (argument.py:106-124) silently skips any colon-less line with zero diagnostic — under its
+  script, a natural multi-line `deps:` list resolves to the empty list and `check_imports`
+  validates nothing, reporting zero errors (dogfood-2 reproduced this exact silent-skip live).
+  rk now (a) parses the multi-line block-list form into the same value the `;`-grammar
+  produces (see the Inputs amendment — an acceptance widening, not a strictness change), and
+  (b) ERRORs every genuinely malformed line, mirroring Gate 1 Check 2 — Gate 2 catching up to
+  Gate 1's already-ratified stricter behavior, not a new rule. Fixtures: `linker-29`
+  (multi-line deps with an unknown id must produce the unknown-dep ERROR), `linker-30`
+  (malformed line ⇒ ERROR where AISM registers the shard clean). See Checks 2a/2b.
 
 **Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
 on historical commits — load-bearing for the **M0.3 robustness run** (F4, repurposed per the
@@ -690,6 +762,9 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-25` | **[R14, bead rk-1rv] mirror presence-conditional golden case** — one valid lemma shard, `argument/INDEX.md` and `argument/DAG.md` BOTH entirely absent ⇒ zero findings, coverage names both mirrors' non-adoption (AISM's `check_generated` ERRORs unconditionally on an absent mirror; rk's contract does not) |
 | `linker-26` | **[rk-9pk] recursive discovery golden case, dogfood shape** — three shards directly at `argument/*.md` root (one dep chain: `lem-a` -> `lem-b` -> `thm-main`), plus `argument/README.md` and `argument/lemmas/README.md` both present ⇒ all three parse/check cleanly, coverage line reads `3/3 lemma shards (2 non-shard files ignored: README.md, lemmas/README.md)` |
 | `linker-27` | **[rk-9pk] frontmatter-less stray file under `argument/` root** — a `.md` file with no `---` frontmatter block at all, named neither `README.md`/`INDEX.md`/`DAG.md` ⇒ ERROR "missing/unterminated frontmatter" (proves a non-excluded file is never silently skipped, only ever a shard or a parse error) |
+| `linker-28` | **[rk-sj6, M1 review B3] duplicate registry id across recursive discovery** — `argument/lem-x.md` + `argument/nested/lem-x.md` both `id: lem-x` (each passes its own id==stem check) ⇒ structural ERROR naming both claiming paths; pre-fix both registered silently and graph checks ran on an overwritten identity |
+| `linker-29` | **[rk-wc3, dogfood-2] multi-line YAML `deps:` naming an unknown id** — the natural block-list style that pre-fix parsed to an EMPTY deps list (dogfood-1's live `3/3 ... 0 errors` over an edgeless graph) ⇒ the list now parses and `unknown dep 'lem-nonexistent'` ERROR fires |
+| `linker-30` | **[rk-wc3 sibling] genuinely malformed frontmatter line in a linker shard** — a colon-less line after a non-empty-valued key (not a list continuation) ⇒ ERROR `frontmatter line without ':'` (Gate 2 now reads `fm.malformedLines` exactly as Gate 1 always has; AISM registers the shard clean with zero diagnostic) |
 
 ---
 
@@ -866,7 +941,7 @@ changed across AISM's history at time of reading.
 
 ---
 
-## Gate 4 — provenance (`report/` ↔ `argument/lemmas/*.md`)
+## Gate 4 — provenance (`report/` ↔ `argument/**/*.md`)
 
 **Purpose.** Keep the human-readable report in sync with the machine-checked argument
 registry — "the Phase-2b 'CI for the paper'" (check-provenance.py:3) — so a renamed, validated,
@@ -890,8 +965,11 @@ hostile verifier — because it is the concrete real-world instance of the gate'
 proves the limitation is not hypothetical.
 
 **Inputs.**
-- Registry: `argument/lemmas/*.md`, re-parsed independently of the linker gate
-  (check-provenance.py:120-132); fields read: `id`, `status`, `af`, `provenance`, `kind`.
+- Registry: `argument/**/*.md` — recursive, excluding `README.md`/`INDEX.md`/`DAG.md` at any
+  depth, the identical scan Gate 2 applies (rk-2t8, M1 review B2; AISM's own script globs
+  `argument/lemmas/*.md` only, check-provenance.py:120-132) — re-parsed independently of the
+  linker gate (a Gate 2 parser bug must not silently propagate into this gate's coverage);
+  fields read: `id`, `status`, `af`, `provenance`, `kind`.
   `provenance:` is a freeform string; the join key is a `report <label>` token embedded anywhere
   in it, e.g. `provenance: bridge md:301-372; report lem:bridge-squarehole` (check-provenance.py:11-14,73).
   Label grammar: `[a-z]+:[A-Za-z0-9-]+` (line 71). When a shard carries no `report <label>`
@@ -1031,7 +1109,8 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   separately ERRORs this exact defect (`linker-01`) — that ERROR does not make THIS gate's own
   coverage statement truthful, since `rk check` still needs to print six honest coverage lines
   even if a reader only looks at one of them. Fixed: the denominator is now every registry file
-  discovered under `argument/lemmas/` (before the frontmatter filter), never just the survivors;
+  discovered by the recursive `argument/**/*.md` scan (before the frontmatter filter, after the
+  README/INDEX/DAG name exclusion — rk-2t8), never just the survivors;
   every excluded path is also named in a single aggregate WARN (`src/gates/
   provenance-parse.ts::registrySkipReport`) — a WARN, not a second ERROR, since Gate 2 already
   owns the validity failure and this gate's own duty is coverage transparency, not a duplicate
@@ -1051,9 +1130,20 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   `provenance-11`. (Gate 6's `PREFIX` parameterization, amended 2026-07-18/R12, is now tagged the
   same `[rk-stricter-intended]` for the same reason; its sibling `MAX_LINES` stays `[message-only]`
   — see the Authority section's "Tag asymmetry, resolved once".)
+- **[rk-stricter-intended] Registry discovery is recursive `argument/**/*.md`, mirroring Gate 2**
+  (rk-2t8, M1 review B2, 2026-07-19). AISM's `parse_registry` globs `argument/lemmas/*.md` only
+  (check-provenance.py:120-132) — on a repo whose shards live at `argument/` root (the exact
+  shape rk's own scaffold stamps, PRD.md:79-85), AISM's script sees an EMPTY registry and check 5
+  compares against nothing: a silent green over a `status: open` result the paper frames as
+  proved, the gate's #1 guarded failure mode entirely undefended. rk's scan now matches Gate 2's
+  recursive contract exactly (same README/INDEX/DAG exclusion set at any depth), deliberately
+  re-implemented rather than imported so the two gates' parsers stay independent. Same footing
+  as Gate 2's rk-9pk widening: a contract amendment removing AISM private-layout residue.
+  Fixture: `provenance-20`.
 - **[message-only] Coverage line** (amended 2026-07-18, rk-v18). `checked provenance: <N>/<M>
   registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<E> errors, <W>
-  warnings)`. `M` (the denominator) is every `argument/lemmas/*.md` file this gate discovered,
+  warnings)`. `M` (the denominator) is every file this gate's recursive `argument/**/*.md` scan discovered
+  (README/INDEX/DAG excluded by name at any depth — rk-2t8),
   `N` (the numerator) is the surviving successfully-parsed set, and `X = M - N` is rendered even
   when `0` — the same "never omitted or folded away" rule `S` already followed. Before this
   change `N` and `M` were both derived from the parsed set alone (always `N == M`, a vacuous
@@ -1093,6 +1183,8 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-16` | **check 4: same binary payload, mismatched recorded hash** [rk-399, finding 1] — proves the byte-faithful check still fails a genuinely stale binary source ⇒ ERROR "file edited, hash stale" |
 | `provenance-17` | **registry-parse frontmatter-invalid > 0** [rk-v18, N4] — one valid lemma plus one lemma with no frontmatter at all ⇒ Gate 4's own aggregate WARN naming the excluded path, coverage denominator honest (`checked` < `total`, never a silent `1/1`) |
 | `provenance-18` | **check 6: three whitelisted-unanchored shards ⇒ one aggregate WARN** [ruling f] — the flood shape (96/118/138 per-item WARNs on real AISM historical trees) collapses into one WARN naming the count + sorted ids |
+| `provenance-19` | **check 4: stale source payload shadowed by a coincidental VCS-named parent** [round-3 landing-blocker 1] — the loader's skip-set is anchored to the repo root and narrowed to `.git` alone, so a `notes/.svn/`-shadowed payload is hashed and its staleness ⇒ ERROR, never a false absent-WARN (row restored 2026-07-19 — the fixture landed in the round-3 wave but this table was never updated; see corpus/README.md's own `provenance-19` row for the full incident) |
+| `provenance-20` | **OVERCLAIM on a root-level (non-`lemmas/`) shard** [rk-2t8, M1 review B2] — recursive `argument/**/*.md` discovery mirrors Gate 2 exactly; `argument/thm-main.md` with `status: open` framed as proved by a `tab:status` row ⇒ OVERCLAIM ERROR, coverage `1/1` (pre-fix: a vacuous `0/0` and no finding) |
 
 ---
 
