@@ -120,6 +120,30 @@ describe("validateConfigOverrides — the other four fields + unknown keys", () 
     }
   });
 
+  test("workers (M3.2): a well-formed value passes through", () => {
+    const raw = { assignments: { prover: { l5: { backend: "claude", fallbacks: ["codex"] } } } };
+    const r = validateConfigOverrides({ workers: raw });
+    expect(r.overrides.workers).toEqual({ assignments: { prover: { l5: { backend: "claude", fallbacks: ["codex"] } } } });
+    expect(r.findings).toEqual([]);
+    expect(r.checked).toBe(1);
+    expect(r.total).toBe(1);
+  });
+
+  test("workers: a malformed value drops the WHOLE field, one ERROR, merge falls back to undefined", () => {
+    const r = validateConfigOverrides({ workers: { assignments: { wizard: { l5: { backend: "claude" } } } } });
+    expect(r.overrides.workers).toBeUndefined();
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]).toMatchObject({ severity: "ERROR", path: ".rk/config.json", structural: true });
+    expect(r.findings[0]!.message).toContain("workers");
+    expect(mergeGateConfig(r.overrides).workers).toBeUndefined();
+  });
+
+  test("workers: absent is legal (no campaign has configured a backend registry yet), zero findings", () => {
+    const r = validateConfigOverrides({});
+    expect(r.overrides.workers).toBeUndefined();
+    expect(r.findings).toEqual([]);
+  });
+
   test("an unrecognized key is dropped and reported, never silently applied", () => {
     const r = validateConfigOverrides({ shardsMxLines: 999 });
     expect((r.overrides as Record<string, unknown>).shardsMxLines).toBeUndefined();

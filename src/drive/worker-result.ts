@@ -16,6 +16,7 @@
 
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
 import type { VerdictDocument } from "./verdict-schema";
+import type { DispatchModel } from "./vocab";
 
 export interface WorkerUsage {
   input: number;
@@ -25,14 +26,19 @@ export interface WorkerUsage {
 }
 
 /** The complete outcome of one backend process invocation for one turn — captured by the edge
- * code that actually spawns the backend (a future src/drive/{claude,codex}-backend.ts, out of
- * this WP's scope), then handed to the pure `resolveTurn` below. `rawText` is `undefined` when the
- * process produced nothing usable (killed, crashed before printing, true process-level timeout) —
- * that is itself a rejection, never treated as "exit 0, empty success." */
+ * code that actually spawns the backend (M3.2: src/drive/backend-{claude,codex}.ts), then handed
+ * to the pure `resolveTurn` below. `rawText` is `undefined` when the process produced nothing
+ * usable (killed, crashed before printing, true process-level timeout) — that is itself a
+ * rejection, never treated as "exit 0, empty success." `dispatchModel` (M3.2, additive/optional —
+ * every M3.1 call site that predates this field still type-checks) records how THIS turn was
+ * actually dispatched (`"session"` = a resumed/continued call, `"flat"` = a from-scratch call that
+ * resent shared context) — a backend-registry fact (src/drive/backend-registry.ts), set by the
+ * adapter itself from its own `capabilities.sessionResume`, NEVER inferred from worker output. */
 export interface WorkerResult {
   exit: number;
   usage: WorkerUsage;
   rawText?: string;
+  dispatchModel?: DispatchModel;
 }
 
 export type TurnFailureStage = "processExit" | "parse" | "binding";

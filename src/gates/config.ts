@@ -38,6 +38,12 @@ import type { Finding, Gate, GateResult } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import type { Phase } from "./phase";
 import { DEFAULT_PHASE } from "./phase";
+// M3.2: `workers` (rk verify's backend registry, per-role×tier assignment + fallbacks) is
+// validated by src/drive/backend-registry.ts's own `validateWorkersConfig` — that module is pure
+// (no fs/network/clock) and does NOT import backend-claude.ts/backend-codex.ts (the actual
+// subprocess-spawning adapters), so importing it here does not drag edge code into the gates
+// layer. Same rk-xbm discipline as every other field below: malformed input drops the WHOLE field.
+import { validateWorkersConfig, type WorkersConfig } from "../drive/backend-registry";
 
 export interface GateConfig {
   /** M1.3 (`rk phase exploration|consolidation`). Missing field = `"consolidation"` (the
@@ -82,6 +88,14 @@ export interface GateConfig {
    * explicit `--north-star <id>` argument, one loud message, never a silent guess; an explicit
    * `--north-star` flag always overrides this field when both are given. */
   northStarId?: string;
+  /** M3.2 (`rk verify`'s backend registry, src/drive/backend-registry.ts): per-(role,tier) backend
+   * assignment + ordered fallbacks. Optional, same "no default" stance as `shardsPrefix`/
+   * `northStarId` — a general tool must never guess which backend fronts which role/tier.
+   * Malformed input (at ANY nesting level) drops the WHOLE field — never a partial or
+   * silently-guessed assignment — with one loud ERROR (see `validateConfigOverrides` below);
+   * `BackendRegistry.chainFor`/`resolve` treat an absent (role,tier) entry as "nothing configured,"
+   * never a silent default backend choice. */
+  workers?: WorkersConfig;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
    * `validateConfigOverrides`'s findings (plus a checked/total pair) from the point they're
@@ -131,6 +145,7 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "shardsMaxLines",
   "refsMinRunReportingLength",
   "northStarId",
+  "workers",
 ]);
 
 const CONFIG_PATH = ".rk/config.json";
@@ -304,6 +319,22 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
           `northStarId: invalid value ${JSON.stringify(v)} -- must be a non-empty string when ` +
             `set; treating as unconfigured (M2.5's own "no default" contract, never a malformed ` +
             `sentinel)`,
+        ),
+      );
+    }
+  }
+
+  if ("workers" in raw) {
+    total++;
+    const v = validateWorkersConfig(raw.workers);
+    if (v.ok) {
+      overrides.workers = v.config;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `workers: invalid value -- ${v.issues.map((i) => `${i.path}: ${i.message}`).join("; ")} -- ` +
+            `dropping the whole field rather than applying a partial or silently-guessed assignment`,
         ),
       );
     }
