@@ -254,4 +254,46 @@ describe("templates / (e) shard schema docs (rk-o1y)", () => {
       expect(argReadme.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
   });
+
+  // rk-gvx (M1-review F1): the README must teach the ACTUAL Gate 2 discovery contract
+  // (argument/**/*.md, recursive), never argument/lemmas/ as the sole shard location.
+  test("argument/README.md.tmpl teaches recursive argument/**/*.md discovery, not lemmas/-only", () => {
+    expect(argReadme).toContain("argument/**/*.md");
+    expect(argReadme.toLowerCase()).toMatch(/may live\s+anywhere under/);
+    expect(argReadme).not.toMatch(/Shards live under `argument\/lemmas\/`/);
+  });
+
+  // rk-gvx: assumption flagged for the orchestrator to verify at merge — a concurrent lane is
+  // adding multi-line YAML list support for deps:/defs:/routes: to the frontmatter parser
+  // (src/gates/snapshot.ts's parseFrontmatter), alongside the existing single-line `;`-list form.
+  test("argument/README.md.tmpl teaches both the single-line ';'-list and multi-line YAML list forms", () => {
+    expect(argReadme).toContain("deps: lem-a; lem-b");
+    expect(argReadme).toMatch(/deps:\n {2}- lem-a\n {2}- lem-b/);
+    expect(argReadme).toMatch(/routes:\n {2}- \[a; b\]\n {2}- \[c\]/);
+  });
+
+  // rk-mdx (M1-review F2): source: internal is not unconditionally valid — defs.ts:153 rejects it
+  // once a non-empty manifest lacks a registered 'internal' source-id.
+  test("definitions/README.md.tmpl states the manifest requirement for source: internal", () => {
+    expect(defsReadme).toContain("refs/manifest/checksums.sha256");
+    expect(defsReadme.toLowerCase()).toContain("rejected");
+  });
+});
+
+// rk-huq / rk-19i (M1-review B4/B5): template-truthfulness regressions — the stamped constitution
+// must describe ACTUAL rk behavior, never a promise the binary doesn't keep.
+describe("templates / (f) constitution truthfulness (rk-huq, rk-19i)", () => {
+  const claude = read("CLAUDE.md.tmpl");
+
+  test("the consolidation-ward transition names fr orient and both graceful-skip conditions (rk-huq)", () => {
+    const section = claude.slice(claude.indexOf("## 3. Phase"), claude.indexOf("## 4."));
+    expect(section).toContain("fr orient");
+    expect(section.toLowerCase()).toContain("visible skip notice");
+    expect(section).toContain("docs/worklog.md");
+  });
+
+  test("build/ tamper-checking is hedged as a future capability, not claimed to fail rk check today (rk-19i)", () => {
+    expect(claude).not.toContain("hand-editing a generated file fails `rk check`");
+    expect(claude).toContain("arrives in a later rk release");
+  });
 });
