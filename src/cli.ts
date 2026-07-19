@@ -16,6 +16,7 @@ import { initCommand, initHelp } from "./cli/init";
 import { upgradeCommand } from "./cli/upgrade";
 import { graphCommand } from "./cli/graph";
 import { renderCommand } from "./cli/render";
+import { verifyCommand } from "./cli/verify";
 import type { Out } from "./cli/args";
 import { defaultOut, hasHelpFlag } from "./cli/args";
 
@@ -30,6 +31,7 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   upgrade: upgradeCommand,
   graph: graphCommand,
   render: renderCommand,
+  verify: verifyCommand,
 };
 
 // rk-1r6: `-h`/`--help` handling for every subcommand, kept independent of check.ts (out of
@@ -80,6 +82,17 @@ function graphHelp(out: Out): number {
   return 0;
 }
 
+function verifyHelp(out: Out): number {
+  out.log("rk verify — hard-tier verification driver over an af workspace (M3.6, PRD C9)");
+  out.log("  usage: rk verify --af <registry-id> [--dry-run] [--root <dir>]");
+  out.log("  --dry-run plans the workspace (ready set, dispatch plan, balloon tripwire status) with");
+  out.log("  NO worker dispatched and NOTHING written -- the cost-free path. A live run drives the");
+  out.log("  workspace to convergence with the prover-overreach/stuck/retry guardrails and the");
+  out.log("  balloon feedback loop (bd task / mandatory-review mark on a ballooned contract).");
+  out.log("  next: 'rk verify --af <id> --dry-run' with a real registry id (see argument/**/*.md).");
+  return 0;
+}
+
 function renderHelp(out: Out): number {
   out.log("rk render — generate the self-contained HTML campaign site (M2.4, PRD C6)");
   out.log("  usage: rk render [--out <dir>] [--north-star <id>] [--title <text>] [--root <dir>]");
@@ -98,6 +111,7 @@ const HELP: Record<string, (out: Out) => number> = {
   upgrade: upgradeHelp,
   graph: graphHelp,
   render: renderHelp,
+  verify: verifyHelp,
 };
 
 function topHelp(out: Out): number {
@@ -110,6 +124,7 @@ function topHelp(out: Out): number {
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
+  out.log("  rk verify --af <id> [--dry-run]  hard-tier verification driver over an af workspace (M3.6, PRD C9)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  every subcommand accepts -h/--help for its own usage (side-effect-free, exits 0).");
   out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");
