@@ -1,0 +1,11 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "missing required \"schema_version\"" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — schemas/generated.v1.json is rk-only (M2.6); no AISM equivalent.",
+  "notes": "M2 boundary review blocker #4: schemas/generated.v1.json requires \"schema_version\" (const \"1\") — the pre-repair runtime parser never checked for it at all, so a manifest missing the field entirely was silently accepted as if it were a valid v1 manifest. Proves this is now a loud, counted ERROR rather than a silent pass. Mutation-proven red-first (temporarily removing the missing-schema_version check turns this fixture green when it must be red; reverted after confirming)."
+}

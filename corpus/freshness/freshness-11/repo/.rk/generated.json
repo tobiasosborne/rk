@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "entries": [
+    { "path": "argument/INDEX.md", "generator": "linker-index", "extra_entry": "nope" }
+  ]
+}

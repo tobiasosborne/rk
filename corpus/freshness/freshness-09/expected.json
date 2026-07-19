@@ -1,0 +1,12 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "\"schema_version\" is \"2\"" },
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "expected exactly \"1\"" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — schemas/generated.v1.json is rk-only (M2.6); no AISM equivalent.",
+  "notes": "M2 boundary review blocker #4: schemas/generated.v1.json's \"schema_version\" is a `const \"1\"` — the pre-repair runtime parser never checked its value at all, so a wrong version (e.g. a future incompatible \"2\" manifest) would have silently run under today's v1 semantics. Proves a wrong version is now a loud, counted ERROR. Mutation-proven red-first (temporarily removing the version-value check turns this fixture green when it must be red; reverted after confirming)."
+}

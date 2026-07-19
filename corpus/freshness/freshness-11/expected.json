@@ -1,0 +1,12 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "unrecognized property" },
+    { "severity": "ERROR", "path_pattern": ".rk/generated.json", "message_pattern": "\"extra_entry\"" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a — schemas/generated.v1.json is rk-only (M2.6); no AISM equivalent.",
+  "notes": "M2 boundary review blocker #4: schemas/generated.v1.json declares additionalProperties:false per manifest ENTRY too — the pre-repair runtime parser only checked path/generator presence, silently accepting any extra per-entry key. The malformed entry is dropped entirely (never partially trusted, same discipline as a missing path/generator), so checked=0/0 even though argument/INDEX.md itself would otherwise byte-match a fresh render. Mutation-proven red-first (temporarily removing the extra-entry-key check turns this fixture green when it must be red; reverted after confirming)."
+}
