@@ -3,84 +3,88 @@
 
 # HANDOFF
 
-## State (2026-07-18, session close — M1 orchestration session)
+## State (2026-07-19, session close — M1 accepted; M2 built and review-repaired)
 
-**M1 is functionally complete and review-round done; NOT yet accepted.** All five WPs
-(M1.1–M1.5 sessions 1–2) landed; the single boundary review returned 5 landing-blockers
-(below). Per the anti-Zeno cap the next session runs ONE repair wave, verifies fixes
-mechanically against the review's file:line claims, runs dogfood session 3, and closes
-the milestone — no re-review.
-Tree: 671 tests / 0 fail / 1 skip; `bun run selftest` OK (92/92 fixtures, purity clean,
-gates-dir allowlist now EMPTY); compiled binary current at dist/rk.
-No git remote configured — all commits local (TJO: add one if pushing is wanted).
+**M1 is ACCEPTED** (repair wave + mechanical verification + dogfood session 3, all six
+user-seat checks PASS, rk-bi4 closed). **M2 is functionally complete through its single
+boundary review and repair wave**; M2.4 pass 2 + SC5 dry-run + dagre vendoring remain
+before full M2 acceptance (see scorecard). Tree: 1070 tests / 0 fail / 1 skip;
+`bun run selftest` OK (109/109 fixtures across 8 gate dirs + 3 graph-harness fixtures +
+render truthfulness corpus); dist/rk current. No rk git remote (TJO: add one if pushing
+is wanted). vibefeld and knowledge-frontier ARE pushed (V4 c266dae, F7 0d5f4df).
 
 ## Milestone scorecard
 
-- M1.1 templates (rk-b8p), M1.2 init (rk-9ir), M1.3 phase (rk-oom), M1.4 upgrade stub
-  (rk-cg9): DONE. Templates embedded in binary; residue bar is a grep test.
-- M1.5 dogfood (rk-bi4, OPEN): sessions 1–2 done on the K6 campaign at
-  ../rk-dogfood-1 (SC1 PASS 3.2 min; audit trigger fired/blocked/reset live;
-  upgrade 1.0.0→1.1.0 followed for real). Session 3 = post-repair verification.
-- Residue work: rk-hq9 audit DONE (memo docs/memos/2026-07-18-aism-residue-audit.md);
-  R12 "AISM" default removed; presence-conditional amendments landed (3849eb1);
-  recursive linker discovery landed (936aa54). rk-au6 remains open (M2 scope).
-- Wave-1 extras: rk-7uc relocation DONE (src/store/); rk-8ux fr refresh DONE.
-
-## M1 boundary review (docs/reviews/2026-07-18-m1-milestone-review-codex.md)
-
-codex gpt-5.6-sol at HIGH (TJO relaxed xhigh this session), ONE round. 12/15 flags
-ratified. **Landing-blockers, all orchestrator-verified at cited lines — this is the
-next session's repair wave, plus rk-wc3:**
-
-1. rk-xbm (P1): .rk/config.json values unvalidated — `phase:"typo"` silently demotes
-   (phase.ts:40 treats non-"consolidation" as exploration); bad shardsMaxLines
-   false-greens shards.ts:152.
-2. rk-2t8 (P1): Gate 4 provenance still hardcodes argument/lemmas
-   (provenance-parse.ts:17,58) — root-level shards escape the OVERCLAIM check.
-3. rk-sj6 (P1): duplicate registry ids across recursive discovery collapse silently
-   (linker-parse.ts:217 / linker-graph.ts:35); duplicates are structural per contract.
-4. rk-huq (P1): `rk phase consolidation` writes no fr event (plan M1.3 acceptance +
-   stamped constitution both promise it).
-5. rk-19i (P1): stamped constitution promises a build/ freshness check that ships M2.6.
-6. rk-wc3 (P1, dogfood-2, NOT visible to the review): multi-line YAML `deps:`/`defs:`
-   silently parse empty (parseList is single-line `;`-grammar) — DAG/unknown-id checks
-   run on an edgeless graph with zero diagnostic.
-
-Follow-ups (batched, non-gating): rk-gvx + rk-mdx (schema READMEs teach wrong
-path/field — truthfulness, do with repair wave), rk-ax5 (init overwrites hooks
-without --force), rk-czv (upgrade marks slot-filled files safe to overwrite), rk-ssu,
-rk-6l2, rk-dh0. Review follow-up F5 (stale HANDOFF) fixed by this rewrite.
+- **M1**: ACCEPTED 2026-07-19. Six P1 validity fixes + four follow-ups, mutation-proven;
+  template_version 1.1.0→1.2.0 (orchestrator-caught compat event); dogfood-3 all-PASS.
+- **M2.1 graph schema v1**: Tier A reviewed (4 blockers repaired) + merged. schemas/
+  graph.v1.json ratified; workspaceResolved/contractMatch split; closed conflict enum.
+- **M2.2 readers**: registry/af/fr/bd → GraphDocument, total-conversion property-tested.
+  AISM read-through: 200/200 shards, af 44/44, fr 8.0% resolution honest baseline
+  (memo: docs/memos/2026-07-19-m2.2-aism-readthrough.md).
+- **M2.3 conflicts**: fixture per class through the full pipeline; never-auto-resolved
+  property (21 cases); reviewed Tier A files untouched.
+- **M2.5 queries**: rk graph --focus/--critical-path/--taint/--blocks; over-inclusive
+  OR-route critical path (ratified; M3.4 depends on it); AISM agreement 200/200;
+  northStarId config field (validated, reviewed).
+- **M2.4 render**: FIRST PASS done (styling single-source-of-truth + effective
+  presentation state, truthfulness corpus, dashboard, hash-routed drill-down, layered
+  DAG, rk render CLI, manifest adoption, repo-relative --out). REMAINING: pass 2 breadth
+  (graveyard, run gallery, provenance chains, conventions view — bead), SC5 third-party
+  <10min dry-run, dagre vendoring (review rejected built-in as permanent, rk-fhd).
+- **M2.6 freshness (Gate 7)**: regenerate-and-diff over .rk/generated.json; per-path
+  Check-11 supersession RATIFIED; unknown generator = blocking ERROR; full manifest
+  schema enforcement; render-site-v1 verified via edge regeneration (pure gate, edge
+  prepares bytes); template_version 1.3.0.
+- **M2 boundary review** (codex gpt-5.6-sol high, ONE round + ONE repair wave, no
+  re-review): 9 blockers ALL repaired red-first + mutation-proven; 8 follow-ups filed;
+  6 design verdicts recorded on beads (scratch review file is session-local; substance
+  is in the memo addendum, gate-contracts Gate 7 section, and bead notes).
 
 ## Next steps (in order)
 
-1. **Repair wave** (single wave, then mechanical verification — NO re-review): rk-xbm,
-   rk-2t8, rk-sj6, rk-huq, rk-19i, rk-wc3; batch rk-gvx/rk-mdx/rk-czv/rk-ax5 alongside
-   (same territories). Repair rigor per finding tier; red fixture per validity fix.
-2. **Dogfood session 3** on ../rk-dogfood-1: verify repairs as the user (multi-line
-   deps now loud/accepted, upgrade instructions safe, constitution honest), then close
-   rk-bi4 and mark M1 ACCEPTED (bd + worklog entry).
-3. **M2 entry** (projection + render): schedule V4 (`af export --graph json`) in
-   ../vibefeld FIRST (plan sequencing); M2.1 graph schema; rk-au6 report-decoupling
-   lands here; AISM touchpoints need explicit TJO calls (2026-07-18 stance memory).
-4. Backlog: rk-ssu, rk-6l2, rk-dh0 (fr versioning), rk-fdl, rk-rko, rk-t14, rk-zjq,
-   rk-w91, plus dogfood P3s rk-uon, rk-i2o, rk-610, rk-8r9.
+1. **M2 acceptance remainder**: M2.4 pass 2 (breadth views bead, P1); then SC5 dry-run
+   on the AISM site (third party answers the five questions <10 min); dagre vendoring
+   (rk-fhd) behind computeLayers/renderDag.
+2. **M3 entry (verification driver)**: M3.0 caching spike FIRST (plan sequencing —
+   before M3.3 design freezes); worker contract spec M3.1; V1-V3 kernel verbs in
+   ../vibefeld (author identity, af verdicts apply, unvalidate --batch) needed by M3.4.
+   M2.5's critical-path query is ready for M3.4's batch exclusion.
+3. **Backlog highlights**: rk-45m (unparseable config JSON silent), rk-3af (report-label
+   teaching doc), snapshot-load build/site include gap (+ .rk include regression test
+   bead — pair them), afRecordsIn accounting, six-gates wording sweep, selftest lines
+   for graph/render corpora (rk-b09), fr workspace-prefix resolution = graph v2
+   (rk-rgp), fr stale command tables (owning repo has no tracker).
+4. **AISM stance unchanged**: read-only crash-test corpus + incident seed ONLY; rk must
+   serve any campaign (SC7). Dogfood repo ../rk-dogfood-1 is live campaign state.
 
-## Governance this session (TJO directives, in bd memory)
+## Governance (standing, in bd memory)
 
-- Reviews at gpt-5.6-sol HIGH suffice (xhigh no longer default).
-- Breaking changes to fr are acceptable; af/fr work unrestricted for rk's needs.
-- Vision restated: rk serves ANY academic theoretical-research campaign — generality
-  is the acceptance lens (drove the residue audit + all template decisions).
+- Reviews: codex gpt-5.6-sol HIGH suffices; Fable only with explicit TJO permission.
+- Anti-Zeno cap: ONE review round + ONE repair wave per milestone; repairs verified
+  mechanically by the orchestrator, never re-reviewed.
+- Two-list reviews: landing-blockers (validity only) gate; everything else → beads.
+- Breaking changes to fr acceptable; af/fr work unrestricted in service of rk.
 
 ## Standing cautions
 
-- Shared working tree for parallel agents: disjoint file scopes, explicit-path commits
-  only, hold commits while a codex review is reading the tree.
-- bd `update --notes` REPLACES the field (a dossier was nearly lost). Append manually.
-- A `pgrep -f` watcher matches its own command line — use a distinctive token or
-  pattern that cannot appear in the watcher (cost: 1.5 h this session).
-- codex exec: health-check via ~/.codex/sessions rollout file; ~17 min for an M1-sized
-  diff review at high; log to file, never pipe through tail.
-- CLAUDE.md==AGENTS.md byte-identity applies to the TEMPLATE too (stamped repos).
-- Campaign repo ../rk-dogfood-1 is live dogfood state — read-only unless a dogfood
-  session owns it.
+- Shared working tree for parallel agents: disjoint file scopes; explicit-path staging
+  AND explicit-path commits — `git commit -m "..." -- <paths>` ALWAYS (a bare
+  `git commit` swept another lane's staged files this session; caught and recomposed).
+  Shared files (corpus/README.md, gate-contracts.md, discovery.ts fixture count,
+  scripts/selftest.ts) are orchestrator-single-writer; lanes report deltas.
+- Cross-lane interfaces: specify the exact type/name contract in BOTH lane briefs
+  before dispatch (BuildDiagnostics and render-site-v1 both landed clean this way).
+- Worktree agents: merge from the REPO ROOT, not from inside a worktree (a merge run
+  inside the worktree merged the branch into itself as a no-op); remove worktrees
+  before deleting their branches; verify `git status -sb` on master afterwards.
+- Shell cwd resets to the project root between tool calls when you cd outside the
+  project; cd + command must share one invocation.
+- bd `update --notes` REPLACES the field — append manually. bd works per-repo; fr has
+  no tracker (file fr items in rk's bd, labeled cross-repo).
+- codex exec: ~17-40 min for milestone-sized reviews at high; `-o <file>`, read the
+  file, never pipe through tail. Two-list output format must be mandated in the prompt.
+- CLAUDE.md==AGENTS.md byte-identity applies to the TEMPLATE and every stamped repo.
+- Template CONTENT changes are compat events: bump template_version (missed by an
+  implementer lane once this session; caught at orchestrator reconciliation).
+- vibefeld `-tags integration` suite is pre-existing broken (bead in vibefeld's bd).
