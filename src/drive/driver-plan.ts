@@ -25,7 +25,16 @@ import { composeBatches, type ComposedBatch } from "./batch-composer";
 import type { GraphDocument } from "../graph/types";
 
 /** The projected view of one af-export node this planner consumes — a narrow slice of
- * ../vibefeld/docs/export-graph-v1.md's node shape, built at the edge (src/drive/driver-af.ts). */
+ * ../vibefeld/docs/export-graph-v1.md's node shape, built at the edge (src/drive/driver-af.ts).
+ * `statement`/`childIds` (M3.5-prep, src/drive/driver-live.ts's live prompt assembly) are
+ * ADDITIVE, optional fields — every readiness/dispatch DECISION in this file (isVerificationReady,
+ * selectReadyNodes, planDispatch) reads neither, so this is data-carrying only, not a change to
+ * driver-plan.ts's own logic. `childIds` (not `deps`): af v1's export carries no separate
+ * `dependencies` array for a node (deliberately excluded, export-graph-v1.md's "Fields deliberately
+ * not included in v1") — a node's own children ARE what its bottom-up validation depends on
+ * (they must already be validated before the parent claim is verifier-ready), so `child_ids` is
+ * the faithful available proxy, read raw off the export same as `crux` (bead rk-mnp's precedent),
+ * never invented or re-derived. */
 export interface AfNodeView {
   id: string;
   epistemicState: string;
@@ -33,6 +42,8 @@ export interface AfNodeView {
   crux: boolean;
   contentHash: string;
   author?: string;
+  statement?: string;
+  childIds?: string[];
 }
 
 /** af's OWN readiness axes: pending AND not blocked. Reads the recorded state, never re-derives it.

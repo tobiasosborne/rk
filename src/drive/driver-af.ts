@@ -74,6 +74,11 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     crux: n.crux === true,
     contentHash: typeof n.content_hash === "string" ? n.content_hash : "",
     author: typeof n.author === "string" && n.author.length > 0 ? n.author : undefined,
+    // M3.5-prep additive read (src/drive/driver-plan.ts's AfNodeView doc comment): `statement` and
+    // `child_ids` are already real v1 export fields; threaded through for live prompt assembly
+    // only, never consumed by any readiness/dispatch decision in this file or driver-plan.ts.
+    statement: typeof n.statement === "string" ? n.statement : undefined,
+    childIds: Array.isArray(n.child_ids) ? n.child_ids.map((c: unknown) => String(c)) : undefined,
   }));
   const root = doc.nodes.find((n: any) => String(n.id) === "1");
   const nodeCount = typeof doc.validation?.total_nodes === "number" ? doc.validation.total_nodes : nodes.length;
