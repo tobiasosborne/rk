@@ -143,12 +143,17 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
 
   if (!existsSync(root)) mkdirSync(root, { recursive: true });
 
+  // rk-ax5: `.claude/settings.json` and `.git/hooks/pre-commit` are NOT TEMPLATE_MANIFEST entries
+  // (they're built by src/scaffold/hooks.ts and written unconditionally below) but `rk init`
+  // overwrites them exactly like every manifest-stamped path — fold them into the same
+  // conflict-detection set so neither is ever clobbered without --force.
+  const NON_MANIFEST_STAMPED_PATHS = [{ path: ".claude/settings.json" }, { path: ".git/hooks/pre-commit" }];
   const existingManifestPaths = new Set<string>();
-  for (const entry of TEMPLATE_MANIFEST.stamped) {
+  for (const entry of [...TEMPLATE_MANIFEST.stamped, ...NON_MANIFEST_STAMPED_PATHS]) {
     const bare = entry.path.endsWith("/") ? entry.path.slice(0, -1) : entry.path;
     if (existsSync(join(root, bare))) existingManifestPaths.add(bare);
   }
-  const conflicts = detectConflicts(TEMPLATE_MANIFEST.stamped, existingManifestPaths);
+  const conflicts = detectConflicts([...TEMPLATE_MANIFEST.stamped, ...NON_MANIFEST_STAMPED_PATHS], existingManifestPaths);
   if (conflicts.length > 0 && !force) {
     out.log(`rk init: refusing to stamp — ${conflicts.length} path(s) already exist at ${root}:`);
     for (const c of conflicts) out.log(`  ${c}`);

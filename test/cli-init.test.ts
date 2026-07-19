@@ -269,6 +269,63 @@ describe("rk init: conflict detection (mutation-proof target b)", () => {
   });
 });
 
+describe("rk init: conflict detection extends to non-manifest stamped paths (rk-ax5)", () => {
+  test("a pre-existing .claude/settings.json refuses to stamp without --force, left untouched", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(join(root, ".claude", "settings.json"), '{"sentinel": true}\n');
+    const { out, lines } = capture();
+    const code = await initCommand(["North star", "--root", root], out, noSpawnDeps());
+    expect(code).not.toBe(0);
+    expect(lines.some((l) => l.includes("refusing to stamp"))).toBe(true);
+    expect(lines.some((l) => l.includes(".claude/settings.json"))).toBe(true);
+    const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+    expect(settings.sentinel).toBe(true);
+    expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+
+  test("--force overwrites a pre-existing .claude/settings.json", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(join(root, ".claude", "settings.json"), '{"sentinel": true}\n');
+    const { out } = capture();
+    const code = await initCommand(["North star", "--root", root, "--force"], out, noSpawnDeps());
+    expect(code).toBe(0);
+    const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+    expect(settings.sentinel).toBeUndefined();
+    expect(settings.hooks).toBeDefined();
+  });
+
+  test("a pre-existing .git/hooks/pre-commit refuses to stamp without --force, left untouched", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(root, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho hand-written\n");
+    const { out, lines } = capture();
+    const code = await initCommand(["North star", "--root", root], out, noSpawnDeps());
+    expect(code).not.toBe(0);
+    expect(lines.some((l) => l.includes("refusing to stamp"))).toBe(true);
+    expect(lines.some((l) => l.includes(".git/hooks/pre-commit"))).toBe(true);
+    expect(readFileSync(join(root, ".git", "hooks", "pre-commit"), "utf8")).toContain("hand-written");
+    expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+
+  test("--force overwrites a pre-existing .git/hooks/pre-commit", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(root, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho hand-written\n");
+    const { out } = capture();
+    const code = await initCommand(["North star", "--root", root, "--force"], out, noSpawnDeps());
+    expect(code).toBe(0);
+    const hook = readFileSync(join(root, ".git", "hooks", "pre-commit"), "utf8");
+    expect(hook).not.toContain("hand-written");
+    expect(hook).toContain("rk check");
+  });
+});
+
 describe("rk init: git init", () => {
   test("git init is invoked when .git is absent", async () => {
     const root = tmpRoot();
