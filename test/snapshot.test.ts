@@ -161,4 +161,54 @@ describe("parseFrontmatter", () => {
     const fm = parseFrontmatter("");
     expect(fm.present).toBe(false);
   });
+
+  // rk-wc3 (dogfood-2): a natural multi-line YAML block list under a `;`-list field (deps/defs/
+  // routes) used to leave the key's value permanently "" (the continuation line has no ':' and
+  // was recorded as merely malformed) — every downstream `;`-split consumer (parseList in
+  // linker-parse.ts) silently saw an empty list, defeating the DAG/unknown-id checks with zero
+  // diagnostic. Fixed: a `- item` line directly (modulo blank lines) following a `key:` line whose
+  // OWN value was empty accumulates into that key's value as the SAME `;`-joined string the
+  // single-line grammar already produces — parseList/parseRoutes need no awareness the source was
+  // multi-line at all.
+  describe("multi-line YAML block-list continuation (rk-wc3)", () => {
+    test("a `key:` line with an empty value followed by `- item` lines joins them `;`-style", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndeps:\n  - a\n  - b\n  - c\n---\n");
+      expect(fm.fields.deps).toBe("a; b; c");
+      expect(fm.malformedLines).toEqual([]);
+    });
+
+    test("works uniformly for any list-valued key (defs, routes), not just deps", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndefs:\n  - RD1-def-two-coloring\n  - RD1-def-mono-triangle\n---\n");
+      expect(fm.fields.defs).toBe("RD1-def-two-coloring; RD1-def-mono-triangle");
+    });
+
+    test("a blank line inside the block list does not terminate the continuation", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndeps:\n  - a\n\n  - b\n---\n");
+      expect(fm.fields.deps).toBe("a; b");
+    });
+
+    test("continuation stops at the next real `key:` line, which parses normally", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndeps:\n  - a\n  - b\nkind: lemma\n---\n");
+      expect(fm.fields.deps).toBe("a; b");
+      expect(fm.fields.kind).toBe("lemma");
+    });
+
+    test("single-line `;`-list values are completely unchanged (no regression)", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndeps: a; b; c\n---\n");
+      expect(fm.fields.deps).toBe("a; b; c");
+    });
+
+    test("a `- item` line with NO preceding empty-valued key is a genuine malformed line, loud, " +
+      "never silently absorbed", () => {
+      const fm = parseFrontmatter("---\nid: foo\n  - stray\n---\n");
+      expect(fm.malformedLines).toEqual([3]);
+      expect(fm.fields.id).toBe("foo");
+    });
+
+    test("an unterminated block still accumulates the list into the field before EOF", () => {
+      const fm = parseFrontmatter("---\nid: foo\ndeps:\n  - a\n  - b\n");
+      expect(fm.terminated).toBe(false);
+      expect(fm.fields.deps).toBe("a; b");
+    });
+  });
 });

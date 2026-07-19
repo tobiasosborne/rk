@@ -288,6 +288,56 @@ describe("parseRegistry / duplicate registry id across recursive discovery (rk-s
   });
 });
 
+// rk-wc3 (dogfood-2): src/gates/snapshot.ts's parseFrontmatter is a flat 'key: value' per-line
+// parser; a natural multi-line YAML block list under `deps:`/`defs:`/`routes:` used to leave the
+// field permanently "" (each `- item` continuation line has no ':', so it was recorded only as a
+// malformed line — which the linker gate never even read). "checked linker: 3/3 lemma shards ...
+// 0 errors" over a graph whose edges were silently empty. Fixed in two parts: (a)
+// parseFrontmatter itself now understands the continuation (test/snapshot.test.ts covers that in
+// isolation); (b) the linker gate now reports fm.malformedLines the way defs.ts does, so any
+// frontmatter line that is STILL genuinely malformed (not a valid continuation) is loud, never
+// silent. corpus/linker/linker-29 (multi-line deps, unknown id) and linker-30 (genuine malformed
+// line) cover this end-to-end; these tests isolate parseRegistry directly.
+describe("parseRegistry / multi-line YAML deps + malformedLines reporting (rk-wc3)", () => {
+  test("a multi-line `deps:` block list resolves to real dependency ids, not an empty list", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-a.md": "---\nid: lem-a\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+      "argument/lem-b.md":
+        "---\nid: lem-b\nkind: lemma\nstatus: stated\naf: none\ncontract: c\ndeps:\n  - lem-a\n---\n",
+    });
+    const { lemmas, errors } = parseRegistry(snapshot);
+    expect(errors).toEqual([]);
+    const lemB = lemmas.find((l) => l.id === "lem-b");
+    expect(lemB?.deps).toEqual(["lem-a"]);
+  });
+
+  test("a multi-line `deps:` block list containing an unknown id still resolves (non-empty), " +
+    "so checkImports can flag it — the exact dogfood-2 regression", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-b.md":
+        "---\nid: lem-b\nkind: lemma\nstatus: stated\naf: none\ncontract: c\ndeps:\n  - lem-nonexistent\n---\n",
+    });
+    const { lemmas, errors } = parseRegistry(snapshot);
+    expect(errors).toEqual([]); // parse-stage itself is clean; checkImports (linker-graph.ts) catches the dangling id
+    expect(lemmas[0]?.deps).toEqual(["lem-nonexistent"]);
+  });
+
+  test("a genuinely malformed frontmatter line inside a linker shard is now a loud parse ERROR, " +
+    "never silent emptiness", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-bad.md":
+        "---\nid: lem-bad\nkind: lemma\nstatus: stated\naf: none\ncontract: c\nthis line has no colon\n---\n",
+    });
+    const { errors } = parseRegistry(snapshot);
+    const malformed = errors.filter((e) => e.message.includes("frontmatter line without ':'"));
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]?.severity).toBe("ERROR");
+    expect(malformed[0]?.structural).toBe(true);
+    expect(malformed[0]?.path).toBe("argument/lem-bad.md");
+    expect(malformed[0]?.line).toBe(7);
+  });
+});
+
 describe("linkerGate coverage line / ignored-file count (rk-9pk)", () => {
   test("the coverage line names the ignored-file count and their names, even when zero " +
     "(never a silent omission, CLAUDE.md L2)", () => {

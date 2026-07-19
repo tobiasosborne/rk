@@ -179,9 +179,18 @@ const FRONTMATTER_DELIM = "---";
 /** Parses the flat `---` / `key: value`* / `---` frontmatter block that opens a defs/linker
  * shard. Blank lines inside the block are skipped (neither a field nor malformed) — no real
  * fixture shard carries one, and it keeps the parser from flagging cosmetic whitespace as a
- * violation. Does not interpret nested/typed YAML — the shards only ever use flat scalar
- * `key: value` lines (`;`-separated lists like `aliases`/`deps` stay a single string value; the
- * gate that owns that field splits it itself). */
+ * violation. Does not interpret nested/typed YAML in general — the shards only ever use flat
+ * scalar `key: value` lines (`;`-separated lists like `aliases`/`deps` stay a single string
+ * value; the gate that owns that field splits it itself) — WITH ONE deliberate exception (rk-wc3,
+ * dogfood-2): a `key:` line whose OWN value is empty may be followed by a YAML block list (one or
+ * more `- item` lines); those items are joined into the SAME `;`-separated string the single-line
+ * grammar already produces (`"a; b; c"`), so `parseList`/`parseRoutes` (linker-parse.ts) need no
+ * awareness the source was multi-line at all. Before this, a multi-line list left the key's value
+ * permanently `""` (each `- item` line has no `:`, so it was merely recorded as malformed) —
+ * silently defeating every `;`-split consumer (dogfood-2: natural multi-line `deps:`/`defs:`
+ * shards validated an edgeless graph with "0 errors"). A `- item` line NOT immediately (modulo
+ * blank lines) preceded by an empty-valued `key:` line is NOT a continuation — it is a genuinely
+ * malformed line, reported exactly as before, never silently absorbed. */
 export function parseFrontmatter(content: string): Frontmatter {
   const lines = content.split("\n");
   let i = 0;
@@ -192,20 +201,37 @@ export function parseFrontmatter(content: string): Frontmatter {
   i++; // past the opening ---
   const fields: Record<string, string> = {};
   const malformedLines: number[] = [];
+  // The key currently eligible to accumulate a `- item` block-list continuation — set only when
+  // that key's own `key:` line carried an empty value, cleared on any line that is not itself a
+  // continuation (a real `key:` line, or a genuinely malformed one). Blank lines do NOT clear it
+  // (a blank line inside a YAML block list is cosmetic, matching the existing blank-line-skip
+  // rule above).
+  let pendingListKey: string | null = null;
   for (; i < lines.length; i++) {
     const line = lines[i]!;
     if (line.trim() === FRONTMATTER_DELIM) {
       return { present: true, terminated: true, fields, malformedLines };
     }
     if (line.trim() === "") continue;
+    const trimmed = line.trim();
+    if (pendingListKey !== null && trimmed.startsWith("-")) {
+      const item = trimmed.slice(1).trim();
+      if (item.length > 0) {
+        const cur = fields[pendingListKey]!;
+        fields[pendingListKey] = cur.length > 0 ? `${cur}; ${item}` : item;
+      }
+      continue;
+    }
     const idx = line.indexOf(":");
     if (idx === -1) {
       malformedLines.push(i + 1);
+      pendingListKey = null;
       continue;
     }
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
     fields[key] = value;
+    pendingListKey = value === "" ? key : null;
   }
   return { present: true, terminated: false, fields, malformedLines };
 }

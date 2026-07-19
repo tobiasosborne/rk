@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-bad.md",
+      "message_pattern": "frontmatter line without ':'"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs: argument.py's `_parse_frontmatter` (scripts/argument.py:106-124, `../almost-idempotent-stochastic-maps`) silently SKIPS any line with no ':' (`if not line or ... or \":\" not in line: continue`) -- it has no `malformedLines`-equivalent concept at all, so this exact repo tree would register `lem-bad` with ZERO findings under AISM's script. This IS a verdict-changing divergence in rk's favor (a genuinely malformed line now blocks where AISM's script would silently proceed), the same direction as defs.ts's own check 2 (Gate 1) already takes for `definitions/*.md` -- Gate 2 is simply catching up to Gate 1's existing, already-ratified stricter behavior, not introducing a new one. Triage: rk-stricter-intended (mirrors the already-landed defs.ts check 2 exactly, same message, same structural classification).",
+  "notes": "rk-wc3 (dogfood-2) sibling to linker-29: proves the OTHER half of the fix -- a frontmatter line that is genuinely malformed (no ':' AND not a valid multi-line list continuation, since it directly follows `contract: Statement text for linker-30.`, a NON-empty-valued key line, so `parseFrontmatter`'s pendingListKey is null when this line is reached) must stay loud, never silently absorbed into emptiness. Pre-fix, `src/gates/snapshot.ts`'s parseFrontmatter already recorded this line in `fm.malformedLines`, but `linker-parse.ts` (Gate 2) never read that field at all -- only `defs.ts` (Gate 1) did -- so the malformed line was invisible to the linker gate's own coverage/verdict even though the underlying parser had already flagged it. Fixed: linker-parse.ts now emits one structural ERROR per `fm.malformedLines` entry, `frontmatter line without ':'`, identical message and structural classification to defs.ts's own check 2 (docs/gate-contracts.md Gate 1 Check 2). Mutation-proven red-first (test/gates/linker.test.ts: replacing the `fm.malformedLines` loop body with an empty array turns the malformed-line unit test red -- zero findings where one ERROR is expected; reverted after confirming). Sibling: `linker-29` (the multi-line-list-continuation half of the same fix)."
+}

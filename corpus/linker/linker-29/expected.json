@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-b.md",
+      "message_pattern": "unknown dep 'lem-nonexistent' (not a registry id)"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "same: argument.py's `_parse_frontmatter` (scripts/argument.py:106-124, `../almost-idempotent-stochastic-maps`) is the identical flat per-line `key: value` parser rk ports -- `if not line or line.lstrip().startswith(\"#\") or \":\" not in line: continue` silently SKIPS any line with no ':' (a `- lem-nonexistent` continuation line included), with no diagnostic of any kind (not even rk's pre-fix `malformedLines` bookkeeping -- AISM has no equivalent concept at all). Under AISM's script this fixture's `deps:` line would resolve to the empty list, `check_imports` (scripts/argument.py:179-194) would see zero deps to validate, and the whole run would report ZERO errors -- exactly dogfood-2's live symptom, reproduced here as a minimal fixture rather than AISM's own tree (which has no natural multi-line deps: shard on record).",
+  "notes": "rk-wc3 (dogfood-2, 2026-07-18/19): src/gates/snapshot.ts's parseFrontmatter is a flat 'key: value' per-line parser; a YAML-list continuation line ('  - lem-nonexistent') used to have no ':' and become a `malformedLines` entry while `deps:`'s own value stayed \"\" -- linker-parse.ts's parseList then split an empty string into `[]`, so checkImports (linker-graph.ts) had nothing to validate and reported zero errors even though the field visibly names an unknown id. Live consequence found in dogfood-1's campaign (`../rk-dogfood-1`): three argument shards authored with this natural multi-line style got 'checked linker: 3/3 ... 0 errors, 0 warnings' with the DAG/unknown-id checks validating an edgeless graph. Fixed in two parts: (a) parseFrontmatter itself now understands a `key:`-with-empty-value followed by `- item` block-list lines, joining them into the SAME `;`-separated value string the single-line grammar already produces (test/snapshot.test.ts covers this in isolation); (b) linker-parse.ts now also reports `fm.malformedLines` the way defs.ts always has (see linker-30, this fixture's sibling), so any line that is STILL genuinely malformed stays loud. This fixture proves (a) end-to-end: the multi-line `deps:` value now resolves to a real (non-empty) dependency list, so checkImports correctly flags the unknown id -- the exact diagnostic dogfood-1's live shards never got. Mutation-proven red-first (test/gates/linker.test.ts + test/snapshot.test.ts: reverting parseFrontmatter's continuation logic turns both the isolated parser test and this fixture's parseRegistry-level test red -- `deps` resolves back to `[]`; reverted after confirming). Sibling: `linker-30` (a genuinely malformed line, never absorbed)."
+}

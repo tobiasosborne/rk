@@ -180,6 +180,23 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
       continue;
     }
 
+    // rk-wc3 (dogfood-2): a line inside an otherwise well-terminated frontmatter block that is
+    // STILL genuinely malformed (no ':', and not a valid multi-line list continuation —
+    // src/gates/snapshot.ts's parseFrontmatter) must be loud, mirroring defs.ts's own check 2
+    // exactly (same message, same structural classification: a parse error breaks this shard's
+    // cross-referenceable identity same as Check 1). Pre-fix, the linker gate never read
+    // `fm.malformedLines` at all — only defs.ts did — so a malformed line here was silently
+    // invisible to Gate 2's own coverage/verdict.
+    for (const lineNo of fm.malformedLines) {
+      errors.push({
+        severity: "ERROR",
+        path,
+        line: lineNo,
+        message: "frontmatter line without ':'",
+        structural: true,
+      });
+    }
+
     const id = fm.fields.id;
     if (!id) {
       errors.push({
