@@ -144,6 +144,99 @@ describe("rk phase consolidation: the consolidation-ward transition logs to docs
   });
 });
 
+describe("rk phase consolidation: the consolidation-ward transition logs to fr (rk-huq)", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  function noFrDeps() {
+    const calls: { bin: string; args: string[]; cwd: string }[] = [];
+    return {
+      calls,
+      which: (_bin: string) => null, // fr absent by default
+      spawn: async (bin: string, args: string[], cwd: string) => {
+        calls.push({ bin, args, cwd });
+        return { exitCode: 0, stderr: "" };
+      },
+    };
+  }
+
+  test("fr not on PATH: visible skip notice, exit 0, nothing spawned", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    const deps = noFrDeps();
+    const { out, lines } = capture();
+    const code = await phaseCommand(["consolidation", "--root", root], out, deps);
+    expect(code).toBe(0);
+    expect(lines.some((l) => l.includes("'fr' not found on PATH"))).toBe(true);
+    expect(deps.calls.length).toBe(0);
+  });
+
+  test("fr on PATH but no .frontier/ state: visible skip notice, fr never spawned", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+    const deps = noFrDeps();
+    deps.which = (bin: string) => (bin === "fr" ? "/usr/bin/fr" : null);
+    const { out, lines } = capture();
+    const code = await phaseCommand(["consolidation", "--root", root], out, deps);
+    expect(code).toBe(0);
+    expect(lines.some((l) => l.includes("no .frontier/ state"))).toBe(true);
+    expect(deps.calls.length).toBe(0);
+  });
+
+  test("fr on PATH and .frontier/ present: 'fr orient' is invoked and success is logged", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    const deps = noFrDeps();
+    deps.which = (bin: string) => (bin === "fr" ? "/usr/bin/fr" : null);
+    const { out, lines } = capture();
+    const code = await phaseCommand(["consolidation", "--root", root], out, deps);
+    expect(code).toBe(0);
+    const frCall = deps.calls.find((c) => c.bin === "fr");
+    expect(frCall?.args[0]).toBe("orient");
+    expect(frCall?.args[1]).toContain("exploration -> consolidation");
+    expect(frCall?.cwd).toBe(root);
+    expect(lines.some((l) => l.includes("logged the consolidation-ward transition to fr"))).toBe(true);
+  });
+
+  test("fr on PATH, .frontier/ present, but 'fr orient' exits nonzero: FAILED notice, exit still 0", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ phase: "exploration" }));
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    const deps = {
+      which: (bin: string) => (bin === "fr" ? "/usr/bin/fr" : null),
+      spawn: async (_bin: string, _args: string[], _cwd: string) => ({ exitCode: 1, stderr: "no arm registered" }),
+    };
+    const { out, lines } = capture();
+    const code = await phaseCommand(["consolidation", "--root", root], out, deps);
+    expect(code).toBe(0);
+    expect(lines.some((l) => l.includes("'fr orient' FAILED"))).toBe(true);
+    expect(lines.some((l) => l.includes("no arm registered"))).toBe(true);
+  });
+
+  test("no-op transition (already consolidation): fr is never invoked even if fr/.frontier present", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    const deps = noFrDeps();
+    deps.which = (bin: string) => (bin === "fr" ? "/usr/bin/fr" : null);
+    const { out } = capture();
+    await phaseCommand(["consolidation", "--root", root], out, deps); // already consolidation (default)
+    expect(deps.calls.length).toBe(0);
+  });
+});
+
 describe("insertWorklogEntry (pure helper)", () => {
   test("inserts right after '## Sessions', before any existing content", () => {
     const content = "# Worklog\n\n## Sessions\n\n### [2026-01-01] old\n";

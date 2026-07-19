@@ -1,15 +1,18 @@
-// EDGE — fs (`.rk/config.json`, `docs/worklog.md`), clock (dated worklog line). `rk phase
-// exploration|consolidation` (M1.3, docs/gate-contracts.md "Phase matrix";
+// EDGE — fs (`.rk/config.json`, `docs/worklog.md`), clock (dated worklog line), subprocess (`fr`).
+// `rk phase exploration|consolidation` (M1.3, docs/gate-contracts.md "Phase matrix";
 // ../research-workflows/PRD.md sec 2/C1: "Phase switch ... The transition consolidation-> is a
-// logged, deliberate act."). No args -> prints the CURRENT resolved phase (same resolution
+// logged, deliberate act."; IMPLEMENTATION_PLAN.md M1.3: "transition consolidation-ward is logged
+// to worklog + fr"). No args -> prints the CURRENT resolved phase (same resolution
 // `loadGateConfig` uses: an absent `phase` field = consolidation, the strictest default). An
 // argument writes `phase` into `.rk/config.json`, preserving every OTHER key already there —
 // deliberately never round-trips through `mergeGateConfig`/`DEFAULT_GATE_CONFIG`, which would
 // bake every default value into a file that previously had none. The consolidation-ward
-// transition (exploration -> consolidation) additionally prepends one dated entry to
+// transition (exploration -> consolidation) additionally (a) prepends one dated entry to
 // `docs/worklog.md` IF that file exists (CLAUDE.md Rule 9: an authored, append-only doc is never
-// silently rewritten by a tool without saying so), and always prints a notice either way — never
-// a silent skip when the file is absent.
+// silently rewritten by a tool without saying so), and (b) logs one `fr orient` event (rk-huq) —
+// an off-arm, breaker-neutral note (`fr help orient`), the correct verb for a governance/process
+// event that is not itself an arm-pull. Both (a) and (b) print a notice either way — never a
+// silent skip — when the target (the file, or `fr`/`.frontier/`) is absent.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,6 +20,23 @@ import type { Out } from "./args";
 import { extractRoot } from "./args";
 import type { Phase } from "../gates/phase";
 import { DEFAULT_PHASE } from "../gates/phase";
+
+// rk-huq: same injectable which/spawn edge pattern as src/cli/init.ts's fr/bd bootstrap — tests
+// must never require a real `fr` binary or touch a real subprocess.
+export type Which = (bin: string) => string | null;
+export type SpawnFn = (bin: string, args: string[], cwd: string) => Promise<{ exitCode: number; stderr: string }>;
+
+const defaultWhich: Which = (bin) => Bun.which(bin);
+
+async function defaultSpawn(bin: string, args: string[], cwd: string): Promise<{ exitCode: number; stderr: string }> {
+  try {
+    const proc = Bun.spawn([bin, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+    const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    return { exitCode, stderr };
+  } catch (e) {
+    return { exitCode: -1, stderr: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 const PHASES: readonly Phase[] = ["exploration", "consolidation"];
 
@@ -69,11 +89,16 @@ export interface PhaseCommandDeps {
   /** injectable for tests — ISO date `YYYY-MM-DD`, same convention as src/refs/add.ts's
    * `retrieved` default. */
   today?: () => string;
+  /** injectable for tests (rk-huq) — never require a real `fr` binary on PATH. */
+  which?: Which;
+  spawn?: SpawnFn;
 }
 
 export async function phaseCommand(args: string[], out: Out, deps: PhaseCommandDeps = {}): Promise<number> {
   const { rest, root } = extractRoot(args);
   const today = deps.today ?? (() => new Date().toISOString().slice(0, 10));
+  const which = deps.which ?? defaultWhich;
+  const spawn = deps.spawn ?? defaultSpawn;
   const raw = readRawConfig(root);
   const before = currentPhase(raw);
 
@@ -112,6 +137,26 @@ export async function phaseCommand(args: string[], out: Out, deps: PhaseCommandD
       out.log("  logged the consolidation-ward transition to docs/worklog.md.");
     } else {
       out.log("  docs/worklog.md not found -- consolidation-ward transition NOT logged (nothing to append to).");
+    }
+
+    // rk-huq: also log the transition to fr, via `fr orient` (an off-arm, breaker-neutral note --
+    // `fr help orient` -- the correct verb: this is a governance event, not an arm-pull). Graceful
+    // skip, never a silent one, when `fr` is not on PATH or this repo has no `.frontier/` state
+    // (e.g. `fr init` was never run here).
+    if (!which("fr")) {
+      out.log("  'fr' not found on PATH -- consolidation-ward transition NOT logged to fr.");
+    } else if (!existsSync(join(root, ".frontier"))) {
+      out.log(
+        "  no .frontier/ state at this repo -- consolidation-ward transition NOT logged to fr " +
+          "(run 'fr init \"<north-star>\"' to enable).",
+      );
+    } else {
+      const r = await spawn("fr", ["orient", "phase: exploration -> consolidation (rk phase)"], root);
+      if (r.exitCode === 0) {
+        out.log("  logged the consolidation-ward transition to fr ('fr orient').");
+      } else {
+        out.log(`  'fr orient' FAILED (exit ${r.exitCode}: ${r.stderr.trim()}) -- consolidation-ward transition NOT logged to fr.`);
+      }
     }
   }
 

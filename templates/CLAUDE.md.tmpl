@@ -119,8 +119,10 @@ In *exploration* only the structural gates block; convention-fixing is lazy, sof
 only, negative-result hunting is cheap. In *consolidation* the full gate set binds: contract-
 shaped claims, eager definitions, hard-tier verification, generated report. Every gate binds at
 a promotion boundary, never on exploratory motion — mandatory-everywhere ceremony is the failure
-mode to design against. The transition toward consolidation is a logged, deliberate act (worklog
-+ `fr`). Do not implement phase logic by hand; use `rk phase`.
+mode to design against. The transition toward consolidation is a logged, deliberate act: `rk phase
+consolidation` appends a dated entry to `docs/worklog.md` and logs an `fr orient` event — each with
+a visible skip notice (never silent) if the target is missing (no `docs/worklog.md`, or `fr` not on
+PATH / no `.frontier/` state here). Do not implement phase logic by hand; use `rk phase`.
 
 ## 4. Model and compute policy
 
