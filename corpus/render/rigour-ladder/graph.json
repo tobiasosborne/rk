@@ -1,0 +1,289 @@
+{
+  "conflicts": [
+    {
+      "edge": "af",
+      "kind": "contract-mismatch",
+      "message": "contract-mismatch: registry='proved' vs af root statement byte-differs (contractMatch:false)",
+      "nodeId": "n-conflict",
+      "otherValue": "contractMatch:false",
+      "registryValue": "proved"
+    }
+  ],
+  "edges": {
+    "af": [
+      {
+        "afRootNodeId": "1",
+        "afSchemaVersion": "1",
+        "contractMatch": false,
+        "epistemicState": "validated",
+        "nodeCount": 5,
+        "nodeId": "n-conflict",
+        "taintState": "clean",
+        "workspace": "proofs/n-conflict",
+        "workspaceResolved": true
+      },
+      {
+        "nodeId": "n-orphan",
+        "workspace": "proofs/missing",
+        "workspaceResolved": false
+      },
+      {
+        "afRootNodeId": "1",
+        "afSchemaVersion": "1",
+        "contractMatch": true,
+        "epistemicState": "validated",
+        "nodeCount": 4,
+        "nodeId": "n-proved",
+        "taintState": "clean",
+        "workspace": "proofs/n-proved",
+        "workspaceResolved": true
+      },
+      {
+        "afRootNodeId": "1",
+        "afSchemaVersion": "1",
+        "contractMatch": true,
+        "epistemicState": "validated",
+        "nodeCount": 3,
+        "nodeId": "n-tainted",
+        "taintState": "tainted",
+        "workspace": "proofs/n-tainted",
+        "workspaceResolved": true
+      }
+    ],
+    "bd": [
+      {
+        "issueId": "rk-demo",
+        "nodeId": "n-open",
+        "resolved": true,
+        "status": "closed"
+      }
+    ],
+    "fr": [],
+    "report": []
+  },
+  "nodes": [
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-cited.",
+      "defs": [],
+      "deps": [],
+      "id": "n-cited",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-cited.md",
+      "routes": [],
+      "status": "cited"
+    },
+    {
+      "af": "validated",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-conflict.",
+      "defs": [],
+      "deps": [],
+      "id": "n-conflict",
+      "kind": "theorem",
+      "path": "argument/lemmas/n-conflict.md",
+      "routes": [],
+      "status": "proved",
+      "workspace": "proofs/n-conflict"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-conjecture.",
+      "defs": [],
+      "deps": [],
+      "id": "n-conjecture",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-conjecture.md",
+      "routes": [],
+      "status": "conjecture"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-consensus.",
+      "defs": [],
+      "deps": [],
+      "id": "n-consensus",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-consensus.md",
+      "routes": [],
+      "status": "consensus"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-disproved.",
+      "defs": [],
+      "deps": [],
+      "id": "n-disproved",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-disproved.md",
+      "routes": [],
+      "status": "disproved"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-heuristic.",
+      "defs": [],
+      "deps": [],
+      "id": "n-heuristic",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-heuristic.md",
+      "routes": [],
+      "status": "heuristic"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-numerical.",
+      "defs": [],
+      "deps": [],
+      "id": "n-numerical",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-numerical.md",
+      "routes": [],
+      "status": "numerical"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-obstruction.",
+      "defs": [],
+      "deps": [],
+      "id": "n-obstruction",
+      "kind": "obstruction",
+      "path": "argument/lemmas/n-obstruction.md",
+      "routes": [],
+      "status": "obstruction"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-open.",
+      "defs": [],
+      "deps": [],
+      "id": "n-open",
+      "kind": "open-problem",
+      "path": "argument/lemmas/n-open.md",
+      "routes": [],
+      "status": "open"
+    },
+    {
+      "af": "seeded",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-orphan.",
+      "defs": [],
+      "deps": [],
+      "id": "n-orphan",
+      "kind": "open-problem",
+      "path": "argument/lemmas/n-orphan.md",
+      "routes": [],
+      "status": "open",
+      "workspace": "proofs/missing"
+    },
+    {
+      "af": "validated",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-proved.",
+      "defs": [],
+      "deps": [],
+      "id": "n-proved",
+      "kind": "theorem",
+      "path": "argument/lemmas/n-proved.md",
+      "routes": [],
+      "status": "proved",
+      "workspace": "proofs/n-proved"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-proved-mod-audit.",
+      "defs": [],
+      "deps": [],
+      "id": "n-proved-mod-audit",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-proved-mod-audit.md",
+      "routes": [],
+      "status": "proved-mod-audit"
+    },
+    {
+      "af": "none",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-stated.",
+      "defs": [],
+      "deps": [],
+      "id": "n-stated",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-stated.md",
+      "routes": [],
+      "status": "stated"
+    },
+    {
+      "af": "validated",
+      "balloons": {
+        "classifications": [],
+        "count": 0
+      },
+      "contract": "Contract of n-tainted.",
+      "defs": [],
+      "deps": [],
+      "id": "n-tainted",
+      "kind": "lemma",
+      "path": "argument/lemmas/n-tainted.md",
+      "routes": [],
+      "status": "stated",
+      "workspace": "proofs/n-tainted"
+    }
+  ],
+  "schema_version": "1",
+  "unresolved": [
+    {
+      "edge": "af",
+      "nodeId": "n-orphan",
+      "reason": "no af export found for workspace",
+      "ref": "proofs/missing"
+    }
+  ]
+}
