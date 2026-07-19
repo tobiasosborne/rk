@@ -401,6 +401,23 @@ selftest`), and — since 2026-07-18, rk-bdd finding 7 — the actual `rk check 
 runs in well under a second (86 in-memory gate runs against small fixture trees); the whole
 script, purity grep included, is comfortably under CLAUDE.md's `<10s` bar.
 
+## Graph fixtures (M2.2) — a distinct harness, not `src/corpus/run.ts`'s `Gate` runner
+
+`corpus/graph/` holds fixtures for `src/store/build-graph.ts`'s "repo root -> `GraphDocument`"
+pipeline (M2.2 store readers + `src/graph/assemble.ts`'s pure join boundary) — a different shape
+of thing than the six `docs/gate-contracts.md` gates the rest of this file's table covers: there
+is no `Finding[]`/verdict output to compare against an `expected.json`, so these fixtures are NOT
+discovered by `src/corpus/run.ts`'s generic `Gate` runner and do NOT count toward `bun run
+selftest`'s `checked corpus: N/N gate fixtures discovered` line. Each one gets its own
+hand-written test file under `test/graph/` instead (still `repo/`-shaped on disk, same fixture
+convention, different harness) — M2.1's memo (docs/memos/2026-07-19-graph-schema-v1.md, "review
+outcomes", question 4) explicitly deferred creating this directory until a reader harness existed
+to run fixtures through; M2.2's `build-graph.ts` is that harness.
+
+| fixture id | harness | violation | status |
+|---|---|---|---|
+| `graph/rename-hazard` | `test/graph/corpus-rename-hazard.test.ts` | end-to-end proof that the registry↔af join reads the shard's `workspace:` field, never its `id` — a shard (`lem-halo-collapse`) whose id names one directory (`proofs/lem-halo-collapse/`, present with a DECOY ledger carrying a deliberately wrong contract/node-count) while `workspace:` names a different, real one (`proofs/halo-collapse-v2/`, the correct ledger). Bead rk-bsj (Tier A M2.1 review follow-up 5): the existing unit fixture (`test/graph/fixtures.ts`'s `buildRenameHazardDocument`) proves the SCHEMA/VALIDATOR catch a rename-hazard edge once one exists as a hand-built document — it cannot catch a READER that derives the join key from `id` in the first place. Mutation-proven red-first (temporarily deriving the workspace-discovery list from `id` in `build-graph.ts` turns this fixture red — `workspaceResolved: false` instead of a correct resolve; reverted after confirming). | landed |
+
 ## Empty-directory fixtures (rk-399)
 
 Git cannot store an empty directory, but two contract checks turn on directory existence
