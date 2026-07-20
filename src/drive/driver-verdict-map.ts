@@ -30,6 +30,11 @@ export interface AfApplyItem {
   target?: string;
   severity?: string;
   category?: string;
+  /** rk B1: the node content hash this verdict was bound against, sent to `af verdicts apply` as
+   * `expect_hash` so af re-checks it (and, for an accept, verifier-ready availability) atomically
+   * under its own state read — the kernel guarantee a driver-side re-read alone cannot give. Set by
+   * the driver loop from the bound hash immediately before apply, not by the pure mapper. */
+  expect_hash?: string;
 }
 
 export type AfItemResult = { ok: true; item: AfApplyItem } | { ok: false; reason: string };

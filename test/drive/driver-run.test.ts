@@ -18,7 +18,14 @@ function node(id: string, o: Partial<AfNodeView> = {}): AfNodeView {
   // rk-gn4: readiness now reads af's exported flags. Default `verifierReady` from the fixture's axes
   // (pending + not blocked) unless the case sets a flag explicitly — mirrors af's authoritative
   // classifier for these simple, challenge-free fixtures, preserving every pre-existing test's intent.
-  return { verifierReady: base.epistemicState === "pending" && base.workflowState !== "blocked", ...base };
+  // rk B3: default `closed` from the axes too — a validated, available node with no challenge is
+  // closed in these simple challenge-free fixtures. A case simulating a post-validation challenge
+  // sets `closed: false` explicitly (a validated root that af no longer reports closed).
+  return {
+    verifierReady: base.epistemicState === "pending" && base.workflowState !== "blocked",
+    closed: base.epistemicState === "validated" && base.workflowState === "available",
+    ...base,
+  };
 }
 function ws(nodes: AfNodeView[], count?: number): AfWorkspaceView {
   return { workspaceId: "proofs/lem-x", rootStatement: "P", nodes, nodeCount: count ?? nodes.length };
@@ -334,6 +341,46 @@ describe("convergence requires a validated root (M3 blocker 2)", () => {
     expect(r.stopReason).toBe("root-unvalidated");
     expect(r.appliedNodeIds).toEqual([]); // a challenge is NOT an accept
     expect(h.logs.some((l) => l.includes('"verdict":"challenge"'))).toBe(true);
+  });
+
+  // rk B3 (the exact defect): a root that reached epistemic 'validated' but then acquired a blocking
+  // challenge keeps epistemicState==='validated', so the old predicate reported CONVERGED. af now
+  // exports `closed:false` for it (blocking challenge on a validated node); the driver must abort
+  // with the DISTINCT root-not-closed reason, never converge.
+  test("a VALIDATED-but-challenged root (closed:false) does NOT converge — root-not-closed", async () => {
+    // Frontier empty (a blocking challenge on a validated node makes it neither prover- nor
+    // verifier-ready), yet epistemicState is still 'validated'. Only the closure flag catches it.
+    const round0 = ws([node("1", { epistemicState: "validated", closed: false, proverReady: false, verifierReady: false })]);
+    const h = harness({ workspaces: [round0], config: { maxRounds: 3 } });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("root-not-closed");
+  });
+
+  // rk B3: a claimed root (work in flight) is never a convergence, even if validated.
+  test("a claimed root does NOT converge — root-claimed", async () => {
+    const round0 = ws([node("1", { epistemicState: "validated", workflowState: "claimed", closed: false, proverReady: false, verifierReady: false })]);
+    const h = harness({ workspaces: [round0], config: { maxRounds: 3 } });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("root-claimed");
+  });
+
+  // rk B3: a blocked root is never a convergence.
+  test("a blocked root does NOT converge — root-blocked", async () => {
+    const round0 = ws([node("1", { epistemicState: "pending", workflowState: "blocked", proverReady: false, verifierReady: false })]);
+    const h = harness({ workspaces: [round0], config: { maxRounds: 3 } });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("root-blocked");
+  });
+
+  // rk B3: a validated AND closed root converges (the positive control).
+  test("a validated + closed root converges", async () => {
+    const round0 = ws([node("1", { epistemicState: "validated", closed: true, proverReady: false, verifierReady: false })]);
+    const h = harness({ workspaces: [round0], config: { maxRounds: 3 } });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
   });
 });
 

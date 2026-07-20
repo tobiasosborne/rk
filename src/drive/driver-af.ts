@@ -51,7 +51,7 @@ export interface ApplyReport {
  * real identity seam and each item's verdict/reason filled by the driver after dispatch. Kept as an
  * open record here since this edge only serializes it. */
 export type FilledVerdictFile = Omit<VerdictFileSkeleton, "items"> & {
-  items: Array<{ node: string; verdict: "accept" | "challenge"; reason: string; target?: string; severity?: string; category?: string }>;
+  items: Array<{ node: string; verdict: "accept" | "challenge"; reason: string; target?: string; severity?: string; category?: string; expect_hash?: string }>;
 };
 
 export type AfParseResult<T> = { ok: true; value: T } | { ok: false; reason: string };
@@ -87,10 +87,70 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     // wrong-role dispatch on a guessed readiness.
     proverReady: n.prover_ready === true,
     verifierReady: n.verifier_ready === true,
+    // rk B2: the prover's recorded reference dependencies (additive `dependencies[]`,
+    // ../vibefeld/internal/export FeatureNodeDependencies). Omitted → undefined (no deps).
+    deps: Array.isArray(n.dependencies) ? n.dependencies.map((d: unknown) => String(d)) : undefined,
+    // rk B3: af's authoritative bottom-up closure flag (additive `closed`, FeatureClosureFlag).
+    // omitempty on the af side → an absent key reads as false here.
+    closed: n.closed === true,
   }));
   const root = doc.nodes.find((n: any) => String(n.id) === "1");
   const nodeCount = typeof doc.validation?.total_nodes === "number" ? doc.validation.total_nodes : nodes.length;
   return { ok: true, value: { workspaceId, rootStatement: root?.statement, nodes, nodeCount } };
+}
+
+/** rk FU5: the af export capabilities this build of rk depends on. Each corresponds to an additive
+ * export field whose ABSENCE (an af predating it) would be silently misread as "false" — an old af
+ * would report every node not-ready and no root closed, which the driver would mistake for a stalled
+ * `root-unvalidated`. The preflight below requires all of them, so an old af fails LOUDLY at startup.
+ * Mirrors ../vibefeld/internal/export.GraphFeatures. */
+export const REQUIRED_AF_FEATURES = ["readiness-flags", "closure-flag", "node-dependencies"] as const;
+export const REQUIRED_AF_SCHEMA_VERSION = "1";
+
+/** Pure: rk FU5 capability/version preflight over a single `af export --graph json` document. A live
+ * run calls this ONCE at startup and refuses to run on a mismatch, rather than silently reading an
+ * older af's absent flags as "nothing ready / not closed." Requires `schema_version === "1"` AND the
+ * always-present `features[]` array to include every capability in REQUIRED_AF_FEATURES. An af too
+ * old to emit `features` at all fails here (the array is absent), which is the whole point. */
+export function preflightAfExport(rawJson: string): { ok: true } | { ok: false; reason: string } {
+  let doc: any;
+  try {
+    doc = JSON.parse(rawJson);
+  } catch {
+    return { ok: false, reason: "af export produced unparseable JSON at preflight" };
+  }
+  if (doc === null || typeof doc !== "object") {
+    return { ok: false, reason: "af export is not a JSON object at preflight" };
+  }
+  if (doc.schema_version !== REQUIRED_AF_SCHEMA_VERSION) {
+    return { ok: false, reason: `af export schema_version is '${doc.schema_version}', require '${REQUIRED_AF_SCHEMA_VERSION}' — incompatible af binary` };
+  }
+  if (!Array.isArray(doc.features)) {
+    return { ok: false, reason: "af export carries no features[] capability list — this af binary is too old for rk's live driver (needs the readiness/closure/dependencies capabilities); rebuild + reinstall af" };
+  }
+  const have = new Set(doc.features.map((f: unknown) => String(f)));
+  const missing = REQUIRED_AF_FEATURES.filter((f) => !have.has(f));
+  if (missing.length > 0) {
+    return { ok: false, reason: `af export is missing required capabilities [${missing.join(", ")}] — this af binary is too old for rk's live driver; rebuild + reinstall af` };
+  }
+  return { ok: true };
+}
+
+/** EDGE (rk FU5): spawns one raw `af export --graph json --dir <abs>` and runs the capability/
+ * version preflight on its output. A live run calls this ONCE at startup (via the injectable
+ * `deps.preflightAf` seam) and refuses to run on a mismatch — an af that cannot spawn, exits
+ * non-zero, or is too old to advertise the required capabilities fails LOUDLY here rather than
+ * silently mis-driving a real-token run. Kept here (not in the CLI shard) so driver-af.ts owns every
+ * af spawn and src/cli/verify-live.ts stays under the shard cap. */
+export function preflightAfWorkspace(absWorkspace: string, afCommand: readonly string[] = ["af"]): { ok: true } | { ok: false; reason: string } {
+  let proc: ReturnType<typeof Bun.spawnSync>;
+  try {
+    proc = Bun.spawnSync([...afCommand, "export", "--graph", "json", "--dir", absWorkspace]);
+  } catch {
+    return { ok: false, reason: "af binary unavailable for capability preflight" };
+  }
+  if (proc.exitCode !== 0) return { ok: false, reason: `af export exited ${proc.exitCode} during capability preflight` };
+  return preflightAfExport(proc.stdout.toString());
 }
 
 /** Pure: parses `af verdicts apply --format json` stdout + the process exit code into an
@@ -132,24 +192,37 @@ export function readAfWorkspace(absWorkspace: string, workspaceId: string, afCom
   return parseAfExport(proc.stdout.toString(), workspaceId);
 }
 
-/** EDGE (rk-gn4): records a prover turn's decomposition into af — the seam `DriverDeps.recordProof`
- * drives at the live edge. Claims `nodeId` as a PROVER, then `af refine`s it with the produced
- * children (which auto-releases the claim). Faithful to ../vibefeld/cmd/af/refine.go's `childSpec`:
- * the JSON child keys are `statement`/`type`/`inference` — a ProofChild's `justification` maps to
- * af's `inference` field; per-child `depends` has no --children JSON slot (af's `--depends` is a
- * whole-refine flag), so it is dropped here (a named live-seam limitation, not a silent guess — see
- * the bead). Fail-closed: any non-zero af exit is a `{ok:false}` reason, never a partial record. */
-export function recordProofRefine(absWorkspace: string, nodeId: string, owner: string, proof: ProofContent, afCommand: readonly string[] = ["af"]): RecordProofResult {
-  const claim = Bun.spawnSync([...afCommand, "claim", nodeId, "--owner", owner, "--role", "prover", "--format", "json", "--dir", absWorkspace]);
-  if (claim.exitCode !== 0) {
-    const stderr = claim.stderr.toString().trim();
-    return { ok: false, reason: `af claim --role prover exit ${claim.exitCode}${stderr ? `: ${stderr}` : ""}` };
-  }
-  const children = proof.children.map((c) => (c.justification ? { statement: c.statement, inference: c.justification } : { statement: c.statement }));
-  const refine = Bun.spawnSync([...afCommand, "refine", nodeId, "--owner", owner, "--children", JSON.stringify(children), "--format", "json", "--dir", absWorkspace]);
-  if (refine.exitCode !== 0) {
-    const stderr = refine.stderr.toString().trim();
-    return { ok: false, reason: `af refine exit ${refine.exitCode}${stderr ? `: ${stderr}` : ""}` };
+/** Pure (rk B2/FU3): maps a prover's `ProofContent` to af `record-proof --children` JSON. Faithful
+ * to ../vibefeld/cmd/af/refine.go's `childSpec`: keys are `statement`/`inference`/`depends` — a
+ * ProofChild's `justification` maps to af's `inference` field, and per-child `depends` is now
+ * carried through (af resolves a `#N` entry to the N-th earlier child in this batch, or an existing
+ * node id — rk B2, no longer dropped). An empty `depends` is omitted. Separated out so the mapping
+ * is unit-testable without spawning af. */
+export function buildRecordProofChildren(proof: ProofContent): Array<{ statement: string; inference?: string; depends?: string[] }> {
+  return proof.children.map((c) => {
+    const child: { statement: string; inference?: string; depends?: string[] } = { statement: c.statement };
+    if (c.justification) child.inference = c.justification;
+    if (c.depends && c.depends.length > 0) child.depends = c.depends;
+    return child;
+  });
+}
+
+/** EDGE (rk-gn4 + B1 + B2 + FU3): records a prover turn's decomposition into af through the ATOMIC
+ * `af record-proof` verb (../vibefeld/cmd/af/record_proof.go). In one af transition this: verifies
+ * `nodeId` is still a prover job AND its content hash still equals `expectHash` (B1 — a proof
+ * generated for bytes/role that changed mid-turn is REFUSED); creates the children WITH per-child
+ * `depends` (B2); disposes the open blocking challenge(s); and releases the node (FU3 — so the
+ * hand-off cycles instead of leaving the parent prover-claimed forever). Fail-closed and matching
+ * the blocker-1 DISCARD posture: any non-zero af exit (a stale-role/stale-hash rejection included)
+ * is a `{ok:false}` reason, never a partial record — the driver logs a skip and counts NO progress. */
+export function recordProofRefine(absWorkspace: string, nodeId: string, owner: string, proof: ProofContent, expectHash?: string, afCommand: readonly string[] = ["af"]): RecordProofResult {
+  const children = buildRecordProofChildren(proof);
+  const args = [...afCommand, "record-proof", nodeId, "--owner", owner, "--children", JSON.stringify(children), "--format", "json", "--dir", absWorkspace];
+  if (expectHash) args.push("--expect-hash", expectHash);
+  const proc = Bun.spawnSync(args);
+  if (proc.exitCode !== 0) {
+    const stderr = proc.stderr.toString().trim();
+    return { ok: false, reason: `af record-proof exit ${proc.exitCode}${stderr ? `: ${stderr}` : ""}` };
   }
   return { ok: true };
 }

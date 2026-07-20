@@ -44,7 +44,8 @@ import { childrenFirst, verifyOneNode } from "./driver-verify-node";
 import { proveOneNode } from "./driver-prove-node";
 import { DEFAULT_DRIVER_CONFIG, type DriverDeps, type DriverRunResult } from "./driver-types";
 import type { AfApplyItem } from "./driver-verdict-map";
-import type { FilledVerdictFile } from "./driver-af";
+import type { FilledVerdictFile, VerdictItemOutcome } from "./driver-af";
+import type { DriverStopReason } from "./driver-guardrails";
 
 // Re-exported so pre-existing importers keep their `from "./driver-run"` paths after the split.
 export { DEFAULT_DRIVER_CONFIG } from "./driver-types";
@@ -53,13 +54,10 @@ export type { ProofContent, ProofChild, RecordProofResult, ProveNodeOutcome } fr
 export type { VerifyNodeOutcome } from "./driver-verify-node";
 
 
-/** M3 blocker 2: convergence requires the claim's ROOT to be af-validated. An empty frontier (no
- * verification-ready node) is NOT proof of success — it also describes a claim whose root was
- * challenged, blocked, or left unproven. af's root is unconditionally id "1" (AF_ROOT_NODE_ID); a
- * synthetic single-subtree fixture may carry only a deeper id, so the root is taken as the
- * shallowest id (fewest dot-components, ties broken lexicographically). Returns true iff that node
- * exists and af reports its epistemic state as `validated`. */
-function isRootValidated(nodes: readonly AfNodeView[]): boolean {
+/** The claim's root: af's root is unconditionally id "1" (AF_ROOT_NODE_ID); a synthetic
+ * single-subtree fixture may carry only a deeper id, so the root is taken as the shallowest id
+ * (fewest dot-components, ties broken lexicographically). */
+function findRoot(nodes: readonly AfNodeView[]): AfNodeView | undefined {
   let root: AfNodeView | undefined;
   for (const n of nodes) {
     if (root === undefined) { root = n; continue; }
@@ -67,7 +65,28 @@ function isRootValidated(nodes: readonly AfNodeView[]): boolean {
     const dr = root.id.split(".").length;
     if (dn < dr || (dn === dr && n.id < root.id)) root = n;
   }
-  return root !== undefined && root.epistemicState === "validated";
+  return root;
+}
+
+/** M3 blocker 2 + rk B3: decide whether an EMPTY frontier is a real convergence. An empty frontier
+ * (no prover- or verifier-ready node) is NOT proof of success — it also describes a root that is
+ * challenged, blocked, claimed, or unproven. Convergence requires the root to be af-`validated` AND
+ * af-`closed` (the authoritative bottom-up closure signal, ../vibefeld/internal/export): the bare
+ * epistemic axis is unchanged by a blocking challenge landing on an already-validated node, so
+ * "validated == converged" would falsely report success (the exact B3 defect). Every non-converged
+ * case returns a DISTINCT named stopReason. */
+function classifyRootConvergence(nodes: readonly AfNodeView[]): { converged: true } | { converged: false; stopReason: DriverStopReason; detail: string } {
+  const root = findRoot(nodes);
+  if (root === undefined) return { converged: false, stopReason: "root-unvalidated", detail: "no root node in the workspace" };
+  // Workflow state first: a claimed/blocked root is mid-flight or blocked work, never a convergence,
+  // regardless of its epistemic axis (rk B3: "reject claimed/blocked roots explicitly").
+  if (root.workflowState === "blocked") return { converged: false, stopReason: "root-blocked", detail: `root ${root.id} is workflow-blocked` };
+  if (root.workflowState === "claimed") return { converged: false, stopReason: "root-claimed", detail: `root ${root.id} is claimed (work in flight)` };
+  if (root.epistemicState !== "validated") return { converged: false, stopReason: "root-unvalidated", detail: `root ${root.id} epistemic state is '${root.epistemicState}', not validated` };
+  // Validated: require af's closure flag. A validated-but-not-closed root is challenged (a blocking
+  // challenge landed post-validation) or has a descendant that fell out of closed — never converged.
+  if (root.closed !== true) return { converged: false, stopReason: "root-not-closed", detail: `root ${root.id} is validated but af does not report it closed — a blocking challenge on the validated root, or an unsettled descendant` };
+  return { converged: true };
 }
 
 /** Drives one workspace claim to convergence or a named abort. */
@@ -103,13 +122,15 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
     const proverReadyIds = selectProverReadyNodes(ws.nodes);
     const verifierReadyIds = selectVerifierReadyNodes(ws.nodes);
     if (proverReadyIds.length === 0 && verifierReadyIds.length === 0) {
-      // M3 blocker 2: nothing prover- OR verifier-ready. Converge ONLY when the ROOT is af-validated
-      // — otherwise the campaign stalled on a challenged/blocked/unproven root and aborts with a
-      // named reason. Producing proof content alone never converges: a validated root is required.
-      if (isRootValidated(ws.nodes)) {
-        return { status: "converged", message: `root validated; nothing prover- or verifier-ready remains (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
+      // M3 blocker 2 + rk B3: nothing prover- OR verifier-ready. Converge ONLY when the ROOT is
+      // af-validated AND af-closed — otherwise the campaign stalled on a challenged/blocked/claimed/
+      // unproven root and aborts with a DISTINCT named reason. Producing proof content alone never
+      // converges; a blocking challenge on an already-validated root is NOT convergence (B3).
+      const rc = classifyRootConvergence(ws.nodes);
+      if (rc.converged) {
+        return { status: "converged", message: `root validated and closed; nothing prover- or verifier-ready remains (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
       }
-      return { status: "aborted", stopReason: "root-unvalidated", message: `frontier empty but the root claim is not validated — a recorded challenge, block, or unproven root never converges (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
+      return { status: "aborted", stopReason: rc.stopReason, message: `frontier empty but the claim did not converge: ${rc.detail} (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
     }
 
     const byId = new Map(ws.nodes.map((n) => [n.id, n] as const));
@@ -174,7 +195,10 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
           attempts.set(item.node, (attempts.get(item.node) ?? 0) + 1);
           continue;
         }
-        const file: FilledVerdictFile = { schema_version: "1", batch_id: "", verified_by: verifiedBySeam, items: [item] };
+        // rk B1: send the bound content hash as `expect_hash` so af RE-checks it (and verifier-ready
+        // availability) atomically under its own state read — the kernel guarantee the driver-side
+        // re-read above cannot give on its own. Both guards agree here; the af one is authoritative.
+        const file: FilledVerdictFile = { schema_version: "1", batch_id: "", verified_by: verifiedBySeam, items: [{ ...item, expect_hash: contentHash }] };
         const report = deps.applyVerdicts(file);
         for (const o of report.items) {
           outcomes.push(o);

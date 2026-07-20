@@ -3,7 +3,7 @@
 // af's own JSON shapes (../vibefeld/docs/export-graph-v1.md + internal/service/verdicts_apply.go).
 
 import { describe, expect, test } from "bun:test";
-import { parseAfExport, parseVerdictReport } from "../../src/drive/driver-af";
+import { parseAfExport, parseVerdictReport, preflightAfExport, buildRecordProofChildren } from "../../src/drive/driver-af";
 
 describe("parseAfExport — af export --graph json → node view (reads recorded axes, reads crux raw)", () => {
   const raw = JSON.stringify({
@@ -31,6 +31,76 @@ describe("parseAfExport — af export --graph json → node view (reads recorded
   test("rejects a body with no nodes[] array", () => {
     expect(parseAfExport("{}", "w").ok).toBe(false);
     expect(parseAfExport("not json", "w").ok).toBe(false);
+  });
+
+  // rk B2/B3: recorded dependencies[] and the closure flag are read off the export.
+  test("reads dependencies[] (rk B2) and closed (rk B3)", () => {
+    const raw2 = JSON.stringify({
+      schema_version: "1",
+      features: ["readiness-flags", "closure-flag", "node-dependencies"],
+      nodes: [
+        { id: "1", type: "claim", statement: "P", epistemic_state: "validated", workflow_state: "available", taint_state: "clean", content_hash: "h1", closed: true },
+        { id: "1.2", type: "claim", statement: "Uses A", epistemic_state: "pending", workflow_state: "available", taint_state: "clean", content_hash: "h2", dependencies: ["1.1"] },
+      ],
+      validation: { total_nodes: 2 },
+    });
+    const r = parseAfExport(raw2, "w");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.nodes.find((n) => n.id === "1")!.closed).toBe(true);
+    expect(r.value.nodes.find((n) => n.id === "1.2")!.deps).toEqual(["1.1"]);
+    // Omitted closed reads false; omitted dependencies reads undefined.
+    expect(r.value.nodes.find((n) => n.id === "1.2")!.closed).toBe(false);
+    expect(r.value.nodes.find((n) => n.id === "1")!.deps).toBeUndefined();
+  });
+});
+
+// rk B2/FU3: the `af record-proof --children` JSON mapping carries per-child depends (no longer
+// dropped) and maps justification → af's `inference` key.
+describe("buildRecordProofChildren — ProofContent → af record-proof --children JSON (rk B2)", () => {
+  test("carries statement, maps justification→inference, and keeps per-child depends", () => {
+    const children = buildRecordProofChildren({
+      children: [
+        { statement: "Lemma A" },
+        { statement: "Uses A", justification: "modus_ponens", depends: ["#0"] },
+        { statement: "Uses existing", depends: ["1.1"] },
+      ],
+    });
+    expect(children).toEqual([
+      { statement: "Lemma A" },
+      { statement: "Uses A", inference: "modus_ponens", depends: ["#0"] },
+      { statement: "Uses existing", depends: ["1.1"] },
+    ]);
+  });
+  test("omits an empty depends and an absent justification", () => {
+    expect(buildRecordProofChildren({ children: [{ statement: "S", depends: [] }] })).toEqual([{ statement: "S" }]);
+  });
+});
+
+// rk FU5: a live run must fail loudly at preflight against an af too old to emit the
+// readiness/closure/dependencies capabilities — an older af omits features[], and its absent
+// omitempty flags would otherwise read as "nothing ready / not closed" → a false root-unvalidated.
+describe("preflightAfExport — schema_version + capability check (rk FU5)", () => {
+  const withFeatures = (features?: unknown) =>
+    JSON.stringify({ schema_version: "1", ...(features === undefined ? {} : { features }), nodes: [], validation: {} });
+
+  test("accepts schema_version '1' with all required capabilities", () => {
+    expect(preflightAfExport(withFeatures(["readiness-flags", "closure-flag", "node-dependencies"])).ok).toBe(true);
+  });
+  test("rejects an af whose export omits features[] entirely (too old)", () => {
+    const r = preflightAfExport(withFeatures(undefined));
+    expect(r.ok).toBe(false);
+  });
+  test("rejects when a required capability is missing", () => {
+    const r = preflightAfExport(withFeatures(["readiness-flags"])); // no closure-flag / node-dependencies
+    expect(r.ok).toBe(false);
+  });
+  test("rejects a wrong schema_version", () => {
+    const r = preflightAfExport(JSON.stringify({ schema_version: "2", features: ["readiness-flags", "closure-flag", "node-dependencies"], nodes: [] }));
+    expect(r.ok).toBe(false);
+  });
+  test("rejects unparseable JSON", () => {
+    expect(preflightAfExport("not json").ok).toBe(false);
   });
 });
 

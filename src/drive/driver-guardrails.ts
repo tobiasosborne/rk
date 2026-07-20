@@ -23,8 +23,17 @@ export type DriverStopReason =
   | "retry-cap-exhausted"
   | "balloon-abort"
   // M3 blocker 2: the frontier emptied (no verification-ready node) but the claim's ROOT was not
-  // af-validated — a challenged/blocked/unproven root that must never be reported as convergence.
+  // af-validated — an unproven root that must never be reported as convergence.
   | "root-unvalidated"
+  // rk B3: the root IS validated but af does NOT report it CLOSED — a blocking challenge landed on
+  // the validated root (its epistemic axis is unchanged, so "validated == converged" would lie), or
+  // a descendant fell out of a closed state. Distinct from root-unvalidated: the root reached
+  // validated but the subtree is not settled.
+  | "root-not-closed"
+  // rk B3: the root is currently CLAIMED — mid-flight prover/verifier work, never a convergence.
+  | "root-claimed"
+  // rk B3: the root is BLOCKED — a workflow block, never a convergence.
+  | "root-blocked"
   // rk-s9t (M3 repair-wave verdict (c)): the campaign-level token budget cannot afford the NEXT
   // real model call. Fail-closed, pre-dispatch — the run stops BEFORE requesting a call it cannot
   // pay for, never a mid-flight silent truncation of a call already in progress.

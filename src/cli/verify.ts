@@ -50,6 +50,11 @@ export interface VerifyCommandDeps {
    * field here, so a live-dispatch test drives a FAKE backend end-to-end and never a real
    * subprocess/LLM call (CLAUDE.md L1/L2's red-corpus-first, applied to this seam). */
   backends?: import("../drive/backend-types").WorkerBackend[];
+  /** rk FU5: injectable af capability/version preflight for the `--live` path, defaulting to a real
+   * `af export --graph json` spawn fed to `preflightAfExport` — same injectable-edge discipline as
+   * `readWorkspace`, so a fake-backend test drives it without a real af, and a dedicated red-corpus
+   * test injects a FAILING preflight to prove the loud abort. */
+  preflightAf?: (absWorkspace: string) => { ok: true } | { ok: false; reason: string };
 }
 
 function findNode(doc: GraphDocument, id: string): RegistryNode | undefined {

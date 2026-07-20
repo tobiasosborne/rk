@@ -193,6 +193,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
       readWorkspace: twoReadyNodesWorkspace(),
       loadWorkersConfig: async () => FAKE_WORKERS_CONFIG,
       backends: [fakeLiveBackend()],
+      preflightAf: () => ({ ok: true }),
     });
     const text = lines.join("\n");
     expect(text).toContain("preflight");
@@ -205,6 +206,29 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     expect(text).toContain("final accounting");
   });
 
+  // rk FU5: an af too old to advertise the readiness/closure/dependencies capabilities must fail
+  // LOUDLY at preflight, before any model call — never silently read as "nothing ready".
+  test("--live with a FAILING af capability preflight: loud abort, exit 1, no worker EVER called", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const called: string[] = [];
+    const spyBackend: WorkerBackend = {
+      name: "fake", modelFamily: "claude", capabilities: { sessionResume: true },
+      async createSession() { called.push("createSession"); return { sessionId: "s1" }; },
+      async runTurn() { called.push("runTurn"); return { exit: 0, usage: { input: 0, output: 0, cache_read: 0, cache_creation: 0 }, rawText: "{}" }; },
+    };
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [spyBackend],
+      preflightAf: () => ({ ok: false, reason: "this af binary is too old for rk's live driver" }),
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("capability preflight failed");
+    expect(lines.join("\n")).toContain("too old");
+    expect(called).toEqual([]); // fail closed: no session ever created, no turn ever run
+  });
+
   test("--live prints the M3.9 report automatically at the end even when nothing was ever measured", async () => {
     const root = tmpRoot(); dirs.push(root);
     writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
@@ -215,6 +239,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
       readWorkspace: twoReadyNodesWorkspace(),
       loadWorkersConfig: async () => FAKE_WORKERS_CONFIG,
       backends: [fakeLiveBackend()],
+      preflightAf: () => ({ ok: true }),
     });
     // no usage was ever logged before the abort tripped on the very first call it counted...
     // actually one turn WAS dispatched (max-turns=1 permits exactly one) before the 2nd aborts, so
@@ -249,7 +274,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     const { out, lines } = capture();
     const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "0"], out, {
       afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
-      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()],
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()], preflightAf: () => ({ ok: true }),
     });
     expect(code).toBe(1);
     expect(lines.join("\n")).toContain("must be a positive integer");
@@ -263,7 +288,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     // refuses the very first verify turn -- the run aborts budget-exhausted before requesting it.
     const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1"], out, {
       afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
-      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()],
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()], preflightAf: () => ({ ok: true }),
     });
     expect(code).toBe(4);
     expect(lines.join("\n")).toContain("budget");

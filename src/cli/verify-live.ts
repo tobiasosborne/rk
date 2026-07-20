@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RegistryNode } from "../graph/types";
-import { readAfWorkspace, applyVerdictFile, type AfParseResult, type AfWorkspaceView } from "../drive/driver-af";
+import { readAfWorkspace, applyVerdictFile, preflightAfWorkspace, type AfParseResult, type AfWorkspaceView } from "../drive/driver-af";
 import { runVerifyDriver, type DriverDeps, type DispatchedTurn } from "../drive/driver-run";
 import { BackendRegistry, type WorkersConfig } from "../drive/backend-registry";
 import type { WorkerBackend } from "../drive/backend-types";
@@ -147,6 +147,12 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);
   out.log(`  campaign token cap: ${budget.maxCampaignTokens} total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve ${budget.perCallReserve}).`);
   out.log("  no worker has been called yet -- the next line, if any, is the first real call.");
+
+  // rk FU5: af capability/version preflight — the LAST gate before the first real model call. An af
+  // too old to emit the readiness/closure/dependencies flags reads as "nothing ready" → a false
+  // root-unvalidated; fail LOUDLY. Injectable like readWorkspace (default: driver-af preflightAfWorkspace).
+  const pf = (deps.preflightAf ?? ((a: string) => preflightAfWorkspace(a, deps.afCommand)))(abs);
+  if (!pf.ok) { out.log(`rk verify --af ${node.id} --live: af capability preflight failed — ${pf.reason}`); return 1; }
 
   const ensured = await created.dispatcher.ensureSession();
   if (!ensured.ok) {

@@ -94,7 +94,7 @@ describe("liveDispatchProve / proverItemFor — the live PROVER dispatch wiring 
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
-    const n = node("1.1", { statement: "P holds", childIds: ["1.1.1"] });
+    const n = node("1.1", { statement: "P holds", deps: ["1.1.1"] });
     const turn = await liveDispatchProve(created.dispatcher)(n);
     expect(turn.role).toBe("prover");                       // → driver-prove-node.ts's role guard passes
     expect(turn.exit).toBe(0);
@@ -103,9 +103,9 @@ describe("liveDispatchProve / proverItemFor — the live PROVER dispatch wiring 
     expect(sentPrompt).toBe(buildProverTurnPrompt({ nodeId: "1.1", statement: "P holds", deps: ["1.1.1"] }));
   });
 
-  test("proverItemFor maps statement + childIds-as-deps, with a self-teaching statement fallback", () => {
-    expect(proverItemFor(node("1.2", { statement: "S", childIds: ["1.2.1", "1.2.2"] }))).toEqual({ nodeId: "1.2", statement: "S", deps: ["1.2.1", "1.2.2"] });
-    expect(proverItemFor(node("1.3", { statement: undefined, childIds: [] })).statement).toContain("no statement recorded");
+  test("proverItemFor maps statement + recorded deps (rk B2), with a self-teaching statement fallback", () => {
+    expect(proverItemFor(node("1.2", { statement: "S", deps: ["1.2.1", "1.2.2"] }))).toEqual({ nodeId: "1.2", statement: "S", deps: ["1.2.1", "1.2.2"] });
+    expect(proverItemFor(node("1.3", { statement: undefined, deps: [] })).statement).toContain("no statement recorded");
   });
 });
 
@@ -174,8 +174,8 @@ describe("toDispatchedTurn — WorkerResult -> DispatchedTurn discipline", () =>
 });
 
 describe("liveDispatchVerify / verifierItemFor", () => {
-  test("uses the node's childIds as deps and its statement, never inventing either", () => {
-    const n = node("1.1", { statement: "P holds", childIds: ["1.1.1", "1.1.2"] });
+  test("uses the node's RECORDED deps (rk B2) and its statement, never inventing either", () => {
+    const n = node("1.1", { statement: "P holds", deps: ["1.1.1", "1.1.2"] });
     const item = verifierItemFor(n, "hard");
     expect(item.deps).toEqual(["1.1.1", "1.1.2"]);
     expect(item.statement).toBe("P holds");
@@ -237,7 +237,9 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
         // or the next round's `queryWorkspace()` would see it "pending" forever.
         for (const item of file.items) {
           const n = ws.nodes.find((x) => x.id === item.node);
-          if (n) { n.epistemicState = "validated"; n.verifierReady = false; } // af clears the flag on validate
+          // af clears verifier_ready and marks the (challenge-free) node closed on validate — rk B3
+          // convergence reads the root's `closed`, so the fake af must advance it too.
+          if (n) { n.epistemicState = "validated"; n.verifierReady = false; n.closed = true; }
         }
         return { exit: 0, batchId: file.batch_id, items: file.items.map((i) => ({ node: i.node, verdict: i.verdict, status: "applied" })), applied: file.items.length, blocked: 0, rejected: 0, aborted: false };
       },

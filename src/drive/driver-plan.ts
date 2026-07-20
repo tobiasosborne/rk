@@ -63,6 +63,19 @@ export interface AfNodeView {
    * re-derives these. */
   proverReady?: boolean;
   verifierReady?: boolean;
+  /** rk B2: this node's recorded REFERENCE dependencies (`dependencies[]` in the af export;
+   * ../vibefeld/internal/export.FeatureNodeDependencies). The prover's exact declared dependency set
+   * — what a verifier judges the node's step AGAINST — not the children-substitution proxy the seam
+   * used before af emitted them. Empty/absent for a node with no recorded dependencies. Part of the
+   * node's content_hash, so a verdict bound to `contentHash` is invalidated if this set changes. */
+  deps?: string[];
+  /** rk B3: af's authoritative bottom-up CLOSURE signal (`closed` in the af export;
+   * ../vibefeld/internal/export.FeatureClosureFlag). True iff the subtree rooted here is settled —
+   * epistemically cleared, not blocked, no open blocking challenge, every descendant closed. The
+   * driver reads this on the ROOT to decide convergence: unlike the bare epistemic axis it goes
+   * false the instant a blocking challenge lands on an already-validated node. Absent (an af
+   * predating the flag, caught by the FU5 features preflight) reads as `false`. */
+  closed?: boolean;
 }
 
 /** PROVER-ready iff af's exported `prover_ready` flag is set (../vibefeld/internal/jobs.FindProverJobs:

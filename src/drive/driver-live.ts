@@ -195,14 +195,17 @@ export function createLiveDispatcher(opts: LiveDispatcherOptions): CreateLiveDis
   };
 }
 
-/** Builds the verifier item input for one af node -- the honest `childIds` proxy for
- * "dependencies" (src/drive/driver-plan.ts's `AfNodeView` doc comment). `statement` falls back to
- * a self-teaching placeholder (never a crash) if the export never carried one for this node. */
+/** Builds the verifier item input for one af node. rk B2: the verifier judges the node against its
+ * exact RECORDED dependencies (`node.deps`, af's `dependencies[]`), not the children-substitution
+ * proxy the seam used before af emitted them — so acceptance certifies the graph the prover actually
+ * produced. Those deps are part of the node's content_hash, which the driver re-reads and sends as
+ * `expect_hash`, so a verdict is invalidated if they change. `statement` falls back to a
+ * self-teaching placeholder (never a crash) if the export never carried one. */
 export function verifierItemFor(node: AfNodeView, tier: Tier): VerifierItemInput {
   return {
     nodeId: node.id,
     statement: node.statement ?? `(no statement recorded by af export for node ${node.id})`,
-    deps: node.childIds ?? [],
+    deps: node.deps ?? [],
     tier,
   };
 }
@@ -214,13 +217,14 @@ export function liveDispatchVerify(dispatcher: LiveRoleTierDispatcher, tier: Tie
     dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier)));
 }
 
-/** Builds the prover item input for one af node — same honest `childIds` proxy for "dependencies"
- * and self-teaching statement fallback as `verifierItemFor` (rk-gn4). */
+/** Builds the prover item input for one af node — the node's RECORDED dependencies (`node.deps`, rk
+ * B2) are what the prover "may assume already established", the same self-teaching statement
+ * fallback as `verifierItemFor` (rk-gn4). */
 export function proverItemFor(node: AfNodeView): ProverItemInput {
   return {
     nodeId: node.id,
     statement: node.statement ?? `(no statement recorded by af export for node ${node.id})`,
-    deps: node.childIds ?? [],
+    deps: node.deps ?? [],
   };
 }
 
@@ -233,12 +237,15 @@ export function liveDispatchProve(dispatcher: LiveRoleTierDispatcher) {
     dispatcher.dispatch(node.id, buildProverTurnPrompt(proverItemFor(node)));
 }
 
-/** The one live `recordProof` a `DriverDeps` needs (rk-gn4): records the prover's decomposition into
- * af via `af claim --role prover` + `af refine` (src/drive/driver-af.ts's `recordProofRefine`).
+/** The one live `recordProof` a `DriverDeps` needs (rk-gn4 + B1 + FU3): records the prover's
+ * decomposition into af via the atomic `af record-proof` verb (src/drive/driver-af.ts's
+ * `recordProofRefine`). rk B1: the node's content hash AT DISPATCH is threaded as `--expect-hash`,
+ * so af refuses a proof generated for bytes that changed mid-turn (mirroring the verifier apply's
+ * hash re-bind) — a stale-role/stale-hash rejection surfaces as a discard, not a partial write.
  * `owner` is the prover's identity seam; `absWorkspace` the resolved proof dir. */
 export function liveRecordProof(absWorkspace: string, owner: string, afCommand?: readonly string[]) {
   return (node: AfNodeView, proof: ProofContent): RecordProofResult =>
-    recordProofRefine(absWorkspace, node.id, owner, proof, afCommand);
+    recordProofRefine(absWorkspace, node.id, owner, proof, node.contentHash, afCommand);
 }
 
 /** Ad hoc, inline balloon-classification prompt (see file header, scope note 4) -- deliberately
