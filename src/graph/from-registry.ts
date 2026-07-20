@@ -51,9 +51,10 @@ function asAfFlag(af: string): AfFlag {
  * (status is optional on `RegistryNode` already, and an unrecognized status is Gate 2's own
  * finding, not a reason to exclude an otherwise-projectable node). `af` similarly degrades to
  * `"none"` on an unrecognized value — the SAME default `parseRegistry` itself already applies
- * when the field is entirely absent, so this is not a new failure mode. `balloons` is always the
- * zero-valued reserved counter (PRD C9 / M3.6 — not populated until the balloon feedback loop
- * lands). */
+ * when the field is entirely absent, so this is not a new failure mode. `balloons` is threaded
+ * straight from `Lemma.balloons` (M3 blocker 7b — `linker-parse.ts`'s `readBalloonCounterFromFields`
+ * already parsed it off the shard's own frontmatter, degrading to `{count: 0, classifications: []}`
+ * on a shard with no balloon marks; this boundary no longer hard-codes that zero itself). */
 export function convertLemma(l: Lemma): RegistryNode | null {
   const kind = asRegistryKind(l.kind);
   if (kind === undefined) return null;
@@ -69,7 +70,7 @@ export function convertLemma(l: Lemma): RegistryNode | null {
     deps: [...l.deps],
     routes: l.routes.map((r) => [...r]),
     defs: [...l.defs],
-    balloons: { count: 0, classifications: [] },
+    balloons: { count: l.balloons.count, classifications: [...l.balloons.classifications] },
   };
 }
 

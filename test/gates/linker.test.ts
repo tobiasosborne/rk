@@ -338,6 +338,52 @@ describe("parseRegistry / multi-line YAML deps + malformedLines reporting (rk-wc
   });
 });
 
+// M3 blocker 7b (docs/reviews/2026-07-19-m3-milestone-review-codex.md finding 7, driver side
+// fixed in commit da2fbcb): the linker must parse the SAME `balloons:`/`balloon_classifications:`
+// frontmatter `src/drive/driver-frontmatter.ts`'s `applyBalloonMark` writes, via
+// `readBalloonCounterFromFields` (src/drive/driver-balloon.ts) — a round-trip proof, not a
+// reimplementation, so the two can never drift on field format.
+describe("parseRegistry / balloon counter parsing (M3 blocker 7b)", () => {
+  test("a shard with no balloon marks parses to the zero-valued default (pre-M3.6 shards, every " +
+    "existing corpus fixture)", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const { lemmas } = parseRegistry(snapshot);
+    expect(lemmas[0]?.balloons).toEqual({ count: 0, classifications: [] });
+  });
+
+  test("round-trips EXACTLY what applyBalloonMark (driver-frontmatter.ts) writes: a scalar " +
+    "`balloons:` count plus a `balloon_classifications:` YAML block list", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md":
+        "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n" +
+        "balloons: 2\nballoon_classifications:\n- missing-fact\n- genuine-gap\n---\n",
+    });
+    const { lemmas } = parseRegistry(snapshot);
+    expect(lemmas[0]?.balloons).toEqual({ count: 2, classifications: ["missing-fact", "genuine-gap"] });
+  });
+
+  test("a non-numeric/malformed `balloons:` value degrades to count 0, never a throw", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md": "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\nballoons: not-a-number\n---\n",
+    });
+    const { lemmas, errors } = parseRegistry(snapshot);
+    expect(errors.filter((e) => e.severity === "ERROR" && e.structural)).toHaveLength(0);
+    expect(lemmas[0]?.balloons).toEqual({ count: 0, classifications: [] });
+  });
+
+  test("an unrecognized classification token is dropped, never guessed/included", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-x.md":
+        "---\nid: lem-x\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n" +
+        "balloons: 1\nballoon_classifications:\n- missing-fact\n- not-a-real-classification\n---\n",
+    });
+    const { lemmas } = parseRegistry(snapshot);
+    expect(lemmas[0]?.balloons).toEqual({ count: 1, classifications: ["missing-fact"] });
+  });
+});
+
 describe("linkerGate coverage line / ignored-file count (rk-9pk)", () => {
   test("the coverage line names the ignored-file count and their names, even when zero " +
     "(never a silent omission, CLAUDE.md L2)", () => {

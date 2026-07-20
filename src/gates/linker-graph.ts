@@ -9,7 +9,7 @@
 
 import type { Finding } from "./framework";
 import type { Lemma } from "./linker-parse";
-import { allDepIds } from "./linker-parse";
+import { allDepIds, isMandatoryReview } from "./linker-parse";
 
 export { scanWorkspaces, introspectWorkspace } from "./linker-workspace";
 export type { WorkspaceFacts } from "./linker-workspace";
@@ -219,6 +219,34 @@ export function checkBrittleness(lemmas: Lemma[], nodeCounts: Map<string, number
         message: `REFACTOR: ${ws} has ${nc} nodes (>${cap}) — factor ${l.id} into sub-lemmas`,
       });
     }
+  }
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------------------
+// Mandatory-review balloon flag (M3 blocker 7c — PRD C9 / M3.6 balloon feedback loop)
+// ---------------------------------------------------------------------------------------
+
+/** Surfaces a shard whose persisted balloon state (`Lemma.balloons`, read back off its own
+ * frontmatter by `linker-parse.ts`'s `readBalloonCounterFromFields`) has crossed the
+ * mandatory-review threshold (`isMandatoryReview`) — a REPEAT balloon on this contract, or a
+ * `genuine-gap` classification at any point in its history. WARN, same tier as `checkBrittleness`
+ * (check 12): this is a driver-state flag on an otherwise well-formed shard, not a structural
+ * defect in ITS declared facts. NOT YET wired into `linkerGate`'s findings (linker.ts) — see the
+ * repair-wave return notes for the follow-up bead; the board-facing surfacing this wave commits to
+ * is `linker-render.ts`'s renderIndex/renderDag flag, which rides the EXISTING checkGenerated
+ * pipeline unchanged. */
+export function checkMandatoryReview(lemmas: Lemma[]): Finding[] {
+  const warnings: Finding[] = [];
+  for (const l of lemmas) {
+    if (!isMandatoryReview(l.balloons)) continue;
+    warnings.push({
+      severity: "WARN",
+      path: l.path,
+      message:
+        `MANDATORY-REVIEW: ${l.id} has ballooned ${l.balloons.count} time${l.balloons.count === 1 ? "" : "s"} ` +
+        `(classifications: ${l.balloons.classifications.join("; ") || "(none)"}) — the contract's hypotheses are suspect, review before further decomposition`,
+    });
   }
   return warnings;
 }

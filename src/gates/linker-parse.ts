@@ -27,6 +27,13 @@
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { listDir, parseFrontmatter } from "./snapshot";
+// M3 blocker 7b/7c (durable repeat-balloon state, graph/board surfacing): `readBalloonCounterFromFields`
+// is the SAME pure read-back src/cli/verify-live.ts uses to recover `priorBalloonCount`/
+// `priorClassifications` off a shard's frontmatter (src/drive/driver-balloon.ts) — reused here
+// rather than re-implemented so the linker parses EXACTLY the field format
+// src/drive/driver-frontmatter.ts's `applyBalloonMark` writes, with one degradation path, not two.
+import { readBalloonCounterFromFields } from "../drive/driver-balloon";
+import type { BalloonCounter } from "../graph/types";
 
 export interface Lemma {
   id: string;
@@ -57,6 +64,12 @@ export interface Lemma {
    * backward-compat: byte-identical to a deps-only shard). */
   routes: string[][];
   workspace?: string;
+  /** M3 blocker 7b: the persisted balloon counter/classification history, read back off this
+   * shard's own `balloons:`/`balloon_classifications:` frontmatter (the SAME fields
+   * `driver-frontmatter.ts`'s `applyBalloonMark` writes) via `readBalloonCounterFromFields`.
+   * Never absent — a shard with no balloon marks parses to `{count: 0, classifications: []}`,
+   * matching `RegistryNode.balloons`'s own "never undefined" invariant (graph/types.ts). */
+  balloons: BalloonCounter;
 }
 
 const KINDS = new Set(["lemma", "proposition", "theorem", "corollary", "open-problem", "obstruction"]);
@@ -278,10 +291,25 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
       deps: parseList(fm.fields.deps),
       routes: parseRoutes(fm.fields.routes),
       workspace: fm.fields.workspace,
+      balloons: readBalloonCounterFromFields(fm.fields),
     });
   }
 
   return { lemmas, errors, total: candidates.length, ignored };
+}
+
+/** M3 blocker 7c: true iff a shard's persisted balloon state has crossed the mandatory-review
+ * threshold `src/drive/driver-balloon.ts`'s `routeBalloon` defines — reconstructed here from the
+ * persisted counter alone, since the routing decision ITSELF is never persisted (only the count +
+ * classification history; see `driver-run.ts`'s `handleBalloon`, which marks the shard on EVERY
+ * balloon, not only mandatory-review ones). Two independent ways in:
+ *   - a REPEAT balloon (`count >= 2`) is ALWAYS mandatory-review regardless of classification
+ *     (`routeBalloon`'s `priorBalloonCount >= 1` clause — the persisted `count` already includes
+ *     the balloon that made it a repeat, so `>= 2` here is `>= 1` prior-count there);
+ *   - a `genuine-gap` classification is ALWAYS mandatory-review even on the very first balloon,
+ *     so its presence ANYWHERE in the classification history is sufficient on its own. */
+export function isMandatoryReview(balloons: BalloonCounter): boolean {
+  return balloons.count >= 2 || balloons.classifications.includes("genuine-gap");
 }
 
 /** `definitions/*.md` id set (excluding README.md/INDEX.md), for check 7's `defs:` resolution —

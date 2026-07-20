@@ -13,6 +13,7 @@ function lemma(overrides: Partial<Lemma> = {}): Lemma {
     defs: [],
     deps: [],
     routes: [],
+    balloons: { count: 0, classifications: [] },
     ...overrides,
   };
 }
@@ -54,6 +55,25 @@ describe("convertRegistry (M2.2 total conversion boundary, memo question 5)", ()
   test("an unrecognized af value degrades to 'none' (same default parseRegistry itself applies)", () => {
     const { nodes } = convertRegistry([lemma({ af: "not-a-real-af-value" })]);
     expect(nodes[0]!.af).toBe("none");
+  });
+
+  // M3 blocker 7b (docs/reviews/2026-07-19-m3-milestone-review-codex.md finding 7): before this
+  // repair wave, `convertLemma` hard-coded `balloons: { count: 0, classifications: [] }` for
+  // EVERY node, so a real persisted balloon counter (parsed by linker-parse.ts) never reached the
+  // graph projection at all. It must now thread the parsed `Lemma.balloons` straight through.
+  test("a lemma's real persisted balloon counter/classifications thread through to the node, " +
+    "no longer hard-coded to zero", () => {
+    const { nodes } = convertRegistry([
+      lemma({ balloons: { count: 2, classifications: ["missing-fact", "genuine-gap"] } }),
+    ]);
+    expect(nodes[0]!.balloons).toEqual({ count: 2, classifications: ["missing-fact", "genuine-gap"] });
+  });
+
+  test("balloons is copied, not aliased — mutating the source lemma's arrays must not affect the node", () => {
+    const sourceClassifications: ("missing-fact" | "dag-dep" | "genuine-gap")[] = ["missing-fact"];
+    const { nodes } = convertRegistry([lemma({ balloons: { count: 1, classifications: sourceClassifications } })]);
+    sourceClassifications.push("genuine-gap");
+    expect(nodes[0]!.balloons.classifications).toEqual(["missing-fact"]);
   });
 
   test("TOTAL: every lemma lands in exactly one of nodes/skipped (property, several shapes)", () => {

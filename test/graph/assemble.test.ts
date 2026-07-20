@@ -17,6 +17,9 @@ function lemma(overrides: Partial<Lemma> = {}): Lemma {
     defs: [],
     deps: [],
     routes: [],
+    // M3 blocker 7b: `balloons` is now required on `Lemma` (linker-parse.ts); the zero-valued
+    // default matches every shard with no balloon marks (the case every fixture here models).
+    balloons: { count: 0, classifications: [] },
     ...overrides,
   };
 }
