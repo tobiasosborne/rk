@@ -88,6 +88,16 @@ describe("composeBatches — critical-path exclusion", () => {
     expect(r.excluded).toContainEqual({ id: "ghost", reason: "unknown-node" });
     expect(allMembers(r.batches)).toEqual(["routine"]);
   });
+
+  test("BLOCKER 5d — an UNRESOLVED north star fails closed: every candidate is treated load-bearing and excluded, NO batch is composed", () => {
+    const d = doc([node("a"), node("b"), node("c")]);
+    const r = composeBatches(d, ["a", "b", "c"], "north-star-does-not-exist");
+    // Pre-fix: computeCriticalPath returns an EMPTY set for an unresolved north star, so nothing is
+    // excluded and every candidate co-batches — the exact "permits every batch" hole the review named.
+    expect(r.batches).toEqual([]);
+    expect(r.excluded.map((e) => e.id).sort()).toEqual(["a", "b", "c"]);
+    for (const e of r.excluded) expect(e.reason).toBe("north-star-unresolved");
+  });
 });
 
 describe("composeBatches — cap", () => {

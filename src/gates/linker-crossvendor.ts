@@ -71,8 +71,15 @@ export interface CriticalPathProvenanceResult {
   northStarFound: boolean;
 }
 
+/** BLOCKER 5b (M3-review): the legacy grandfathering marker is an ATOMIC, semicolon-delimited
+ * `provenance:` token, NEVER a substring. `provenance` is one freeform line; we split it on `;`,
+ * trim each token, and require an EXACT `legacy-same-family` token. This defeats the
+ * substring-gaming the review named: `not-legacy-same-family-really` or `legacy-same-family-x`
+ * contain the literal but are not the token, so they never grandfather. Per the review's verdict
+ * (d): `provenance: report lem:x; legacy-same-family` is the sanctioned shape. */
 function hasLegacyMarker(l: Lemma): boolean {
-  return l.provenance !== undefined && l.provenance.includes(LEGACY_MARKER);
+  if (l.provenance === undefined) return false;
+  return l.provenance.split(";").some((tok) => tok.trim() === LEGACY_MARKER);
 }
 
 /** Runs the critical-path provenance check. `identityOf` maps a lemma id to its af workspace's
@@ -91,7 +98,24 @@ export function checkCriticalPathProvenance(
 
   const path = computeCriticalPath(toMinimalGraphDoc(lemmas), northStarId);
   if (!path.found) {
-    return { findings: [], checked: 0, criticalPathSize: 0, northStarConfigured: true, northStarFound: false };
+    // BLOCKER 5d (M3-review): a CONFIGURED north star that resolves to no registry node must FAIL
+    // CLOSED, not silently yield an empty critical set that permits everything. An operator asked
+    // for critical-path enforcement against a specific north star; if that id cannot be resolved,
+    // the guarantee cannot be established, so this is a hard misconfiguration ERROR — never a
+    // silent pass. (Absent northStarId, above, is the distinct "no opinion" case and stays silent.)
+    return {
+      findings: [
+        {
+          severity: "ERROR",
+          path: ".rk/config.json",
+          message: `configured north star '${northStarId}' could not be resolved to any registry node — critical-path cross-vendor provenance cannot be established, failing closed (fix the northStarId, or unset it to disable the check)`,
+        },
+      ],
+      checked: 0,
+      criticalPathSize: 0,
+      northStarConfigured: true,
+      northStarFound: false,
+    };
   }
 
   const byId = new Map(lemmas.map((l) => [l.id, l] as const));
@@ -109,12 +133,20 @@ export function checkCriticalPathProvenance(
     if (facts === undefined || !facts.validated) continue; // no introspectable workspace, or not (currently) validated — orphan/contract/status checks own those gaps
 
     checked++;
+    const legacy = hasLegacyMarker(l);
 
     if (facts.validationBatchId !== undefined) {
+      // BLOCKER 5c (M3-review): a batch id on a load-bearing critical-path node is a C3
+      // critical-path-exclusion violation and now fails closed (ERROR), independent of family —
+      // NOT a mere warning. The only downgrade is an explicit, reviewed `legacy-same-family`
+      // marker, which acknowledges the legitimate case C2 names (a batch validated the node BEFORE
+      // it became load-bearing) so genuinely old data is grandfathered, never demoted.
       findings.push({
-        severity: "WARN",
+        severity: legacy ? "WARN" : "ERROR",
         path: l.path,
-        message: `critical-path node '${id}' was validated as part of batch '${facts.validationBatchId}' — batch-validated provenance on the path to the north star (checked after the fact; C3's critical-path exclusion should have forced per-node treatment here)`,
+        message: legacy
+          ? `critical-path node '${id}' was validated as part of batch '${facts.validationBatchId}' but is explicitly marked 'provenance: ${LEGACY_MARKER}' — grandfathered (batch validated before the node became load-bearing), never demoted`
+          : `critical-path node '${id}' was validated as part of batch '${facts.validationBatchId}' — a load-bearing node on the path to the north star must never be batch-validated (PRD C3's critical-path exclusion); fails closed (ERROR unless explicitly marked '${LEGACY_MARKER}')`,
       });
     }
 
@@ -126,13 +158,18 @@ export function checkCriticalPathProvenance(
     const bothParse = authorDecoded?.ok === true && verifierDecoded?.ok === true;
 
     if (!bothParse) {
-      // Recommended cutover semantics (docs/gate-contracts.md Gate 2): absence of a parseable
-      // seam on either side = legacy = WARNING. This is the AISM shape (author/validated_by
-      // entirely absent from every one of its 44 workspaces' ledgers).
+      // BLOCKER 5a (M3-review): an unparseable identity on a load-bearing critical-path node is no
+      // longer AUTO-grandfathered — inferring "legacy" from unresolvable free text let a new
+      // same-family result evade enforcement simply by not using the seam. It now fails closed
+      // (ERROR), UNLESS the shard carries an explicit, reviewed `legacy-same-family` marker (then
+      // WARN). Genuinely old AISM-shape data (0/44 workspaces carry the seam) is still
+      // grandfatherable — but only by an explicit administrative opt-in, never silently.
       findings.push({
-        severity: "WARN",
+        severity: legacy ? "WARN" : "ERROR",
         path: l.path,
-        message: `critical-path node '${id}' carries no parseable cross-vendor identity (legacy-same-family: predates the verifier-identity seam convention) — re-verification recommended, prioritized by path criticality, never forced`,
+        message: legacy
+          ? `critical-path node '${id}' carries no parseable cross-vendor identity but is explicitly marked 'provenance: ${LEGACY_MARKER}' — grandfathered legacy data (predates the verifier-identity seam convention), never demoted`
+          : `critical-path node '${id}' carries no parseable cross-vendor identity and no explicit '${LEGACY_MARKER}' marker — an unresolvable prover/verifier identity on a load-bearing node fails closed (ERROR); grandfather it only via a reviewed 'provenance: ${LEGACY_MARKER}' token`,
       });
       continue;
     }
@@ -140,7 +177,7 @@ export function checkCriticalPathProvenance(
     const proverFamily = authorDecoded.identity.modelFamily;
     const verifierFamily = verifierDecoded.identity.modelFamily;
     if (proverFamily === verifierFamily) {
-      if (hasLegacyMarker(l)) {
+      if (legacy) {
         findings.push({
           severity: "WARN",
           path: l.path,

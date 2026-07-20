@@ -589,35 +589,50 @@ is stale against the code and must not be treated as ground truth).
     `src/drive/cross-vendor.ts`, checked before an af `accept` item is ever written — see below).
     Presence-conditional on `config.northStarId` (M2.5's own "no default" contract): absent ⇒
     zero findings, named on the coverage line, never a silent guess at which registry id is the
-    north star. When configured, every shard on the critical path to the configured north star
+    north star. **Fail-closed on an UNRESOLVED north star** (2026-07-19 M3 review, blocker 5d): a
+    `northStarId` that IS configured but resolves to no registry node is a hard misconfiguration
+    ⇒ ERROR (`path: .rk/config.json`), never a silent pass. Previously an unresolved north star
+    yielded an empty critical set that checked nothing and (in the batch composer) permitted every
+    batch; the operator asked for critical-path enforcement against a specific id, so if that id
+    cannot be resolved the guarantee cannot be established and the check fails closed. (The distinct
+    "no `northStarId` at all" case above stays silent — a deliberate no-opinion state, not a broken
+    one.) When configured AND resolvable, every shard on the critical path to the configured north star
     (`src/graph/query-path.ts`'s `computeCriticalPath`, the same over-inclusive OR-route closure
     M2.5/M3.4 already use) with `af: validated` and an introspectable, currently-validated af
     workspace is checked against its root node's identity provenance
     (`src/gates/linker-workspace.ts`'s `introspectRootIdentity` — the SAME direct-ledger read
     path `introspectWorkspace` already uses for contract/node-count, since this gate is pure and
     may not shell out to `af export`):
-    - `validationBatchId` present ⇒ WARN, always, independent of family — PRD C3's critical-path
-      exclusion says a critical-path node should never be batch-validated; a batch id here means
-      that rule was not honored, caught retrospectively (a node can become load-bearing AFTER a
-      batch validated it — the exact "path membership changes... not only at verdict-apply time"
-      scenario C2 names).
-    - **Cutover semantics** (decided here, normative): both `author` and `validatedBy` are run
-      through `src/drive/identity.ts`'s `decodeVerifierSeam` (never a bespoke parse). If EITHER
-      side fails to decode, or `validatedBy` was never recorded at all (a node validated with no
-      identity — AISM's real shape, see below), the node reads as **legacy: predates the
-      verifier-identity seam convention** ⇒ WARN, never ERROR, never a demotion. If BOTH sides
-      decode and the two `modelFamily` values are EQUAL (POST-convention same-family) ⇒ ERROR,
-      UNLESS the shard's frontmatter `provenance:` field contains the literal substring
-      `legacy-same-family` (an explicit, administrative grandfathering marker — a freeform-field
-      substring check, not a grammar this check owns; Gate 4 remains the owner of `provenance:`'s
-      own "report `<label>`" grammar), in which case it is WARN instead. Different families ⇒
-      satisfied, no finding. Stated as one line: **absence of a parseable seam = legacy = warning;
-      a parseable seam that is same-family = error (unless explicitly marked legacy).** This is
+    - `validationBatchId` present ⇒ **ERROR** (2026-07-19 M3 review, blocker 5c), independent of
+      family — PRD C3's critical-path exclusion says a load-bearing node must NEVER be
+      batch-validated; a batch id here is a structural exclusion violation, no longer a mere
+      warning. The ONLY downgrade is an explicit, reviewed `legacy-same-family` marker (atomic
+      token, see cutover semantics below), which acknowledges the legitimate case C2 names — a
+      batch that validated the node BEFORE it became load-bearing — ⇒ WARN. Genuinely-old batched
+      data is thus grandfatherable but never silently, and a fresh batch validation on a
+      load-bearing node fails closed.
+    - **Cutover semantics** (decided here, normative; HARDENED by the 2026-07-19 M3 review,
+      blocker 5a/5b): both `author` and `validatedBy` are run through `src/drive/identity.ts`'s
+      `decodeVerifierSeam` (never a bespoke parse). If BOTH sides decode and the two `modelFamily`
+      values are EQUAL (POST-convention same-family) ⇒ ERROR. If EITHER side fails to decode, or
+      `validatedBy` was never recorded at all (an unparseable/absent identity) ⇒ **also ERROR,
+      failing closed** — "legacy" is NO LONGER inferred from an unresolvable identity, because
+      that inference let a new same-family result evade enforcement simply by using free text
+      instead of the seam. BOTH the same-family ERROR and the unparseable-identity ERROR are
+      downgraded to WARN (grandfathered, never demoted) IFF the shard's frontmatter `provenance:`
+      field carries `legacy-same-family` as an **atomic, semicolon-delimited token** — the field
+      is split on `;`, each token trimmed, and an EXACT `legacy-same-family` token required. This
+      is a reviewed administrative grandfathering mark, never a substring match: `not-legacy-same-family`
+      or `legacy-same-family-x` contain the literal but are NOT the token and never grandfather
+      (Gate 4 remains the owner of `provenance:`'s own "report `<label>`" grammar). Sanctioned
+      shape: `provenance: report lem:x; legacy-same-family`. Different families ⇒ satisfied, no
+      finding. Stated as one line: **an unresolvable-or-same-family identity on a load-bearing node
+      is an error, unless an explicit atomic `legacy-same-family` token grandfathers it.** This is
       the split the brief calls for between the two enforcement points: the apply-time check
-      (below) is about to mint a NEW validation event and fails closed on an unresolvable
-      identity; this continuous check is retrospective over ALREADY-recorded validations and
-      grandfathers what it cannot resolve, per PRD C9's standing directive ("existing results
-      validated under the old same-family regime... are not demoted").
+      (below) fails closed on an unresolvable identity when minting a NEW validation event; this
+      continuous check now ALSO fails closed retrospectively, but still honors PRD C9's standing
+      directive ("existing results validated under the old same-family regime... are not demoted")
+      via the explicit opt-in marker rather than by silently inferring legacy from missing data.
     - Coverage is folded into Gate 2's one coverage line as
       `critical-path provenance: <checked>/<criticalPathSize> checked` (or
       `no north star configured` / `configured north star not found in registry`).

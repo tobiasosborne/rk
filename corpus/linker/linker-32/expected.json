@@ -1,15 +1,15 @@
 {
   "gate": "linker",
-  "verdict": "pass",
+  "verdict": "fail",
   "findings": [
     {
-      "severity": "WARN",
+      "severity": "ERROR",
       "path_pattern": "argument/thm-main.md",
-      "message_pattern": "legacy-same-family"
+      "message_pattern": "carries no parseable cross-vendor identity and no explicit 'legacy-same-family' marker"
     }
   ],
-  "exit_code": 0,
+  "exit_code": 1,
   "config_override": { "northStarId": "thm-main" },
-  "aism_behavior": "class-driven (no AISM counterpart -- AISM never had identity provenance) -- but this fixture's ledger IS AISM's real historical shape: built with the globally-installed pre-V1 af binary (0.1.5, predating ../vibefeld's identity-provenance commits), so node_created carries no node.author and node_validated carries no verified_by/batch_id, byte-identical in shape to a spot-check of AISM's own proofs/*/ledger/*.json (0/44 workspaces carry these fields at all, per this WP's report). proof_initialized's OWN top-level author ('orchestrator') is a DIFFERENT, pre-existing field and is correctly never read as the root's identity.",
-  "notes": "M3.8 Check 13, GRANDFATHERING golden case: a critical-path node validated with NO parseable cross-vendor seam at all -> WARNING 'legacy-same-family', never an ERROR or a demotion (PRD C9's standing directive: 'all 44 AISM workspaces are codex-prover+codex-verifier ... not demoted'). Recommended cutover semantics (docs/gate-contracts.md Gate 2): absence of a parseable seam = legacy = warning."
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM never had identity provenance) -- this fixture's ledger IS AISM's real historical shape: built with the globally-installed pre-V1 af binary (0.1.5, predating ../vibefeld's identity-provenance commits), so node_created carries no node.author and node_validated carries no verified_by/batch_id, byte-identical in shape to a spot-check of AISM's own proofs/*/ledger/*.json (0/44 workspaces carry these fields at all). proof_initialized's OWN top-level author ('orchestrator') is a DIFFERENT, pre-existing field and is correctly never read as the root's identity.",
+  "notes": "M3.8 Check 13, HARDENED by the 2026-07-19 M3 review (blocker 5a): a critical-path node validated with NO parseable cross-vendor seam at all AND NO explicit 'legacy-same-family' marker -> ERROR, failing closed. Rationale: inferring 'legacy' from an unresolvable identity let a NEW same-family result evade enforcement simply by using free text instead of the seam. Grandfathering AISM's real 44-workspace shape now requires an EXPLICIT, reviewed 'provenance: legacy-same-family' opt-in (see linker-39, this same ledger WITH the marker -> WARN). Sibling: linker-31 (parseable same-family, no marker -> ERROR), linker-39 (this ledger + explicit marker -> WARN)."
 }

@@ -1,15 +1,15 @@
 {
   "gate": "linker",
-  "verdict": "pass",
+  "verdict": "fail",
   "findings": [
     {
-      "severity": "WARN",
+      "severity": "ERROR",
       "path_pattern": "argument/thm-main.md",
-      "message_pattern": "validated as part of batch 'batch-7'"
+      "message_pattern": "was validated as part of batch 'batch-7'"
     }
   ],
-  "exit_code": 0,
+  "exit_code": 1,
   "config_override": { "northStarId": "thm-main" },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's ledgers predate batch validation entirely; 0/44 workspaces carry batch_id).",
-  "notes": "M3.8 Check 14 (C3's critical-path exclusion, checked after the fact): a critical-path node (thm-main IS the north star) validated via 'af verdicts apply' with a batch_id -- WARNING, regardless of family (author claude|claude-code|opus|s1, verifier gpt|codex|gpt-5.6|s9 -- DIFFERENT families, so no separate same-family ERROR fires here; this isolates the batch finding). Ledger built with a real af binary rebuilt from ../vibefeld HEAD via 'af verdicts apply' (the V2 kernel verb), script-verified: af export --graph json reports validation_batch_id exactly as embedded here. C3's own rule says critical-path nodes should always get per-node treatment; a batch id here means that did not happen -- caught retrospectively by this check, exactly the 'checked continuously... because path membership changes' scenario PRD C2 names."
+  "notes": "M3.8 Check 13, HARDENED by the 2026-07-19 M3 review (blocker 5c): a critical-path node (thm-main IS the north star) validated via 'af verdicts apply' with a batch_id -> ERROR (fails closed), regardless of family (author claude|claude-code|opus|s1, verifier gpt|codex|gpt-5.6|s9 -- DIFFERENT families, so the batch finding is isolated from the same-family check). PRD C3 says a load-bearing critical-path node must NEVER be batch-validated; a batch id here is a structural exclusion violation, no longer a mere warning. The only downgrade is an explicit, reviewed 'provenance: legacy-same-family' marker acknowledging the legitimate C2 case (a batch validated the node BEFORE it became load-bearing) -> WARN. Ledger built with a real af binary rebuilt from ../vibefeld HEAD via 'af verdicts apply', script-verified: af export --graph json reports validation_batch_id exactly as embedded here."
 }

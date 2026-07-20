@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "carries no parseable cross-vendor identity but is explicitly marked 'provenance: legacy-same-family'"
+    }
+  ],
+  "exit_code": 0,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart -- the explicit marker is an rk-only escape hatch, documented in docs/gate-contracts.md Gate 2).",
+  "notes": "M3.8 Check 13, grandfathering OPT-IN (2026-07-19 M3 review, blocker 5a): byte-identical ledger to linker-32 (AISM's real pre-V1 shape, no parseable seam at all) -- the ONLY difference is this shard's frontmatter carries 'provenance: retrofit audit; legacy-same-family'. Under the hardened cutover an unparseable identity fails closed (ERROR, linker-32) UNLESS explicitly grandfathered; the atomic ';'-delimited 'legacy-same-family' token downgrades it to a WARNING, never demoted. Proves genuinely-old AISM data can still be grandfathered, but only via an explicit reviewed opt-in -- never inferred from the unparseable identity itself. Sibling: linker-32 (same ledger, NO marker -> ERROR), linker-38 (parseable same-family + marker -> WARN)."
+}

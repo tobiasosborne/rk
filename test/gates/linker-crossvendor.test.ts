@@ -42,11 +42,15 @@ describe("checkCriticalPathProvenance — presence-conditional on northStarId", 
     expect(r).toEqual({ findings: [], checked: 0, criticalPathSize: 0, northStarConfigured: false, northStarFound: false });
   });
 
-  test("northStarId configured but resolves to no real node -> zero findings, northStarFound false", () => {
+  test("northStarId configured but resolves to no real node -> FAIL CLOSED with an ERROR (blocker 5d)", () => {
     const r = checkCriticalPathProvenance([lemma("lem-a")], "does-not-exist", new Map());
     expect(r.northStarConfigured).toBe(true);
     expect(r.northStarFound).toBe(false);
-    expect(r.findings).toEqual([]);
+    // An unresolved configured north star can no longer resolve to an empty critical set that
+    // silently permits everything — it is a fail-closed ERROR (misconfiguration).
+    expect(r.findings.length).toBe(1);
+    expect(r.findings[0]!.severity).toBe("ERROR");
+    expect(r.findings[0]!.message).toContain("could not be resolved");
   });
 });
 
@@ -77,7 +81,7 @@ describe("checkCriticalPathProvenance — family comparison", () => {
     expect(r.findings).toEqual([]);
   });
 
-  test("no parseable seam at all (AISM's real shape: validated=true, no identity fields) -> WARNING legacy-same-family, never ERROR", () => {
+  test("no parseable seam at all + NO explicit marker -> ERROR, fails closed (blocker 5a: legacy is no longer inferred from an unparseable identity)", () => {
     const identityOf = new Map<string, RootIdentityFacts>([
       [NORTH_STAR, facts()], // validated, but no author/validatedBy at all
       ["lem-x", facts()],
@@ -86,19 +90,36 @@ describe("checkCriticalPathProvenance — family comparison", () => {
     expect(r.checked).toBe(2);
     expect(r.findings.length).toBe(2);
     for (const f of r.findings) {
-      expect(f.severity).toBe("WARN");
-      expect(f.message).toContain("legacy-same-family");
+      expect(f.severity).toBe("ERROR");
+      expect(f.message).toContain("no parseable cross-vendor identity");
     }
   });
 
-  test("validated=true, validatedBy is free text (undecodable) -> WARNING legacy-same-family, never ERROR", () => {
+  test("validated=true, validatedBy is free text (undecodable) + NO marker -> ERROR (a same-family result can no longer evade enforcement via free text)", () => {
     const identityOf = new Map<string, RootIdentityFacts>([
       [NORTH_STAR, facts({ validatedBy: "orchestrator" })],
       ["lem-x", facts({ validatedBy: "orchestrator" })],
     ]);
     const r = checkCriticalPathProvenance(lemmas, NORTH_STAR, identityOf);
     expect(r.checked).toBe(2);
-    for (const f of r.findings) expect(f.severity).toBe("WARN");
+    for (const f of r.findings) expect(f.severity).toBe("ERROR");
+  });
+
+  test("no parseable seam BUT explicit 'legacy-same-family' marker -> WARNING (grandfathering now requires an explicit opt-in)", () => {
+    const marked = [
+      lemma(NORTH_STAR, { deps: ["lem-x"], af: "validated", provenance: "legacy-same-family" }),
+      lemma("lem-x", { af: "validated", provenance: "report lem:x; legacy-same-family" }),
+    ];
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts()],
+      ["lem-x", facts()],
+    ]);
+    const r = checkCriticalPathProvenance(marked, NORTH_STAR, identityOf);
+    expect(r.findings.length).toBe(2);
+    for (const f of r.findings) {
+      expect(f.severity).toBe("WARN");
+      expect(f.message).toContain("legacy-same-family");
+    }
   });
 
   test("same family, both parseable, BUT explicit 'provenance: legacy-same-family' marker -> WARNING not ERROR", () => {
@@ -115,10 +136,38 @@ describe("checkCriticalPathProvenance — family comparison", () => {
     expect(lemXFinding.severity).toBe("WARN");
     expect(lemXFinding.message).toContain("legacy-same-family");
   });
+
+  test("BLOCKER 5b — the legacy token is matched atomically, NOT by substring: 'not-legacy-same-family-really' does NOT grandfather", () => {
+    const gamed = [
+      lemma(NORTH_STAR, { deps: ["lem-x"], af: "validated" }),
+      lemma("lem-x", { af: "validated", provenance: "not-legacy-same-family-really" }),
+    ];
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts({ author: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+      ["lem-x", facts({ author: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+    ]);
+    const r = checkCriticalPathProvenance(gamed, NORTH_STAR, identityOf);
+    const lemXFinding = r.findings.find((f) => f.path === "argument/lem-x.md")!;
+    expect(lemXFinding.severity).toBe("ERROR"); // substring is present, but it is NOT an atomic ';'-delimited token
+  });
+
+  test("BLOCKER 5b — an atomic ';'-delimited token IS accepted regardless of surrounding tokens", () => {
+    const marked = [
+      lemma(NORTH_STAR, { deps: ["lem-x"], af: "validated" }),
+      lemma("lem-x", { af: "validated", provenance: "report lem:x;legacy-same-family;note" }),
+    ];
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts({ author: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+      ["lem-x", facts({ author: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+    ]);
+    const r = checkCriticalPathProvenance(marked, NORTH_STAR, identityOf);
+    const lemXFinding = r.findings.find((f) => f.path === "argument/lem-x.md")!;
+    expect(lemXFinding.severity).toBe("WARN");
+  });
 });
 
 describe("checkCriticalPathProvenance — batch-validation flag", () => {
-  test("validationBatchId present on a critical-path node -> WARNING, independent of family", () => {
+  test("BLOCKER 5c — validationBatchId present on a critical-path node, no marker -> ERROR (C3 exclusion violated), independent of family", () => {
     const lemmas = [lemma(NORTH_STAR, { deps: ["lem-x"], af: "validated" }), lemma("lem-x", { af: "validated" })];
     const identityOf = new Map<string, RootIdentityFacts>([
       [NORTH_STAR, facts({ author: CLAUDE_SEAM, validatedBy: GPT_SEAM_B })],
@@ -127,8 +176,23 @@ describe("checkCriticalPathProvenance — batch-validation flag", () => {
     const r = checkCriticalPathProvenance(lemmas, NORTH_STAR, identityOf);
     const batchFindings = r.findings.filter((f) => f.message.includes("batch"));
     expect(batchFindings.length).toBe(1);
-    expect(batchFindings[0]!.severity).toBe("WARN");
+    expect(batchFindings[0]!.severity).toBe("ERROR");
     expect(batchFindings[0]!.path).toBe("argument/lem-x.md");
+  });
+
+  test("validationBatchId present but shard carries an explicit 'legacy-same-family' marker -> WARNING (grandfathered: batch validated before the node became load-bearing)", () => {
+    const lemmas = [
+      lemma(NORTH_STAR, { deps: ["lem-x"], af: "validated" }),
+      lemma("lem-x", { af: "validated", provenance: "legacy-same-family" }),
+    ];
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts({ author: CLAUDE_SEAM, validatedBy: GPT_SEAM_B })],
+      ["lem-x", facts({ author: CLAUDE_SEAM, validatedBy: GPT_SEAM_B, validationBatchId: "batch-7" })],
+    ]);
+    const r = checkCriticalPathProvenance(lemmas, NORTH_STAR, identityOf);
+    const batchFindings = r.findings.filter((f) => f.message.includes("batch"));
+    expect(batchFindings.length).toBe(1);
+    expect(batchFindings[0]!.severity).toBe("WARN");
   });
 });
 

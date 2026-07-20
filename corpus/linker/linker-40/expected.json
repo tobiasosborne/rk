@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "configured north star 'ghost-north-star' could not be resolved to any registry node"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "northStarId": "ghost-north-star" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no north-star config and no critical-path provenance check).",
+  "notes": "M3.8 Check 13 fail-closed (2026-07-19 M3 review, blocker 5d): a CONFIGURED northStarId that resolves to no registry node is a hard misconfiguration ERROR, never a silent pass. Previously an unresolved north star yielded an empty critical set that silently permitted every batch and checked nothing; the check now fails closed because the operator asked for critical-path enforcement against a specific north star and that guarantee cannot be established. The distinct 'no northStarId configured at all' case (a deliberate no-opinion state) stays silent -- see linker fixtures without a config_override."
+}

@@ -64,7 +64,7 @@ export interface BatchComposerConfig {
   defsWeight?: number;
 }
 
-export type ExclusionReason = "critical-path" | "unknown-node";
+export type ExclusionReason = "critical-path" | "unknown-node" | "north-star-unresolved";
 
 export interface ExcludedCandidate {
   id: string;
@@ -164,7 +164,18 @@ export function composeBatches(
   const defsWeight = config.defsWeight ?? DEFAULT_DEFS_WEIGHT;
 
   const byId = indexNodes(doc);
-  const criticalSet = new Set(computeCriticalPath(doc, northStarId).nodeIds);
+  const critical = computeCriticalPath(doc, northStarId);
+  // BLOCKER 5d (M3-review): an UNRESOLVED north star must FAIL CLOSED. Previously `computeCriticalPath`
+  // returned an empty `nodeIds` for a north star naming no real node, so `criticalSet` was empty, no
+  // candidate was ever excluded as critical-path, and EVERY candidate co-batched — the "empty critical
+  // set permits every batch" hole the review named. When the north star cannot be resolved we cannot
+  // know which nodes are load-bearing, so we treat EVERY candidate as load-bearing: exclude them all,
+  // compose no batch. (The apply-time half in cross-vendor.ts already fails closed the same way.)
+  if (!critical.found) {
+    const excluded = [...new Set(candidateIds)].sort().map((id) => ({ id, reason: "north-star-unresolved" as const }));
+    return { northStarId, cap, batches: [], excluded };
+  }
+  const criticalSet = new Set(critical.nodeIds);
 
   const excluded: ExcludedCandidate[] = [];
   const eligible: string[] = [];
