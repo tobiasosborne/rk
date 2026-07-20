@@ -31,27 +31,56 @@ interface CodexEvent {
   usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number; reasoning_output_tokens?: number };
 }
 
-/** Parses `codex exec --json`'s JSONL event stream. A stray non-JSON line is skipped, not fatal on
- * its own (the live-fire spike observed one informational stderr-style line mixed into stdout on
- * an unrecognized-model warning) — the caller decides overall success/failure from the PRESENCE of
- * a `turn.completed`/`turn.failed`/`error` event, not from every line parsing cleanly. */
-function parseJsonl(stdout: string): CodexEvent[] {
+const TERMINAL_TYPES = new Set(["turn.completed", "turn.failed", "error"]);
+
+interface ParsedJsonl {
+  events: CodexEvent[];
+  /** The LAST non-blank line failed to parse as a JSON object. Unlike a stray informational line
+   * elsewhere in the stream (tolerated below), a malformed TAIL line means the stream may have been
+   * cut off mid-write (process killed, pipe closed) — we cannot tell whether a terminal event ever
+   * arrived, so the caller must reject rather than silently drop it (review blocker 4: a truncated
+   * execution must never reach the ledger looking like a clean run). */
+  tailMalformed: boolean;
+}
+
+/** Parses `codex exec --json`'s JSONL event stream. A stray non-JSON line NOT at the tail is
+ * skipped, not fatal on its own (the live-fire spike observed one informational stderr-style line
+ * mixed into stdout on an unrecognized-model warning) — but a malformed line at the very end of the
+ * stream is reported via `tailMalformed`, since that is exactly the shape a truncated/incomplete
+ * execution takes. The caller decides overall success/failure from the PRESENCE of exactly one
+ * terminal (`turn.completed`/`turn.failed`/`error`) event, never from every line parsing cleanly. */
+function parseJsonl(stdout: string): ParsedJsonl {
+  const lines = stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
   const events: CodexEvent[] = [];
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  let tailMalformed = false;
+  lines.forEach((line, i) => {
     try {
-      const parsed: unknown = JSON.parse(trimmed);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) events.push(parsed as CodexEvent);
+      const parsed: unknown = JSON.parse(line);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        events.push(parsed as CodexEvent);
+        return;
+      }
     } catch {
-      // a non-JSON stray line — ignored, see doc comment above.
+      // falls through to the malformed handling below
     }
-  }
-  return events;
+    if (i === lines.length - 1) tailMalformed = true;
+    // else: a stray non-JSON line elsewhere in the stream — ignored, see doc comment above.
+  });
+  return { events, tailMalformed };
+}
+
+/** Exactly one terminal event is the only acceptable shape: none means the turn never reached a
+ * conclusion (incomplete/discarded); more than one is an ambiguous/duplicated stream. Either case
+ * must be rejected by the caller, never resolved by picking "the last one" (review blocker 4). */
+function soleTerminalEvent(events: CodexEvent[]): CodexEvent | "missing" | "duplicate" {
+  const terminals = events.filter((e) => TERMINAL_TYPES.has(e.type));
+  if (terminals.length === 0) return "missing";
+  if (terminals.length > 1) return "duplicate";
+  return terminals[0]!;
 }
 
 function usageFrom(events: CodexEvent[]): WorkerUsage {
-  const completed = [...events].reverse().find((e) => e.type === "turn.completed");
+  const completed = events.find((e) => e.type === "turn.completed");
   const u = completed?.usage;
   return {
     input: u?.input_tokens ?? 0,
@@ -127,10 +156,17 @@ export class CodexBackend implements WorkerBackend {
       const outcome = await this.spawn(this.binary, args, { cwd: this.cwd, timeoutMs: item.timeoutMs, input: "" });
       if (outcome.timedOut) return { exit: 10, usage: ZERO_USAGE, dispatchModel: "flat" };
 
-      const events = parseJsonl(outcome.stdout);
+      const { events, tailMalformed } = parseJsonl(outcome.stdout);
+      const terminal = soleTerminalEvent(events);
+      // A truncated tail, a missing terminal event, or duplicate terminal events are all shapes an
+      // incomplete or discarded turn can take — none of them may reach the verdict-file read below
+      // (review blocker 4). Only a single, unambiguous terminal event is even eligible for exit 0.
+      if (tailMalformed || terminal === "missing" || terminal === "duplicate") {
+        return { exit: 13, usage: ZERO_USAGE, dispatchModel: "flat" };
+      }
       const usage = usageFrom(events);
-      const failed = events.some((e) => e.type === "turn.failed" || e.type === "error");
-      if (outcome.exitCode !== 0 || failed) return { exit: 13, usage, dispatchModel: "flat" };
+      if (terminal.type !== "turn.completed") return { exit: 13, usage, dispatchModel: "flat" };
+      if (outcome.exitCode !== 0) return { exit: 13, usage, dispatchModel: "flat" };
       if (budgetExceeded(item, usage)) return { exit: 11, usage, dispatchModel: "flat" };
 
       try {

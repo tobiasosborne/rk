@@ -184,6 +184,107 @@ describe("CodexBackend.runTurn", () => {
     expect(result.exit).toBe(13);
   });
 
+  test("an error event type is exit 13, even at process exit 0", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async () => ({
+        exitCode: 0,
+        stdout: [JSON.stringify({ type: "turn.started" }), JSON.stringify({ type: "error", message: "boom" })].join("\n"),
+        stderr: "",
+        timedOut: false,
+      }),
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(13);
+  });
+
+  test("review blocker 4 — no terminal event at all (incomplete/discarded turn) is exit 13, the verdict file is never read even though it exists and exit code is 0", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        // A plausible-looking output file is present, as if a turn started writing it, but no
+        // turn.completed/turn.failed/error event ever arrived — the incomplete-turn shape this
+        // blocker is about.
+        writeFileSync(outFileArg(args), '{"verdict":"VALID","justification":"ok"}');
+        return { exitCode: 0, stdout: JSON.stringify({ type: "turn.started" }), stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(13);
+    expect(result.rawText).toBeUndefined();
+  });
+
+  test("review blocker 4 — empty stdout (no events at all) is exit 13, not a silent success", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        writeFileSync(outFileArg(args), "OK");
+        return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(13);
+    expect(result.rawText).toBeUndefined();
+  });
+
+  test("review blocker 4 — duplicate terminal events (two turn.completed lines) is exit 13, never resolved by picking the last one's usage", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        writeFileSync(outFileArg(args), "OK");
+        const first = turnCompletedLine({ output_tokens: 1 });
+        const second = turnCompletedLine({ output_tokens: 999 });
+        return { exitCode: 0, stdout: [first, second].join("\n"), stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(13);
+    expect(result.rawText).toBeUndefined();
+  });
+
+  test("review blocker 4 — a malformed tail line (truncated JSON) is rejected, not silently skipped, even after a valid turn.completed line", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        writeFileSync(outFileArg(args), "OK");
+        // The stream looks complete (a valid turn.completed line) but is followed by a truncated
+        // fragment — as if the process was killed mid-write of a further event. This must NOT be
+        // silently dropped as a harmless stray line; the tail not parsing means we cannot trust the
+        // stream reached its true end.
+        const truncatedTail = '{"type":"turn.st';
+        return { exitCode: 0, stdout: [turnCompletedLine(), truncatedTail].join("\n"), stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(13);
+    expect(result.rawText).toBeUndefined();
+  });
+
+  test("review blocker 4 — verdict output is read only after a valid sole successful terminal event (positive control, mirrors the exit-0 success test)", async () => {
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        writeFileSync(outFileArg(args), '{"verdict":"VALID","justification":"ok"}');
+        return { exitCode: 0, stdout: [JSON.stringify({ type: "turn.started" }), turnCompletedLine()].join("\n"), stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec());
+    const result = await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(result.exit).toBe(0);
+    expect(result.rawText).toBe('{"verdict":"VALID","justification":"ok"}');
+  });
+
   test("output usage meeting/exceeding maxOutputTokens is exit 11 (budget exceeded)", async () => {
     const backend = new CodexBackend({
       tmpDirFactory: freshTmpDir(),
