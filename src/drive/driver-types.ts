@@ -15,6 +15,7 @@ import type { ProofContent, RecordProofResult } from "./driver-prove-node";
 import type { BalloonClassification } from "../graph/types";
 import type { Role } from "./vocab";
 import type { WorkerUsage } from "./worker-result";
+import type { ParseFailureClass } from "./parse-diag";
 
 import { DEFAULT_BALLOON_NODE_CAP } from "./driver-balloon";
 import { DEFAULT_MAX_STUCK_ROUNDS, DEFAULT_NODE_RETRY_CAP, DEFAULT_NODE_CHURN_CAP, DEFAULT_MAX_CHURN_ROUNDS } from "./driver-guardrails";
@@ -59,6 +60,17 @@ export interface DispatchedTurn {
    * STOP-REPORT-6 gap: an exit-12 previously surfaced as the bare string "worker exit 12", raw
    * output unrecoverable). Undefined on success and on every non-parse failure. */
   rawText?: string;
+  /** rk-d1n (M3.5 live debug): the `JSON.parse` error message from the failed extraction (e.g.
+   * "Unterminated string in JSON at position N"), carried alongside `rawText` on an exit-12
+   * parse/extraction failure. DIAGNOSTIC ONLY — recorded in the `parse-failed` evidence record so an
+   * unterminated string (model stopped mid-object) is distinguishable from trailing content; never
+   * read by any acceptance/verdict logic. Undefined except on a parse failure. */
+  parseError?: string;
+  /** rk-d1n: the DIAGNOSTIC failure-mode class of the extraction failure
+   * (src/drive/parse-diag.ts's `classifyExtractionFailure`) — "unterminated" | "trailing-content" |
+   * "no-object" | "multiple-objects" | "other". Recorded in the `parse-failed` evidence record only;
+   * acceptance semantics never read it. Undefined except on a parse failure. */
+  parseClass?: ParseFailureClass;
 }
 
 export interface DriverDeps {
@@ -119,6 +131,15 @@ export interface DriverDeps {
   /** File a bd task; returns false when bd is absent (skip loudly, never silently). */
   createBdTask(task: { title: string; description: string }): boolean;
   appendLog(line: string): void;
+  /** rk-d1n (M3.5 live debug): persist the FULL raw model output of a parse/extraction failure to a
+   * file under the workspace `.rk/` (the live edge writes `.rk/parse-failures/<node>-<n>.txt`,
+   * append-index, edge IO), returning the workspace-relative path recorded in the `parse-failed`
+   * evidence record. The bounded snippet in the log is capped; this is the un-truncated bytes so the
+   * exact failure (an unterminated verbose `reason` string, in the attempt-11 incident) is fully
+   * inspectable without a re-run. OPTIONAL: a synthetic/dry harness may omit it, in which case only
+   * the bounded snippet + classification are recorded (no `rawFailurePath`). Never throws at the
+   * edge (a write failure returns undefined). */
+  writeParseFailure?(node: string, rawText: string): string | undefined;
   /** ISO timestamp — the edge owns the clock (L3). */
   now(): string;
   priorBalloonCount: number;

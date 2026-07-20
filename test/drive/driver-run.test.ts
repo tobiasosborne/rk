@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { runVerifyDriver, type DriverDeps, type DispatchedTurn } from "../../src/drive/driver-run";
+import { toDispatchedTurn } from "../../src/drive/driver-live";
 import type { AfWorkspaceView, ApplyReport, FilledVerdictFile } from "../../src/drive/driver-af";
 import type { AfNodeView } from "../../src/drive/driver-plan";
 import type { VerifierIdentity } from "../../src/drive/identity";
@@ -288,6 +289,55 @@ describe("bind-failure evidence (rk-qxp) — diagnosis-quality skip reason + per
     });
     await runVerifyDriver(h.deps);
     expect(h.logs.some((l) => l.includes('"kind":"parse-failed"'))).toBe(false);
+  });
+
+  // rk-d1n (M3.5 live debug): the parse-failed record gains the JSON.parse error message, a diagnostic
+  // failure-mode `classification`, a 2000-char snippet, and — when the edge injects `writeParseFailure`
+  // — the `rawFailurePath` of the full raw text persisted under .rk/. Realistic chain: the fake
+  // dispatcher runs the model bytes through the REAL toDispatchedTurn (the live edge's own parser), so
+  // the record's fields reflect the true classifier output, not hand-set values.
+  test("a parse-failed record carries classification + parseError + rawFailurePath, snippet capped at 2000", async () => {
+    // An unterminated object whose verbose reason exceeds the OLD 500-char snippet bound (the exact
+    // attempt-11 failure: the string is cut mid-value, so it never closes).
+    const longReason = "x".repeat(2200);
+    const raw = `{"verdict":{"outcome":"challenge","target":"1","severity":"major","reason":"${longReason}`;
+    const persisted: { node: string; rawText: string }[] = [];
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw }),
+      writeParseFailure: (nodeId, rawText) => { persisted.push({ node: nodeId, rawText }); return `.rk/parse-failures/${nodeId}-1.txt`; },
+    });
+    await runVerifyDriver(h.deps);
+    const line = h.logs.find((l) => l.includes('"kind":"parse-failed"'));
+    expect(line).toBeDefined();
+    const rec = JSON.parse(line!);
+    expect(rec.classification).toBe("unterminated");
+    expect(typeof rec.parseError).toBe("string");
+    expect(rec.parseError.length).toBeGreaterThan(0);
+    expect(rec.rawFailurePath).toBe(".rk/parse-failures/1-1.txt");
+    // snippet is bounded at 2000 (raised from 500) — the long reason is quotable much further now,
+    // but never unbounded.
+    expect(rec.rawSnippet.length).toBeGreaterThan(500);
+    expect(rec.rawSnippet.length).toBeLessThanOrEqual(2000);
+    // the FULL raw text (untruncated) went to the persisted file, not just the snippet.
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.rawText).toBe(raw);
+    expect(persisted[0]!.rawText.length).toBeGreaterThan(2000);
+  });
+
+  test("a parse-failed record WITHOUT an injected writeParseFailure omits rawFailurePath (optional dep)", async () => {
+    const raw = '{"verdict":"VALID","justification":"ok"} trailing prose';
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw }),
+      // writeParseFailure NOT provided
+    });
+    await runVerifyDriver(h.deps);
+    const rec = JSON.parse(h.logs.find((l) => l.includes('"kind":"parse-failed"'))!);
+    expect(rec.classification).toBe("trailing-content");
+    expect(rec.rawFailurePath).toBeUndefined();
   });
 
   test("an INTEGER-number challenge target (e.g. 1) is coerced to the string '1', binds, and reaches apply — no bind-failed record", async () => {

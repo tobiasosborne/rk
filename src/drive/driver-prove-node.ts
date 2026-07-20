@@ -13,7 +13,7 @@
 //   isRootValidated) — recording proof content alone never converges a claim.
 
 import { detectProverOverreach, usageTokens } from "./driver-guardrails";
-import { boundedRawSnippet } from "./driver-verify-node";
+import { boundedRawSnippet, PARSE_RAW_SNIPPET_CAP } from "./driver-verify-node";
 import type { AfNodeView } from "./driver-plan";
 import type { DriverDeps } from "./driver-types";
 
@@ -91,7 +91,16 @@ export async function proveOneNode(deps: DriverDeps, node: AfNodeView, knownIds:
     // GAP 7(b): persist the raw output on an exit-12 parse/extraction failure (same evidence trail
     // as the verifier path) rather than losing it behind "prover worker exit 12".
     if (turn.rawText !== undefined) {
-      deps.appendLog(JSON.stringify({ kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role, rawSnippet: boundedRawSnippet(turn.rawText) }));
+      // rk-d1n: same diagnosability upgrade as the verifier path — 2000-char snippet, parse-error
+      // message, failure-mode class, and the full raw text persisted to `.rk/parse-failures/`.
+      const rawFailurePath = deps.writeParseFailure?.(node.id, turn.rawText);
+      deps.appendLog(JSON.stringify({
+        kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role,
+        rawSnippet: boundedRawSnippet(turn.rawText, PARSE_RAW_SNIPPET_CAP),
+        ...(turn.parseError !== undefined ? { parseError: turn.parseError } : {}),
+        ...(turn.parseClass !== undefined ? { classification: turn.parseClass } : {}),
+        ...(rawFailurePath !== undefined ? { rawFailurePath } : {}),
+      }));
     }
     return { spentTokens, skip: `prover worker exit ${turn.exit}` };
   }

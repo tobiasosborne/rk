@@ -119,6 +119,21 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: 42 }), 1);
     expect(r.ok).toBe(false);
   });
+  // rk-d1n (M3.5 live debug): the new diagnosability fields (parseError, classification, rawFailurePath)
+  // are validated LENIENTLY — a record carrying them is recognized, AND an OLD-shape record without any
+  // of them still parses (they predate the fields; they must not become a loud "unrecognized" issue).
+  test("a 'parse-failed' record WITH the new diagnosability fields is recognized", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "{\"a\":1", parseError: "Unterminated string in JSON at position 5", classification: "unterminated", rawFailurePath: ".rk/parse-failures/1-1.txt" }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("an OLD-shape 'parse-failed' record (no parseError/classification/rawFailurePath) still parses", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("a 'parse-failed' record whose 'classification' is present but not a string is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "x", classification: 7 }), 1);
+    expect(r.ok).toBe(false);
+  });
 
   // GAP 8 (STOP-REPORT-7): the driver's new 'record-proof-failed' evidence record — persisted whenever
   // af record-proof refuses a prover decomposition, carrying node + af reason + a bounded children

@@ -289,6 +289,25 @@ describe("toDispatchedTurn — WorkerResult -> DispatchedTurn discipline", () =>
     const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: '{"verdict":"VALID","justification":"ok"}' });
     expect(t.exit).toBe(0);
     expect(t.rawText).toBeUndefined();
+    expect(t.parseError).toBeUndefined(); // rk-d1n: no diagnostics on success
+    expect(t.parseClass).toBeUndefined();
+  });
+  // rk-d1n: an exit-12 parse/extraction failure now ALSO attaches the JSON.parse error message and a
+  // diagnostic failure-mode class (DIAGNOSTIC ONLY — the exit is still 12), so the edge's parse-failed
+  // record can tell an unterminated verbose `reason` apart from trailing content (the attempt-11 gap).
+  test("exit 0 + an UNTERMINATED object (model cut mid-string) -> exit 12, parseClass 'unterminated' + a parseError", () => {
+    const raw = '{"verdict":{"outcome":"challenge","target":"1","severity":"major","reason":"long reason that never';
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw });
+    expect(t.exit).toBe(12);
+    expect(t.rawText).toBe(raw);
+    expect(t.parseClass).toBe("unterminated");
+    expect(t.parseError!.length).toBeGreaterThan(0);
+  });
+  test("exit 0 + trailing prose after a balanced object -> exit 12, parseClass 'trailing-content'", () => {
+    const raw = '{"verdict":"VALID","justification":"ok"} Hope that helps!';
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw });
+    expect(t.exit).toBe(12);
+    expect(t.parseClass).toBe("trailing-content");
   });
 });
 

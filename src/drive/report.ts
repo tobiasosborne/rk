@@ -77,7 +77,13 @@ export interface BindFailedLogRecord { kind: "bind-failed"; at: string; node : s
  * these (the math never reads `rawSnippet`), but they MUST be RECOGNIZED (never `unrecognized 'kind'`).
  * The `node` field is spelled with a space before its colon — same purity-grep false-positive the
  * records above document. */
-export interface ParseFailedLogRecord { kind: "parse-failed"; at: string; node : string; role: Role; rawSnippet: string; }
+export interface ParseFailedLogRecord { kind: "parse-failed"; at: string; node : string; role: Role; rawSnippet: string;
+  /** rk-d1n (M3.5 live debug), all OPTIONAL and validated leniently so older records without them stay
+   * recognized: `parseError` = the JSON.parse message, `classification` = the diagnostic failure-mode
+   * class (unterminated | trailing-content | no-object | multiple-objects | other), `rawFailurePath` =
+   * the `.rk/parse-failures/<node>-<n>.txt` file holding the full un-truncated raw output. This report
+   * only COUNTS parse-failed records; the math reads none of these fields. */
+  parseError?: string; classification?: string; rawFailurePath?: string; }
 /** GAP 8 (STOP-REPORT-7): the driver's record-proof-failure EVIDENCE record (src/drive/driver-prove-
  * node.ts). Written whenever `af record-proof` refuses a prover decomposition (a bad `depends` entry,
  * a stale-role/stale-hash rejection, any non-zero af exit), carrying the node, af's error `reason`,
@@ -142,6 +148,12 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (!isNonBlankString(parsed.node)) return fail("parse-failed record: missing/mistyped 'node'");
       if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`parse-failed record: 'role' must be one of ${[...ROLES].join(", ")}`);
       if (typeof parsed.rawSnippet !== "string") return fail("parse-failed record: 'rawSnippet' must be a string");
+      // rk-d1n: the M3.5 diagnosability fields are OPTIONAL — present is type-checked, absent stays
+      // recognized (an older parse-failed record predates them and must still parse, not become a
+      // loud issue). Diagnostic-only: nothing downstream reads them.
+      if (parsed.parseError !== undefined && typeof parsed.parseError !== "string") return fail("parse-failed record: 'parseError', when present, must be a string");
+      if (parsed.classification !== undefined && typeof parsed.classification !== "string") return fail("parse-failed record: 'classification', when present, must be a string");
+      if (parsed.rawFailurePath !== undefined && typeof parsed.rawFailurePath !== "string") return fail("parse-failed record: 'rawFailurePath', when present, must be a string");
       return { ok: true, record: parsed as unknown as ParseFailedLogRecord };
     case "record-proof-failed":
       if (!isNonBlankString(parsed.node)) return fail("record-proof-failed record: missing/mistyped 'node'");

@@ -39,6 +39,7 @@ import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
 import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
 import { isProoflessNode, type AfNodeView } from "./driver-plan";
+import { classifyExtractionFailure, extractSingleJsonObject } from "./parse-diag";
 import { recordProofRefine } from "./driver-af";
 import type { ProofContent, RecordProofResult } from "./driver-prove-node";
 // rk-7hi: model/family resolution now lives in its own pure module (280-line shard cap) —
@@ -84,53 +85,28 @@ export function buildRegistry(workers: WorkersConfig, backends: WorkerBackend[])
  * against `DispatchState` (docs/worker-contract.md's data-flow section), so this function's only
  * job is turning a `WorkerResult` into the pre-bind `{raw: unknown, exit}` shape `DispatchedTurn`
  * needs. A parse failure on a nominally-successful exit is reported as 12 (schema-invalid), never
- * silently swallowed. */
-/** GAP 7(a): a CONSERVATIVE, encoding-layer-only extraction of the single JSON object a turn is
- * required to be. It strips at most ONE surrounding markdown code fence (```json … ``` or ``` … ```)
- * plus surrounding whitespace, then requires the ENTIRE remainder to `JSON.parse` to exactly one
- * JSON OBJECT. Anything else fails: prose around JSON, multiple concatenated objects, a bare array or
- * primitive, or "no object" (JSON.parse itself rejects trailing content and multiple values). This
- * is DELIBERATELY not a scan-for-first-brace or embedded-object extraction — picking the "wrong"
- * `{...}` out of a mixed blob risks binding a bogus verdict, and verdict extraction is a validity
- * semantic; the only tolerance added here is a fenced-but-otherwise-clean object, the one shape a
- * model reliably emits despite the "bare JSON" instruction. Ambiguous output still fails (loudly, and
- * persisted by the edge — see DispatchedTurn.rawText). */
-export function extractSingleJsonObject(rawText: string): { ok: true; value: Record<string, unknown> } | { ok: false } {
-  const candidate = stripSingleFence(rawText);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(candidate);
-  } catch {
-    return { ok: false };
-  }
-  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) return { ok: true, value: parsed as Record<string, unknown> };
-  return { ok: false };
-}
-
-/** Removes at most one surrounding ```-fence from `s` (after trimming). A fence is recognized only
- * when the opening line is a bare ``` optionally followed by a simple language tag (e.g. ```json)
- * and a matching closing ``` exists — otherwise the input is returned trimmed but unchanged, so a
- * value that merely CONTAINS backticks is never mangled. */
-function stripSingleFence(s: string): string {
-  const t = s.trim();
-  if (!t.startsWith("```")) return t;
-  const firstNl = t.indexOf("\n");
-  if (firstNl === -1) return t;
-  const tag = t.slice(3, firstNl).trim();
-  if (tag !== "" && !/^[A-Za-z0-9_-]+$/.test(tag)) return t; // opening line carried more than a language tag — not a clean fence
-  const closeIdx = t.lastIndexOf("```");
-  if (closeIdx <= firstNl) return t; // no closing fence after the opening line
-  return t.slice(firstNl + 1, closeIdx).trim();
-}
+ * silently swallowed.
+ *
+ * GAP 7(a) / rk-d1n: `extractSingleJsonObject` (the CONSERVATIVE single-object ACCEPTANCE rule) and
+ * `classifyExtractionFailure`/`stripSingleFence` (DIAGNOSTIC-ONLY) now live in the pure
+ * src/drive/parse-diag.ts, re-exported here so every existing import site is unaffected. On a
+ * parse/extraction failure this attaches, purely for the `parse-failed` evidence record: the raw
+ * text (so the edge can persist it), the `JSON.parse` error message, and the failure-mode class —
+ * none of which changes the acceptance verdict (still exit 12, ambiguous still fails). */
+export { extractSingleJsonObject, stripSingleFence, classifyExtractionFailure } from "./parse-diag";
+export type { ParseFailureClass } from "./parse-diag";
 
 export function toDispatchedTurn(role: Role, result: WorkerResult): DispatchedTurn {
   if (result.exit !== 0) return { raw: undefined, role, exit: result.exit, usage: result.usage };
   if (result.rawText === undefined) return { raw: undefined, role, exit: 12, usage: result.usage };
   const extracted = extractSingleJsonObject(result.rawText);
   if (extracted.ok) return { raw: extracted.value, role, exit: 0, usage: result.usage };
-  // GAP 7(b): parse/extraction failed — carry the raw text so the driver edge persists a bounded
-  // `parse-failed` snippet (previously discarded; the node-skipped reason was the bare "worker exit 12").
-  return { raw: undefined, role, exit: 12, usage: result.usage, rawText: result.rawText };
+  // GAP 7(b) + rk-d1n: parse/extraction failed — carry the raw text (so the driver edge persists a
+  // bounded snippet AND the full raw text), plus the JSON.parse error message and a diagnostic
+  // failure-mode class (unterminated vs trailing-content vs …). All three are DIAGNOSTIC ONLY; the
+  // acceptance outcome is unchanged (exit 12).
+  const diag = classifyExtractionFailure(result.rawText);
+  return { raw: undefined, role, exit: 12, usage: result.usage, rawText: result.rawText, parseError: diag.parseError, parseClass: diag.classification };
 }
 
 export interface LiveDispatcherOptions {

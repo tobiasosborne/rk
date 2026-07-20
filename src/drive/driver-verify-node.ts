@@ -31,7 +31,11 @@ export function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
  * JSON regardless of the snippet's content. Never throws (a value that cannot be stringified — e.g.
  * a BigInt — falls back to `String(raw)`). */
 const RAW_SNIPPET_CAP = 500;
-export function boundedRawSnippet(raw: unknown): string {
+/** rk-d1n: the parse-failed record's snippet cap is raised to 2000 (the attempt-11 incident's
+ * verbose `reason` was cut off at the old 500, hiding whether the JSON was truncated there or ran
+ * on) — bind-failed/record-proof-failed keep the 500 default. */
+export const PARSE_RAW_SNIPPET_CAP = 2000;
+export function boundedRawSnippet(raw: unknown, cap: number = RAW_SNIPPET_CAP): string {
   let s: string;
   try {
     s = typeof raw === "string" ? raw : JSON.stringify(raw);
@@ -39,7 +43,7 @@ export function boundedRawSnippet(raw: unknown): string {
     s = String(raw);
   }
   if (s === undefined) s = String(raw); // JSON.stringify(undefined) === undefined
-  return s.length > RAW_SNIPPET_CAP ? s.slice(0, RAW_SNIPPET_CAP) : s;
+  return s.length > cap ? s.slice(0, cap) : s;
 }
 
 /** The outcome of one `verifyOneNode` call. `spentTokens` (rk-s9t) is the turn's all-in token cost
@@ -82,7 +86,19 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
     // `toDispatchedTurn`) — persist a bounded snippet as evidence so the stop is self-diagnosing,
     // instead of the raw string being unrecoverable behind "worker exit 12" (STOP-REPORT-6).
     if (turn.rawText !== undefined) {
-      deps.appendLog(JSON.stringify({ kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role, rawSnippet: boundedRawSnippet(turn.rawText) }));
+      // rk-d1n: raise the snippet cap to 2000, add the JSON.parse error message + a diagnostic
+      // failure-mode class, and persist the FULL raw text to `.rk/parse-failures/` (edge IO via the
+      // injected `writeParseFailure`), recording its path — so an unterminated verbose `reason` (the
+      // attempt-11 exit-12 deaths) is fully diagnosable without a re-run. All DIAGNOSTIC: the skip
+      // below is unchanged (still `worker exit 12`).
+      const rawFailurePath = deps.writeParseFailure?.(node.id, turn.rawText);
+      deps.appendLog(JSON.stringify({
+        kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role,
+        rawSnippet: boundedRawSnippet(turn.rawText, PARSE_RAW_SNIPPET_CAP),
+        ...(turn.parseError !== undefined ? { parseError: turn.parseError } : {}),
+        ...(turn.parseClass !== undefined ? { classification: turn.parseClass } : {}),
+        ...(rawFailurePath !== undefined ? { rawFailurePath } : {}),
+      }));
     }
     return { spentTokens, skip: `worker exit ${turn.exit}` };
   }

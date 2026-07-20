@@ -41,7 +41,7 @@ import type { Out } from "./args";
 // logic both files actually call.
 import type { VerifyCommandDeps } from "./verify";
 import { reportCommand } from "./verify-report";
-import { appendDriverLog, createBdTaskEdge, readDefinitionTexts } from "./verify-live-io";
+import { appendDriverLog, createBdTaskEdge, readDefinitionTexts, writeParseFailure } from "./verify-live-io";
 
 export const DEFAULT_MAX_TURNS = 30;
 // Distinct from, and deliberately below, driver-balloon.ts's own DEFAULT_BALLOON_NODE_CAP (40) --
@@ -249,6 +249,9 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     writeShard: (content) => writeFileSync(join(root, node.path), content),
     createBdTask: createBdTaskEdge,
     appendLog: (line) => appendDriverLog(root, line),
+    // rk-d1n: persist a parse/extraction failure's full raw output to `.rk/parse-failures/` so the
+    // exact bytes (an unterminated verbose reason, the attempt-11 exit-12 deaths) are inspectable.
+    writeParseFailure: (nodeId, rawText) => writeParseFailure(root, nodeId, rawText),
     now: () => new Date().toISOString(),
     priorBalloonCount: persistedBalloons.count,
     priorClassifications: persistedBalloons.classifications,
