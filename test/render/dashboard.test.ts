@@ -73,4 +73,46 @@ describe("render/dashboard", () => {
     const without = renderDashboard(doc);
     expect(without).toContain("no north star");
   });
+
+  // rk-scy (1): SC5 dry-run — the compact high-value content (summary/legend/north-star) sat
+  // BELOW ~400 near-duplicate defect lines. Reorder so a skimming reader hits the summary first.
+  test("summary, legend, and the north-star line all precede the long defect lists", () => {
+    const html = renderDashboard(doc, "n-open");
+    const countsAt = html.indexOf("rk-counts");
+    const legendAt = html.indexOf("rk-legend-section");
+    const blocksAt = html.indexOf("rk-blocks");
+    const defectListAt = html.indexOf("declared status contradicted by evidence");
+    const conflictsAt = html.indexOf("rk-conflicts");
+    const unresolvedAt = html.indexOf("rk-unresolved");
+    expect(countsAt).toBeGreaterThanOrEqual(0);
+    expect(legendAt).toBeGreaterThan(countsAt);
+    expect(blocksAt).toBeGreaterThan(legendAt);
+    expect(defectListAt).toBeGreaterThan(blocksAt);
+    expect(conflictsAt).toBeGreaterThan(blocksAt);
+    expect(unresolvedAt).toBeGreaterThan(blocksAt);
+  });
+
+  // rk-scy (1): long defect lists collapsed behind <details>/<summary> (CSP-safe) rather than
+  // dumped inline — a skimmer sees a one-line label, not ~400 <li> rows.
+  test("the conflicts, contradicted-status, and unresolved-reference sections are collapsed behind <details>", () => {
+    const html = renderDashboard(doc);
+    const detailsCount = (html.match(/<details/g) ?? []).length;
+    expect(detailsCount).toBe(3);
+    expect(html).toContain("<summary>");
+    // each collapsed section's own content is still present (never dropped, just collapsed).
+    expect(html).toContain("declared status contradicted by evidence");
+    expect(html).toContain("contract-mismatch");
+    expect(html).toContain("proofs/missing");
+  });
+
+  // rk-scy (2): the status table read "proved 147 rigorous" while the headline said 34 — reconciled
+  // only via the conflict lists below. Show declared/defect/effective inline in the row itself.
+  test("the status table reconciles declared vs effective rigorous counts inline, per row", () => {
+    const html = renderDashboard(doc);
+    // fixture: status:proved is declared on 4 nodes (n-proved, n-conflict, n-proved-tainted,
+    // n-proved-orphan); 3 of those are defects (conflicted or tainted) -> 1 effectively rigorous.
+    expect(html).toContain("4 declared, 3 conflicted, 1 rigorous");
+    // cited/consensus are declared on 1 node each, no defects -> fully reconciled trivially.
+    expect(html).toContain("1 declared, 0 conflicted, 1 rigorous");
+  });
 });

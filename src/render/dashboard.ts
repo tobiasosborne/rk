@@ -55,13 +55,36 @@ export function statusCounts(doc: GraphDocument, taint?: ReadonlyMap<string, Tai
   return { byStatus, unset, rigorous, nonRigorous: doc.nodes.length - rigorous, defect };
 }
 
+/** rk-scy (2): per-status defect count — of the nodes DECLARED status `s`, how many are
+ * `effectivePresentation`-defective (conflicted or non-clean taint). Feeds the status table's
+ * inline reconciliation so "N declared rigorous" and the headline's effective rigorous count can
+ * never read as disagreeing without the row itself explaining why. */
+function perStatusDefects(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>): Record<RigourStatus, number> {
+  const conflicted = conflictedIds(doc);
+  const out = Object.fromEntries(RIGOUR_STATUSES.map((s) => [s, 0])) as Record<RigourStatus, number>;
+  for (const nd of doc.nodes) {
+    if (nd.status === undefined) continue;
+    const pres = effectivePresentation(nd.status, conflicted.has(nd.id), nodeTaint(nd.id, taint));
+    if (pres.isDefect) out[nd.status]++;
+  }
+  return out;
+}
+
 function countsBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>): string {
   const c = statusCounts(doc, taint);
+  const defects = perStatusDefects(doc, taint);
   const rows = RIGOUR_STATUSES.filter((s) => c.byStatus[s] > 0).map((s) => {
     const st = statusStyle(s);
+    const declared = c.byStatus[s];
+    // rk-scy (2): "proved 147 rigorous" reconciled only via the conflict lists below (SC5
+    // dry-run) — for a rigorous-tier row, spell the declared/conflicted/effective split out
+    // inline so the row alone answers "why doesn't this match the headline".
+    const reconciliation = st.rigorous
+      ? ` (${declared} declared, ${defects[s]} conflicted, ${declared - defects[s]} rigorous)`
+      : "";
     return (
       `<tr class="${st.tierClass}"><td><span class="rk-swatch" style="background:${st.colour}"></span>` +
-      `${esc(st.label)}</td><td>${c.byStatus[s]}</td><td>${st.rigorous ? "rigorous" : "not"}</td></tr>`
+      `${esc(st.label)}</td><td>${declared}</td><td>${st.rigorous ? "rigorous" : "not"}${esc(reconciliation)}</td></tr>`
     );
   }).join("");
   const unsetRow = c.unset > 0 ? `<tr><td>unset</td><td>${c.unset}</td><td>not</td></tr>` : "";
@@ -160,24 +183,38 @@ function whatBlocksBlock(doc: GraphDocument, northStarId?: string): string {
   );
 }
 
+/** rk-scy (1): SC5 dry-run — a skimming reader hit ~400 near-duplicate defect lines before ever
+ * reaching the legend/summary. Wraps a long list section in a collapsed `<details>` (CSP-safe,
+ * no JS) labelled with its own count, so the content is still ONE CLICK away — never dropped,
+ * just not first. */
+function collapsedSection(summaryLabel: string, sectionHtml: string): string {
+  return `<details class="rk-collapsible"><summary>${esc(summaryLabel)}</summary>${sectionHtml}</details>`;
+}
+
 /** The full dashboard fragment. `northStarId` (optional) drives the what-blocks summary; absent, it
  * degrades honestly to a note rather than fabricating a path. `taint` (optional) is the doc-wide
  * taint trace — pass the one `render/site.ts` already computed once per render; when omitted this
- * recomputes it (kept optional so every pre-existing unit test call site keeps working). */
+ * recomputes it (kept optional so every pre-existing unit test call site keeps working).
+ *
+ * rk-scy (1): ordered so the compact high-value content — status summary, legend, north-star
+ * line — renders FIRST; the long, near-duplicate defect lists (conflicts / contradicted-status /
+ * unresolved-references, ~400 lines on a real campaign) render LAST and collapsed behind
+ * `<details>`, so a skimming reader meets the summary before the noise. */
 export function renderDashboard(
   doc: GraphDocument,
   northStarId?: string,
   taint?: ReadonlyMap<string, TaintEntry>,
 ): string {
   const t = taint ?? computeTaintTrace(doc);
+  const c = statusCounts(doc, t);
   return (
     `<div class="rk-dashboard">` +
     countsBlock(doc, t) +
-    conflictsBlock(doc) +
-    defectBlock(doc, t) +
-    unresolvedBlock(doc) +
-    whatBlocksBlock(doc, northStarId) +
     `<section class="rk-legend-section"><h2>rigour ladder legend</h2>${renderLegend()}</section>` +
+    whatBlocksBlock(doc, northStarId) +
+    collapsedSection(`conflicts (${doc.conflicts.length})`, conflictsBlock(doc)) +
+    collapsedSection(`declared status contradicted by evidence (${c.defect})`, defectBlock(doc, t)) +
+    collapsedSection(`unresolved references (${doc.unresolved.length})`, unresolvedBlock(doc)) +
     `</div>`
   );
 }
