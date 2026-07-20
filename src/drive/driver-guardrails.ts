@@ -11,6 +11,7 @@
 // an abort is never silent and the driver log (.rk/driver-log.jsonl) records WHY a claim died.
 
 import type { Role } from "./vocab";
+import type { WorkerUsage } from "./worker-result";
 
 /** Named machine-readable abort/discard reasons — the closed vocabulary the driver log and any
  * board consumer key off, so "why did this claim stop" is never free-text a reader must interpret.
@@ -23,7 +24,11 @@ export type DriverStopReason =
   | "balloon-abort"
   // M3 blocker 2: the frontier emptied (no verification-ready node) but the claim's ROOT was not
   // af-validated — a challenged/blocked/unproven root that must never be reported as convergence.
-  | "root-unvalidated";
+  | "root-unvalidated"
+  // rk-s9t (M3 repair-wave verdict (c)): the campaign-level token budget cannot afford the NEXT
+  // real model call. Fail-closed, pre-dispatch — the run stops BEFORE requesting a call it cannot
+  // pay for, never a mid-flight silent truncation of a call already in progress.
+  | "budget-exhausted";
 
 export const DEFAULT_MAX_STUCK_ROUNDS = 3;
 export const DEFAULT_NODE_RETRY_CAP = 3;
@@ -105,4 +110,46 @@ export function checkRetryCap(attemptsSoFar: number, cap: number = DEFAULT_NODE_
     return { exhausted: true, reason: `node exhausted its per-node retry cap (${attemptsSoFar}/${cap} attempts) — no further dispatch` };
   }
   return { exhausted: false };
+}
+
+// --- Campaign-level token budget (rk-s9t) -----------------------------------------------------
+
+/** The campaign-wide spend guard the live dispatch path was missing (M3 milestone review verdict
+ * (c)): a REQUIRED-for-live token ceiling on the whole driver run, and a conservative per-call
+ * reserve so the last affordable call is never one the run cannot actually pay to finish.
+ * `maxCampaignTokens` bounds the SUM of every dispatched turn's usage (input+output+cache), applied
+ * or discarded — tokens are spent either way. `perCallReserve` is a conservative upper estimate of
+ * ONE more call's cost; the guard refuses a call whenever the reserve would carry spend past the
+ * cap, so it stops with headroom rather than after an overshoot. Distinct from the driver's
+ * `--max-turns`/`--max-nodes` valves, which bound CALL COUNT, not tokens/spend. */
+export interface BudgetConfig {
+  maxCampaignTokens: number;
+  perCallReserve: number;
+}
+
+export interface BudgetDecision {
+  /** True iff the NEXT real model call may be dispatched under the budget. */
+  affordable: boolean;
+  reason?: string;
+}
+
+/** Total tokens a single turn actually spent — every component of `WorkerUsage` counts (a cache
+ * read or a cache-creation write is real spend the provider bills), so the budget is the honest
+ * all-in token figure, never just input+output. */
+export function usageTokens(u: WorkerUsage): number {
+  return u.input + u.output + u.cache_read + u.cache_creation;
+}
+
+/** Pre-dispatch affordability check (rk-s9t rule 2). Refuses when spend has already reached the cap
+ * (`>=`, so an exactly-at-cap run never dispatches again) OR when one more call's conservative
+ * reserve would carry spend past the cap. Pure: the caller owns the running `tokensSpent` total and
+ * the clock/log; this only decides. */
+export function checkBudget(tokensSpent: number, budget: BudgetConfig): BudgetDecision {
+  if (tokensSpent >= budget.maxCampaignTokens) {
+    return { affordable: false, reason: `campaign token budget exhausted: ${tokensSpent} spent >= cap ${budget.maxCampaignTokens} — no further dispatch` };
+  }
+  if (tokensSpent + budget.perCallReserve > budget.maxCampaignTokens) {
+    return { affordable: false, reason: `campaign token budget cannot afford the next call: ${tokensSpent} spent + ${budget.perCallReserve} reserve > cap ${budget.maxCampaignTokens} — no further dispatch` };
+  }
+  return { affordable: true };
 }

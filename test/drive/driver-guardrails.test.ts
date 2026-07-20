@@ -6,9 +6,11 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_MAX_STUCK_ROUNDS,
   DEFAULT_NODE_RETRY_CAP,
+  checkBudget,
   checkRetryCap,
   detectProverOverreach,
   evaluateStuckGuard,
+  usageTokens,
 } from "../../src/drive/driver-guardrails";
 
 describe("detectProverOverreach — provers prove, only verifiers produce verdicts", () => {
@@ -68,5 +70,39 @@ describe("checkRetryCap — per-node attempt ceiling", () => {
   test("not exhausted below the cap", () => {
     expect(checkRetryCap(0).exhausted).toBe(false);
     expect(checkRetryCap(DEFAULT_NODE_RETRY_CAP - 1).exhausted).toBe(false);
+  });
+});
+
+describe("usageTokens — all-in token cost of one turn (rk-s9t)", () => {
+  test("sums every component (input+output+cache_read+cache_creation), not just input/output", () => {
+    // mutation: drop cache_read/cache_creation from the sum → this goes red.
+    expect(usageTokens({ input: 10, output: 5, cache_read: 100, cache_creation: 20 })).toBe(135);
+  });
+});
+
+describe("checkBudget — pre-dispatch affordability (rk-s9t rule 2)", () => {
+  const budget = { maxCampaignTokens: 100, perCallReserve: 10 };
+
+  test("affordable while spent + reserve stays at or below the cap (boundary is inclusive)", () => {
+    // mutation: `>=` instead of `>` on the reserve branch → this exact-boundary case goes red.
+    expect(checkBudget(90, budget).affordable).toBe(true); // 90 + 10 == 100, still affordable
+    expect(checkBudget(0, budget).affordable).toBe(true);
+  });
+
+  test("refuses once the reserve would carry spend PAST the cap", () => {
+    const d = checkBudget(91, budget); // 91 + 10 = 101 > 100
+    expect(d.affordable).toBe(false);
+    expect(d.reason).toContain("reserve");
+  });
+
+  test("refuses when spend has already reached the cap (>=, never one more)", () => {
+    // mutation: `>` instead of `>=` → the exactly-at-cap case wrongly passes and this goes red.
+    const d = checkBudget(100, { maxCampaignTokens: 100, perCallReserve: 0 });
+    expect(d.affordable).toBe(false);
+    expect(d.reason).toContain("exhausted");
+  });
+
+  test("a cap smaller than one call's reserve refuses the FIRST call (spent 0)", () => {
+    expect(checkBudget(0, { maxCampaignTokens: 5, perCallReserve: 10 }).affordable).toBe(false);
   });
 });
