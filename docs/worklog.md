@@ -183,3 +183,56 @@ dry-run + dagre vendoring remain before full M2 acceptance. Tree at close: 1070 
   (117/117 fixtures on the M3.8 branch, 109/109 on master); dist/rk current.
   THREE lines touch src/drive/driver-run.ts (master usage-logging, M3.8 cross-vendor
   wiring, live-wiring async injection) — the repair session reconciles all three.
+
+## 2026-07-20 — M3 repair + prover dispatch + M3.5 live-debug campaign (Fable orchestrating Opus/Sonnet lanes)
+
+The session that made the machine actually prove things. Three arcs:
+
+- **M3 repair wave** (P0, all 8 boundary-review landing-blockers, 7 parallel lanes):
+  verdicts re-bound to authoritative bytes at apply; challenges never count as
+  convergence progress and converged requires a validated root; role==="verifier"
+  exactly with true per-node non-batch applies; codex terminal-event requirement;
+  grandfathering de-gamed (atomic legacy token, north-star fail-closed, critical-path
+  batch provenance ERROR); L5 corruption poisons promotion + promoted shards
+  continuously re-validated; balloons persisted and threaded to the board (Check 15);
+  SC4 accounting hardened (claim-keyed baselines, schemaVersion 2, session/L5 usage)
+  + campaign token cap with pre-dispatch budget checks. Corpus 117→123. Anti-Zeno
+  held: one wave, mechanical verification, no re-review. Both M3.8/M3.5-prep branches
+  merged first (three-way driver-run.ts reconciliation).
+- **Render wave**: dashboard truthfulness ordering (summary/legend first, inline
+  "147 declared / 113 conflicted / 34 rigorous" reconciliation), vocabulary fixes,
+  graveyard death certificates via fr render edge, .rk/-include regression test.
+- **Prover dispatch + the M3.5 live-debug loop.** Preflight abort discovered the
+  driver was verifier-only (plan gap, surfaced per stop-condition; note in
+  ../research-workflows/). Landed prover dispatch (af authoritative readiness flags,
+  atomic record-proof with challenge disposition + release, per-node prove-then-
+  verify), Tier-A reviewed + one repair wave (af kernel CAS enforcement of
+  hash/role/availability; per-child depends recorded end-to-end; closure flag;
+  version/capability preflight). Then ELEVEN live attempts, each stopping on exactly
+  one isolated gap, each fixed with red-green tests (TJO directive mid-loop: no
+  per-fix reviews — batched at M3 close): model pins (opus/sonnet only, never
+  Fable; codex sol under ChatGPT auth), per-assignment model config (compat event,
+  config-03), bootstrap vacuous-accept guard (narrowed to root shape after codex
+  caught the assumption-leaf overreach), numeric challenge targets, af batch_id
+  optional for non-batch applies, category→aspect target mapping, free-text
+  justification labels in af (SC7 de-residue), fenced-JSON extraction + parse
+  evidence, #N sibling-depends bridge, proof_author provenance on decomposed
+  parents (GAP 9 — the root can finally validate), dependency content in verifier
+  context (GAP 10). Every fix live-verified before the next attempt.
+- **Result**: lem-weighted-min CONVERGED both directions with FULL verdict parity
+  (identical 1/1 challenge dynamics to the AISM originals); mass-split converged
+  claude-prover direction; starvation validated 36/39 before a genuine cross-vendor
+  content dispute. Campaign totals: 6 runs, 2.31M tokens, 58 validated nodes,
+  clean whole-lemma SC4 denominator 33,004 tok/validated-node; cache asymmetry
+  ~0.50 (codex verifier) vs ~0.93 (claude verifier) — the M3.9 caching lever.
+  All memos/reports banked durably in ../rk-m3.5-baseline.
+- **Open at close**: GAP 11 (claude-verifier turns rejected at extraction on 2 of 3
+  lemmas — diagnosability landed: parse-error classification, 2000-char snippets,
+  full raw to .rk/parse-failures/; re-run is next session's first move), the
+  challenge-loop protocol question (disputed parent never converges), the batched
+  M3-close Tier A review of all loop validity changes, M3.9 SC4 comparison, M3
+  acceptance. README added; repo published to GitHub this close.
+
+Gates at close: bun test 1967/0, selftest OK (123/123 corpus, purity 101/101).
+vibefeld advanced d4493c8→8c32a2c (readiness/closure/proof-author exports, atomic
+record-proof, free-text justifications, optional batch_id) — all pushed.

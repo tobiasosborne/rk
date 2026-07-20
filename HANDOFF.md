@@ -3,101 +3,100 @@
 
 # HANDOFF
 
-## State (2026-07-19, session close — M1+M2 ACCEPTED; M3 built, review-repaired NEXT)
+## State (2026-07-20, session close — M3 repair DONE, prover dispatch LIVE, M3.5 4/6 banked)
 
-**M1 ACCEPTED. M2 ACCEPTED** (all WPs, one review + one repair wave, SC5 marginal pass,
-dagre vendored). **M3 is fully built through its single boundary review**: M3.0 spike,
-M3.1 contract (Tier A reviewed + repaired + merged), M3.2 backends, M3.3 session/cache
-manager, M3.4 batch composer, M3.6 hard-tier driver pass 1, M3.7 L5 verdict store,
-M3.9 report instrument all on master; M3.8 cross-vendor rule and the M3.5 live-dispatch
-wiring sit on two UNMERGED worktree branches (below). The M3 boundary review returned
-**8 landing-blockers** — the repair wave is the P0 bead and the NEXT session's first
-move; per its verdict the machinery is NOT yet safe for the M3.5 real-token run.
-**TJO has explicitly authorized the M3.5 spend** (bd memory
-m3-5-spend-authorization-tjo-2026-07-19) — gated only on the repair wave.
-Master tree: green at the M3.9 tip (1581/0/1, selftest 109/109, dist/rk current).
-No rk git remote (TJO: add one if pushing is wanted). vibefeld pushed through 1320ef6
-(V0-V4 ALL done: identity schema, verdicts apply, unvalidate --batch, graph export);
-knowledge-frontier pushed through 0d5f4df (F7 fr export).
+**M3 repair wave COMPLETE** (all 8 boundary-review blockers, rk-e3g closed, one wave,
+mechanically verified, no re-review). **Render wave landed** (rk-scy/38f/50v/d2v).
+**Prover dispatch landed and Tier-A reviewed** (rk-gn4 closed): af authoritative
+readiness flags, atomic `af record-proof` (refine + challenge disposition + release),
+per-node prove→verify, kernel CAS enforcement of hash/role/availability at
+record-proof and verdicts apply, per-child depends end-to-end, closure flag,
+capability preflight. **The M3.5 live-debug loop (11 attempts) fixed ten further
+gaps** — see docs/worklog.md 2026-07-20 entry — each with red-green tests, landed
+WITHOUT per-fix review per TJO directive (bd memory
+m3-5-fix-loop-no-per-fix-reviews-tjo-2026-07-20); all loop validity changes are
+QUEUED for ONE batched Tier A review at M3 close (list below).
 
-## Unmerged branches (both green in their worktrees — MERGE ORDER MATTERS)
+**M3.5 baseline: 3 of 6 runs converged, 4/6 produced denominators.**
+lem-weighted-min A+B CONVERGED, FULL parity (identical challenge dynamics);
+mass-split A CONVERGED 7/7; starvation A 36/39 validated then a genuine cross-vendor
+'incorrect' dispute on 1.9/1.10; mass-split B + starvation B stuck on GAP 11.
+Campaign: 2.31M tokens, 58 validated nodes, **clean whole-lemma SC4 denominator
+33,004 tok/validated-node** (wm-A + wm-B + ms-A pooled); cache ~0.50 codex-verifier
+vs ~0.93 claude-verifier (M3.9 lever). All banked in ../rk-m3.5-baseline
+(RUN-REPORT-11 = campaign table; memos/ has 4 baseline memos, 2 FULL + 2 partial).
 
-- `worktree-agent-a9b12837c0ead0e82` — M3.8 cross-vendor + linker Checks 13/14 +
-  L5-promotion integration + corpus linker-31..38 (count 109→117). Tier A; several
-  review blockers (5, 6) land IN its files.
-- `worktree-agent-a79b59394bee01511` — M3.5 live wiring: --live flag, safety valves,
-  driver-prompts, driver-live, async driver-run injection points.
-- **THREE lines touch src/drive/driver-run.ts**: master (M3.9 usage logging), M3.8
-  branch (cross-vendor apply wiring), live-wiring branch (async injection). The repair
-  session must reconcile all three — recommended order: merge M3.8 first (resolve
-  against master), then live-wiring, then apply the repair wave on the unified tree.
+Gates at close: bun test 1967/0 (134 files), selftest OK (corpus 123/123, purity
+101/101). rk tip pushed to the NEW public GitHub remote (created this close).
+vibefeld pushed through 8c32a2c. AISM untouched (read-only) throughout.
 
-## Next steps (in order — next session)
+## Next steps (in order)
 
-1. **M3 repair wave** (the P0 bead lists all 8 with file:line; full text in
-   docs/reviews/2026-07-19-m3-milestone-review-codex.md): (1) re-bind verdicts to
-   authoritative bytes at apply; (2) challenges never count as progress, converged
-   requires validated root; (3) role===verifier exactly + true per-node sessions/
-   applies in per-node mode; (4) codex terminal-event requirement; (5) grandfathering
-   de-gamed (unparseable=ERROR unless exact atomic legacy-same-family token; north-star
-   unresolved fails closed); (6) L5 corruption poisons promotion + promoted shards
-   re-validated continuously; (7) balloon counts persisted + threaded into the graph
-   (from-registry hard-codes balloons:0); (8) SC4 accounting hardening + spend guards
-   (campaign cap, pre-dispatch budget checks — review verdict (c): exit-11 is NOT a
-   spend guard). Merge branches per the order above; ONE wave, mechanical verification,
-   NO re-review; full bun test + selftest + live-fire gates (the review env was
-   read-only and could not run them).
-2. **M3.5 baseline run** (TJO-authorized): follow
-   docs/memos/2026-07-19-m3.5-baseline-runbook.md — staging is DURABLE at
-   ../rk-m3.5-baseline (3 lemma dirs: lem-weighted-min, lem-mass-split,
-   lem-starvation-completion-obstruction; configs validate 3/3; dry-run verified).
-   Per-lemma baseline memos (af node ids collide across dirs — never one combined
-   array); verdict-parity procedure + abort criteria in the runbook. Both worker
-   pairings (workers.reverse.json swap — rk has no --config flag).
-3. **M3 close**: M3.9 SC4 comparison against the baseline; auto-prove.sh disposition
-   in vibefeld (delete or deprecate — D6 stale-tooling trap); worklog + acceptance.
-4. **Then M4** (fr upgrades + bandit experiment, pre-registration doc M4.0 first) and
-   M5 leftovers; render beads (dashboard ordering P1 rk-…, vocabulary, fr residual
-   carry-through) batch into the next render wave.
-
-## Review/bead ledger (this session)
-
-All four codex reviews banked in docs/reviews/ (M2.1, M2 boundary, M3.1, M3 boundary).
-Open highlights: P0 M3-repair-wave bead; P1 dashboard-ordering (SC5); rk-mnp (crux not
-in graph schema); rk-eet/rk-pwv (usage-log gaps); graph-v2 batch (workspace-prefix
-rk-rgp, conflict identity rk-tns closed-by-coalesce, fr residual text); rk-45m
-(config JSON silent); rk-3af (report-label teacher); rk-b09 (selftest lines for
-graph/render corpora); scheduler-knob config promotion; fr stale command tables
-(fr repo has no tracker — filed here). vibefeld-0l3d lives in vibefeld's tracker.
+1. **GAP 11** (P1 bead): claude-verifier turns on mass-split/starvation rejected at
+   extraction (worker exit 12 ×3, 0 applied) while weighted-min's claude verifier
+   converged — output-variance dependent. Diagnosability NOW IN PLACE (4c07540/
+   891afcd: parse-error classification, 2000-char snippets, full raw to
+   .rk/parse-failures/, prompt conciseness cap). First move: re-run mass-split B —
+   the banked evidence will name the exact malformation; fix accordingly (parser
+   robustness vs prompt vs bounded reprompt — validity side into the batched review).
+2. **Re-run starvation** after GAP 11 (its run A dispute is protocol signal, not a
+   bug — see the P2 challenge-loop bead: disputed parent re-decomposes forever).
+3. **M3 close**: (a) ONE batched Tier A codex review (gpt-5.6-sol, high) of the
+   loop's validity-adjacent changes — vacuous-root guard + prompts, category→aspect
+   map, af batch_id contract, free-text justification, #N depends bridge,
+   proof_author provenance + prover-of-record precedence, GAP 10 context assembly,
+   extraction acceptance rule, DriverDeps signature changes; (b) M3.9 SC4 comparison
+   vs the baseline memos; (c) auto-prove.sh disposition in vibefeld (D6 stale-tooling
+   trap); (d) acceptance report + close beads.
+4. **Then M4** (fr upgrades + bandit experiment, pre-registration doc M4.0 first).
+   Backlog highlights: rk-74o (structural batch eligibility, P1), shard-cap split
+   wave (P2), scheduler stagger relax, graph-v2 batch (rk-mnp crux, rk-rgp),
+   glossary cross-linking (rk-iup), Claude-adapter terminal-event audit.
 
 ## Governance (standing, in bd memory)
 
 - Reviews: codex gpt-5.6-sol HIGH; Fable only with explicit TJO permission.
-- Anti-Zeno: ONE review round + ONE repair wave per milestone; orchestrator verifies
-  mechanically; residuals → beads → next milestone's single review.
-- Two-list reviews; repair rigor follows the finding's tier.
-- Breaking fr changes acceptable; af/fr work unrestricted in rk's service.
-- AISM: read-only crash-test corpus + incident seed ONLY (SC7 generality is the lens).
-- M3.5 spend: TJO-authorized 2026-07-19, gated on the repair wave only.
+- Anti-Zeno: ONE review round + ONE repair wave per milestone; mechanical
+  verification; residuals → beads → next milestone's single review.
+- M3.5 loop amendment (TJO 2026-07-20): live-debug fixes land with tests, NO
+  per-fix review; batched Tier A at M3 close (bd memory ...no-per-fix-reviews...).
+- Worker models (TJO 2026-07-20, bd memory m3-5-model-policy...): claude side
+  opus/sonnet ONLY (never Fable) — staging pins claude-opus-4-8; codex side
+  gpt-5.6-sol (only model runnable under this machine's ChatGPT-account codex).
+- Spend: M3.5 authorization stands; runbook §14 cap 1.5M/run; lemmas 2-3 dispatch
+  was TJO-approved 2026-07-20 and is now spent/banked.
+- AISM: read-only crash-test corpus + incident seed ONLY (SC7 generality lens).
+
+## Key facts for the next session
+
+- Live invocation shape: `dist/rk verify --af <id> --live --max-campaign-tokens
+  1500000` from a lemma dir in ../rk-m3.5-baseline; models pinned per-assignment in
+  .rk/config.json (run A) / workers.reverse.json (swap in for run B); NO --model
+  flag. Rebuild dist/rk + reinstall af before any run; af features[] must include
+  readiness-flags, closure-flag, node-dependencies, proof-author.
+- Restore workspaces byte-identical from _pristine/ before every run; per-lemma
+  memos (af node ids collide across dirs — never one combined array).
+- Driver logs are self-diagnosing: bind-failed / parse-failed (with classification
+  + rawFailurePath) / record-proof-failed / stall dominant-cause lines.
+- The af binary at ~/go/bin/af is 0.1.5 built from vibefeld 8c32a2c.
+- Runbook: docs/memos/2026-07-19-m3.5-baseline-runbook.md §§10-14 (append-only;
+  §11 model pin, §12 per-assignment config, §13 codex sol, §14 cap + sequencing).
 
 ## Standing cautions
 
-- Parallel agents, shared tree: disjoint file scopes; `git commit -m "..." -- <paths>`
-  ALWAYS (bare commit once swept another lane's staged files). Shared files
-  (corpus/README.md, gate-contracts.md, discovery.ts count, selftest.ts, contract
-  docs) are orchestrator-single-writer; lanes report deltas.
-- Cross-lane interfaces: pin the exact type/name contract in BOTH briefs before
-  dispatch (BuildDiagnostics, WorkerBackend both landed byte-identical this way).
-- Worktree agents: merge from the REPO ROOT (a merge run inside a worktree no-ops
-  into itself); remove worktree before deleting its branch; freeze master commits
-  while a codex review is reading the tree.
-- Shell cwd resets to project root between tool calls when cd'ing outside the
-  project; cd + command must share one invocation.
-- bd `update --notes` REPLACES — append manually. bd is per-repo; fr has none.
-- codex exec: 17-60 min for milestone reviews at high; `-o <file>`; the review
-  sandbox is read-only — it CANNOT run bun gates (EROFS), so repairs must run them.
-- Scratchpad is EPHEMERAL per session: bank review outputs into docs/reviews/ and
-  relocate any staging out of /tmp before stopping (done this session).
-- Template CONTENT changes are compat events (bump template_version).
-- Purity grep false-triggers on `node:` param names and `Date.now()` in comments —
-  rename/reword, never touch the guard.
+- Parallel agents, shared tree: disjoint file scopes; `git commit -m "..." --
+  <paths>` ALWAYS. Shared files (corpus/README.md, gate-contracts.md, discovery.ts
+  counts, selftest, contract docs) are orchestrator-single-writer; lanes report
+  deltas. Pin cross-lane type contracts in BOTH briefs before dispatch.
+- M3.5 operator agents: instruct them to STAY with live runs (tail logs, minutes
+  per turn is normal) — two yielded mid-run and needed a resume nudge; monitors
+  firing "completed" notifications repeatedly is normal harness behavior.
+- codex exec reviews: -s read-only, -C needs --skip-git-repo-check outside a repo;
+  17-60 min at high for milestone scope, ~15 min for focused diffs; -o <file>; the
+  sandbox cannot run bun (EROFS) — repairs run the gates.
+- bd close with multiple ids applies ONE --reason to all (fix notes after).
+  bd is per-repo (cd matters); fr has no tracker.
+- Purity grep false-triggers on `node:` param names — rename, never touch the guard.
+- Scratchpad is EPHEMERAL: bank into docs/reviews/ and ../rk-m3.5-baseline (durable).
+- Live runs write .rk/parse-failures/ in workspaces — no rotation; clean when
+  restoring pristine.
