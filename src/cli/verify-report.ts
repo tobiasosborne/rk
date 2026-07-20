@@ -31,6 +31,9 @@ function reportLines(r: CampaignReport): string[] {
   lines.push(`  cache fraction: ${r.cacheFraction.toFixed(4)}`);
   lines.push(`  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=${r.verdicts.total} applied=${r.verdicts.applied} blocked=${r.verdicts.blocked} rejected=${r.verdicts.rejected} other=${r.verdicts.other}`);
   lines.push(`  balloons: total=${r.balloons.total} unclassified=${r.balloons.unclassified} by-classification=${JSON.stringify(r.balloons.byClassification)}`);
+  // rk-53r (P3) + rk-jit (STOP-4): the driver's own per-node discards, recognized (never printed as
+  // "unrecognized 'kind'"). A non-zero vacuous-accept-discarded is the bootstrap-deadlock signature.
+  lines.push(`  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded}`);
   // M3 repair-wave blocker 8: a session whose usage records span more than one claimId poisons that
   // session's cache_creation attribution -- surfaced loudly here (never folded silently into the
   // totals above, which still sum every record exactly; only the PER-NODE split is untrustworthy).

@@ -54,6 +54,21 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "node-skipped", at: "t", node: "1.1", reason: "no worker" }), 1);
     expect(r.ok).toBe(true);
   });
+
+  // rk-53r (P3) + rk-jit (STOP-4): the driver writes these two discard kinds; the report reader
+  // must RECOGNIZE them (never print "unrecognized 'kind'"), and validate their node/reason fields.
+  test("the driver's own 'cross-vendor-rejected' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "cross-vendor-rejected", at: "t", node: "1", reason: "identity-unparseable" }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("the new 'vacuous-accept-discarded' kind is recognized", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "vacuous-accept-discarded", at: "t", node: "1", reason: "nothing to verify" }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("a discard kind missing its 'node'/'reason' is a loud issue, never silently accepted", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "cross-vendor-rejected", at: "t" }), 1);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("parseDriverLog — corrupted-tail precedent (mirrors l5-store's parseL5Log)", () => {
@@ -104,6 +119,17 @@ describe("buildReport — honest empty states", () => {
     const r = buildReport(records, "camp");
     expect(r.measured).toBe(false);
     expect(r.verdicts.applied).toBe(1);
+  });
+
+  test("discard kinds are counted per kind (rk-53r / rk-jit), never silently dropped", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "cross-vendor-rejected", at: "t", node: "1", reason: "identity-unparseable" },
+      { kind: "cross-vendor-rejected", at: "t", node: "1", reason: "identity-unparseable" },
+      { kind: "vacuous-accept-discarded", at: "t", node: "1", reason: "nothing to verify" },
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.discards.crossVendorRejected).toBe(2);
+    expect(r.discards.vacuousAcceptDiscarded).toBe(1);
   });
 });
 

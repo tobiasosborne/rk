@@ -47,8 +47,17 @@ export interface BalloonUnclassifiedLogRecord { kind: "balloon-unclassified"; at
  * only — this report's math never reads their fields, so they get the loud-but-minimal check
  * (valid JSON object, recognized kind) rather than full per-field validation. */
 export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-bd-skipped" | "prover-overreach" | "node-skipped"; at: string; }
+/** rk-53r (P3) + rk-jit (STOP-4): the driver's two per-node DISCARD kinds. `cross-vendor-rejected`
+ * (driver-verify-node.ts) is written whenever the cross-vendor gate refuses an accept;
+ * `vacuous-accept-discarded` is the new backstop discard of an accept on a proofless node. Both were
+ * previously reported as `unrecognized 'kind'` (STOP-REPORT-4) even though rk's OWN driver writes
+ * them — recognized here with `node`/`reason` validated, and counted in `CampaignReport.discards`. */
+// The `node` field is spelled with a space before its colon on purpose — same purity-grep
+// false-positive the `VerdictOutcomeLogRecord` above documents (the selftest forbids a Node builtin
+// import's exact spelling in a PURITY file; the wire field is genuinely named this).
+export interface DiscardLogRecord { kind: "cross-vendor-rejected" | "vacuous-accept-discarded"; at: string; node : string; reason: string; }
 
-export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | OtherDriverLogRecord;
+export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | OtherDriverLogRecord;
 const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped"]);
 
 export interface DriverLogIssue { line: number; message: string; }
@@ -89,6 +98,10 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
     case "balloon-unclassified":
       if (!isNonBlankString(parsed.contractId) || !isNumber(parsed.nodeCount) || !isNumber(parsed.cap)) return fail("balloon-unclassified record: missing/mistyped field(s)");
       return { ok: true, record: parsed as unknown as BalloonUnclassifiedLogRecord };
+    case "cross-vendor-rejected":
+    case "vacuous-accept-discarded":
+      if (!isNonBlankString(parsed.node) || !isNonBlankString(parsed.reason)) return fail(`${parsed.kind} record: missing/mistyped 'node'/'reason'`);
+      return { ok: true, record: parsed as unknown as DiscardLogRecord };
     default:
       if (typeof parsed.kind === "string" && OTHER_KINDS.has(parsed.kind)) return { ok: true, record: parsed as unknown as OtherDriverLogRecord };
       return fail(`unrecognized 'kind': ${JSON.stringify(parsed.kind)}`);
@@ -117,6 +130,10 @@ export function parseDriverLog(text: string): DriverLogParseResult {
 // --- Aggregation ---------------------------------------------------------------------------------
 
 export interface VerdictCounts { total: number; applied: number; blocked: number; rejected: number; other: number; }
+/** rk-53r (P3) + rk-jit (STOP-4): per-kind counts of the driver's own discard events, so `rk verify
+ * --report` surfaces them (e.g. "the verifier accepted N proofless nodes that were discarded")
+ * instead of dropping them as unrecognized noise. */
+export interface DiscardCounts { crossVendorRejected: number; vacuousAcceptDiscarded: number; }
 export interface BalloonCounts { total: number; unclassified: number; byClassification: Record<string, number>; }
 export interface NodeReportRow { nodeId: string; claimId: string; totals: AccountingTotals; cacheFraction: number; attributedTokens: number; }
 export interface ClaimReportRow { claimId: string; contractIds: string[]; nodeIds: string[]; totals: AccountingTotals; cacheFraction: number; attributedTokens: number; balloons: BalloonCounts; }
@@ -127,6 +144,7 @@ export interface CampaignReport {
   cacheFraction: number;
   verdicts: VerdictCounts;
   balloons: BalloonCounts;
+  discards: DiscardCounts;
   nodeRows: NodeReportRow[];
   claimRows: ClaimReportRow[];
   parseIssues: DriverLogIssue[];
@@ -224,6 +242,11 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
     if (r.kind === "balloon") addBalloon(balloons, r.classification);
     else if (r.kind === "balloon-unclassified") addBalloon(balloons, undefined);
   }
+  const discards: DiscardCounts = { crossVendorRejected: 0, vacuousAcceptDiscarded: 0 };
+  for (const r of records) {
+    if (r.kind === "cross-vendor-rejected") discards.crossVendorRejected++;
+    else if (r.kind === "vacuous-accept-discarded") discards.vacuousAcceptDiscarded++;
+  }
 
   const nodeRows: NodeReportRow[] = allKeys(state).map((k) => {
     const totals = totalsFor(state, k);
@@ -244,5 +267,5 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
 
   const grand = grandTotal(state);
   const attributionIssues = computeAttributionIssues(usageRecords);
-  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
+  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
 }
