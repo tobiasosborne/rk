@@ -1,12 +1,12 @@
 // 1:1 test file for src/drive/report.ts (M3.9). Covers: driver-log line parsing (l5-store's
 // corrupted-tail precedent), the attribution conservation property, honest empty states, campaign/
-// claim/node rollups, and the SC4 baseline stub.
+// claim/node rollups, and parseIssues/attributionIssues threading (M3 repair-wave blocker 8). The
+// SC4 baseline comparison itself (parseBaselineMemo/compareToBaseline) now lives in
+// src/drive/report-baseline.ts and is covered by test/drive/report-baseline.test.ts.
 
 import { describe, expect, test } from "bun:test";
 import {
   buildReport,
-  compareToBaseline,
-  parseBaselineMemo,
   parseDriverLog,
   parseDriverLogLine,
   type DriverLogRecord,
@@ -179,49 +179,22 @@ describe("PROPERTY: attribution conservation — sum of per-node attributed toke
   });
 });
 
-describe("SC4 baseline stub — never fabricates a denominator", () => {
-  test("no baseline supplied: unavailable, honest caveat", () => {
-    const r = buildReport([], "camp");
-    const cmp = compareToBaseline(r, undefined);
-    expect(cmp.available).toBe(false);
-    expect(cmp.caveat).toContain("no baseline recorded");
+describe("buildReport — parseIssues and attributionIssues are honestly threaded through", () => {
+  test("caller-supplied parse issues are carried into the report, never dropped", () => {
+    const r = buildReport([], "camp", [{ line: 5, message: "garbage line" }]);
+    expect(r.parseIssues).toEqual([{ line: 5, message: "garbage line" }]);
   });
 
-  test("baseline supplied but this lemma has zero current measured tokens: ratio is undefined, never Infinity", () => {
+  test("no parse issues supplied: parseIssues defaults to empty, never undefined", () => {
     const r = buildReport([], "camp");
-    const cmp = compareToBaseline(r, [{ lemma: "lem-x", tokens: 1000, calls: 5 }]);
-    expect(cmp.available).toBe(true);
-    expect(cmp.rows[0]!.ratio).toBeUndefined();
-    expect(cmp.rows[0]!.currentTokens).toBe(0);
+    expect(r.parseIssues).toEqual([]);
   });
 
-  test("baseline vs a measured campaign: ratio = baseline/current", () => {
+  test("clean single-claim-per-session usage: zero attribution issues", () => {
     const records: DriverLogRecord[] = [
-      { kind: "usage", at: "t", contractId: "c", claimId: "claim-1", nodeId: "lem-x", role: "verifier", sessionId: "s1", usage: { input: 100, output: 50, cache_read: 0, cache_creation: 0 } },
+      { kind: "usage", at: "t1", contractId: "c1", claimId: "claim-1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 0, cache_read: 0, cache_creation: 0 } },
+      { kind: "usage", at: "t2", contractId: "c1", claimId: "claim-1", nodeId: "2", role: "verifier", sessionId: "s1", usage: { input: 1, output: 0, cache_read: 0, cache_creation: 0 } },
     ];
-    const r = buildReport(records, "camp");
-    const cmp = compareToBaseline(r, [{ lemma: "lem-x", tokens: 450, calls: 5 }]);
-    expect(cmp.rows[0]!.currentTokens).toBe(150);
-    expect(cmp.rows[0]!.ratio).toBeCloseTo(3.0, 10);
-  });
-});
-
-describe("parseBaselineMemo", () => {
-  test("valid array round-trips", () => {
-    const r = parseBaselineMemo(JSON.stringify([{ lemma: "a", tokens: 1, calls: 1 }]));
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.baseline).toEqual([{ lemma: "a", tokens: 1, calls: 1 }]);
-  });
-
-  test("not an array: rejected", () => {
-    expect(parseBaselineMemo(JSON.stringify({ lemma: "a" })).ok).toBe(false);
-  });
-
-  test("malformed JSON: rejected, never thrown", () => {
-    expect(parseBaselineMemo("{not json").ok).toBe(false);
-  });
-
-  test("an entry missing a required field: rejected", () => {
-    expect(parseBaselineMemo(JSON.stringify([{ lemma: "a", tokens: 1 }])).ok).toBe(false);
+    expect(buildReport(records, "camp").attributionIssues).toEqual([]);
   });
 });

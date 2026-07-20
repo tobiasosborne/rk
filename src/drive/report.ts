@@ -1,8 +1,9 @@
 // PURITY: pure — no fs/network/clock (L3). M3.9: the token/call accounting REPORT machinery
 // (IMPLEMENTATION_PLAN.md M3.9, PRD C9's closing paragraph — "The driver reports tokens/calls per
 // validated node so success criterion 4 is measured, not estimated"). This is the INSTRUMENT, not
-// the SC4 verdict: `compareToBaseline` below is a stub — SC4 waits on M3.5's baseline memo and
-// never fabricates a denominator until one exists.
+// the SC4 verdict — src/drive/report-baseline.ts (split out, M3 repair-wave blocker 8, to keep
+// this file within CLAUDE.md's shard-size guidance) is what compares a `CampaignReport` built here
+// against a real M3.5 baseline memo.
 //
 // Two jobs: (1) parse `.rk/driver-log.jsonl` TEXT (read by the fs edge, src/cli/verify.ts — same
 // split as src/drive/l5-store.ts's pure parser vs. src/drive/l5-store-io.ts's fs edge) into typed
@@ -129,6 +130,13 @@ export interface CampaignReport {
   nodeRows: NodeReportRow[];
   claimRows: ClaimReportRow[];
   parseIssues: DriverLogIssue[];
+  /** M3 repair-wave blocker 8: a session is opened per (role, tier, claim) — docs/worker-
+   * contract.md section (a) — so every "usage" record sharing one `sessionId` should also share
+   * ONE `claimId`. A session whose records span more than one claimId means the cache_creation
+   * pooling in `attributeTokens` below is mixing tokens across claims that should never have shared
+   * a session; that pool's split is then not trustworthy. Never silently accepted: `compareToBaseline`
+   * refuses SC4 comparison outright while this is non-empty (see there). */
+  attributionIssues: string[];
 }
 
 const ZERO_TOTALS: AccountingTotals = { input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0 };
@@ -159,6 +167,28 @@ function attributeTokens(usageRecords: readonly UsageLogRecord[]): Map<string, n
   return perNode;
 }
 
+/** M3 repair-wave blocker 8: detects a session whose "usage" records were logged under more than
+ * one `claimId` — a violation of the worker contract's "one session per (role, tier, claim)" rule
+ * (docs/worker-contract.md section (a)) that would otherwise let `attributeTokens`'s per-session
+ * cache_creation pool silently mix cost across unrelated claims. Returns one human-readable message
+ * per offending session, sorted by sessionId for deterministic output — never a silent pass. */
+function computeAttributionIssues(usageRecords: readonly UsageLogRecord[]): string[] {
+  const bySession = new Map<string, Set<string>>();
+  for (const r of usageRecords) {
+    const claims = bySession.get(r.sessionId) ?? new Set<string>();
+    claims.add(r.claimId);
+    bySession.set(r.sessionId, claims);
+  }
+  const issues: string[] = [];
+  for (const sessionId of [...bySession.keys()].sort()) {
+    const claims = bySession.get(sessionId)!;
+    if (claims.size > 1) {
+      issues.push(`session '${sessionId}' has usage records under ${claims.size} different claimIds (${[...claims].sort().join(", ")}) — cache_creation pooling for this session is not attributable and its cost is excluded from SC4 comparison`);
+    }
+  }
+  return issues;
+}
+
 function emptyVerdictCounts(): VerdictCounts { return { total: 0, applied: 0, blocked: 0, rejected: 0, other: 0 }; }
 function classifyStatus(status: string, into: VerdictCounts): void {
   into.total++;
@@ -175,8 +205,13 @@ function addBalloon(into: BalloonCounts, classification?: string): void {
 }
 
 /** Folds parsed driver-log records into the full report. Pure: no I/O, no clock. `campaignId` is
- * caller-supplied (one driver-log.jsonl == one campaign, per-repo ground truth), never derived here. */
-export function buildReport(records: readonly DriverLogRecord[], campaignId: string): CampaignReport {
+ * caller-supplied (one driver-log.jsonl == one campaign, per-repo ground truth), never derived
+ * here. `issues` (M3 repair-wave blocker 8, additive/optional so every pre-existing call site still
+ * type-checks) is the caller's own `parseDriverLog(...).issues` — threaded through into the
+ * returned report (previously hardcoded to `[]`, silently dropping every parse issue from the
+ * report itself even though the CLI printed them separately) so `compareToBaseline` can refuse SC4
+ * comparison when the log it is measuring against was not read cleanly. */
+export function buildReport(records: readonly DriverLogRecord[], campaignId: string, issues: readonly DriverLogIssue[] = []): CampaignReport {
   const usageRecords = records.filter((r): r is UsageLogRecord => r.kind === "usage");
   let state = emptyAccountingState();
   for (const r of usageRecords) state = recordTurn(state, { nodeId: r.nodeId, claimId: r.claimId, campaignId }, r.usage);
@@ -208,49 +243,6 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
   });
 
   const grand = grandTotal(state);
-  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, nodeRows, claimRows, parseIssues: [] };
-}
-
-// --- SC4 baseline comparison (stub — M3.5 supplies the real memo) --------------------------------
-
-export interface BaselineEntry { lemma: string; tokens: number; calls: number; }
-export type BaselineMemo = BaselineEntry[];
-
-/** `.rk`-external memo shape M3.5 will produce: a JSON array of `{lemma, tokens, calls}`, one per
- * already-validated node re-measured from a fresh workspace under the CURRENT (pre-batching/
- * caching) protocol — the SC4 denominator. */
-export function parseBaselineMemo(text: string): { ok: true; baseline: BaselineMemo } | { ok: false; reason: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    return { ok: false, reason: `baseline file is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  if (!Array.isArray(parsed)) return { ok: false, reason: "baseline file must be a JSON array of {lemma, tokens, calls}" };
-  const baseline: BaselineMemo = [];
-  for (const [i, entry] of parsed.entries()) {
-    if (!isPlainObject(entry) || !isNonBlankString(entry.lemma) || !isNumber(entry.tokens) || !isNumber(entry.calls)) return { ok: false, reason: `baseline entry ${i} must be {lemma: string, tokens: number, calls: number}` };
-    baseline.push({ lemma: entry.lemma, tokens: entry.tokens, calls: entry.calls });
-  }
-  return { ok: true, baseline };
-}
-
-export interface BaselineComparisonRow { lemma: string; baselineTokens: number; baselineCalls: number; currentTokens: number; currentCalls: number; ratio?: number; }
-export interface BaselineComparison { available: boolean; rows: BaselineComparisonRow[]; caveat: string; }
-
-export const NO_BASELINE_CAVEAT = "no baseline recorded — SC4 not yet measurable";
-export const SC4_CAVEAT = "SC4 (IMPLEMENTATION_PLAN.md M3.9): >=3x improvement over the M3.5 baseline, or an honest miss with analysis.";
-
-/** Matches baseline entries to this campaign's node rows by `lemma === nodeId`. Never fabricates a
- * denominator: a lemma with zero measured current tokens gets `ratio: undefined`, never `Infinity`
- * or a silently-substituted value. */
-export function compareToBaseline(report: CampaignReport, baseline?: BaselineMemo): BaselineComparison {
-  if (baseline === undefined || baseline.length === 0) return { available: false, rows: [], caveat: NO_BASELINE_CAVEAT };
-  const rows = baseline.map((b) => {
-    const node = report.nodeRows.find((n) => n.nodeId === b.lemma);
-    const currentTokens = node?.attributedTokens ?? 0;
-    const currentCalls = node?.totals.turns ?? 0;
-    return { lemma: b.lemma, baselineTokens: b.tokens, baselineCalls: b.calls, currentTokens, currentCalls, ratio: currentTokens > 0 ? b.tokens / currentTokens : undefined };
-  });
-  return { available: true, rows, caveat: SC4_CAVEAT };
+  const attributionIssues = computeAttributionIssues(usageRecords);
+  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
 }

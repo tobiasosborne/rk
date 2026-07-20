@@ -268,7 +268,9 @@ describe("rk verify --report (M3.9)", () => {
     mkdirSync(join(root, ".rk"), { recursive: true });
     writeFileSync(join(root, ".rk", "driver-log.jsonl"), usageLine({ contractId: "lem-x", claimId: "claim-1", nodeId: "lem-x", sessionId: "s1", usage: { input: 100, output: 50, cache_read: 0, cache_creation: 0 } }) + "\n");
     const baselinePath = join(root, "baseline.json");
-    writeFileSync(baselinePath, JSON.stringify([{ lemma: "lem-x", tokens: 450, calls: 5 }]));
+    // M3 repair-wave blocker 8: baseline entries now carry claimId (the join key fix) under a
+    // versioned {schemaVersion, entries} envelope, not a bare array (src/drive/report.ts).
+    writeFileSync(baselinePath, JSON.stringify({ schemaVersion: 2, entries: [{ claimId: "claim-1", lemma: "lem-x", tokens: 450, calls: 5 }] }));
     const { out, lines } = capture();
     const code = await verifyCommand(["--report", "--root", root, "--baseline", baselinePath], out, { afCommand: ABSENT, frCommand: ABSENT });
     expect(code).toBe(0);

@@ -23,7 +23,7 @@
 // `validateSessionRequest` before ever reaching a backend is a future WP's responsibility.
 
 import type { ModelFamily, Role, Tier } from "./vocab";
-import type { WorkerResult } from "./worker-result";
+import type { WorkerResult, WorkerUsage } from "./worker-result";
 
 /** What `createSession` needs: the shared context to send once, and enough of the isolation tuple
  * (docs/worker-contract.md section (a)) for a backend to log/attribute the session correctly.
@@ -67,6 +67,16 @@ export interface WorkerBackend {
   name: string;
   modelFamily: ModelFamily;
   capabilities: { sessionResume: boolean };
-  createSession(spec: SessionSpec): Promise<{ sessionId: string }>;
+  /** M3 repair-wave blocker 8 (docs/reviews/2026-07-19-m3-milestone-review-codex.md): opening a
+   * session-capable backend's session is not free — e.g. `ClaudeBackend.createSession` (src/drive/
+   * backend-claude.ts) spawns a REAL `claude -p` call carrying `sharedContext` and gets back a real
+   * usage envelope. `usage` is OPTIONAL/additive (a `dispatchModel:"flat"` backend that sends
+   * nothing on `createSession`, per the Q1 ruling, legitimately has none to report, and every
+   * pre-existing `{ sessionId }`-only implementation still type-checks unchanged) so the SC4
+   * accounting layer (src/drive/report.ts, src/drive/l5-dispatch.ts) is no longer STRUCTURALLY
+   * blind to session-creation cost — a caller that has real usage to report now has somewhere to
+   * put it, closing the "session-creation usage... absent" accounting gap. Populating this field on
+   * `ClaudeBackend`/`CodexBackend` themselves is a follow-up (out of this WP's file scope). */
+  createSession(spec: SessionSpec): Promise<{ sessionId: string; usage?: WorkerUsage }>;
   runTurn(sessionId: string, item: TurnItem): Promise<WorkerResult>;
 }

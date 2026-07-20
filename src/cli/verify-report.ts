@@ -9,7 +9,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildReport, compareToBaseline, parseBaselineMemo, parseDriverLog, type CampaignReport } from "../drive/report";
+import { buildReport, parseDriverLog, type CampaignReport } from "../drive/report";
+import { compareToBaseline, parseBaselineMemo } from "../drive/report-baseline";
 import type { Out } from "./args";
 
 /** The fixed, campaign-repo-relative location of the driver's append-only event log (same
@@ -30,6 +31,10 @@ function reportLines(r: CampaignReport): string[] {
   lines.push(`  cache fraction: ${r.cacheFraction.toFixed(4)}`);
   lines.push(`  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=${r.verdicts.total} applied=${r.verdicts.applied} blocked=${r.verdicts.blocked} rejected=${r.verdicts.rejected} other=${r.verdicts.other}`);
   lines.push(`  balloons: total=${r.balloons.total} unclassified=${r.balloons.unclassified} by-classification=${JSON.stringify(r.balloons.byClassification)}`);
+  // M3 repair-wave blocker 8: a session whose usage records span more than one claimId poisons that
+  // session's cache_creation attribution -- surfaced loudly here (never folded silently into the
+  // totals above, which still sum every record exactly; only the PER-NODE split is untrustworthy).
+  for (const issue of r.attributionIssues) lines.push(`  ATTRIBUTION ISSUE: ${issue}`);
   for (const c of r.claimRows) {
     lines.push(`  claim ${c.claimId} (contract ${c.contractIds.join(",") || "?"}): turns=${c.totals.turns} attributed-tokens=${c.attributedTokens} cache-fraction=${c.cacheFraction.toFixed(4)} balloons=${c.balloons.total}`);
     for (const n of r.nodeRows.filter((row) => row.claimId === c.claimId)) {
@@ -51,7 +56,12 @@ export function reportCommand(root: string, out: Out, baselinePath: string | und
   }
   const { records, issues } = parseDriverLog(readFileSync(path, "utf8"));
   for (const issue of issues) out.log(`  [driver-log:${issue.line}] ${issue.message}`);
-  const report = buildReport(records, root);
+  // M3 repair-wave blocker 8: `issues` used to be computed here and then discarded -- `buildReport`
+  // hardcoded `parseIssues: []`, so a corrupted driver log's parse issues never reached the
+  // report object itself (only this function's own separate print loop above), and SC4 comparison
+  // had no way to know the log it was measuring against was incomplete. Threading `issues` through
+  // is what lets `compareToBaseline` refuse a fabricated ratio over a damaged log (see there).
+  const report = buildReport(records, root, issues);
   for (const line of reportLines(report)) out.log(line);
   if (issues.length > 0) out.log(`  ${issues.length} driver-log line(s) could not be parsed (see above) -- never silently dropped.`);
 
@@ -72,7 +82,7 @@ export function reportCommand(root: string, out: Out, baselinePath: string | und
   out.log(`  SC4 baseline comparison -- ${cmp.caveat}`);
   for (const row of cmp.rows) {
     const ratioText = row.ratio === undefined ? "no current data measured for this lemma" : `${row.ratio.toFixed(2)}x`;
-    out.log(`    ${row.lemma}: baseline=${row.baselineTokens}tok/${row.baselineCalls}call current=${row.currentTokens}tok/${row.currentCalls}call ratio=${ratioText}`);
+    out.log(`    ${row.claimId}/${row.lemma}: baseline=${row.baselineTokens}tok/${row.baselineCalls}call current=${row.currentTokens}tok/${row.currentCalls}call ratio=${ratioText}`);
   }
   return 0;
 }

@@ -47,8 +47,10 @@ function plan(overrides: Partial<L5DispatchPlan> = {}): L5DispatchPlan {
 
 /** A fake in-memory `WorkerBackend`: `turnReplies` maps itemId -> the raw JSON body the fake
  * worker "returns" for that item's turn (already JSON.stringify-ready as an object; this fake
- * stringifies it for the caller, mirroring a real backend's `rawText`). */
-function fakeBackend(turnReplies: Record<string, unknown>, opts: { exitFor?: Record<string, number> } = {}): { backend: WorkerBackend; sessionSpecs: SessionSpec[]; turns: TurnItem[] } {
+ * stringifies it for the caller, mirroring a real backend's `rawText`). `sessionUsage`, when
+ * supplied, is what `createSession` reports back (M3 blocker 8: a session-capable backend's
+ * `createSession` can itself spend real tokens — see backend-types.ts's additive `usage` field). */
+function fakeBackend(turnReplies: Record<string, unknown>, opts: { exitFor?: Record<string, number>; sessionUsage?: WorkerUsage } = {}): { backend: WorkerBackend; sessionSpecs: SessionSpec[]; turns: TurnItem[] } {
   const sessionSpecs: SessionSpec[] = [];
   const turns: TurnItem[] = [];
   let sessionCounter = 0;
@@ -58,7 +60,7 @@ function fakeBackend(turnReplies: Record<string, unknown>, opts: { exitFor?: Rec
     capabilities: { sessionResume: true },
     async createSession(spec) {
       sessionSpecs.push(spec);
-      return { sessionId: `sess-${sessionCounter++}` };
+      return { sessionId: `sess-${sessionCounter++}`, usage: opts.sessionUsage };
     },
     async runTurn(_sessionId, item) {
       turns.push(item);
@@ -72,8 +74,16 @@ function fakeBackend(turnReplies: Record<string, unknown>, opts: { exitFor?: Rec
   return { backend, sessionSpecs, turns };
 }
 
-function deps(backend: WorkerBackend, contentOverrides: Record<string, string> = { a: CONTENT_A, b: CONTENT_B }): L5DispatchDeps {
-  return { backend, model: "claude-sonnet-5", content: new Map(Object.entries(contentOverrides)), sharedContext: "rubric text", nowIso: () => "2026-07-19T00:00:00.000Z" };
+function deps(backend: WorkerBackend, contentOverrides: Record<string, string> = { a: CONTENT_A, b: CONTENT_B }, extra: Partial<L5DispatchDeps> = {}): L5DispatchDeps {
+  return { backend, model: "claude-sonnet-5", content: new Map(Object.entries(contentOverrides)), sharedContext: "rubric text", nowIso: () => "2026-07-19T00:00:00.000Z", ...extra };
+}
+
+/** Captures every `appendLog` line as a parsed JSON object, in call order — the shape a real
+ * `.rk/driver-log.jsonl` writer (src/cli/verify-live.ts's `appendDriverLog`, out of this WP's
+ * scope) would persist. */
+function logCapture(): { appendLog: (line: string) => void; records: Record<string, unknown>[] } {
+  const records: Record<string, unknown>[] = [];
+  return { appendLog: (line: string) => records.push(JSON.parse(line)), records };
 }
 
 describe("dispatchL5Plan — success path", () => {
@@ -167,5 +177,75 @@ describe("dispatchL5Plan — multi-batch", () => {
     const outcomes = await dispatchL5Plan(root, twoBatchPlan, deps(backend, { a: "content a", c: "content c" }));
     expect(sessionSpecs.map((s) => s.claimId)).toEqual(["l5:batch-1", "l5:batch-2"]);
     expect(outcomes.map((o) => o.batchId)).toEqual(["batch-1", "batch-2"]);
+  });
+});
+
+// M3 repair-wave blocker 8 (docs/reviews/2026-07-19-m3-milestone-review-codex.md): "session-creation
+// usage and all L5 usage are absent" from the SC4 accounting report. Before this WP, dispatchL5Plan
+// discarded every WorkerResult's `usage` field and never called `createSession`'s optional `usage`
+// at all — real L5 spend was structurally invisible to src/drive/report.ts. These tests assert the
+// fix's contract: an injected `appendLog` receives one `{kind:"usage",...}` line per real backend
+// call (session open + every dispatched turn, applied OR rejected — tokens are spent either way),
+// and zero lines for members discarded BEFORE dispatch (no tokens spent).
+describe("dispatchL5Plan — M3 blocker 8: L5 usage accounting", () => {
+  test("logs one usage record per dispatched turn, for BOTH applied and rejected members", async () => {
+    const usageA: WorkerUsage = { input: 11, output: 22, cache_read: 0, cache_creation: 0 };
+    const usageB: WorkerUsage = { input: 33, output: 44, cache_read: 0, cache_creation: 0 };
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } }, { exitFor: { b: 13 } });
+    // fakeBackend always returns the SAME usage per test; override runTurn behavior via a thin
+    // wrapper so "a" and "b" report distinguishable usage.
+    const usageByItem: Record<string, WorkerUsage> = { a: usageA, b: usageB };
+    const wrapped: WorkerBackend = { ...backend, runTurn: async (sid, item) => { const r = await backend.runTurn(sid, item); return { ...r, usage: usageByItem[item.itemId]! }; } };
+    const root = tmpRoot();
+    const { appendLog, records } = logCapture();
+    await dispatchL5Plan(root, plan(), deps(wrapped, undefined, { appendLog }));
+
+    const usageRecords = records.filter((r) => r.kind === "usage" && r.nodeId !== "(session-open)");
+    expect(usageRecords.map((r) => r.nodeId).sort()).toEqual(["a", "b"]);
+    const recA = usageRecords.find((r) => r.nodeId === "a")!;
+    expect(recA.usage).toEqual(usageA);
+    expect(recA.claimId).toBe("l5:batch-1");
+    const recB = usageRecords.find((r) => r.nodeId === "b")!;
+    expect(recB.usage).toEqual(usageB); // rejected turn (exit 13) still spent real tokens
+  });
+
+  test("logs a session-creation usage record when the backend reports one, distinct from member nodeIds", async () => {
+    const sessionUsage: WorkerUsage = { input: 500, output: 0, cache_read: 0, cache_creation: 200 };
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } }, { sessionUsage });
+    const root = tmpRoot();
+    const { appendLog, records } = logCapture();
+    await dispatchL5Plan(root, plan(), deps(backend, undefined, { appendLog }));
+
+    const sessionRecords = records.filter((r) => r.kind === "usage" && r.nodeId === "(session-open)");
+    expect(sessionRecords).toHaveLength(1);
+    expect(sessionRecords[0]!.usage).toEqual(sessionUsage);
+    expect(sessionRecords[0]!.claimId).toBe("l5:batch-1");
+    // session-open logged before any member turn (log order feeds report.ts's fair-share pooling).
+    const allNodeIds = records.filter((r) => r.kind === "usage").map((r) => r.nodeId);
+    expect(allNodeIds[0]).toBe("(session-open)");
+  });
+
+  test("no session-creation usage record when the backend reports none (a flat/no-usage backend)", async () => {
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const { appendLog, records } = logCapture();
+    await dispatchL5Plan(root, plan(), deps(backend, undefined, { appendLog }));
+    expect(records.some((r) => r.nodeId === "(session-open)")).toBe(false);
+  });
+
+  test("a member discarded BEFORE dispatch (content-hash mismatch) logs NO usage record — no tokens spent", async () => {
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const { appendLog, records } = logCapture();
+    await dispatchL5Plan(root, plan(), deps(backend, { a: "TAMPERED bytes that do not match HASH_A", b: CONTENT_B }, { appendLog }));
+    const usageRecords = records.filter((r) => r.kind === "usage" && r.nodeId !== "(session-open)");
+    expect(usageRecords.map((r) => r.nodeId)).toEqual(["b"]); // "a" never dispatched, never logged
+  });
+
+  test("dispatch works unchanged when appendLog is not supplied (optional dep, no crash)", async () => {
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend));
+    expect(outcomes[0]!.applied).toHaveLength(2);
   });
 });
