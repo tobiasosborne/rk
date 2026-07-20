@@ -53,6 +53,20 @@ describe("reportLines — FU4: discard diagnostics render even with zero usage r
     expect(discards!).toContain("parse-failed=1");
   });
 
+  // GAP 8: an af record-proof rejection (the codex-prover forward-sibling depends stop) renders its
+  // own count on the discards line, even on an otherwise unmeasured deadlock run.
+  test("record-proof-failed count renders on the discards line (GAP 8), even with zero usage records", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "record-proof-failed", at: "t1", node: "1", reason: "af record-proof exit 1: child 2: dependency node 1.1 does not exist", rawSnippet: '[{"statement":"x","depends":["1.1"]}]' } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-recproof");
+    expect(report.measured).toBe(false);
+    const lines = reportLines(report);
+    const discards = lines.find((l) => l.includes("discards:"));
+    expect(discards).toBeDefined();
+    expect(discards!).toContain("record-proof-failed=1");
+  });
+
   test("a measured report still prints the discards line (unchanged path)", () => {
     const records: DriverLogRecord[] = [
       { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,

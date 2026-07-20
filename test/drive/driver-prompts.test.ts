@@ -112,6 +112,21 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
     for (const word of forbidden) expect(turn.toLowerCase()).not.toContain(word.toLowerCase());
   });
 
+  // GAP 8 (STOP-REPORT-7): the prompt must document af's dependency convention so a prover stops
+  // naming a not-yet-created sibling by its anticipated absolute id. A forward same-batch sibling is
+  // "#N" (0-based; #0 = first child); an already-existing node keeps its absolute id. One concrete
+  // example is present.
+  test("prover prompt documents the #N in-batch dependency convention with a concrete example", () => {
+    const turn = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: ["1"] });
+    expect(turn).toContain("#0"); // the 0-based first-child relative ref
+    expect(turn).toContain("#N");
+    expect(turn).toContain("0-based");
+    // the concrete example wiring a second child to the first via #0
+    expect(turn).toContain('"depends": ["#0"]');
+    // and the explicit warning against an anticipated absolute sibling id
+    expect(turn).toContain("absolute id");
+  });
+
   test("prover prompt is byte-stable for the same input", () => {
     const a = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: [] });
     const b = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: [] });

@@ -67,7 +67,7 @@ export type ProveNodeOutcome = { spentTokens: number } & ({ recorded: true; node
 /** Dispatches ONE prover turn over `node` and records the produced decomposition into af. Returns
  * `recorded` on success (the node now carries children and af re-classifies it — the verifier path
  * takes over), or a named `skip` (never applied); either way carries the turn's `spentTokens`. */
-export async function proveOneNode(deps: DriverDeps, node: AfNodeView): Promise<ProveNodeOutcome> {
+export async function proveOneNode(deps: DriverDeps, node: AfNodeView, knownIds: ReadonlySet<string>): Promise<ProveNodeOutcome> {
   const turn = await deps.dispatchProve(node);
   if (turn === undefined) return { spentTokens: 0, skip: "no prover worker available" };
   const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
@@ -97,8 +97,15 @@ export async function proveOneNode(deps: DriverDeps, node: AfNodeView): Promise<
   }
   const proof = extractProofContent(turn.raw);
   if (proof === undefined) return { spentTokens, skip: "prover produced no usable proof content (need a non-empty children[] decomposition)" };
-  const rec = await deps.recordProof(node, proof);
-  if (!rec.ok) return { spentTokens, skip: `af recordProof failed: ${rec.reason}` };
+  const rec = await deps.recordProof(node, proof, knownIds);
+  if (!rec.ok) {
+    // GAP 8 observability (STOP-REPORT-7, same evidence family as rk-2cm's bind/parse-failed): an af
+    // record-proof exit-1 (e.g. a bad `depends` entry) previously banked ONLY af's error string — the
+    // raw prover decomposition was unrecoverable. Persist a bounded snippet of the children JSON
+    // alongside the reason so the mis-wired proof DAG is inspectable without a re-run.
+    deps.appendLog(JSON.stringify({ kind: "record-proof-failed", at: deps.now(), node: node.id, reason: rec.reason, rawSnippet: boundedRawSnippet(JSON.stringify(proof.children)) }));
+    return { spentTokens, skip: `af recordProof failed: ${rec.reason}` };
+  }
   deps.appendLog(JSON.stringify({ kind: "proof-recorded", at: deps.now(), node: node.id, children: proof.children.length }));
   return { spentTokens, recorded: true, nodeId: node.id };
 }

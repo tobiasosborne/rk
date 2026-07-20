@@ -181,7 +181,10 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
         const decision = checkBudget(tokensSpent, deps.budget);
         if (!decision.affordable) return { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
       }
-      const pr = await proveOneNode(deps, node);
+      // GAP 8: the round's fresh node-id set (parallel to verifyOneNode's `new Set(byId.keys())`
+      // below) — buildRecordProofChildren needs it to translate a prover's forward-sibling `depends`
+      // into af's `#N` in-batch namespace and to distinguish an existing dependency from one.
+      const pr = await proveOneNode(deps, node, new Set(byId.keys()));
       tokensSpent += pr.spentTokens; // accrue whether the proof recorded or the turn was discarded
       if ("recorded" in pr) {
         progressed = true;

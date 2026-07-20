@@ -285,8 +285,8 @@ export function liveDispatchProve(dispatcher: LiveRoleTierDispatcher) {
  * hash re-bind) — a stale-role/stale-hash rejection surfaces as a discard, not a partial write.
  * `owner` is the prover's identity seam; `absWorkspace` the resolved proof dir. */
 export function liveRecordProof(absWorkspace: string, owner: string, afCommand?: readonly string[]) {
-  return (node: AfNodeView, proof: ProofContent): RecordProofResult =>
-    recordProofRefine(absWorkspace, node.id, owner, proof, node.contentHash, afCommand);
+  return (node: AfNodeView, proof: ProofContent, knownIds: ReadonlySet<string>): RecordProofResult =>
+    recordProofRefine(absWorkspace, node.id, owner, proof, knownIds, node.contentHash, afCommand);
 }
 
 /** Ad hoc, inline balloon-classification prompt (see file header, scope note 4) -- deliberately

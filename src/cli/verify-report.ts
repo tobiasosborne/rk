@@ -26,7 +26,9 @@ function discardsLine(r: CampaignReport): string {
   // is the "no verdict ever bound/landed" signature (e.g. a challenge target the model failed to quote).
   // GAP 7(b): `parse-failed` alongside it — a nominally-successful turn whose output was not a single
   // bare JSON object (exit 12); the raw snippet is in the driver-log for diagnosis.
-  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures} parse-failed=${r.parseFailures}`;
+  // GAP 8: `record-proof-failed` — an af record-proof that refused a prover decomposition (e.g. a
+  // depends entry that named neither an existing node nor a legal in-batch sibling).
+  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures} parse-failed=${r.parseFailures} record-proof-failed=${r.recordProofFailures}`;
 }
 
 export function reportLines(r: CampaignReport): string[] {

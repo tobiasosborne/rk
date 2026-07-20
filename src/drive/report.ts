@@ -78,8 +78,17 @@ export interface BindFailedLogRecord { kind: "bind-failed"; at: string; node : s
  * The `node` field is spelled with a space before its colon — same purity-grep false-positive the
  * records above document. */
 export interface ParseFailedLogRecord { kind: "parse-failed"; at: string; node : string; role: Role; rawSnippet: string; }
+/** GAP 8 (STOP-REPORT-7): the driver's record-proof-failure EVIDENCE record (src/drive/driver-prove-
+ * node.ts). Written whenever `af record-proof` refuses a prover decomposition (a bad `depends` entry,
+ * a stale-role/stale-hash rejection, any non-zero af exit), carrying the node, af's error `reason`,
+ * and a bounded, JSON-safe snippet of the children JSON — so a live stop can quote the raw prover
+ * decomposition that af rejected instead of only "af recordProof failed: ...". This report only
+ * COUNTS these (the math never reads `reason`/`rawSnippet`), but they MUST be RECOGNIZED (never
+ * `unrecognized 'kind'`). The `node` field is spelled with a space before its colon — same purity-grep
+ * false-positive the records above document. */
+export interface RecordProofFailedLogRecord { kind: "record-proof-failed"; at: string; node : string; reason: string; rawSnippet: string; }
 
-export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | OtherDriverLogRecord;
+export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | OtherDriverLogRecord;
 const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap"]);
 
 export interface DriverLogIssue { line: number; message: string; }
@@ -134,6 +143,11 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`parse-failed record: 'role' must be one of ${[...ROLES].join(", ")}`);
       if (typeof parsed.rawSnippet !== "string") return fail("parse-failed record: 'rawSnippet' must be a string");
       return { ok: true, record: parsed as unknown as ParseFailedLogRecord };
+    case "record-proof-failed":
+      if (!isNonBlankString(parsed.node)) return fail("record-proof-failed record: missing/mistyped 'node'");
+      if (!isNonBlankString(parsed.reason)) return fail("record-proof-failed record: missing/mistyped 'reason'");
+      if (typeof parsed.rawSnippet !== "string") return fail("record-proof-failed record: 'rawSnippet' must be a string");
+      return { ok: true, record: parsed as unknown as RecordProofFailedLogRecord };
     default:
       if (typeof parsed.kind === "string" && OTHER_KINDS.has(parsed.kind)) return { ok: true, record: parsed as unknown as OtherDriverLogRecord };
       return fail(`unrecognized 'kind': ${JSON.stringify(parsed.kind)}`);
@@ -186,6 +200,11 @@ export interface CampaignReport {
    * non-zero value on an otherwise unmeasured campaign is the signature of a live stop where the
    * worker's output never bound; the raw snippet is in the driver-log for diagnosis. */
   parseFailures: number;
+  /** GAP 8 (STOP-REPORT-7): count of 'record-proof-failed' evidence records — an `af record-proof`
+   * that refused a prover decomposition (a bad `depends` entry, a stale-role/stale-hash rejection).
+   * A non-zero value on an otherwise unmeasured campaign is the signature of a live stop where the
+   * prover ran but no proof was ever recorded; the children snippet is in the driver-log for diagnosis. */
+  recordProofFailures: number;
   nodeRows: NodeReportRow[];
   claimRows: ClaimReportRow[];
   parseIssues: DriverLogIssue[];
@@ -286,11 +305,13 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
   const discards: DiscardCounts = { crossVendorRejected: 0, vacuousAcceptDiscarded: 0 };
   let bindFailures = 0;
   let parseFailures = 0;
+  let recordProofFailures = 0;
   for (const r of records) {
     if (r.kind === "cross-vendor-rejected") discards.crossVendorRejected++;
     else if (r.kind === "vacuous-accept-discarded") discards.vacuousAcceptDiscarded++;
     else if (r.kind === "bind-failed") bindFailures++;
     else if (r.kind === "parse-failed") parseFailures++;
+    else if (r.kind === "record-proof-failed") recordProofFailures++;
   }
 
   const nodeRows: NodeReportRow[] = allKeys(state).map((k) => {
@@ -312,5 +333,5 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
 
   const grand = grandTotal(state);
   const attributionIssues = computeAttributionIssues(usageRecords);
-  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, parseFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
+  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, parseFailures, recordProofFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
 }

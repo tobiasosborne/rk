@@ -61,41 +61,104 @@ describe("parseAfExport — af export --graph json → node view (reads recorded
 
 // rk B2/FU3: the `af record-proof --children` JSON mapping carries per-child depends (no longer
 // dropped) and maps justification → af's `inference` key.
-describe("buildRecordProofChildren — ProofContent → af record-proof --children JSON (rk B2)", () => {
+describe("buildRecordProofChildren — ProofContent → af record-proof --children JSON (rk B2 + GAP 8)", () => {
+  // parent "2" so a genuinely-existing "1.1" is never a same-batch sibling; knownIds carries the
+  // existing nodes. A `#0` passes through; an existing absolute id passes through (existing-node-wins).
+  const known = new Set(["1", "2", "1.1"]);
   test("carries statement, maps justification→inference, and keeps per-child depends", () => {
-    const children = buildRecordProofChildren({
+    const r = buildRecordProofChildren({
       children: [
         { statement: "Lemma A" },
         { statement: "Uses A", justification: "modus_ponens", depends: ["#0"] },
         { statement: "Uses existing", depends: ["1.1"] },
       ],
-    });
-    expect(children).toEqual([
+    }, "2", known);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children).toEqual([
       { statement: "Lemma A" },
       { statement: "Uses A", inference: "modus_ponens", depends: ["#0"] },
       { statement: "Uses existing", depends: ["1.1"] },
     ]);
   });
   test("omits an empty depends and an absent justification", () => {
-    expect(buildRecordProofChildren({ children: [{ statement: "S", depends: [] }] })).toEqual([{ statement: "S" }]);
+    const r = buildRecordProofChildren({ children: [{ statement: "S", depends: [] }] }, "1", new Set(["1"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children).toEqual([{ statement: "S" }]);
   });
   // GAP 6 seam: a FREE-TEXT justification (a real math step outside af's known logic-rule set) is
-  // passed straight through as af's `inference` VERBATIM — no enum bridge, no coercion. af now
-  // accepts any non-blank free-text inference (../vibefeld schema.ValidateJustification), so this is
-  // the shape that records the prover's true derivation label (the live GAP-6 label was exactly
-  // "multiplication_by_positive"). rk deliberately does NOT map it to a logic rule (that would be a
-  // provenance lie).
+  // passed straight through as af's `inference` VERBATIM — no enum bridge, no coercion.
   test("passes a free-text (non-enum) justification through as `inference`, verbatim", () => {
-    const children = buildRecordProofChildren({
+    const r = buildRecordProofChildren({
       children: [
         { statement: "multiply the weighted inequality by w_i > 0", justification: "multiplication_by_positive" },
         { statement: "monotone step", justification: "monotonicity", depends: ["#0"] },
       ],
-    });
-    expect(children).toEqual([
+    }, "1", new Set(["1"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children).toEqual([
       { statement: "multiply the weighted inequality by w_i > 0", inference: "multiplication_by_positive" },
       { statement: "monotone step", inference: "monotonicity", depends: ["#0"] },
     ]);
+  });
+
+  // GAP 8 (STOP-REPORT-7): the exact live failure — a codex prover names a forward same-batch sibling
+  // by its ANTICIPATED absolute id ("1.1" = the first child of node "1"), which does not exist yet at
+  // record time. af's contract (../vibefeld/internal/service/proof.go:1706-1714) resolves a forward
+  // sibling only via `#N` (0-based, #0 = first child), so rk must translate 1.1 → #0.
+  test("GAP 8: an anticipated same-batch sibling absolute id translates to af's #N (1.1 → #0)", () => {
+    const r = buildRecordProofChildren({
+      children: [
+        { statement: "child 1 (becomes 1.1)" },
+        { statement: "child 2 uses child 1", depends: ["1.1"] },
+      ],
+    }, "1", new Set(["1"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children[1]!.depends).toEqual(["#0"]);
+  });
+
+  test("GAP 8: the 4th anticipated sibling 1.4 → #3 when parent 1 has no existing children", () => {
+    const r = buildRecordProofChildren({
+      children: [{ statement: "a" }, { statement: "b" }, { statement: "c" }, { statement: "d uses c", depends: ["1.3"] }],
+    }, "1", new Set(["1"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children[3]!.depends).toEqual(["#2"]);
+  });
+
+  // existing-node-wins: a `<parentId>.<k>` shape that ALREADY exists is a real dependency, passed
+  // through unchanged — NOT re-interpreted as a same-batch sibling. af then allocates the new child
+  // from the first free slot (1.3 here), so an anticipated 1.3 → #0.
+  test("GAP 8: existing-node-wins — an existing 1.1 passes through, and firstFree accounts for it", () => {
+    const r = buildRecordProofChildren({
+      children: [
+        { statement: "new child becomes 1.3", depends: ["1.1"] },  // 1.1 exists → pass through
+        { statement: "new child becomes 1.4, uses the sibling above", depends: ["1.3"] }, // 1.3 not yet → #0
+      ],
+    }, "1", new Set(["1", "1.1", "1.2"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.children[0]!.depends).toEqual(["1.1"]);
+      expect(r.children[1]!.depends).toEqual(["#0"]);
+    }
+  });
+
+  test("GAP 8: an already-af-relative #N passes through verbatim", () => {
+    const r = buildRecordProofChildren({ children: [{ statement: "a" }, { statement: "b", depends: ["#0"] }] }, "1", new Set(["1"]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.children[1]!.depends).toEqual(["#0"]);
+  });
+
+  // FAIL LOUDLY: a forward id beyond the batch is neither an existing node nor a legal in-batch
+  // sibling — refuse to record a mis-wired DAG (never silently dropped), naming the bad entry.
+  test("GAP 8: a forward sibling id beyond the batch size fails loudly, naming the entry", () => {
+    const r = buildRecordProofChildren({ children: [{ statement: "a" }, { statement: "b", depends: ["1.9"] }] }, "1", new Set(["1"]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("1.9");
+  });
+
+  test("GAP 8: a depends entry naming a wholly non-existent node fails loudly, naming the entry", () => {
+    const r = buildRecordProofChildren({ children: [{ statement: "a", depends: ["7.4"] }] }, "1", new Set(["1"]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("7.4");
   });
 });
 

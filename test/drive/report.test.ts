@@ -119,6 +119,26 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: 42 }), 1);
     expect(r.ok).toBe(false);
   });
+
+  // GAP 8 (STOP-REPORT-7): the driver's new 'record-proof-failed' evidence record — persisted whenever
+  // af record-proof refuses a prover decomposition, carrying node + af reason + a bounded children
+  // snippet. Must be RECOGNIZED (never "unrecognized 'kind'") and its node/reason validated.
+  test("the new 'record-proof-failed' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "record-proof-failed", at: "t", node: "1", reason: "af record-proof exit 1: child 2: dependency node 1.1 does not exist", rawSnippet: '[{"statement":"x","depends":["1.1"]}]' }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("a 'record-proof-failed' record missing its 'node' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "record-proof-failed", at: "t", reason: "boom", rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(false);
+  });
+  test("a 'record-proof-failed' record missing its 'reason' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "record-proof-failed", at: "t", node: "1", rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(false);
+  });
+  test("a 'record-proof-failed' record whose 'rawSnippet' is not a string is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "record-proof-failed", at: "t", node: "1", reason: "boom", rawSnippet: 42 }), 1);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("parseDriverLog — corrupted-tail precedent (mirrors l5-store's parseL5Log)", () => {
@@ -198,6 +218,15 @@ describe("buildReport — honest empty states", () => {
     ];
     const r = buildReport(records, "camp");
     expect(r.parseFailures).toBe(2);
+  });
+
+  test("record-proof-failed records are counted (GAP 8), never silently dropped", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "record-proof-failed", at: "t", node: "1", reason: "af record-proof exit 1: child 2: dependency node 1.1 does not exist", rawSnippet: '[{"statement":"x"}]' } as DriverLogRecord,
+      { kind: "record-proof-failed", at: "t", node: "1", reason: "af record-proof exit 1", rawSnippet: "[]" } as DriverLogRecord,
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.recordProofFailures).toBe(2);
   });
 });
 

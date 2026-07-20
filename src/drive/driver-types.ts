@@ -80,8 +80,12 @@ export interface DriverDeps {
   /** rk-gn4: record a prover turn's produced decomposition into af (the live edge drives `af claim
    * --role prover` + `af refine --children`), after which af re-classifies the node (its children
    * become the new frontier and the verifier path takes over). Fail-closed: a non-ok result is
-   * logged as a node skip, never a partial write. MAY return a Promise at the live edge. */
-  recordProof(node: AfNodeView, proof: ProofContent): RecordProofResult | Promise<RecordProofResult>;
+   * logged as a node skip, never a partial write. MAY return a Promise at the live edge.
+   * GAP 8: `knownIds` is the current export's node-id set (the caller's fresh per-round `byId`
+   * keys), needed to translate a prover's `depends` into af's `#N` in-batch namespace deterministically
+   * — an existing id passes through, a not-yet-created same-batch sibling id becomes `#N`
+   * (src/drive/driver-af.ts's `buildRecordProofChildren`). */
+  recordProof(node: AfNodeView, proof: ProofContent, knownIds: ReadonlySet<string>): RecordProofResult | Promise<RecordProofResult>;
   /** Dispatch the balloon-classification turn (verifier role, cheap tier) over the offending
    * subtree; returns the already-parsed worker output. MAY return a Promise (same note as
    * `dispatchVerify` above) — typed `unknown` already, so no signature change is needed here. */
