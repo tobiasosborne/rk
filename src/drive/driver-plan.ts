@@ -55,6 +55,14 @@ export interface AfNodeView {
   crux: boolean;
   contentHash: string;
   author?: string;
+  /** rk GAP 9: af's `proof_author` — the prover-of-record that PROVED this node by decomposing it
+   * (`af record-proof`, ../vibefeld internal/export FeatureProofAuthor), distinct from `author`
+   * (who authored the node's content). For a decomposed ROOT this is the campaign prover, whereas
+   * `author` is the `af init` stamp (often an unparseable orchestration identity). The apply-time
+   * cross-vendor gate reads this in PRECEDENCE over `author` as the node's prover-of-record
+   * (src/drive/cross-vendor.ts `proverOfRecord`). Absent/empty in the export → undefined (node never
+   * decomposed, or an af predating the field), and the gate falls back to `author` exactly as before. */
+  proofAuthor?: string;
   statement?: string;
   /** rk-jit repair (STOP-4, blocker 1): af's node `type` (../vibefeld/internal/schema/nodetype.go —
    * `claim | local_assume | local_discharge | case | qed`; af has NO distinct axiom/global-assumption

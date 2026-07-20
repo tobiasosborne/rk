@@ -33,6 +33,7 @@ import type { Finding } from "./framework";
 import type { Lemma } from "./linker-parse";
 import type { RootIdentityFacts } from "./linker-workspace";
 import { decodeVerifierSeam } from "../drive/identity";
+import { proverOfRecord } from "../drive/cross-vendor";
 import { computeCriticalPath } from "../graph/query-path";
 import type { GraphDocument, RegistryNode, AfFlag } from "../graph/types";
 
@@ -150,10 +151,17 @@ export function checkCriticalPathProvenance(
       });
     }
 
+    // rk GAP 9: the prover-of-record for a DECOMPOSED root is its `proof_author` (the decomposer af
+    // record-proof stamped), taking precedence over the init `author` — the SAME precedence the
+    // apply-time gate uses (src/drive/cross-vendor.ts `proverOfRecord`), so the continuous check and
+    // the apply-time check agree on a decomposed root instead of the linker re-flagging a node the
+    // apply gate just cleared. Falls back to `facts.author` when no proof-author was recorded (every
+    // AISM ledger predates the field → identical legacy behavior, corpus fixtures unchanged).
+    const proverRaw = proverOfRecord(facts.proofAuthor, facts.author);
     // `facts.validatedBy` is itself optional (undefined exactly when the node was validated with
-    // NO identity recorded at all — AISM's real shape); guard it the same way `facts.author` is
+    // NO identity recorded at all — AISM's real shape); guard it the same way `proverRaw` is
     // guarded just above, rather than handing `decodeVerifierSeam` a possibly-`undefined` value.
-    const authorDecoded = facts.author !== undefined ? decodeVerifierSeam(facts.author) : undefined;
+    const authorDecoded = proverRaw !== undefined ? decodeVerifierSeam(proverRaw) : undefined;
     const verifierDecoded = facts.validatedBy !== undefined ? decodeVerifierSeam(facts.validatedBy) : undefined;
     const bothParse = authorDecoded?.ok === true && verifierDecoded?.ok === true;
 

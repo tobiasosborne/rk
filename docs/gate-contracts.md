@@ -617,8 +617,19 @@ is stale against the code and must not be treated as ground truth).
       batch that validated the node BEFORE it became load-bearing — ⇒ WARN. Genuinely-old batched
       data is thus grandfatherable but never silently, and a fresh batch validation on a
       load-bearing node fails closed.
+    - **Prover-of-record precedence** (GAP 9, RUN-REPORT-8, 2026-07-20): the PROVER side of the
+      comparison is the node's **`proof_author` when present, else its `author`**
+      (`src/drive/cross-vendor.ts`'s `proverOfRecord`, read here off `RootIdentityFacts.proofAuthor`
+      / `.author`). For a DECOMPOSED node the prover-of-record is the DECOMPOSER — the prover `af
+      record-proof` stamped on the parent (`node_proof_authored`) — NOT its content `author`, which
+      for a root is the `af init` stamp (often an unparseable orchestration identity). This is the
+      SAME precedence the apply-time half uses, so the continuous check and the apply-time check
+      agree on a decomposed root instead of the linker re-flagging a node the apply gate just
+      cleared. A node never decomposed (every AISM ledger predates the field) has no `proof_author`
+      and falls back to `author` — identical legacy behavior, all 43 linker fixtures unchanged.
     - **Cutover semantics** (decided here, normative; HARDENED by the 2026-07-19 M3 review,
-      blocker 5a/5b): both `author` and `validatedBy` are run through `src/drive/identity.ts`'s
+      blocker 5a/5b): the prover-of-record identity (above) and `validatedBy` are run through
+      `src/drive/identity.ts`'s
       `decodeVerifierSeam` (never a bespoke parse). If BOTH sides decode and the two `modelFamily`
       values are EQUAL (POST-convention same-family) ⇒ ERROR. If EITHER side fails to decode, or
       `validatedBy` was never recorded at all (an unparseable/absent identity) ⇒ **also ERROR,

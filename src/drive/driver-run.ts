@@ -42,6 +42,7 @@ import { handleBalloon } from "./driver-balloon-run";
 import { selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "./driver-plan";
 import { childrenFirst, verifyOneNode } from "./driver-verify-node";
 import { proveOneNode } from "./driver-prove-node";
+import { stallReasonClass, appendStallCause } from "./driver-stall";
 import { DEFAULT_DRIVER_CONFIG, type DriverDeps, type DriverRunResult } from "./driver-types";
 import type { AfApplyItem } from "./driver-verdict-map";
 import type { FilledVerdictFile, VerdictItemOutcome } from "./driver-af";
@@ -119,6 +120,12 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   // src/drive/report.ts) — this in-memory map only picks the current stall's stop reason. Never
   // touches convergence.
   const vacuousSinceProgress = new Map<string, number>();
+  // RUN-REPORT-8 (carried P2): node-skipped reason CLASS → count SINCE THE LAST PROGRESS. Feeds the
+  // dominant-cause suffix on a stuck-no-progress abort so the stop names WHY it stalled (e.g.
+  // "dominant cause: cross-vendor: identity-unparseable ×3") instead of the opaque bare reason.
+  // Message-only; cleared on progress alongside the other since-progress tallies.
+  const stallCauses = new Map<string, number>();
+  const noteSkip = (reason: string) => { const c = stallReasonClass(reason); stallCauses.set(c, (stallCauses.get(c) ?? 0) + 1); };
   let roundsWithoutProgress = 0;
   // rk-cpk (review FU2): churn accounting, distinct from the stuck guard. The stuck guard resets on
   // ANY structural write (a recorded proof), so a prove/challenge chain that grows the tree every
@@ -195,6 +202,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       }
       else {
         attempts.set(id, attemptsSoFar + 1);
+        noteSkip(pr.skip);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: pr.skip }));
       }
     }
@@ -220,6 +228,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
         // rk-jit (STOP-4): tally a vacuous-accept discard so a stuck abort can name the bootstrap
         // deadlock as its cause instead of the opaque stuck-no-progress. Cleared on progress (below).
         if (r.vacuousNode !== undefined) vacuousSinceProgress.set(r.vacuousNode, (vacuousSinceProgress.get(r.vacuousNode) ?? 0) + 1);
+        noteSkip(r.skip);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: r.skip }));
       }
     }
@@ -236,7 +245,9 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       for (const { item, contentHash } of ordered) {
         const current = fresh.get(item.node);
         if (current === undefined || current !== contentHash) {
-          deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: item.node, reason: `stale verdict discarded: af node content hash changed between dispatch and apply (bound ${contentHash}, current ${current ?? "absent"})` }));
+          const staleReason = `stale verdict discarded: af node content hash changed between dispatch and apply (bound ${contentHash}, current ${current ?? "absent"})`;
+          noteSkip(staleReason);
+          deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: item.node, reason: staleReason }));
           attempts.set(item.node, (attempts.get(item.node) ?? 0) + 1);
           continue;
         }
@@ -257,7 +268,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
     // Progress this round = a recorded proof OR an af-applied accept. No progress → stuck guard.
     // FU2: any progress also clears the vacuous-since-progress tally — a stall AFTER progress is a
     // fresh cause, never the earlier bootstrap discard.
-    if (progressed) { roundsWithoutProgress = 0; vacuousSinceProgress.clear(); }
+    if (progressed) { roundsWithoutProgress = 0; vacuousSinceProgress.clear(); stallCauses.clear(); }
     else {
       roundsWithoutProgress++;
       const stuck = evaluateStuckGuard(roundsWithoutProgress, config.maxStuckRounds);
@@ -270,7 +281,8 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
         if (vacuousSinceProgress.size > 0) {
           return { status: "aborted", stopReason: "bootstrap-vacuous-accepts", message: `no progress and the verifier accepted proofless node(s) that were discarded as vacuous (${vacuousDetail(vacuousSinceProgress)}) — a fresh conjecture cannot bootstrap: a PROVER must produce proof content before a verifier has anything to verify. ${stuck.reason!}`, appliedNodeIds, outcomes, rounds: round + 1 };
         }
-        return { status: "aborted", stopReason: "stuck-no-progress", message: stuck.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
+        // RUN-REPORT-8 (P2): name the dominant node-skipped cause so the stop is self-diagnosing.
+        return { status: "aborted", stopReason: "stuck-no-progress", message: appendStallCause(stuck.reason!, stallCauses), appliedNodeIds, outcomes, rounds: round + 1 };
       }
     }
 
@@ -297,5 +309,5 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   if (vacuousSinceProgress.size > 0) {
     return { status: "aborted", stopReason: "bootstrap-vacuous-accepts", message: `hit maxRounds (${config.maxRounds}) without convergence; the verifier accepted proofless node(s) that were discarded as vacuous (${vacuousDetail(vacuousSinceProgress)}) — a PROVER must produce proof content first`, appliedNodeIds, outcomes, rounds: round };
   }
-  return { status: "aborted", stopReason: "stuck-no-progress", message: `hit maxRounds (${config.maxRounds}) without convergence`, appliedNodeIds, outcomes, rounds: round };
+  return { status: "aborted", stopReason: "stuck-no-progress", message: appendStallCause(`hit maxRounds (${config.maxRounds}) without convergence`, stallCauses), appliedNodeIds, outcomes, rounds: round };
 }

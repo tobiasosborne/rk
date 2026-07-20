@@ -75,6 +75,10 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     crux: n.crux === true,
     contentHash: typeof n.content_hash === "string" ? n.content_hash : "",
     author: typeof n.author === "string" && n.author.length > 0 ? n.author : undefined,
+    // rk GAP 9: the prover-of-record that decomposed this node (`af record-proof`), the additive
+    // `proof_author` field (FeatureProofAuthor). Read the same way `author` is; absent/empty →
+    // undefined so the cross-vendor gate falls back to `author` exactly as pre-GAP-9.
+    proofAuthor: typeof n.proof_author === "string" && n.proof_author.length > 0 ? n.proof_author : undefined,
     // M3.5-prep additive read (src/drive/driver-plan.ts's AfNodeView doc comment): `statement` and
     // `child_ids` are already real v1 export fields; threaded through for live prompt assembly.
     statement: typeof n.statement === "string" ? n.statement : undefined,

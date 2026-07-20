@@ -119,6 +119,7 @@ export function introspectRootIdentity(snapshot: RepoSnapshot, workspace: string
   if (files.length === 0) return null;
 
   let author: string | undefined;
+  let proofAuthor: string | undefined;
   let validated = false;
   let validatedBy: string | undefined;
   let validationBatchId: string | undefined;
@@ -138,6 +139,15 @@ export function introspectRootIdentity(snapshot: RepoSnapshot, workspace: string
         author = node.author;
       }
     }
+    // rk GAP 9: node "1"'s proof-of-record author, from the LATEST `node_proof_authored` event for
+    // node "1" (../vibefeld internal/ledger NodeProofAuthored, emitted by `af record-proof`). A
+    // re-decomposition emits it again, so the last one wins — mirrors af's own apply projection
+    // (state/apply.go applyNodeProofAuthored always overwrites). This is the decomposer identity the
+    // apply-time gate reads in precedence over `author`; the continuous check must read it the same
+    // way (see checkCriticalPathProvenance) so the two enforcement points agree on a decomposed root.
+    if (rec.type === "node_proof_authored" && rec.node_id === "1" && typeof rec.author === "string" && rec.author.length > 0) {
+      proofAuthor = rec.author;
+    }
     if (rec.type === "node_validated" && rec.node_id === "1") {
       validated = true;
       validatedBy = typeof rec.verified_by === "string" && rec.verified_by.length > 0 ? rec.verified_by : undefined;
@@ -149,13 +159,18 @@ export function introspectRootIdentity(snapshot: RepoSnapshot, workspace: string
       validationBatchId = undefined;
     }
   }
-  return { author, validated, validatedBy, validationBatchId };
+  return { author, proofAuthor, validated, validatedBy, validationBatchId };
 }
 
 export interface RootIdentityFacts {
   /** The root node's driver-supplied author identity, or `undefined` when none was ever recorded
    * (a pre-V1 ledger — this is AISM's real shape, all 44 workspaces; or a `--author`-less init). */
   author?: string;
+  /** rk GAP 9: the root's proof-of-record author — the prover that decomposed it (`af record-proof`,
+   * `node_proof_authored` event), or `undefined` when the root was never decomposed (every AISM
+   * ledger, which predates the field). The critical-path provenance check reads this in PRECEDENCE
+   * over `author` for a decomposed root, the same way the apply-time gate does. */
+  proofAuthor?: string;
   /** True iff the LATEST relevant event was `node_validated` (not superseded by a later
    * `node_unvalidated`) — i.e. the node IS currently validated, independent of whether any
    * identity was recorded for that validation. See this function's doc comment for why this is a

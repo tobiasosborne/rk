@@ -361,6 +361,57 @@ describe("cross-vendor rule (M3.8) — apply-time, load-bearing (critical-path) 
     expect(r.status).toBe("converged");
     expect(r.appliedNodeIds).toEqual(["1.1"]);
   });
+
+  // GAP 9 (RUN-REPORT-8): a DECOMPOSED root whose `af init` author is unparseable but whose
+  // `proof_author` (the decomposer) is a parseable cross-family seam now validates cross-vendor on
+  // the decomposer's family — pre-fix it failed closed as prover=unknown and stuck forever.
+  test("GAP 9: decomposed root with unparseable init author + cross-family proof-author VALIDATES and converges", async () => {
+    const dec = { author: "rk-m3.5-baseline-prep", proofAuthor: "claude|claude-code|opus|sy", childIds: ["1.1"] };
+    const round0 = ws([node("1", dec)]);
+    const round1 = ws([node("1", { ...dec, epistemicState: "validated" })]);
+    const h = harness({ workspaces: [round0, round1], isLoadBearing: () => true });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
+    expect(r.appliedNodeIds).toEqual(["1"]);
+  });
+
+  test("GAP 9: same-family proof-author on a decomposed root is STILL rejected (proof-author never bypasses the rule)", async () => {
+    const h = harness({
+      workspaces: [ws([node("1", { author: "rk-m3.5-baseline-prep", proofAuthor: "gpt|codex|gpt-5.6|sz", childIds: ["1.1"] })])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      isLoadBearing: () => true,
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(h.logs.some((l) => l.includes("cross-vendor-rejected") && l.includes('"reason":"same-family"'))).toBe(true);
+  });
+
+  test("GAP 9: a decomposed root with unparseable author AND no proof-author STILL fails closed (fail-closed posture untouched)", async () => {
+    const h = harness({
+      workspaces: [ws([node("1", { author: "rk-m3.5-baseline-prep", childIds: ["1.1"] })])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      isLoadBearing: () => true,
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(h.logs.some((l) => l.includes("cross-vendor-rejected") && l.includes('"reason":"identity-unparseable"'))).toBe(true);
+  });
+});
+
+// RUN-REPORT-8 (carried P2): a stuck-no-progress abort names the dominant node-skipped cause in its
+// human-readable message, so the true stall cause is legible without hand-reading the driver log.
+describe("stall-cause legibility on a stuck abort", () => {
+  test("stuck message appends the dominant node-skipped cause and count", async () => {
+    const h = harness({
+      workspaces: [ws([node("1", { author: "rk-m3.5-baseline-prep", childIds: ["1.1"] })])], // unparseable, no proof-author → repeatedly identity-unparseable
+      config: { maxStuckRounds: 2, maxRounds: 3 },
+      isLoadBearing: () => true,
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("stuck-no-progress");
+    expect(r.message).toContain("dominant cause: cross-vendor: identity-unparseable");
+  });
 });
 
 // rk-jit (STOP-4): the bootstrap deadlock. af marks a fresh proofless root verifier-ready; a real

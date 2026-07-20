@@ -81,6 +81,30 @@ describe("checkCriticalPathProvenance — family comparison", () => {
     expect(r.findings).toEqual([]);
   });
 
+  const INIT_STAMP = "rk-m3.5-baseline-prep"; // unparseable `af init` author
+
+  test("GAP 9: decomposed root — unparseable init author BUT parseable proof-author, cross-family with verifier -> satisfied, zero findings", () => {
+    // The apply-time gate validated this root on its DECOMPOSER's family; the continuous check must
+    // agree (read proof_author in precedence over author), not re-flag it as an unparseable ERROR.
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts({ author: INIT_STAMP, proofAuthor: GPT_SEAM_A, validatedBy: CLAUDE_SEAM })],
+      ["lem-x", facts({ author: INIT_STAMP, proofAuthor: GPT_SEAM_A, validatedBy: CLAUDE_SEAM })],
+    ]);
+    const r = checkCriticalPathProvenance(lemmas, NORTH_STAR, identityOf);
+    expect(r.checked).toBe(2);
+    expect(r.findings).toEqual([]);
+  });
+
+  test("GAP 9: decomposed root — proof-author does NOT bypass the rule; same-family proof-author/verifier -> ERROR", () => {
+    const identityOf = new Map<string, RootIdentityFacts>([
+      [NORTH_STAR, facts({ author: INIT_STAMP, proofAuthor: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+      ["lem-x", facts({ author: INIT_STAMP, proofAuthor: GPT_SEAM_A, validatedBy: GPT_SEAM_B })],
+    ]);
+    const r = checkCriticalPathProvenance(lemmas, NORTH_STAR, identityOf);
+    expect(r.findings.length).toBe(2);
+    for (const f of r.findings) expect(f.severity).toBe("ERROR");
+  });
+
   test("no parseable seam at all + NO explicit marker -> ERROR, fails closed (blocker 5a: legacy is no longer inferred from an unparseable identity)", () => {
     const identityOf = new Map<string, RootIdentityFacts>([
       [NORTH_STAR, facts()], // validated, but no author/validatedBy at all

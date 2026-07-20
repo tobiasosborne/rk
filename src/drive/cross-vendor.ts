@@ -51,6 +51,21 @@ export interface CrossVendorDecision {
  * continuous check (which treats "no parseable seam" as legacy and merely warns), an apply-time
  * caller is about to mint a NEW validation event, so an unresolvable identity on a load-bearing
  * claim must block, not warn. */
+/** GAP 9: picks the prover-of-record identity a cross-vendor check compares for a node. For a
+ * DECOMPOSED node the prover-of-record is the DECOMPOSER — af record-proof's `proof_author` stamp
+ * (../vibefeld internal/ledger NodeProofAuthored) — NOT the node's own content `author`. This
+ * matters for the ROOT: its `author` is the `af init` stamp (e.g. "rk-m3.5-baseline-prep", an
+ * orchestration identity that decodes to no model family), while its `proofAuthor` is the campaign
+ * prover that actually proved it by decomposition — the same family stamp its now-validated
+ * CHILDREN already carry. Precedence: proof-author WHEN PRESENT, else the node author (unchanged
+ * pre-GAP-9 behavior), else `undefined` → `decideCrossVendor` fails closed EXACTLY as before. This
+ * only chooses WHICH recorded field is the prover-of-record; it never invents an identity, so a
+ * node with neither still fails closed on a load-bearing claim. The fail-closed posture for
+ * genuinely unattributed proofs is untouched. */
+export function proverOfRecord(proofAuthor: string | undefined, author: string | undefined): string | undefined {
+  return proofAuthor ?? author;
+}
+
 export function decideCrossVendor(authorRaw: string | undefined, verifierRaw: string, loadBearing: boolean): CrossVendorDecision {
   const authorDecoded = authorRaw !== undefined ? decodeVerifierSeam(authorRaw) : undefined;
   const verifierDecoded = decodeVerifierSeam(verifierRaw);

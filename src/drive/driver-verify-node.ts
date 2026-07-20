@@ -8,7 +8,7 @@
 // cross-vendor gate on an ACCEPT (M3.8 / PRD C9). It composes the pure cores; it writes nothing.
 
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
-import { crossVendorRejectionMessage, decideCrossVendor } from "./cross-vendor";
+import { crossVendorRejectionMessage, decideCrossVendor, proverOfRecord } from "./cross-vendor";
 import { detectProverOverreach, usageTokens } from "./driver-guardrails";
 import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { afItemFromVerdictDocument, type AfApplyItem } from "./driver-verdict-map";
@@ -119,7 +119,13 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
       deps.appendLog(JSON.stringify({ kind: "vacuous-accept-discarded", at: deps.now(), node: node.id, reason: "accept on a node with no recorded proof body (no children, no dependencies) — nothing to verify; a prover pass must run first" }));
       return { spentTokens, skip: `vacuous accept discarded: node '${node.id}' has no recorded proof body (no children, no dependencies) — an accept verifies nothing; a prover must produce proof content first`, vacuousNode: node.id };
     }
-    const decision = decideCrossVendor(node.author, verifiedBySeam, deps.isLoadBearing(node.id));
+    // GAP 9: the prover-of-record for a DECOMPOSED node is its `proof_author` (the decomposer af
+    // record-proof stamped), taking precedence over `node.author` (the content/init author). A root
+    // whose init `author` is unparseable but whose children validated cross-vendor now validates on
+    // its decomposer's family, instead of failing closed as prover=unknown. Falls back to
+    // `node.author` when no proof-author was recorded — the pre-GAP-9 behavior, and still fail-closed
+    // for a genuinely unattributed proof.
+    const decision = decideCrossVendor(proverOfRecord(node.proofAuthor, node.author), verifiedBySeam, deps.isLoadBearing(node.id));
     if (!decision.satisfied) {
       const reason = crossVendorRejectionMessage(node.id, decision);
       deps.appendLog(JSON.stringify({ kind: "cross-vendor-rejected", at: deps.now(), node: node.id, reason: decision.reason }));

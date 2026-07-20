@@ -355,6 +355,19 @@ strings through `decodeVerifierSeam` before comparing `modelFamily` — never a 
 a decode failure must be treated as "family unknown, cross-vendor check cannot proceed," never as
 a silent pass.
 
+**Prover-of-record precedence (GAP 9, RUN-REPORT-8, 2026-07-20).** The PROVER-side identity the
+check decodes is the node's **`proof_author` when present, else its `author`**
+(`src/drive/cross-vendor.ts`'s `proverOfRecord`, both fields read off `af export --graph json`).
+For a node DECOMPOSED via `af record-proof`, the prover-of-record is the DECOMPOSER — af stamps
+the acting prover onto the parent as `proof_author` (`../vibefeld` `node_proof_authored`,
+`FeatureProofAuthor`), symmetric with the `author` stamp its children already carry — NOT its
+content `author`, which for a root is the `af init` stamp (e.g. an orchestration identity that
+decodes to no family). This is exactly the RUN-REPORT-8 wall: a fully-decomposed root whose
+children all validated cross-vendor still failed closed as `prover=unknown` because the gate read
+the init `author`. The verifier side is unchanged. Fail-closed is untouched for a genuinely
+unattributed proof: a node with neither `proof_author` nor a parseable `author` still yields
+`identity-unparseable` and blocks on a load-bearing claim, exactly as before.
+
 ## (f) Hash domains (review blocker 4 — pinned byte-for-byte)
 
 `contentHash` does NOT mean the same bytes across tiers, and the two domains must never be
