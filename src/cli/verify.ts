@@ -107,12 +107,16 @@ export async function verifyCommand(args: string[], out: Out, deps: VerifyComman
   const { rest: r3, value: maxTurnsRaw } = extractFlag(r2, "--max-turns");
   const { rest: r4, value: maxNodesRaw } = extractFlag(r3, "--max-nodes");
   const { rest: r5, value: model } = extractFlag(r4, "--model");
+  // rk-s9t: the campaign-level token cap -- REQUIRED for a --live run (validated in verify-live.ts,
+  // which refuses to start without it). Parsed here, validated at the edge so the refusal message
+  // can be loud and self-teaching.
+  const { rest: r6, value: maxCampaignTokensRaw } = extractFlag(r5, "--max-campaign-tokens");
   // A real spend must always be an EXPLICIT flag: `--live` opts in; `--dry-run` (or the absence of
   // BOTH flags) always means dry-run, even if `--live` is also present -- explicit safety wins.
-  const live = r5.includes("--live");
-  const dryRun = r5.includes("--dry-run") || !live;
+  const live = r6.includes("--live");
+  const dryRun = r6.includes("--dry-run") || !live;
 
-  if (r5.includes("--report")) return reportCommand(root, out, baselinePath);
+  if (r6.includes("--report")) return reportCommand(root, out, baselinePath);
 
   if (!afId) {
     out.log("rk verify: no target selected -- pass --af <registry-id> (hard tier).");
@@ -140,6 +144,7 @@ export async function verifyCommand(args: string[], out: Out, deps: VerifyComman
   return runLiveVerify(root, node, out, deps, {
     maxTurns: parsePositiveInt(maxTurnsRaw, DEFAULT_MAX_TURNS),
     maxNodes: parsePositiveInt(maxNodesRaw, DEFAULT_MAX_NODES),
+    maxCampaignTokensRaw,
     model,
   });
 }

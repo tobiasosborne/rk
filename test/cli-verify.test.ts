@@ -114,7 +114,8 @@ describe("rk verify — CLI wiring", () => {
     const root = tmpRoot(); dirs.push(root);
     writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
     const { out, lines } = capture();
-    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live"], out, {
+    // cap supplied so the run clears the rk-s9t budget gate and reaches the workers-config check.
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1000000"], out, {
       afCommand: ABSENT, frCommand: ABSENT, readWorkspace: fakeWorkspace(2),
     });
     expect(code).toBe(1);
@@ -177,7 +178,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     const root = tmpRoot(); dirs.push(root);
     writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
     const { out, lines } = capture();
-    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1"], out, {
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1", "--max-campaign-tokens", "1000000"], out, {
       afCommand: ABSENT,
       frCommand: ABSENT,
       readWorkspace: twoReadyNodesWorkspace(),
@@ -187,6 +188,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     const text = lines.join("\n");
     expect(text).toContain("preflight");
     expect(text).toContain("backend resolved: verifier/hard -> 'fake'");
+    expect(text).toContain("campaign token cap: 1000000");
     expect(text).toContain("ABORTED (safety valve)");
     expect(text).toContain("max-turns (1) reached");
     expect(code).toBe(4);
@@ -198,7 +200,7 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     const root = tmpRoot(); dirs.push(root);
     writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
     const { out, lines } = capture();
-    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1"], out, {
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1", "--max-campaign-tokens", "1000000"], out, {
       afCommand: ABSENT,
       frCommand: ABSENT,
       readWorkspace: twoReadyNodesWorkspace(),
@@ -209,6 +211,53 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     // actually one turn WAS dispatched (max-turns=1 permits exactly one) before the 2nd aborts, so
     // the log carries that one usage record -- confirm the report reads it back honestly.
     expect(lines.join("\n")).toContain("rk verify --report: campaign");
+  });
+
+  // rk-s9t: the fail-closed campaign token cap. A --live run with no --max-campaign-tokens must
+  // REFUSE to start before any backend call (the exact hole the M3 milestone review named).
+  test("--live WITHOUT --max-campaign-tokens: refuses to start, exit 1, no worker EVER called", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const called: string[] = [];
+    const spyBackend: WorkerBackend = {
+      name: "fake", modelFamily: "claude", capabilities: { sessionResume: true },
+      async createSession() { called.push("createSession"); return { sessionId: "s1" }; },
+      async runTurn() { called.push("runTurn"); return { exit: 0, usage: { input: 0, output: 0, cache_read: 0, cache_creation: 0 }, rawText: "{}" }; },
+    };
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [spyBackend],
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("REQUIRES a campaign token cap");
+    expect(called).toEqual([]); // fail closed: nothing was dispatched
+  });
+
+  test("--live with a non-positive-int --max-campaign-tokens: loud refusal, exit 1", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "0"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()],
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("must be a positive integer");
+  });
+
+  test("--live with a tiny cap the FIRST turn cannot afford: budget-exhausted abort, exit 4, no apply", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    // cap 1 < the per-call reserve (DEFAULT_MAX_OUTPUT_TOKENS 8000), so the pre-dispatch check
+    // refuses the very first verify turn -- the run aborts budget-exhausted before requesting it.
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [fakeLiveBackend()],
+    });
+    expect(code).toBe(4);
+    expect(lines.join("\n")).toContain("budget");
   });
 });
 

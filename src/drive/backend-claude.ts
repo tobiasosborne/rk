@@ -63,6 +63,17 @@ function budgetExceeded(item: TurnItem, usage: WorkerUsage): boolean {
   return Number.isFinite(item.maxOutputTokens) && item.maxOutputTokens > 0 && usage.output >= item.maxOutputTokens;
 }
 
+// rk-s9t (M3 milestone review verdict (c)) — provider-enforced campaign budget, deliberately NOT
+// wired: the campaign-level cap the driver enforces (src/cli/verify-live.ts's --max-campaign-tokens,
+// checked pre-dispatch in src/drive/driver-run.ts) is a TOKEN figure. The only budget flag `claude
+// -p` actually accepts is `--max-budget-usd` (a DOLLAR figure — confirmed by the M3.2 live-fire
+// spike; there is no per-invocation token-cap flag). Passing the remaining budget through would mean
+// converting remaining tokens → dollars, which needs a per-model price table this codebase does not
+// (and per CLAUDE.md L4/the "do not invent provider flags" brief, must not) hardcode. So the spawn
+// below carries NO budget flag; the honest, provider-independent enforcement is driver-side rules
+// 1+2 (a required campaign cap + a pre-dispatch remaining-budget check that spends nothing it cannot
+// afford). The per-TURN output ceiling is the separate, already-modelled exit-11 heuristic above.
+
 export interface ClaudeBackendDeps {
   spawn?: SpawnFn;
   binary?: string;

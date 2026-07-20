@@ -24,6 +24,7 @@ import {
   liveDispatchVerify,
   DEFAULT_MODEL_BY_BACKEND,
 } from "../drive/driver-live";
+import { parseCampaignBudget } from "./verify-live-budget";
 import { buildSharedContext, type DefinitionText } from "../drive/driver-prompts";
 import { readBalloonCounterFromFields } from "../drive/driver-balloon";
 import type { VerifierIdentity } from "../drive/identity";
@@ -93,6 +94,11 @@ function createBdTaskEdge(task: { title: string; description: string }): boolean
 export interface LiveRunOptions {
   maxTurns: number;
   maxNodes: number;
+  /** rk-s9t: the raw `--max-campaign-tokens` flag value (undefined = flag absent). A `--live` run
+   * REFUSES to start unless this parses to a positive integer (src/cli/verify-live-budget.ts) --
+   * the fail-closed spend guard the M3 milestone review named (a real-token run with no ceiling is
+   * the exact hole). */
+  maxCampaignTokensRaw?: string;
   model?: string;
 }
 
@@ -106,6 +112,16 @@ async function defaultLoadWorkersConfig(root: string): Promise<WorkersConfig | u
  * test needs -- everything else here is either pure (src/drive/driver-live.ts, driver-prompts.ts)
  * or driven off a FAKE `WorkerBackend` reachable only through the registry that config builds. */
 export async function runLiveVerify(root: string, node: RegistryNode, out: Out, deps: VerifyCommandDeps, opts: LiveRunOptions): Promise<number> {
+  // rk-s9t: fail closed on the spend guard FIRST -- before reading the workspace, building the
+  // registry, or making any backend call. A `--live` run with no campaign token cap must never
+  // start (the exact hole the M3 milestone review named).
+  const budgetResult = parseCampaignBudget(opts.maxCampaignTokensRaw);
+  if (!budgetResult.ok) {
+    out.log(budgetResult.message);
+    return 1;
+  }
+  const budget = budgetResult.budget;
+
   if (!node.workspace) {
     out.log(`rk verify --af --live: node '${node.id}' declares no 'workspace:' -- nothing to verify.`);
     return 1;
@@ -149,6 +165,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   out.log(`  session plan: ONE shared session for claim '${claimId}' (turn 1 = shared context, every node after = a resume turn)`);
   out.log(`  workspace: ${node.workspace} (${wsResult.value.nodeCount} node(s) total)`);
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);
+  out.log(`  campaign token cap: ${budget.maxCampaignTokens} total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve ${budget.perCallReserve}).`);
   out.log("  no worker has been called yet -- the next line, if any, is the first real call.");
 
   const ensured = await created.dispatcher.ensureSession();
@@ -226,6 +243,9 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     now: () => new Date().toISOString(),
     priorBalloonCount: persistedBalloons.count,
     priorClassifications: persistedBalloons.classifications,
+    // rk-s9t: the validated campaign token cap the driver enforces per-dispatch (fail closed above
+    // if the flag was absent, so this is always a real, positive ceiling by the time we get here).
+    budget,
   };
 
   let code: number;
