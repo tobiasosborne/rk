@@ -136,6 +136,19 @@ on the session, not as separate flat-prompt processes.
 - **`claimId` and `turnId` are both required on every request** (review blocker 2). `claimId`
   identifies the node/batch claim a session belongs to (part of the isolation tuple above);
   `turnId` is a per-turn idempotency key — see "Retry ownership" below for what it is for.
+- **Model selection (rk-7hi, M3.5 STOP-2 blocker).** `model` is part of the isolation tuple above,
+  so a prover session and a verifier session pinned to DIFFERENT models are already, mechanically,
+  different sessions — nothing about session isolation needed to change for per-role model pinning
+  to be safe. What was missing was a way to CHOOSE two different models for one `rk verify --live`
+  run at all: the CLI's `--model` flag is a single global value. `resolveModel`
+  (`src/drive/driver-live.ts`) resolves the model for each (role, tier) independently, most-specific
+  wins: (1) `.rk/config.json`'s `workers.assignments.<role>.<tier>.model` (`src/drive/
+  backend-registry.ts`'s `RoleTierAssignment.model`, optional; `BackendRegistry.modelFor`), (2) the
+  global `--model` flag, (3) `DEFAULT_MODEL_BY_BACKEND[backend]`. This is the ONLY mechanism that
+  lets a cross-vendor run pin, e.g., the claude side to `claude-opus-4-8` while the codex side stays
+  on its own default in the SAME run. Family identity (`modelFamily`, section (e) below) is derived
+  from the BACKEND name alone (`familyForBackend`, `src/drive/driver-live.ts`) — completely
+  independent of which model wins here, so this pin can never perturb the cross-vendor rule.
 
 ## (b) Request shape
 
