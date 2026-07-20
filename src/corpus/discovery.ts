@@ -92,4 +92,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * and the L5-promotion integration (`linker-35`..`linker-37`: fresh VALID promotes, stale does
  * not, VALID-WITH-CORRECTION correction-pending does not). See docs/gate-contracts.md Gate 2's
  * "Critical-path provenance" section for the full contract text. */
-export const EXPECTED_FIXTURE_COUNT = 117;
+export const EXPECTED_FIXTURE_COUNT = 121;
