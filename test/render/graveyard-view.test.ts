@@ -11,6 +11,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { DeadRouteResidual } from "../../src/render/fr-edge";
 import type { GraphDocument } from "../../src/graph/types";
 import { computeGraveyard, renderGraveyard } from "../../src/render/graveyard-view";
 
@@ -69,5 +70,47 @@ describe("render/graveyard-view", () => {
     const empty: GraphDocument = { ...doc, edges: { ...doc.edges, fr: [] } };
     const html = renderGraveyard(empty);
     expect(html).toContain("no dead routes");
+  });
+
+  // rk-50v RENDER-EDGE option: fr's own residual/death-certificate text, supplied at the render
+  // edge (src/render/fr-edge.ts), decorates a matching dead-route row -- no graph-schema change.
+  describe("residual/death-certificate text (rk-50v RENDER-EDGE option)", () => {
+    const RESIDUAL_2: DeadRouteResidual = { residual: "induction fails at n=5", reason: "counterexample found", killedByWave: "w3" };
+
+    test("absent residuals argument renders BYTE-IDENTICAL to today's disclaim-only output", () => {
+      expect(renderGraveyard(doc)).toBe(renderGraveyard(doc, undefined));
+    });
+
+    test("an EMPTY residuals map also renders byte-identical to omitting the argument entirely", () => {
+      expect(renderGraveyard(doc, new Map())).toBe(renderGraveyard(doc));
+    });
+
+    test("a supplied residual for a live cycle shows its residual/reason/wave text on that row", () => {
+      const html = renderGraveyard(doc, new Map([[2, RESIDUAL_2]]));
+      expect(html).toContain("induction fails at n=5");
+      expect(html).toContain("counterexample found");
+      expect(html).toContain("w3");
+    });
+
+    test("a supplied residual for a SUPERSEDED cycle still shows -- never dropped (CLAUDE.md L2)", () => {
+      const html = renderGraveyard(doc, new Map([[1, { residual: "n-obstruction dead end", reason: "no oracle", killedByWave: null }]]));
+      const supersededSection = html.slice(html.indexOf('id="rk-graveyard-superseded"'));
+      expect(supersededSection).toContain("n-obstruction dead end");
+    });
+
+    test("a cycle with NO matching residual entry renders with no residual block, unaffected", () => {
+      const html = renderGraveyard(doc, new Map([[2, RESIDUAL_2]]));
+      // cycle 3 has no residual supplied -- its row must not gain any residual text.
+      const cycle3Row = html.slice(html.indexOf("cycle 3<"), html.indexOf("cycle 3<") + 200);
+      expect(cycle3Row).not.toContain("induction fails");
+    });
+
+    test("RED CASE: when residual data IS supplied, the note clarifies it is shown per-entry", () => {
+      const html = renderGraveyard(doc, new Map([[2, RESIDUAL_2]]));
+      expect(html.toLowerCase()).toContain("shown per-entry");
+      // the original disclaim sentence stays too -- schema-wise it's still true (L5: honest, not
+      // rewritten to imply a graph-schema change that did not happen).
+      expect(html).toContain("NOT carried into rk's graph projection");
+    });
   });
 });

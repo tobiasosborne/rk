@@ -12,6 +12,7 @@ import { run } from "../src/cli";
 import { renderCommand } from "../src/cli/render";
 
 const ABSENT = ["definitely-not-a-real-binary-xyz"];
+const FAKE_FR = [Bun.which("bun")!, join(import.meta.dir, "render", "fixtures", "fake-fr.ts")];
 
 function capture() {
   const lines: string[] = [];
@@ -217,6 +218,46 @@ describe("rk render — CLI edge", () => {
     expect(html).toContain("2026-07-10-x");
     expect(html).toContain("def-x");
     expect(html).toContain("[2026-07-10] a convention.");
+  });
+
+  // rk-50v RENDER-EDGE option: fr export's own residual/death-certificate text, threaded through
+  // src/render/fr-edge.ts -- NO graph-schema change (orchestrator-pinned decision).
+  test("rk-50v: no fr export reachable -- 0 residual notes, graveyard degrades to disclaim-only (no new failure mode)", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("0 dead-route residual note(s)");
+  });
+
+  test("rk-50v: fr export reachable with derived.deadRoutes -- residual text reaches the rendered graveyard", async () => {
+    const root = repo();
+    writeFileSync(
+      join(root, "fake-fr-response.json"),
+      JSON.stringify({
+        schema_version: "1",
+        log: [{ cycle: 1, outcome: "died", evidence: { artifact: "argument/lem-base.md" } }],
+        verdicts: [],
+        derived: {
+          deadRoutes: [
+            {
+              arm: "a1",
+              residual: "the induction step fails at n=5",
+              reason: "counterexample found",
+              killedAtCycle: 1,
+              killedByWave: "w2",
+              outcome: "died",
+            },
+          ],
+        },
+      }),
+    );
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: FAKE_FR });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("1 dead-route residual note(s)");
+    const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
+    expect(html).toContain("the induction step fails at n=5");
   });
 
   test("registered on the top-level dispatcher; --help is side-effect-free", async () => {

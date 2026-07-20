@@ -32,12 +32,20 @@
 // data the GraphDocument itself does not carry (runs/**, definitions/*.md, CONVENTIONS.md) --
 // and threads their output into `renderSite`'s options. Both degrade honestly (empty result,
 // never a crash) when their inputs are absent.
+//
+// rk-50v RENDER-EDGE option (orchestrator-pinned; NO graph-schema change): also invokes
+// src/render/fr-edge.ts's `loadFrResiduals` (a SECOND, independent `fr export` subprocess call,
+// same `frCommand` as `buildGraphDocument`'s own fr read) for the dead-route graveyard's
+// residual/death-certificate text. Degrades to `EMPTY_FR_RESIDUALS` (never a crash, never a new
+// failure mode) when `fr` is unreachable or its export is unparseable -- the graveyard then
+// renders exactly as it did before this option existed.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { MANIFEST_PATH, MANIFEST_SCHEMA_VERSION, RENDER_SITE_GENERATOR } from "../gates/freshness";
 import { loadDefsData } from "../render/defs-edge";
 import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
+import { loadFrResiduals } from "../render/fr-edge";
 import { loadRunGallery } from "../render/runs-edge";
 import { renderSite } from "../render/site";
 import { buildGraphDocument } from "../store/build-graph";
@@ -188,7 +196,18 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
   // stance every other reader in this codebase takes.
   const runGallery = loadRunGallery(root);
   const defsData = loadDefsData(root);
-  const site = renderSite(doc, { northStarId, title: titleFlag, sources: diagnostics.sources, runGallery, defsData });
+  // rk-50v RENDER-EDGE option: a second, independent `fr export` read for the graveyard's
+  // residual/death-certificate text (src/render/fr-edge.ts) -- degrades to an empty result
+  // (no new failure mode) when `fr` is unreachable, same `frCommand` as the graph's own fr read.
+  const frResiduals = loadFrResiduals(root, deps.frCommand ?? ["fr"]);
+  const site = renderSite(doc, {
+    northStarId,
+    title: titleFlag,
+    sources: diagnostics.sources,
+    runGallery,
+    defsData,
+    frResiduals,
+  });
 
   const outRoot = join(root, outDir);
   for (const file of site.files) {
@@ -214,6 +233,7 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
   for (const line of sourceStatusLines(diagnostics.sources)) out.log(`  ${line}`);
   out.log(`  ${runGallery.coverage.checked}/${runGallery.coverage.total} run bundle(s), ${defsData.defs.length} definition(s)` +
     `${defsData.conventions !== undefined ? ", CONVENTIONS.md present" : ", no CONVENTIONS.md"}.`);
+  out.log(`  ${frResiduals.byCycle.size} dead-route residual note(s) available from fr export.`);
   out.log(`  adopted ${manifestEntryPath} in ${MANIFEST_PATH} (generator '${RENDER_SITE_GENERATOR}') for Gate 7.`);
   out.log(`  open ${join(outDir, "index.html")} in a browser (self-contained, no server needed).`);
   out.log("  next: 'rk render --north-star <id>' to include the what-blocks summary if unset.");

@@ -18,6 +18,7 @@ import { renderDag } from "./dag";
 import type { DefRecord, DefsData } from "./defs-edge";
 import { renderDefsIndex } from "./defs-view";
 import { renderDegradedBanner, renderSourcesBlock, type SourceStatuses } from "./diagnostics-view";
+import type { FrResidualData } from "./fr-edge";
 import { renderGraveyard } from "./graveyard-view";
 import { esc } from "./html";
 import { nodePanelId, renderNodePanel } from "./node-view";
@@ -52,6 +53,12 @@ export interface RenderSiteOptions {
    * feeds the provenance-chains view's "refs" step (keyed by def id) when supplied. Omitted
    * degrades the same honest way as `runGallery`. */
   defsData?: DefsData;
+  /** rk-50v RENDER-EDGE option (orchestrator-pinned; NO graph-schema change): fr's own
+   * residual/death-certificate text per dead route (src/render/fr-edge.ts's `loadFrResiduals`
+   * EDGE output), threaded into the graveyard section. Omitted, or an empty `byCycle` map,
+   * renders the graveyard BYTE-IDENTICAL to today's disclaim-only output (never a new failure
+   * mode) — see src/render/graveyard-view.ts's `renderGraveyard`. */
+  frResiduals?: FrResidualData;
 }
 
 const BASE_CSS = `
@@ -115,7 +122,7 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
   const sourcesBlock = options.sources ? renderSourcesBlock(options.sources) : "";
   const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}${sourcesBlock}</div>`;
   const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
-  const graveyard = `<section id="graveyard" class="rk-route-target">${renderGraveyard(doc)}</section>`;
+  const graveyard = `<section id="graveyard" class="rk-route-target">${renderGraveyard(doc, options.frResiduals?.byCycle)}</section>`;
 
   // M2.4 pass 2 (rk-c2q): run gallery / definitions+conventions / provenance chains. `runGallery`/
   // `defsData` are OPTIONAL edge-supplied data (this core stays pure — see file header); omitted

@@ -15,8 +15,19 @@
 // ../knowledge-frontier/src/types.ts) is NOT part of `FrEdge` — the M2.2 reader carries only what
 // the registry<->fr join needs (cycle/artifact/outcome/verdict/supersedes), per PRD C5's per-edge
 // table. This view says so plainly rather than fabricating or omitting the field silently.
+//
+// rk-50v RENDER-EDGE option (orchestrator-pinned; NO graph-schema change): `renderGraveyard`
+// optionally takes a `residuals` map — src/render/fr-edge.ts's `FrResidualData.byCycle`, keyed by
+// the SAME cycle number as a `DeadRouteEntry.cycle` — and decorates a matching row with fr's own
+// residual/reason/killedByWave text. This module itself stays PURE (L3): the map is data handed
+// in by the caller (src/render/site.ts), never fetched here. Omitting the argument (or passing an
+// empty map) renders BYTE-IDENTICAL to before this option existed — see
+// test/render/graveyard-view.test.ts's "byte-identical" cases — so a campaign without fr export
+// reachable, or a render that never threads `frResiduals`, sees exactly today's disclaim-only view
+// (no new failure mode, CLAUDE.md L2).
 
 import type { FrEdge, GraphDocument } from "../graph/types";
+import type { DeadRouteResidual } from "./fr-edge";
 import { esc } from "./html";
 import { nodePanelId } from "./node-view";
 
@@ -68,7 +79,15 @@ export function computeGraveyard(doc: GraphDocument): DeadRouteEntry[] {
     .sort((a, b) => a.cycle - b.cycle);
 }
 
-function entryLine(e: DeadRouteEntry): string {
+/** fr's own residual/reason/wave text for one row, when the caller supplied it (rk-50v
+ * RENDER-EDGE option) — `undefined` renders nothing extra, the pre-existing behavior. */
+function residualBlock(r: DeadRouteResidual | undefined): string {
+  if (!r) return "";
+  const wave = r.killedByWave ? ` <span class="rk-tier">(wave ${esc(r.killedByWave)})</span>` : "";
+  return `<div class="rk-residual">died at: <em>${esc(r.residual)}</em> — ${esc(r.reason)}${wave}</div>`;
+}
+
+function entryLine(e: DeadRouteEntry, residual?: DeadRouteResidual): string {
   const target = e.resolvedNodeId
     ? `<a href="#${esc(nodePanelId(e.resolvedNodeId))}">${esc(e.resolvedNodeId)}</a>`
     : `<span class="rk-none">unresolved (no registry node matched <code>${esc(e.artifact)}</code>)</span>`;
@@ -77,22 +96,33 @@ function entryLine(e: DeadRouteEntry): string {
   const verdict = verdictBits.length > 0 ? ` — ${verdictBits.join(", ")}` : "";
   return (
     `<li>cycle ${e.cycle}<code class="rk-tier"> [${esc(e.outcome)}]</code> — ${target}` +
-    `<span class="rk-muted"> (${esc(e.artifact)})</span>${verdict}</li>`
+    `<span class="rk-muted"> (${esc(e.artifact)})</span>${verdict}${residualBlock(residual)}</li>`
   );
 }
 
 /** Renders the full graveyard section. `superseded` entries render in their OWN subsection
  * (`#rk-graveyard-superseded`) so a reader can never mistake one for a live route — see this
- * module's header for why that distinction is load-bearing, not cosmetic. */
-export function renderGraveyard(doc: GraphDocument): string {
+ * module's header for why that distinction is load-bearing, not cosmetic.
+ *
+ * `residuals` (rk-50v RENDER-EDGE option, src/render/fr-edge.ts's `FrResidualData.byCycle`) is
+ * OPTIONAL, keyed by cycle: a matching entry decorates that row with fr's own residual/reason/
+ * wave text, superseded rows included (a residual is never dropped just because its route was
+ * superseded — CLAUDE.md L2). Omitted, or an empty map, renders BYTE-IDENTICAL to a call with no
+ * residual data at all — see this file's header. */
+export function renderGraveyard(doc: GraphDocument, residuals?: ReadonlyMap<number, DeadRouteResidual>): string {
   const entries = computeGraveyard(doc);
   const live = entries.filter((e) => !e.superseded);
   const superseded = entries.filter((e) => e.superseded);
+  const hasResiduals = residuals !== undefined && entries.some((e) => residuals.has(e.cycle));
 
   const note =
     `<p class="rk-muted">fr's own residual/death-certificate text (the "died at" invariant) is ` +
     `NOT carried into rk's graph projection — only cycle/artifact/outcome/verdict/supersedes cross ` +
-    `the registry&harr;fr join (PRD C5). Consult <code>fr export</code> directly for the residual.</p>`;
+    `the registry&harr;fr join (PRD C5). Consult <code>fr export</code> directly for the residual.</p>` +
+    (hasResiduals
+      ? `<p class="rk-ok">fr export data was supplied to this render — residual/reason text is ` +
+        `shown per-entry below where fr recorded one.</p>`
+      : "");
 
   if (entries.length === 0) {
     return (
@@ -104,7 +134,7 @@ export function renderGraveyard(doc: GraphDocument): string {
   const liveBlock =
     live.length === 0
       ? `<p class="rk-none">none currently live (every dead route on record has been superseded).</p>`
-      : `<ul>${live.map(entryLine).join("")}</ul>`;
+      : `<ul>${live.map((e) => entryLine(e, residuals?.get(e.cycle))).join("")}</ul>`;
 
   const supersededBlock =
     superseded.length === 0
@@ -112,7 +142,7 @@ export function renderGraveyard(doc: GraphDocument): string {
       : `<ul>${superseded
           .map(
             (e) =>
-              `<li class="rk-defect">${entryLine(e).replace("<li>", "")
+              `<li class="rk-defect">${entryLine(e, residuals?.get(e.cycle)).replace("<li>", "")
                 .replace("</li>", "")} — <strong>superseded by cycle ${e.supersededByCycle}</strong></li>`,
           )
           .join("")}</ul>`;

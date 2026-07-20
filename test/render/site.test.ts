@@ -11,6 +11,7 @@ import type { GraphDocument } from "../../src/graph/types";
 import { renderSite } from "../../src/render/site";
 import { nodePanelId } from "../../src/render/node-view";
 import type { DefsData } from "../../src/render/defs-edge";
+import type { FrResidualData } from "../../src/render/fr-edge";
 import type { RunGalleryData } from "../../src/render/runs-edge";
 
 const FIXTURE = join(import.meta.dir, "..", "..", "corpus", "render", "rigour-ladder", "graph.json");
@@ -109,6 +110,22 @@ describe("render/site", () => {
     expect(html).toContain('href="#graveyard"');
     expect(html).toContain('id="graveyard" class="rk-route-target"');
     expect(html).toContain("dead-route graveyard");
+  });
+
+  // rk-50v RENDER-EDGE option: fr export's own residual/reason text threads through to the
+  // graveyard section when supplied, with no graph-schema change.
+  test("frResiduals threads through to the graveyard section (rk-50v RENDER-EDGE option)", () => {
+    const frResiduals: FrResidualData = {
+      byCycle: new Map([[2, { residual: "induction fails at n=5", reason: "counterexample found", killedByWave: "w3" }]]),
+    };
+    const html = indexHtml(renderSite(doc, { frResiduals }));
+    expect(html).toContain("induction fails at n=5");
+  });
+
+  test("frResiduals omitted: the graveyard section is byte-identical to today's disclaim-only output", () => {
+    const withOption = indexHtml(renderSite(doc, { frResiduals: { byCycle: new Map() } }));
+    const without = indexHtml(renderSite(doc));
+    expect(withOption).toBe(without);
   });
 
   test("wires runs/provenance/defs as their own hash-routed sections, all linked from the nav", () => {
