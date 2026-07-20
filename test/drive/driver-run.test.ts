@@ -49,6 +49,11 @@ function harness(over: Partial<DriverDeps> & { workspaces: AfWorkspaceView[] }):
     // override this to simulate an af content edit between dispatch and apply.
     reReadContentHashes: () => new Map((lastWs?.nodes ?? []).map((n) => [n.id, n.contentHash] as const)),
     dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0 }) as DispatchedTurn,
+    // rk-gn4: prover half defaults. No pre-existing test sets a `proverReady` node, so these never
+    // fire for them; dedicated prover tests below override them. Default = no prover worker + a
+    // no-op recorder, so an accidental prover-ready node is a loud skip, never a silent apply.
+    dispatchProve: () => undefined,
+    recordProof: () => ({ ok: true }),
     dispatchClassification: () => ({ classification: "missing-fact", rationale: "def X unprovided" }),
     applyVerdicts: (file) => appliedReport(file.items.map((i) => i.node)),
     // M3.8: permissive default so every PRE-EXISTING test above (none of which sets `node.author`
@@ -427,5 +432,64 @@ describe("re-read before apply (M3 blocker 1)", () => {
     expect(r.appliedNodeIds).toEqual([]);
     expect(r.status).toBe("aborted");
     expect(h.logs.some((l) => l.includes("node-skipped") && l.includes("content hash changed"))).toBe(true);
+  });
+});
+
+// rk-gn4: the PROVER half of the loop. A prover-ready node gets a prover turn whose decomposition is
+// recorded into af; the node then becomes verifier-ready and the EXISTING verifier path takes over —
+// per-node prove-then-verify. Validity is untouchable: a prover NEVER mints a verdict, and a
+// validated root is still required to converge.
+describe("prover dispatch (rk-gn4) — prove-then-verify per node, never a prover verdict", () => {
+  const proverBody = { children: [{ statement: "sub-step", justification: "modus_ponens" }] };
+
+  test("a prover-ready node is proved (recorded), then verified next round, then converges", async () => {
+    const recordedNodes: string[] = [];
+    // round 0: node 1 prover-ready (fresh). round 1: 1 is now verifier-ready (af re-classified after
+    // refine). round 2: 1 validated → converge. The fake advances af's state on recordProof/apply.
+    const r0 = ws([node("1", { proverReady: true, verifierReady: false })]);
+    const r1 = ws([node("1", { proverReady: false, verifierReady: true })]);
+    const r2 = ws([node("1", { epistemicState: "validated", proverReady: false, verifierReady: false })]);
+    const h = harness({
+      workspaces: [r0, r1, r2],
+      dispatchProve: () => ({ raw: proverBody, role: "prover", exit: 0 }) as DispatchedTurn,
+      recordProof: (n) => { recordedNodes.push(n.id); return { ok: true }; },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(recordedNodes).toEqual(["1"]);                       // the prover produced + recorded a proof
+    expect(h.logs.some((l) => l.includes('"kind":"proof-recorded"'))).toBe(true);
+    expect(r.status).toBe("converged");                         // root validated
+    expect(r.appliedNodeIds).toEqual(["1"]);                    // the verifier accepted it
+  });
+
+  test("a prover turn that smuggles a VERDICT is discarded — never recorded, never applied", async () => {
+    let applyCalls = 0;
+    const r0 = ws([node("1", { proverReady: true, verifierReady: false })]);
+    const h = harness({
+      workspaces: [r0],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchProve: () => ({ raw: { verdict: { outcome: "accept" }, children: [{ statement: "x" }] }, role: "prover", exit: 0 }) as DispatchedTurn,
+      recordProof: () => { throw new Error("recordProof must not be called for an overreaching prover"); },
+      applyVerdicts: (file) => { applyCalls++; return appliedReport(file.items.map((i) => i.node)); },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(applyCalls).toBe(0);                                  // no verdict was ever applied
+    expect(r.appliedNodeIds).toEqual([]);
+    expect(r.status).toBe("aborted");                           // no progress → stuck; never a false converge
+    expect(h.logs.some((l) => l.includes('"kind":"prover-overreach"'))).toBe(true);
+  });
+
+  test("a prover turn accrues to the SAME campaign cap; the (cap+1)th token is never requested", async () => {
+    let proveCalls = 0;
+    const usage = { input: 100, output: 0, cache_read: 0, cache_creation: 0 };
+    const r0 = ws([node("1", { proverReady: true, verifierReady: false }), node("1.2", { proverReady: true, verifierReady: false })]);
+    const h = harness({
+      workspaces: [r0, r0],
+      budget: { maxCampaignTokens: 100, perCallReserve: 1 },
+      dispatchProve: () => { proveCalls++; return { raw: proverBody, role: "prover", exit: 0, usage } as DispatchedTurn; },
+      recordProof: () => ({ ok: true }),
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(proveCalls).toBe(1);                                  // first prover turn spends 100; the 2nd is refused pre-dispatch
+    expect(r.stopReason).toBe("budget-exhausted");
   });
 });

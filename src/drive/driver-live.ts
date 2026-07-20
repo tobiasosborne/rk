@@ -35,8 +35,10 @@ import type { SessionRecord } from "./session";
 import type { DispatchModel, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
-import { buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type VerifierItemInput } from "./driver-prompts";
+import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierItemInput } from "./driver-prompts";
 import type { AfNodeView } from "./driver-plan";
+import { recordProofRefine } from "./driver-af";
+import type { ProofContent, RecordProofResult } from "./driver-prove-node";
 
 const ZERO_USAGE: WorkerUsage = { input: 0, output: 0, cache_read: 0, cache_creation: 0 };
 export const DEFAULT_SESSION_TIMEOUT_MS = 120_000;
@@ -210,6 +212,33 @@ export function verifierItemFor(node: AfNodeView, tier: Tier): VerifierItemInput
 export function liveDispatchVerify(dispatcher: LiveRoleTierDispatcher, tier: Tier) {
   return (node: AfNodeView): Promise<DispatchedTurn> =>
     dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier)));
+}
+
+/** Builds the prover item input for one af node — same honest `childIds` proxy for "dependencies"
+ * and self-teaching statement fallback as `verifierItemFor` (rk-gn4). */
+export function proverItemFor(node: AfNodeView): ProverItemInput {
+  return {
+    nodeId: node.id,
+    statement: node.statement ?? `(no statement recorded by af export for node ${node.id})`,
+    deps: node.childIds ?? [],
+  };
+}
+
+/** The one live `dispatchProve` a `DriverDeps` needs (rk-gn4): dispatches `node` as a PROVER turn on
+ * a prover-role dispatcher, building its decomposition prompt via src/drive/driver-prompts.ts. The
+ * dispatcher's `role` is "prover", so `DispatchedTurn.role` is "prover" and driver-prove-node.ts's
+ * role guard passes; a verifier dispatcher handed here would be refused there (never records). */
+export function liveDispatchProve(dispatcher: LiveRoleTierDispatcher) {
+  return (node: AfNodeView): Promise<DispatchedTurn> =>
+    dispatcher.dispatch(node.id, buildProverTurnPrompt(proverItemFor(node)));
+}
+
+/** The one live `recordProof` a `DriverDeps` needs (rk-gn4): records the prover's decomposition into
+ * af via `af claim --role prover` + `af refine` (src/drive/driver-af.ts's `recordProofRefine`).
+ * `owner` is the prover's identity seam; `absWorkspace` the resolved proof dir. */
+export function liveRecordProof(absWorkspace: string, owner: string, afCommand?: readonly string[]) {
+  return (node: AfNodeView, proof: ProofContent): RecordProofResult =>
+    recordProofRefine(absWorkspace, node.id, owner, proof, afCommand);
 }
 
 /** Ad hoc, inline balloon-classification prompt (see file header, scope note 4) -- deliberately

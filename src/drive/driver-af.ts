@@ -18,6 +18,7 @@ import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { AfNodeView } from "./driver-plan";
 import type { VerdictFileSkeleton } from "./batch-plan";
+import type { ProofContent, RecordProofResult } from "./driver-prove-node";
 
 export interface AfWorkspaceView {
   workspaceId: string;
@@ -129,6 +130,28 @@ export function readAfWorkspace(absWorkspace: string, workspaceId: string, afCom
     return { ok: false, reason: stderr.length > 0 ? stderr : `af export exited ${proc.exitCode}` };
   }
   return parseAfExport(proc.stdout.toString(), workspaceId);
+}
+
+/** EDGE (rk-gn4): records a prover turn's decomposition into af — the seam `DriverDeps.recordProof`
+ * drives at the live edge. Claims `nodeId` as a PROVER, then `af refine`s it with the produced
+ * children (which auto-releases the claim). Faithful to ../vibefeld/cmd/af/refine.go's `childSpec`:
+ * the JSON child keys are `statement`/`type`/`inference` — a ProofChild's `justification` maps to
+ * af's `inference` field; per-child `depends` has no --children JSON slot (af's `--depends` is a
+ * whole-refine flag), so it is dropped here (a named live-seam limitation, not a silent guess — see
+ * the bead). Fail-closed: any non-zero af exit is a `{ok:false}` reason, never a partial record. */
+export function recordProofRefine(absWorkspace: string, nodeId: string, owner: string, proof: ProofContent, afCommand: readonly string[] = ["af"]): RecordProofResult {
+  const claim = Bun.spawnSync([...afCommand, "claim", nodeId, "--owner", owner, "--role", "prover", "--format", "json", "--dir", absWorkspace]);
+  if (claim.exitCode !== 0) {
+    const stderr = claim.stderr.toString().trim();
+    return { ok: false, reason: `af claim --role prover exit ${claim.exitCode}${stderr ? `: ${stderr}` : ""}` };
+  }
+  const children = proof.children.map((c) => (c.justification ? { statement: c.statement, inference: c.justification } : { statement: c.statement }));
+  const refine = Bun.spawnSync([...afCommand, "refine", nodeId, "--owner", owner, "--children", JSON.stringify(children), "--format", "json", "--dir", absWorkspace]);
+  if (refine.exitCode !== 0) {
+    const stderr = refine.stderr.toString().trim();
+    return { ok: false, reason: `af refine exit ${refine.exitCode}${stderr ? `: ${stderr}` : ""}` };
+  }
+  return { ok: true };
 }
 
 /** EDGE: writes `file` to a temp path under `absWorkspace`, spawns

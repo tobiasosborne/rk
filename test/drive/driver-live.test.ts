@@ -11,10 +11,13 @@ import {
   createLiveDispatcher,
   describeMissingWorkersConfig,
   liveDispatchClassification,
+  liveDispatchProve,
   liveDispatchVerify,
+  proverItemFor,
   toDispatchedTurn,
   verifierItemFor,
 } from "../../src/drive/driver-live";
+import { buildProverTurnPrompt } from "../../src/drive/driver-prompts";
 import { runVerifyDriver, type DriverDeps } from "../../src/drive/driver-run";
 import type { AfWorkspaceView, ApplyReport, FilledVerdictFile } from "../../src/drive/driver-af";
 import type { AfNodeView } from "../../src/drive/driver-plan";
@@ -78,6 +81,31 @@ describe("createLiveDispatcher — preflight loudness", () => {
     const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "claude"), []); // "claude" named, not registered
     const result = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "shared" });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("liveDispatchProve / proverItemFor — the live PROVER dispatch wiring (rk-gn4)", () => {
+  test("dispatches a PROVER-role turn whose prompt is the node's decomposition request, and returns the parsed children body", async () => {
+    const proverBody = { children: [{ statement: "sub-step", justification: "modus_ponens" }] };
+    let sentPrompt = "";
+    const { backend } = fakeBackend({ turnFor: (item) => { sentPrompt = item.content; return { exit: 0, usage: { input: 4, output: 2, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify(proverBody) }; } });
+    const registry = new BackendRegistry<WorkerBackend>({ assignments: { prover: { hard: { backend: "fake", fallbacks: [] } } } }, [backend]);
+    const created = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: "claim-p", model: "m", sharedContext: "S" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const n = node("1.1", { statement: "P holds", childIds: ["1.1.1"] });
+    const turn = await liveDispatchProve(created.dispatcher)(n);
+    expect(turn.role).toBe("prover");                       // → driver-prove-node.ts's role guard passes
+    expect(turn.exit).toBe(0);
+    expect(turn.raw).toEqual(proverBody);                   // the decomposition, NOT a verdict
+    // the turn carried the prover decomposition prompt (never a verifier/verdict prompt).
+    expect(sentPrompt).toBe(buildProverTurnPrompt({ nodeId: "1.1", statement: "P holds", deps: ["1.1.1"] }));
+  });
+
+  test("proverItemFor maps statement + childIds-as-deps, with a self-teaching statement fallback", () => {
+    expect(proverItemFor(node("1.2", { statement: "S", childIds: ["1.2.1", "1.2.2"] }))).toEqual({ nodeId: "1.2", statement: "S", deps: ["1.2.1", "1.2.2"] });
+    expect(proverItemFor(node("1.3", { statement: undefined, childIds: [] })).statement).toContain("no statement recorded");
   });
 });
 
@@ -199,6 +227,8 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
       queryWorkspace: () => ({ ok: true, value: ws }),
       reReadContentHashes: () => new Map(ws.nodes.map((n) => [n.id, n.contentHash] as const)),
       dispatchVerify: liveDispatchVerify(result.dispatcher, "hard"),
+      dispatchProve: () => undefined, // this end-to-end exercises the verify path; no prover-ready nodes
+      recordProof: () => ({ ok: true }),
       dispatchClassification: liveDispatchClassification(result.dispatcher),
       applyVerdicts: (file): ApplyReport => {
         applied.push(file);

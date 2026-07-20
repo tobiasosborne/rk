@@ -124,8 +124,19 @@ export interface ProverItemInput {
   deps: readonly string[];
 }
 
-/** Builds the prover's per-turn content. NO verdict vocabulary anywhere in this function's output
- * (see file header) — a prover is asked to PRODUCE a proof step, never to judge one. */
+const PROVER_OUTPUT_INSTRUCTIONS = [
+  "Respond with EXACTLY one JSON object and nothing else, matching:",
+  '{"children": [{"statement": <string>, "justification"?: <inference rule name>, "depends"?: [<node id>, ...]}, ...]}',
+  'Each element of "children" is one sub-step of the proof: its "statement" is the sub-claim, its',
+  'optional "justification" names the inference rule that establishes it (e.g. modus_ponens,',
+  'by_definition, contradiction), and its optional "depends" lists the node ids it relies on. Order',
+  'the children so each one only relies on earlier children or the dependencies above. Provide at',
+  'least one child. Do NOT judge the statement — only decompose and justify it.',
+].join("\n");
+
+/** Builds the prover's per-turn content: a request for a `children[]` decomposition that
+ * src/drive/driver-af.ts's `af refine` seam records verbatim. NO verdict vocabulary anywhere in this
+ * function's output (see file header) — a prover PRODUCES the next proof step, never judges one. */
 export function buildProverTurnPrompt(item: ProverItemInput): string {
   const lines: string[] = [];
   lines.push(`## Produce the proof step for node ${item.nodeId}`);
@@ -135,6 +146,6 @@ export function buildProverTurnPrompt(item: ProverItemInput): string {
   lines.push("");
   lines.push(`Dependencies you may assume already established (${item.deps.length}): ${item.deps.length === 0 ? "(none)" : item.deps.join(", ")}`);
   lines.push("");
-  lines.push("Write the proof step establishing the statement from the dependencies above. Respond with the proof text only.");
+  lines.push(PROVER_OUTPUT_INSTRUCTIONS);
   return lines.join("\n");
 }

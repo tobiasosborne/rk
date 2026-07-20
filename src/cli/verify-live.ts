@@ -8,7 +8,7 @@
 // how the run finished (`reportCommand`, src/cli/verify-report.ts, reads the persisted
 // `.rk/driver-log.jsonl` — durable even if the run aborted early).
 
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RegistryNode } from "../graph/types";
 import { readAfWorkspace, applyVerdictFile, type AfParseResult, type AfWorkspaceView } from "../drive/driver-af";
@@ -21,15 +21,17 @@ import {
   createLiveDispatcher,
   describeMissingWorkersConfig,
   liveDispatchClassification,
+  liveDispatchProve,
   liveDispatchVerify,
+  liveRecordProof,
   DEFAULT_MODEL_BY_BACKEND,
 } from "../drive/driver-live";
+import { encodeVerifierSeam } from "../drive/identity";
 import { parseCampaignBudget } from "./verify-live-budget";
-import { buildSharedContext, type DefinitionText } from "../drive/driver-prompts";
+import { buildSharedContext } from "../drive/driver-prompts";
 import { readBalloonCounterFromFields } from "../drive/driver-balloon";
 import type { VerifierIdentity } from "../drive/identity";
-import { loadSnapshot } from "../store/snapshot-load";
-import { listDir, parseFrontmatter } from "../gates/snapshot";
+import { parseFrontmatter } from "../gates/snapshot";
 import { loadGateConfig } from "../store/config-load";
 import type { Out } from "./args";
 // Type-only: no runtime binding from src/cli/verify.ts is imported here, so there is no runtime
@@ -37,7 +39,8 @@ import type { Out } from "./args";
 // file at runtime) -- src/cli/verify-report.ts is the shared, non-circular home for the printing
 // logic both files actually call.
 import type { VerifyCommandDeps } from "./verify";
-import { reportCommand, driverLogPath } from "./verify-report";
+import { reportCommand } from "./verify-report";
+import { appendDriverLog, createBdTaskEdge, readDefinitionTexts } from "./verify-live-io";
 
 export const DEFAULT_MAX_TURNS = 30;
 // Distinct from, and deliberately below, driver-balloon.ts's own DEFAULT_BALLOON_NODE_CAP (40) --
@@ -52,42 +55,6 @@ const HARD_TIER_GUIDANCE =
 class SafetyValveAbort extends Error {
   constructor(public reason: string) {
     super(reason);
-  }
-}
-
-/** Reads every `definitions/*.md` shard whose frontmatter `id:` is in `ids`, returning raw file
- * text keyed by id -- reuses the SAME snapshot/frontmatter primitives src/store/registry-load.ts
- * already relies on (never a second, forked frontmatter parser). */
-function readDefinitionTexts(root: string, ids: readonly string[]): DefinitionText[] {
-  const wanted = new Set(ids);
-  if (wanted.size === 0) return [];
-  const snapshot = loadSnapshot(root);
-  const out: DefinitionText[] = [];
-  for (const name of listDir(snapshot, "definitions")) {
-    if (name === "README.md" || name === "INDEX.md") continue;
-    const content = snapshot.get(`definitions/${name}`);
-    if (content === undefined) continue;
-    const fm = parseFrontmatter(content);
-    if (fm.present && fm.terminated && fm.fields.id && wanted.has(fm.fields.id)) out.push({ id: fm.fields.id, text: content });
-  }
-  return out;
-}
-
-function appendDriverLog(root: string, line: string): void {
-  mkdirSync(join(root, ".rk"), { recursive: true });
-  appendFileSync(driverLogPath(root), `${line}\n`);
-}
-
-/** `bd create <title> -d <description>` -- best-effort, exactly the `which`/spawn discipline
- * src/cli/init.ts's own bd bootstrap uses. Returns false (never throws) when bd is absent or the
- * spawn fails -- src/drive/driver-run.ts already logs a loud, non-fatal skip for that case. */
-function createBdTaskEdge(task: { title: string; description: string }): boolean {
-  if (!Bun.which("bd")) return false;
-  try {
-    const proc = Bun.spawnSync(["bd", "create", task.title, "-d", task.description]);
-    return proc.exitCode === 0;
-  } catch {
-    return false;
   }
 }
 
@@ -154,6 +121,18 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     out.log(created.reason);
     return 1;
   }
+  // rk-gn4: the PROVER dispatcher — its OWN session (role "prover", hard tier, distinct claim id), so
+  // the adversarial "no agent plays both roles" invariant holds at the session level (../vibefeld
+  // Law 2). A `--live` run REFUSES to start without a prover backend too: a workspace with any
+  // prover-ready node needs one, and starting a spend that cannot make prover progress is the exact
+  // half-wired hole rk-gn4 fixes. The prover may use a different backend/model than the verifier.
+  const proverBackend = registry.resolve("prover", "hard");
+  const proverModel = opts.model ?? (proverBackend ? DEFAULT_MODEL_BY_BACKEND[proverBackend.name] ?? proverBackend.name : "unknown");
+  const proverCreated = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: `${claimId}-prover`, model: proverModel, sharedContext });
+  if (!proverCreated.ok) {
+    out.log(proverCreated.reason);
+    return 1;
+  }
   // The classification turn is rare (only fires on a balloon tripwire) and gets its OWN session
   // (a different tier -- l5, "cheap" -- is a different isolation tuple than the hard-tier verify
   // session above), but still benefits from knowing the conjecture, so it reuses the SAME
@@ -162,7 +141,8 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
 
   out.log(`rk verify --af ${node.id} --live: preflight`);
   out.log(`  backend resolved: verifier/hard -> '${created.dispatcher.backendName}' (model '${model}')`);
-  out.log(`  session plan: ONE shared session for claim '${claimId}' (turn 1 = shared context, every node after = a resume turn)`);
+  out.log(`  backend resolved: prover/hard -> '${proverCreated.dispatcher.backendName}' (model '${proverModel}')`);
+  out.log(`  session plan: ONE shared verifier session for claim '${claimId}' + ONE prover session '${claimId}-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)`);
   out.log(`  workspace: ${node.workspace} (${wsResult.value.nodeCount} node(s) total)`);
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);
   out.log(`  campaign token cap: ${budget.maxCampaignTokens} total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve ${budget.perCallReserve}).`);
@@ -190,6 +170,25 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     checkValves(n.id);
     return rawDispatchVerify(n);
   };
+  // rk-gn4: prover dispatch shares the SAME safety valves (a prover turn is a real spend too) and the
+  // SAME campaign budget (enforced in the driver loop). The prover session is created lazily on its
+  // first dispatch (createLiveDispatcher's ensureSession), so a workspace with no prover-ready node
+  // never opens it.
+  const rawDispatchProve = liveDispatchProve(proverCreated.dispatcher);
+  const dispatchProve: DriverDeps["dispatchProve"] = (n): Promise<DispatchedTurn | undefined> => {
+    checkValves(n.id);
+    return rawDispatchProve(n);
+  };
+  // The prover's identity seam, recorded as the af node author on refine (so the apply-time
+  // cross-vendor rule can parse it against the verifier's seam). Built from the resolved prover
+  // backend; a codex-fronted prover is family 'gpt' (vocab.ts), else 'claude'.
+  const proverIdentity: VerifierIdentity = { modelFamily: proverCreated.dispatcher.backendName === "codex" ? "gpt" : "claude", backend: proverCreated.dispatcher.backendName, model: proverModel, sessionId: `${claimId}-prover` };
+  const proverSeam = encodeVerifierSeam(proverIdentity);
+  if (!proverSeam.ok) {
+    out.log(`rk verify --af ${node.id} --live: prover identity is not encodable -- ${proverSeam.reason}`);
+    return 1;
+  }
+  const recordProof = liveRecordProof(abs, proverSeam.value, deps.afCommand);
   const dispatchClassification = classCreated.ok ? liveDispatchClassification(classCreated.dispatcher) : async () => undefined;
 
   const identity: VerifierIdentity = { modelFamily: created.dispatcher.backendName === "codex" ? "gpt" : "claude", backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
@@ -222,6 +221,8 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
       return fresh.ok ? new Map(fresh.value.nodes.map((n) => [n.id, n.contentHash])) : new Map();
     },
     dispatchVerify,
+    dispatchProve,
+    recordProof,
     dispatchClassification,
     applyVerdicts: (file) => applyVerdictFile(abs, file, deps.afCommand),
     // Merge reconciliation (M3.8 cross-vendor rule + M3.5 live wiring): DriverDeps.isLoadBearing

@@ -91,9 +91,14 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
     expect(turn).toContain("Dependencies (0): (none)");
   });
 
-  test("prover prompt asks for a proof step, never a verdict, and uses none of the forbidden verdict vocabulary", () => {
+  test("prover prompt asks for a proof step as a children[] decomposition, never a verdict, and uses none of the forbidden verdict vocabulary", () => {
     const turn = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: ["1"] });
     expect(turn).toContain("proof step");
+    // rk-gn4: the prover output is a structured decomposition af's `refine` seam can record, not free
+    // text — a `{"children":[{"statement":...}]}` JSON object. No verdict vocab anywhere (the
+    // prover-overreach guard depends on provers never even being ASKED for one).
+    expect(turn).toContain('"children"');
+    expect(turn).toContain('"statement"');
     const forbidden = ["verdict", "accept", "challenge", "VALID", "INVALID", "outcome"];
     for (const word of forbidden) expect(turn.toLowerCase()).not.toContain(word.toLowerCase());
   });

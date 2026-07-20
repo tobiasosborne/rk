@@ -158,7 +158,8 @@ function fakeLiveBackend(): WorkerBackend {
     },
   };
 }
-const FAKE_WORKERS_CONFIG: WorkersConfig = { assignments: { verifier: { hard: { backend: "fake", fallbacks: [] } } } };
+// rk-gn4: a live run needs BOTH roles configured (the prover produces proofs, the verifier judges).
+const FAKE_WORKERS_CONFIG: WorkersConfig = { assignments: { verifier: { hard: { backend: "fake", fallbacks: [] } }, prover: { hard: { backend: "fake", fallbacks: [] } } } };
 
 /** Two verification-ready leaf nodes, never advancing state (irrelevant -- the tests below all
  * abort or fail before a second round would ever matter). */
