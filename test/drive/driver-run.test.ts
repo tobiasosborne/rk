@@ -62,9 +62,9 @@ function harness(over: Partial<DriverDeps> & { workspaces: AfWorkspaceView[] }):
 describe("balloon path (synthetic acceptance) — tripwire → classify → route → mark/task → ABORT", () => {
   const over = [node("1"), node("1.1"), node("1.2"), node("1.3"), node("1.4")]; // 5 > cap 3
 
-  test("missing-fact (first balloon) → bd provisioning task filed, shard NOT marked, aborts", () => {
+  test("missing-fact (first balloon) → bd provisioning task filed, shard NOT marked, aborts", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 } });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("balloon-abort"); // the signal AUGMENTS the abort, never replaces it
     expect(r.balloon?.classification).toBe("missing-fact");
@@ -75,9 +75,9 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
     expect(h.logs.some((l) => l.includes('"kind":"balloon"'))).toBe(true);
   });
 
-  test("genuine-gap → mandatory-review: frontmatter mark WRITTEN, no bd task, aborts", () => {
+  test("genuine-gap → mandatory-review: frontmatter mark WRITTEN, no bd task, aborts", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 }, dispatchClassification: () => ({ classification: "genuine-gap", rationale: "hypotheses too weak" }) });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.balloon?.routing).toBe("mandatory-review");
     expect(h.written.length).toBe(1);
@@ -86,7 +86,7 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
     expect(h.bdTasks.length).toBe(0);
   });
 
-  test("REPEAT balloon on the same contract → mandatory-review (mark) even for missing-fact", () => {
+  test("REPEAT balloon on the same contract → mandatory-review (mark) even for missing-fact", async () => {
     const h = harness({
       workspaces: [ws(over, 5)],
       config: { balloonCap: 3 },
@@ -94,23 +94,23 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
       priorClassifications: ["missing-fact"],
       dispatchClassification: () => ({ classification: "missing-fact", rationale: "again" }),
     });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.balloon?.routing).toBe("mandatory-review");
     expect(h.written.length).toBe(1);
     expect(h.written[0]!).toContain("balloons: 2"); // prior 1 + this
     expect(h.written[0]!).toContain("balloon_classifications:\n- missing-fact\n- missing-fact");
   });
 
-  test("bd absent → task is NOT filed but a loud skip is logged (never silent)", () => {
+  test("bd absent → task is NOT filed but a loud skip is logged (never silent)", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 }, createBdTask: () => false });
-    runVerifyDriver(h.deps);
+    await runVerifyDriver(h.deps);
     expect(h.bdTasks.length).toBe(0);
     expect(h.logs.some((l) => l.includes("balloon-bd-skipped"))).toBe(true);
   });
 
-  test("an unclassifiable balloon still ABORTS and marks nothing (never guesses a class)", () => {
+  test("an unclassifiable balloon still ABORTS and marks nothing (never guesses a class)", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 }, dispatchClassification: () => ({ nonsense: true }) });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("balloon-abort");
     expect(h.written.length).toBe(0);
@@ -120,12 +120,12 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
 });
 
 describe("verify cycle — bottom-up convergence with fake accepts", () => {
-  test("applies leaf then parent across rounds, then converges", () => {
+  test("applies leaf then parent across rounds, then converges", async () => {
     const round0 = ws([node("1", { workflowState: "blocked" }), node("1.1")]); // 1.1 ready, 1 blocked
     const round1 = ws([node("1"), node("1.1", { epistemicState: "validated" })]); // 1 now ready
     const round2 = ws([node("1", { epistemicState: "validated" }), node("1.1", { epistemicState: "validated" })]); // done
     const h = harness({ workspaces: [round0, round1, round2] });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("converged");
     expect(r.appliedNodeIds.sort()).toEqual(["1", "1.1"]);
     expect(h.logs.some((l) => l.includes('"kind":"verdict-outcome"'))).toBe(true);
@@ -133,13 +133,13 @@ describe("verify cycle — bottom-up convergence with fake accepts", () => {
 });
 
 describe("M3.9: usage logging", () => {
-  test("a turn carrying usage appends a 'usage' record with the claim/contract/node/session identity", () => {
+  test("a turn carrying usage appends a 'usage' record with the claim/contract/node/session identity", async () => {
     const h = harness({
       workspaces: [ws([node("1.1")])],
       config: { maxRounds: 1 },
       dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0, usage: { input: 10, output: 5, cache_read: 100, cache_creation: 0 } }),
     });
-    runVerifyDriver(h.deps);
+    await runVerifyDriver(h.deps);
     const usageLines = h.logs.filter((l) => l.includes('"kind":"usage"')).map((l) => JSON.parse(l));
     expect(usageLines).toHaveLength(1);
     expect(usageLines[0]).toEqual({
@@ -148,44 +148,44 @@ describe("M3.9: usage logging", () => {
     });
   });
 
-  test("no usage on the dispatched turn -> no 'usage' record appended (never fabricates a zero)", () => {
+  test("no usage on the dispatched turn -> no 'usage' record appended (never fabricates a zero)", async () => {
     const h = harness({ workspaces: [ws([node("1.1")])], config: { maxRounds: 1 } }); // default dispatchVerify carries no `usage`
-    runVerifyDriver(h.deps);
+    await runVerifyDriver(h.deps);
     expect(h.logs.some((l) => l.includes('"kind":"usage"'))).toBe(false);
   });
 
-  test("usage is logged even when the turn is later discarded (prover overreach) — tokens were spent regardless", () => {
+  test("usage is logged even when the turn is later discarded (prover overreach) — tokens were spent regardless", async () => {
     const h = harness({
       workspaces: [ws([node("1.1")])],
       config: { maxStuckRounds: 1, maxRounds: 1 },
       dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" } }, role: "prover", exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } }),
     });
-    runVerifyDriver(h.deps);
+    await runVerifyDriver(h.deps);
     expect(h.logs.some((l) => l.includes('"kind":"usage"'))).toBe(true);
     expect(h.logs.some((l) => l.includes("prover-overreach"))).toBe(true);
   });
 });
 
 describe("guardrails inside the loop", () => {
-  test("a PROVER turn that emits a verdict is discarded + logged, and drives the loop to a stuck abort", () => {
+  test("a PROVER turn that emits a verdict is discarded + logged, and drives the loop to a stuck abort", async () => {
     const h = harness({
       workspaces: [ws([node("1.1")])],
       config: { maxStuckRounds: 2, maxRounds: 10 },
       dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "x" }, role: "prover", exit: 0 }),
     });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("stuck-no-progress");
     expect(h.logs.some((l) => l.includes("prover-overreach"))).toBe(true);
   });
 
-  test("no bindable verdict every round → stuck abort with a named reason", () => {
+  test("no bindable verdict every round → stuck abort with a named reason", async () => {
     const h = harness({
       workspaces: [ws([node("1.1")])],
       config: { maxStuckRounds: 2, maxRounds: 10 },
       dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "x" }, role: "verifier", exit: 13 }), // nonzero exit → never applied
     });
-    const r = runVerifyDriver(h.deps);
+    const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("stuck-no-progress");
     expect(r.message).toContain("stuck");

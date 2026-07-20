@@ -22,6 +22,18 @@
 // dispatched turn (when the dispatcher supplies `DispatchedTurn.usage`) — the ONE new record kind
 // this WP adds to this log; every existing kind/shape below is untouched. src/drive/report.ts is
 // the pure reader of the full log, including this new kind.
+//
+// M3.5-prep FLAGGED injection point (this WP, src/drive/driver-live.ts): `dispatchVerify` and
+// `dispatchClassification` were synchronous-only, which no real backend call (subprocess spawn,
+// M3.2 `WorkerBackend.createSession`/`runTurn`) can honor — those are Promises by their PINNED
+// interface (src/drive/backend-types.ts). The MINIMAL fix: both hooks may now ALSO return a
+// Promise of their prior result, and `runVerifyDriver`/`verifyOneNode`/`handleBalloon` are marked
+// `async` with an `await` at each call site. Every decision RULE (ordering, guardrails, balloon
+// routing, retry/stuck caps, af apply) is byte-for-byte unchanged — only the sync/async boundary
+// moved. Every injected fake in test/drive/driver-run.test.ts still returns plain values (an
+// `await` on a non-Promise resolves on the next microtask, changing nothing observable), so no
+// existing test's ASSERTIONS changed, only its `test(...)` callback and call site gained
+// `async`/`await` keywords. Callers of `runVerifyDriver` now receive `Promise<DriverRunResult>`.
 
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
 import { deriveBatchId } from "./batch-composer";
@@ -93,10 +105,13 @@ export interface DriverDeps {
   identity: VerifierIdentity;
   /** Query af for the workspace's current node state (af's state machine is truth). */
   queryWorkspace(): AfParseResult<AfWorkspaceView>;
-  /** Dispatch a verifier turn over one ready node. `undefined` = no worker available (skipped). */
-  dispatchVerify(node: AfNodeView): DispatchedTurn | undefined;
+  /** Dispatch a verifier turn over one ready node. `undefined` = no worker available (skipped).
+   * MAY return a Promise (M3.5-prep, src/drive/driver-live.ts's real backend calls — see the file
+   * header's flagged injection-point note); every existing synchronous fake still type-checks. */
+  dispatchVerify(node: AfNodeView): DispatchedTurn | undefined | Promise<DispatchedTurn | undefined>;
   /** Dispatch the balloon-classification turn (verifier role, cheap tier) over the offending
-   * subtree; returns the already-parsed worker output. */
+   * subtree; returns the already-parsed worker output. MAY return a Promise (same note as
+   * `dispatchVerify` above) — typed `unknown` already, so no signature change is needed here. */
   dispatchClassification(subtree: string[]): unknown;
   applyVerdicts(file: FilledVerdictFile): ApplyReport;
   /** M3.8 (PRD C9 cross-vendor rule, apply-time half): true iff `nodeId` is load-bearing — on the
@@ -144,9 +159,9 @@ function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
   return a.node < b.node ? -1 : a.node > b.node ? 1 : 0;
 }
 
-function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): DriverRunResult {
+async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): Promise<DriverRunResult> {
   const subtree = deps.offendingSubtree ?? ws.nodes.map((n) => n.id);
-  const parsed = parseClassificationReview(deps.dispatchClassification([...subtree].sort()));
+  const parsed = parseClassificationReview(await deps.dispatchClassification([...subtree].sort()));
   if (!parsed.ok) {
     // Classification failed — still abort (the tripwire fired), but say so loudly; no mark/task on
     // an unclassified balloon (never guess a class).
@@ -192,8 +207,8 @@ function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): Driv
 
 /** Dispatches + binds a single node's verdict, applying the prover-overreach guard. Returns the af
  * item to apply, or a reason it was skipped (never applied). */
-function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): { item: AfApplyItem } | { skip: string } {
-  const turn = deps.dispatchVerify(node);
+async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<{ item: AfApplyItem } | { skip: string }> {
+  const turn = await deps.dispatchVerify(node);
   if (turn === undefined) return { skip: "no worker available" };
   // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,
   // independent of whether the resulting verdict is ever applied (src/drive/report.ts reads this
@@ -230,7 +245,7 @@ function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: strin
 }
 
 /** Drives one workspace claim to convergence or a named abort. */
-export function runVerifyDriver(deps: DriverDeps): DriverRunResult {
+export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult> {
   const config = { ...DEFAULT_DRIVER_CONFIG, ...deps.config };
   const seamResult = encodeVerifierSeam(deps.identity);
   if (!seamResult.ok) {
@@ -251,7 +266,7 @@ export function runVerifyDriver(deps: DriverDeps): DriverRunResult {
 
     const balloon = detectBalloon(ws.nodeCount, config.balloonCap);
     if (balloon.ballooned) {
-      const result = handleBalloon(deps, ws, config.balloonCap);
+      const result = await handleBalloon(deps, ws, config.balloonCap);
       return { ...result, appliedNodeIds, outcomes, rounds: round };
     }
 
@@ -266,7 +281,7 @@ export function runVerifyDriver(deps: DriverDeps): DriverRunResult {
       const node = byId.get(id)!;
       const attemptsSoFar = attempts.get(id) ?? 0;
       if (checkRetryCap(attemptsSoFar, config.nodeRetryCap).exhausted) continue;
-      const r = verifyOneNode(deps, node, verifiedBySeam);
+      const r = await verifyOneNode(deps, node, verifiedBySeam);
       if ("item" in r) items.push(r.item);
       else {
         attempts.set(id, attemptsSoFar + 1);

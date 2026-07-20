@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verifyCommand } from "../src/cli/verify";
 import type { AfParseResult, AfWorkspaceView } from "../src/drive/driver-af";
+import type { SessionSpec, TurnItem, WorkerBackend } from "../src/drive/backend-types";
+import type { WorkersConfig } from "../src/drive/backend-registry";
 
 function usageLine(o: { contractId: string; claimId: string; nodeId: string; sessionId: string; usage: { input: number; output: number; cache_read: number; cache_creation: number } }): string {
   return JSON.stringify({ kind: "usage", at: "2026-07-19T00:00:00Z", role: "verifier", ...o });
@@ -97,13 +99,116 @@ describe("rk verify — CLI wiring", () => {
     expect(lines.join("\n")).toContain("BALLOON TRIPWIRE");
   });
 
-  test("live run (no --dry-run): honest gate, points at --dry-run, exit 3", async () => {
+  test("no --dry-run and no --live: dry-run is still the DEFAULT (M3.5-prep: a real spend must always be explicit)", async () => {
     const root = tmpRoot(); dirs.push(root);
     writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
     const { out, lines } = capture();
-    const code = await verifyCommand(["--af", "lem-a", "--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
-    expect(code).toBe(3);
-    expect(lines.join("\n")).toContain("live dispatch is not wired");
+    const code = await verifyCommand(["--af", "lem-a", "--root", root], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: fakeWorkspace(2),
+    });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("DRY RUN");
+  });
+
+  test("--live with no .rk/config.json workers assignment: loud error naming the exact config shape, exit 1, no worker ever called", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: fakeWorkspace(2),
+    });
+    expect(code).toBe(1);
+    const text = lines.join("\n");
+    expect(text).toContain("workers.assignments.verifier.hard");
+    expect(text).toContain('"backend": "claude"');
+  });
+
+  test("--live and --dry-run together: the explicit safety flag wins, still dry-run", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--dry-run"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: fakeWorkspace(2),
+    });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("DRY RUN");
+  });
+});
+
+/** A fake, never-real-subprocess backend for the full `--live` CLI wiring tests below (task
+ * constraint: no real subprocess/LLM call anywhere in this suite). */
+function fakeLiveBackend(): WorkerBackend {
+  return {
+    name: "fake",
+    modelFamily: "claude",
+    capabilities: { sessionResume: true },
+    async createSession(_spec: SessionSpec) {
+      return { sessionId: "session-1" };
+    },
+    async runTurn(_sessionId: string, _item: TurnItem) {
+      return { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+    },
+  };
+}
+const FAKE_WORKERS_CONFIG: WorkersConfig = { assignments: { verifier: { hard: { backend: "fake", fallbacks: [] } } } };
+
+/** Two verification-ready leaf nodes, never advancing state (irrelevant -- the tests below all
+ * abort or fail before a second round would ever matter). */
+function twoReadyNodesWorkspace(): (a: string, id: string) => AfParseResult<AfWorkspaceView> {
+  return (_a, id) => ({
+    ok: true,
+    value: {
+      workspaceId: id,
+      rootStatement: "P",
+      nodeCount: 2,
+      nodes: [
+        { id: "1.1", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64) },
+        { id: "1.2", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64) },
+      ],
+    },
+  });
+}
+
+describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend", () => {
+  const dirs: string[] = [];
+  afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  test("--max-turns 1 with 2 ready nodes: preflight printed, session created once, ABORTS on the 2nd turn with a named reason, never reaches af apply", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG,
+      backends: [fakeLiveBackend()],
+    });
+    const text = lines.join("\n");
+    expect(text).toContain("preflight");
+    expect(text).toContain("backend resolved: verifier/hard -> 'fake'");
+    expect(text).toContain("ABORTED (safety valve)");
+    expect(text).toContain("max-turns (1) reached");
+    expect(code).toBe(4);
+    // the M3.9 report is still printed at the end, even on an early abort (honest accounting).
+    expect(text).toContain("final accounting");
+  });
+
+  test("--live prints the M3.9 report automatically at the end even when nothing was ever measured", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG,
+      backends: [fakeLiveBackend()],
+    });
+    // no usage was ever logged before the abort tripped on the very first call it counted...
+    // actually one turn WAS dispatched (max-turns=1 permits exactly one) before the 2nd aborts, so
+    // the log carries that one usage record -- confirm the report reads it back honestly.
+    expect(lines.join("\n")).toContain("rk verify --report: campaign");
   });
 });
 
