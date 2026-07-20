@@ -81,6 +81,24 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "cross-vendor-rejected", at: "t" }), 1);
     expect(r.ok).toBe(false);
   });
+
+  // rk-qxp: the driver's new 'bind-failed' evidence record — persisted whenever a returned verdict
+  // fails to bind, carrying node + issues (with paths) + a bounded raw snippet so the next live stop
+  // is self-diagnosing. Must be RECOGNIZED (never "unrecognized 'kind'") and its node validated.
+  test("the new 'bind-failed' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "bind-failed", at: "t", node: "1", issues: [{ path: "$.verdict.target", message: "must be a non-blank string" }], rawSnippet: '{"verdict":{"outcome":"challenge","target":1}}' }), 1);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a 'bind-failed' record missing its 'node' is a loud issue, never silently accepted", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "bind-failed", at: "t", issues: [], rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'bind-failed' record whose 'rawSnippet' is not a string is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "bind-failed", at: "t", node: "1", issues: [], rawSnippet: 42 }), 1);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("parseDriverLog — corrupted-tail precedent (mirrors l5-store's parseL5Log)", () => {
@@ -142,6 +160,15 @@ describe("buildReport — honest empty states", () => {
     const r = buildReport(records, "camp");
     expect(r.discards.crossVendorRejected).toBe(2);
     expect(r.discards.vacuousAcceptDiscarded).toBe(1);
+  });
+
+  test("bind-failed records are counted (rk-qxp), never silently dropped", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "bind-failed", at: "t", node: "1", issues: [{ path: "$.verdict.target", message: "must be a non-blank string" }], rawSnippet: "{}" } as DriverLogRecord,
+      { kind: "bind-failed", at: "t", node: "1", issues: [], rawSnippet: "{}" } as DriverLogRecord,
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.bindFailures).toBe(2);
   });
 });
 

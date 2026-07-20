@@ -232,6 +232,49 @@ describe("guardrails inside the loop", () => {
   });
 });
 
+// rk-qxp: the M3.5 live-debug fix. A verdict that fails to bind must (1) skip with a DIAGNOSIS-QUALITY
+// reason carrying the issue PATH (not just the bare message — driver-verify-node.ts:64 previously
+// joined only i.message), and (2) persist a 'bind-failed' driver-log record with node + issue paths +
+// a BOUNDED raw snippet so the next live stop is self-diagnosing (the raw model output was previously
+// discarded on bind failure, forcing diagnosis by guessing).
+describe("bind-failure evidence (rk-qxp) — diagnosis-quality skip reason + persisted record", () => {
+  test("a bind failure logs a 'bind-failed' record (node + issue PATHS + bounded raw snippet) and the node-skipped reason carries the path", async () => {
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      // A non-integer number target is rejected (a dotted id like "1.10" would parse to 1.1 and name
+      // the WRONG child), so this bind genuinely fails and exercises the evidence path end to end.
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: 1.5, severity: "major", reason: "gap" }, justification: "j" }, role: "verifier", exit: 0 }),
+    });
+    await runVerifyDriver(h.deps);
+    const bindFailed = h.logs.find((l) => l.includes('"kind":"bind-failed"'));
+    expect(bindFailed).toBeDefined();
+    expect(bindFailed!).toContain('"node":"1"');
+    expect(bindFailed!).toContain("$.verdict.target"); // the PATH is preserved in the persisted issues
+    expect(bindFailed!).toContain('"rawSnippet"');
+    expect(bindFailed!.toLowerCase()).toContain("challenge"); // the snippet carries the offending raw output
+    // the node-skipped reason ALSO now carries the path, not just the bare "must be ..." message.
+    const skip = h.logs.find((l) => l.includes("node-skipped") && l.includes("verdict bind failed"));
+    expect(skip).toBeDefined();
+    expect(skip!).toContain("$.verdict.target");
+  });
+
+  test("an INTEGER-number challenge target (e.g. 1) is coerced to the string '1', binds, and reaches apply — no bind-failed record", async () => {
+    const applied: FilledVerdictFile[] = [];
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: 1, severity: "major", reason: "gap in node 1" }, justification: "j" }, role: "verifier", exit: 0 }),
+      applyVerdicts: (f) => { applied.push(f); return appliedReport(f.items.map((i) => i.node)); },
+    });
+    await runVerifyDriver(h.deps);
+    expect(h.logs.some((l) => l.includes('"kind":"bind-failed"'))).toBe(false);
+    const challengeItem = applied.flatMap((f) => f.items).find((i) => i.verdict === "challenge");
+    expect(challengeItem).toBeDefined();
+    expect(challengeItem!.target).toBe("1"); // coerced to the STRING form, not the number 1
+  });
+});
+
 // M3.8: apply-time cross-vendor enforcement (PRD C9), wired into verifyOneNode. IDENTITY (the
 // driver's own verifier identity, declared at the top of this file) is gpt/codex/gpt-5.6/s1 —
 // verifiedBySeam = "gpt|codex|gpt-5.6|s1".

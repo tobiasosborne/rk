@@ -24,6 +24,24 @@ export function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
   return a.node < b.node ? -1 : a.node > b.node ? 1 : 0;
 }
 
+/** rk-qxp: a BOUNDED, JSON-safe rendering of the raw model output for the 'bind-failed' evidence
+ * record. Serialize the (already-parsed) raw output back to JSON and cap it at 500 chars so a
+ * runaway body can never bloat the append-only log; the whole snippet is then embedded as a JSON
+ * string value by the caller's `JSON.stringify`, which escapes it — so the log line stays valid
+ * JSON regardless of the snippet's content. Never throws (a value that cannot be stringified — e.g.
+ * a BigInt — falls back to `String(raw)`). */
+const RAW_SNIPPET_CAP = 500;
+function boundedRawSnippet(raw: unknown): string {
+  let s: string;
+  try {
+    s = typeof raw === "string" ? raw : JSON.stringify(raw);
+  } catch {
+    s = String(raw);
+  }
+  if (s === undefined) s = String(raw); // JSON.stringify(undefined) === undefined
+  return s.length > RAW_SNIPPET_CAP ? s.slice(0, RAW_SNIPPET_CAP) : s;
+}
+
 /** The outcome of one `verifyOneNode` call. `spentTokens` (rk-s9t) is the turn's all-in token cost
  * (0 when no worker was available or the dispatcher reported no usage) — reported on BOTH the apply
  * and the skip branch so the caller adds it to the running campaign total regardless of whether the
@@ -61,7 +79,16 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
   if (node.author !== undefined && node.author === verifiedBySeam) return { spentTokens, skip: "reviewer==author (would be rejected by af)" };
   const state: DispatchState = { itemId: node.id, contentHash: node.contentHash, tier: "hard", claimId: deps.claimId, verifier: deps.identity };
   const bound = bindVerdicts(state, turn.raw);
-  if (!bound.ok) return { spentTokens, skip: `verdict bind failed: ${bound.issues.map((i) => i.message).join("; ")}` };
+  if (!bound.ok) {
+    // rk-qxp: diagnosis-quality skip reason — carry each issue's PATH, not just its bare message (a
+    // "must be a non-blank string" with no path forced diagnosis by guessing which field was at
+    // fault). AND persist the evidence: a 'bind-failed' driver-log record with the node, the issues
+    // (paths included), and a BOUNDED snippet of the raw model output (previously discarded on bind
+    // failure), so the next live stop is self-diagnosing rather than requiring a re-run.
+    const detail = bound.issues.map((i) => `${i.path}: ${i.message}`).join("; ");
+    deps.appendLog(JSON.stringify({ kind: "bind-failed", at: deps.now(), node: node.id, issues: bound.issues.map((i) => ({ path: i.path, message: i.message })), rawSnippet: boundedRawSnippet(turn.raw) }));
+    return { spentTokens, skip: `verdict bind failed: ${detail}` };
+  }
   const mapped = afItemFromVerdictDocument(node.id, bound.document);
   if (!mapped.ok) return { spentTokens, skip: `verdict map failed: ${mapped.reason}` };
   // M3.8: the cross-vendor rule only gates PROMOTION — a challenge never accepts the node this

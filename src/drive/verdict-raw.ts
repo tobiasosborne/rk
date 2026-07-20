@@ -105,7 +105,21 @@ function validateRawHardOutcome(v: unknown, path: string, issues: RawIssue[]): v
     return;
   }
   checkNoExtraKeys(v, ["outcome", "target", "severity", "reason", "category"], path, issues);
-  if (!("target" in v) || !isNonBlankString(v.target)) issues.push({ path: `${path}.target`, message: "must be a non-blank string" });
+  // rk-qxp: tolerant-but-safe node-id parsing. A model routinely emits the challenge "target" as a
+  // bare JSON NUMBER because af node ids look numeric ("1"). Accept and coerce IN PLACE to the string
+  // form via String(n) ONLY when it is an integer — an integer id like 1 round-trips unambiguously as
+  // "1", and coercing here (before src/drive/bind-verdicts.ts copies this verdict object verbatim into
+  // the constructed document) means the document-schema and af-map checks downstream see a clean
+  // string. A NON-INTEGER number is REJECTED, never coerced: JSON parses a dotted id like 1.10 to the
+  // number 1.1, and String(1.1) === "1.1" would SILENTLY name a different child ("1.10" vs "1.1"), so
+  // the model must quote a dotted id. This is parse-layer tolerance for an unambiguous encoding, not a
+  // validity-semantics change (the string case below is unchanged).
+  if (typeof v.target === "number") {
+    if (Number.isInteger(v.target)) v.target = String(v.target);
+    else issues.push({ path: `${path}.target`, message: `must be a JSON string in quotes, not a number — a non-integer like ${v.target} is ambiguous (e.g. "1.10" and "1.1" both parse to the number 1.1); quote the exact node id, e.g. "target": "1.10"` });
+  } else if (!("target" in v) || !isNonBlankString(v.target)) {
+    issues.push({ path: `${path}.target`, message: "must be a non-blank string" });
+  }
   if (!("severity" in v)) issues.push({ path: `${path}.severity`, message: "missing required property 'severity'" });
   else if (typeof v.severity !== "string" || !SEVERITIES.has(v.severity as Severity)) issues.push({ path: `${path}.severity`, message: `must be one of ${[...SEVERITIES].join(", ")}` });
   if (!("reason" in v) || !isNonBlankString(v.reason)) issues.push({ path: `${path}.reason`, message: "must be a non-blank string" });

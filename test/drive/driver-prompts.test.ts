@@ -83,6 +83,15 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
     expect(turn).not.toContain("VALID");
   });
 
+  test("hard-tier verifier prompt requires the challenge target to be a QUOTED JSON STRING, with a concrete example (rk-qxp)", () => {
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: ["1.1"], tier: "hard" });
+    // The concrete quoted-string example a model can copy verbatim.
+    expect(turn).toContain('"target": "1"');
+    // And an explicit instruction that a bare number is wrong.
+    expect(turn.toLowerCase()).toContain("string");
+    expect(turn.toLowerCase()).toContain("number");
+  });
+
   test("l5-tier verifier prompt carries VALID/VALID-WITH-CORRECTION/INVALID + justification instructions", () => {
     const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "l5" });
     expect(turn).toContain("VALID-WITH-CORRECTION");
@@ -136,6 +145,13 @@ describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)
     const dflt = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard" });
     expect(dflt).toContain("Scope: judge whether this node's OWN inference");
     expect(dflt).not.toContain("NOTHING TO VERIFY");
+  });
+
+  test("a proofless HARD-tier prompt also states the challenge target must be a quoted node-id string (rk-qxp)", () => {
+    const proofless = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard", proofless: true });
+    expect(proofless).toContain('"challenge"');
+    expect(proofless.toLowerCase()).toContain("quoted");
+    expect(proofless).toContain('"1"'); // the node id, as a quoted string example
   });
 
   test("l5-tier proofless prompt demands INVALID (its negative verdict), not a challenge", () => {

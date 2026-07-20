@@ -22,7 +22,9 @@ export function driverLogPath(root: string): string {
 // rk-53r (P3) + rk-jit (STOP-4): the driver's own per-node discards, recognized (never printed as
 // "unrecognized 'kind'"). A non-zero vacuous-accept-discarded is the bootstrap-deadlock signature.
 function discardsLine(r: CampaignReport): string {
-  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded}`;
+  // rk-qxp: `bind-failed` is surfaced on the same line — a non-zero count on an unmeasured campaign
+  // is the "no verdict ever bound/landed" signature (e.g. a challenge target the model failed to quote).
+  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures}`;
 }
 
 export function reportLines(r: CampaignReport): string[] {

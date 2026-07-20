@@ -167,6 +167,46 @@ describe("validateRawWorkerOutput — rejection classes: shape and content", () 
   });
 });
 
+// rk-qxp: tolerant-but-safe node-id parsing for the challenge "target". A model routinely emits the
+// target as a bare JSON NUMBER because af node ids look numeric ("1"). An INTEGER round-trips
+// unambiguously and is coerced in place to its string form; a NON-INTEGER number is REJECTED, never
+// coerced, because JSON parses a dotted id like 1.10 to the number 1.1 and String(1.1) === "1.1"
+// would silently name a DIFFERENT child ("1.10" vs "1.1"). This is parse-layer tolerance for an
+// unambiguous encoding, NOT a validity-semantics change.
+describe("validateRawWorkerOutput — challenge target number tolerance (rk-qxp)", () => {
+  test("an INTEGER-number target (e.g. 1) is accepted and coerced in place to the string '1'", () => {
+    const raw = { verdict: { outcome: "challenge", target: 1, severity: "major", reason: "r" }, justification: "j" };
+    expect(validateRawWorkerOutput("hard", raw)).toEqual([]);
+    expect((raw.verdict as { target: unknown }).target).toBe("1"); // coerced, so the document downstream carries a string
+  });
+
+  test("a large integer-number target is coerced, not rejected", () => {
+    const raw = { verdict: { outcome: "challenge", target: 42, severity: "note", reason: "r" }, justification: "j" };
+    expect(validateRawWorkerOutput("hard", raw)).toEqual([]);
+    expect((raw.verdict as { target: unknown }).target).toBe("42");
+  });
+
+  test("a NON-INTEGER number target (e.g. 1.10 -> 1.1) is REJECTED with a quote-the-id message, never coerced", () => {
+    const raw = { verdict: { outcome: "challenge", target: 1.1, severity: "major", reason: "r" }, justification: "j" };
+    const msg = messages(validateRawWorkerOutput("hard", raw));
+    expect(msg).toContain("$.verdict.target");
+    expect(msg.toLowerCase()).toContain("quote");
+    expect((raw.verdict as { target: unknown }).target).toBe(1.1); // NOT coerced — a dotted id must stay a quoted string
+  });
+
+  test("the non-integer rejection does NOT double-report (single target issue, not a coercion + a blank-string issue)", () => {
+    const raw = { verdict: { outcome: "challenge", target: 1.5, severity: "major", reason: "r" }, justification: "j" };
+    const issues = validateRawWorkerOutput("hard", raw);
+    expect(issues.filter((i) => i.path === "$.verdict.target").length).toBe(1);
+  });
+
+  test("a string target is still accepted unchanged (dotted ids stay strings)", () => {
+    const raw = { verdict: { outcome: "challenge", target: "1.10", severity: "major", reason: "r" }, justification: "j" };
+    expect(validateRawWorkerOutput("hard", raw)).toEqual([]);
+    expect((raw.verdict as { target: unknown }).target).toBe("1.10");
+  });
+});
+
 describe("validateCorrectionDetail (exported for reuse by src/drive/verdict-schema.ts)", () => {
   test("valid correction detail is accepted", () => {
     const issues: RawIssue[] = [];

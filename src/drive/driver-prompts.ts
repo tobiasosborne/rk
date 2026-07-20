@@ -96,7 +96,7 @@ function prooflessVerdictRule(tier: Tier): string {
   const forbidden = tier === "hard" ? 'the "accept" outcome' : 'a "VALID" or "VALID-WITH-CORRECTION" verdict';
   const required =
     tier === "hard"
-      ? 'a "challenge" outcome targeting this node, severity "critical" or "major", category "missing", whose "reason" states that NO proof or derivation has been recorded for this statement and one must be produced first'
+      ? 'a "challenge" outcome targeting this node (its "target" MUST be the node id as a quoted JSON string, e.g. "target": "1" — never a bare number), severity "critical" or "major", category "missing", whose "reason" states that NO proof or derivation has been recorded for this statement and one must be produced first'
       : 'an "INVALID" verdict whose "justification" states that NO proof or derivation has been recorded for this statement and one must be produced first';
   return [
     "HARD RULE — NOTHING TO VERIFY: this node carries a statement but NO recorded proof body (no",
@@ -110,9 +110,13 @@ function prooflessVerdictRule(tier: Tier): string {
 
 const HARD_VERDICT_INSTRUCTIONS = [
   "Respond with EXACTLY one JSON object and nothing else, matching:",
-  '{"verdict": {"outcome": "accept"} | {"outcome": "challenge", "target": <node id at fault>, "severity": "critical" | "major" | "minor" | "note", "reason": <string>, "category"?: "gap" | "missing" | "dependency" | "incorrect" | "unclear" | "other"}, "justification": <string>}',
+  '{"verdict": {"outcome": "accept"} | {"outcome": "challenge", "target": <node id as a JSON string>, "severity": "critical" | "major" | "minor" | "note", "reason": <string>, "category"?: "gap" | "missing" | "dependency" | "incorrect" | "unclear" | "other"}, "justification": <string>}',
   '"accept" means this node\'s claim is validly established given its dependencies below.',
   '"challenge" means it is not; it MUST name a "target" (the node or dependency at fault), a "severity", and a non-blank "reason". There is no third outcome.',
+  // rk-qxp: node ids look numeric, so a model tends to emit "target": 1 (a bare number). It MUST be a
+  // JSON STRING IN QUOTES — e.g. "target": "1" — never a bare number, and a dotted id MUST be quoted
+  // (e.g. "target": "1.10"; the number 1.10 parses to 1.1 and would name the wrong node).
+  'The "target" MUST be a JSON string in quotes, e.g. "target": "1" or "target": "1.10" — never a bare number.',
 ].join("\n");
 
 const L5_VERDICT_INSTRUCTIONS = [

@@ -27,6 +27,18 @@ describe("reportLines — FU4: discard diagnostics render even with zero usage r
     expect(discards!).toContain("cross-vendor-rejected=1");
   });
 
+  test("bind-failed count renders on the discards line (rk-qxp), even with zero usage records", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "bind-failed", at: "t1", node: "1", issues: [{ path: "$.verdict.target", message: "must be a non-blank string" }], rawSnippet: '{"verdict":{"outcome":"challenge","target":1}}' } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-bindfail");
+    expect(report.measured).toBe(false);
+    const lines = reportLines(report);
+    const discards = lines.find((l) => l.includes("discards:"));
+    expect(discards).toBeDefined();
+    expect(discards!).toContain("bind-failed=1");
+  });
+
   test("a measured report still prints the discards line (unchanged path)", () => {
     const records: DriverLogRecord[] = [
       { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,
