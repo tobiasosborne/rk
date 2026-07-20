@@ -75,10 +75,17 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     contentHash: typeof n.content_hash === "string" ? n.content_hash : "",
     author: typeof n.author === "string" && n.author.length > 0 ? n.author : undefined,
     // M3.5-prep additive read (src/drive/driver-plan.ts's AfNodeView doc comment): `statement` and
-    // `child_ids` are already real v1 export fields; threaded through for live prompt assembly
-    // only, never consumed by any readiness/dispatch decision in this file or driver-plan.ts.
+    // `child_ids` are already real v1 export fields; threaded through for live prompt assembly.
     statement: typeof n.statement === "string" ? n.statement : undefined,
     childIds: Array.isArray(n.child_ids) ? n.child_ids.map((c: unknown) => String(c)) : undefined,
+    // rk-gn4: af's OWN authoritative per-node job classification (vibefeld d4493c8,
+    // ../vibefeld/internal/jobs via `af export --graph json`). `omitempty` on the af side means a
+    // false flag is ABSENT from the JSON, so an absent key reads as `false` here. An OLD af that
+    // predates these flags therefore reports every node not-ready → driver-plan.ts's readiness
+    // dispatches nothing → the driver aborts root-unvalidated (fail closed, loud), never a
+    // wrong-role dispatch on a guessed readiness.
+    proverReady: n.prover_ready === true,
+    verifierReady: n.verifier_ready === true,
   }));
   const root = doc.nodes.find((n: any) => String(n.id) === "1");
   const nodeCount = typeof doc.validation?.total_nodes === "number" ? doc.validation.total_nodes : nodes.length;

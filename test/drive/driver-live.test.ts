@@ -22,7 +22,9 @@ import type { VerifierIdentity } from "../../src/drive/identity";
 
 const HASH = "a".repeat(64);
 function node(id: string, o: Partial<AfNodeView> = {}): AfNodeView {
-  return { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, statement: `statement for ${id}`, childIds: [], ...o };
+  const base: AfNodeView = { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, statement: `statement for ${id}`, childIds: [], ...o };
+  // rk-gn4: default af's verifier_ready flag from the axes (pending + not blocked) unless set.
+  return { verifierReady: base.epistemicState === "pending" && base.workflowState !== "blocked", ...base };
 }
 
 /** A scripted fake backend: `createSession` mints a fresh sessionId every call (so the test can
@@ -205,7 +207,7 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
         // or the next round's `queryWorkspace()` would see it "pending" forever.
         for (const item of file.items) {
           const n = ws.nodes.find((x) => x.id === item.node);
-          if (n) n.epistemicState = "validated";
+          if (n) { n.epistemicState = "validated"; n.verifierReady = false; } // af clears the flag on validate
         }
         return { exit: 0, batchId: file.batch_id, items: file.items.map((i) => ({ node: i.node, verdict: i.verdict, status: "applied" })), applied: file.items.length, blocked: 0, rejected: 0, aborted: false };
       },

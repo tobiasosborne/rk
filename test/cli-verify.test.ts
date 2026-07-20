@@ -45,6 +45,9 @@ function fakeWorkspace(nodeCount: number): (a: string, id: string) => AfParseRes
         workflowState: i === 0 ? "blocked" : "available",
         crux: i === 1,
         contentHash: "a".repeat(64),
+        // af's authoritative flags (rk-gn4): the blocked root is ready for nothing; each available
+        // leaf is verifier_ready (af's breadth-first classifier — a verifier reviews it first).
+        verifierReady: i !== 0,
       })),
     },
   });
@@ -83,7 +86,11 @@ describe("rk verify — CLI wiring", () => {
     expect(text).toContain("DRY RUN");
     expect(text).toContain("4 node(s)");
     expect(text).toContain("balloon tripwire: 4 <= cap");
-    expect(text).toContain("verification-ready now (3): 1.1, 1.2, 1.3");
+    // rk-gn4: the dry-run now shows BOTH halves of the loop from af's OWN flags. These 3 available
+    // leaves are verifier_ready per af's authoritative classifier (breadth-first); nothing is
+    // prover-ready this round. The blocked root is ready for neither.
+    expect(text).toContain("prover-ready now (0): none");
+    expect(text).toContain("verifier-ready now (3): 1.1, 1.2, 1.3");
     expect(text).toContain("crux (per-node cross-vendor, never batched): 1.1");
     expect(text).toContain("token usage: 0");
   });
@@ -162,9 +169,10 @@ function twoReadyNodesWorkspace(): (a: string, id: string) => AfParseResult<AfWo
       workspaceId: id,
       rootStatement: "P",
       nodeCount: 2,
+      // rk-gn4: both verifier_ready per af's authoritative flag (available pending leaves).
       nodes: [
-        { id: "1.1", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64) },
-        { id: "1.2", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64) },
+        { id: "1.1", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), verifierReady: true },
+        { id: "1.2", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), verifierReady: true },
       ],
     },
   });

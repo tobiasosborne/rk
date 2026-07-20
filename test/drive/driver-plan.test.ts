@@ -17,62 +17,43 @@ function doc(nodes: RegistryNode[]): GraphDocument {
   return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
 }
 
-describe("readiness split — prover-ready (needs proof) vs verifier-ready (has a checkable proof)", () => {
-  // Ground truth: af's status.go classifier (internal/render/status.go:167-189 — the "ready for
-  // review" one the operator sees), defaulted to the STRICTER validity semantics (L5): a childless
-  // pending node has NO recorded proof to check, so it is prover-ready, never verifier-ready.
-  test("a fresh, childless pending node is PROVER-ready, NOT verifier-ready (the rk-gn4 bug)", () => {
-    const fresh = afNode("1"); // pending, available, no childIds — the M3.5 fresh-workspace root
-    expect(isProverReady(fresh)).toBe(true);
-    // mutation: if isVerifierReady drops the `has children` clause it wrongly returns true here → red.
-    expect(isVerifierReady(fresh, new Map([["1", fresh]]))).toBe(false);
+describe("readiness split — rk reads af's OWN exported prover_ready/verifier_ready flags", () => {
+  // Ground truth: af's authoritative internal/jobs classifier, surfaced per-node in
+  // `af export --graph json` (vibefeld d4493c8). rk NEVER re-derives af's job state machine and
+  // NEVER parses the cruder `af status` summary — it reads the flags. A node with NEITHER flag
+  // (or an af predating them) is not ready for either role.
+  test("verifierReady flag → verifier-ready only; proverReady flag → prover-ready only", () => {
+    const v = afNode("1", { verifierReady: true }); // af's call for a fresh reviewable conjecture
+    expect(isVerifierReady(v)).toBe(true);
+    expect(isProverReady(v)).toBe(false);
+    const p = afNode("2", { proverReady: true }); // af's call for a challenged/needs-refinement node
+    expect(isProverReady(p)).toBe(true);
+    expect(isVerifierReady(p)).toBe(false);
   });
 
-  test("a pending parent whose children are ALL cleared is verifier-ready, not prover-ready", () => {
-    const parent = afNode("1", { childIds: ["1.1", "1.2"] });
-    const byId = new Map([
-      ["1", parent],
-      ["1.1", afNode("1.1", { epistemicState: "validated" })],
-      ["1.2", afNode("1.2", { epistemicState: "admitted" })],
-    ]);
-    expect(isVerifierReady(parent, byId)).toBe(true);
-    expect(isProverReady(parent)).toBe(false);
+  test("a node with neither flag (old af, or terminal/waiting) is ready for NOTHING — fail closed", () => {
+    const none = afNode("1"); // no flags set
+    expect(isProverReady(none)).toBe(false);
+    expect(isVerifierReady(none)).toBe(false);
   });
 
-  test("a pending parent with a NOT-yet-cleared child is NEITHER ready (waiting on descendants)", () => {
-    const parent = afNode("1", { childIds: ["1.1"] });
-    const byId = new Map([["1", parent], ["1.1", afNode("1.1")]]); // 1.1 still pending
-    expect(isVerifierReady(parent, byId)).toBe(false);
-    expect(isProverReady(parent)).toBe(false);
+  test("readiness ignores raw epistemic/workflow axes — only af's flags decide (no re-derivation)", () => {
+    // A pending+available node that af did NOT flag verifier_ready (e.g. because it has an open
+    // blocking challenge) must NOT be treated as verifier-ready by rk re-deriving from the axes.
+    const challenged = afNode("1", { epistemicState: "pending", workflowState: "available", proverReady: true });
+    expect(isVerifierReady(challenged)).toBe(false);
+    expect(isProverReady(challenged)).toBe(true);
   });
 
-  test("draft and needs_refinement are prover-ready regardless of children; blocked never is", () => {
-    expect(isProverReady(afNode("1", { epistemicState: "draft" }))).toBe(true);
-    expect(isProverReady(afNode("1", { epistemicState: "needs_refinement", childIds: ["1.1"] }))).toBe(true);
-    // mutation: drop the `!blocked` clause → these go red.
-    expect(isProverReady(afNode("1", { workflowState: "blocked" }))).toBe(false);
-    const blockedParent = afNode("1", { workflowState: "blocked", childIds: ["1.1"] });
-    expect(isVerifierReady(blockedParent, new Map([["1", blockedParent], ["1.1", afNode("1.1", { epistemicState: "validated" })]]))).toBe(false);
-  });
-
-  test("a validated (terminal) node is neither prover- nor verifier-ready", () => {
-    const done = afNode("1", { epistemicState: "validated" });
-    expect(isProverReady(done)).toBe(false);
-    expect(isVerifierReady(done, new Map([["1", done]]))).toBe(false);
-  });
-
-  test("select* return sorted, mutually-exclusive id lists", () => {
+  test("select* return sorted lists filtered by the respective flag", () => {
     const nodes = [
-      afNode("1", { childIds: ["1.1", "1.2"] }),      // parent: 1.1 validated, 1.2 pending-leaf → waiting (neither)
-      afNode("1.2"),                                    // childless pending → prover
-      afNode("1.1", { epistemicState: "validated" }),   // terminal → neither
+      afNode("1", { verifierReady: true }),
+      afNode("1.2", { proverReady: true }),
+      afNode("1.1", { epistemicState: "validated" }), // terminal, no flags
+      afNode("1.3", { verifierReady: true }),
     ];
+    expect(selectVerifierReadyNodes(nodes)).toEqual(["1", "1.3"]);
     expect(selectProverReadyNodes(nodes)).toEqual(["1.2"]);
-    expect(selectVerifierReadyNodes(nodes)).toEqual([]);
-    // now clear 1.2 → parent 1 becomes verifier-ready, 1.2 leaves the prover set
-    const nodes2 = [afNode("1", { childIds: ["1.1", "1.2"] }), afNode("1.2", { epistemicState: "validated" }), afNode("1.1", { epistemicState: "validated" })];
-    expect(selectProverReadyNodes(nodes2)).toEqual([]);
-    expect(selectVerifierReadyNodes(nodes2)).toEqual(["1"]);
   });
 });
 

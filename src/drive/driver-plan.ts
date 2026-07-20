@@ -4,41 +4,27 @@
 // byte. The CLI's default acceptance path (the synthetic balloon run) and every planner test drive
 // this; the impure loop (src/drive/driver-run.ts) executes whatever this returns.
 //
-// READINESS (bottom-up-ready dispatch): a node is in exactly one of three states each round —
-// PROVER-ready (needs proof work), VERIFIER-ready (has a recorded, fully-built proof to check), or
-// waiting/terminal (neither). This split replaces the old `pending && !blocked` proxy, which
-// mislabelled a fresh unproven conjecture (pending + available, no proof) as verification-ready and
-// so handed a verifier a bare claim to "accept" (bead rk-gn4 / the M3.5 preflight abort).
+// READINESS (bottom-up-ready dispatch): each round a node is PROVER-ready (needs proof work),
+// VERIFIER-ready (ready for adversarial review), or neither (waiting/terminal). rk reads af's OWN
+// authoritative per-node job classification — the `prover_ready`/`verifier_ready` flags emitted by
+// `af export --graph json` (../vibefeld/docs/export-graph-v1.md, vibefeld d4493c8), computed by
+// af's `internal/jobs` package, the same classifier `af jobs [--ready]` uses. rk NEVER re-derives
+// af's job state machine (L5: af's state is truth) and NEVER parses the cruder `af status` summary.
 //
-// GROUND TRUTH (characterized 2026-07-20, L5 provenance): af has TWO disagreeing job classifiers.
-//   - `internal/jobs/{prover,verifier}.go` (drives `af jobs`): a node with a statement, pending,
-//     available, no blocking challenge is a VERIFIER job — this is the permissive classifier that
-//     matches rk's OLD buggy proxy (it would call the fresh conjecture verifier-ready).
-//   - `internal/render/status.go:167-189` (drives `af status`, the "Prover: N awaiting refinement /
-//     Verifier: M ready for review" line the M3.5 operator actually saw): a prover job is
-//     `available && epistemic ∈ {draft,pending,needs_refinement}`; a verifier job is
-//     `claimed && pending && all-children-validated`.
-// The two disagree on a fresh conjecture (status.go: prover; jobs.go: verifier). Per L5 we default to
-// the STRICTER validity semantics and mirror status.go's spirit, with one deliberate, recorded
-// divergence (triage: rk-stricter-intended): rk's driver ingests via `af verdicts apply` (a batch
-// verb) not an interactive `af claim --role verifier`, so `claimed` is NOT the right verifier signal
-// for rk. The validity-meaningful signal that a node "has a proof to verify" is that it carries a
-// recorded decomposition whose children are ALL epistemically cleared. A childless pending node has
-// no proof to check and is prover-ready — never handed to a verifier to rubber-stamp.
-//
-// All four axes read here (workflow_state, epistemic_state, child_ids presence, children's
-// epistemic_state) are recorded fields straight off `af export --graph json`
-// (../vibefeld/docs/export-graph-v1.md); nothing reconstructs WHY af set them. If af later exposes a
-// first-class per-node readiness flag in the export, these predicates read it instead.
-
-/** af epistemic states a verifier's `af verdicts apply` treats as "no obstacle to the parent" —
- * byte-identical to ../vibefeld/internal/jobs/verifier.go's `AllChildrenCleared` allowlist
- * (validated | admitted | archived). A `refuted` or still-`pending` child is NOT cleared. */
-const CLEARED_EPISTEMIC = new Set(["validated", "admitted", "archived"]);
-
-/** af epistemic states that denote "still needs prover work" (../vibefeld/internal/render/status.go
- * :174-176: draft | pending | needs_refinement). */
-const PROVER_EPISTEMIC = new Set(["draft", "pending", "needs_refinement"]);
+// GROUND TRUTH (characterized 2026-07-20, L5 provenance): af has TWO classifiers that disagree.
+//   - `internal/jobs/{prover,verifier}.go` (AUTHORITATIVE — drives `af jobs`, now exported as the
+//     per-node flags): a fresh childless pending conjecture with a statement and no blocking
+//     challenge is a VERIFIER job (breadth-first: the verifier looks first and challenges an
+//     unproven claim); a node with an open blocking challenge is a PROVER job;
+//     FilterReadyVerifierJobs additionally requires every child cleared (bottom-up-ready).
+//   - `internal/render/status.go:167-189` (drives the `af status` "Prover:/Verifier:" summary line
+//     the M3.5 preflight operator read): a coarser workflow-only heuristic that calls the SAME fresh
+//     conjecture a prover job. This is the classifier that misled the STOP report; it is NOT af's
+//     authoritative job state. rk ignores it and reads the exported flags.
+// So rk's OLD `pending && !blocked` proxy was coincidentally right that a fresh node is verifier-
+// ready, but blind to challenges and to bottom-up child-clearing. The rk-gn4 fix is to read af's
+// exported flags (correct for all three) AND to add the missing PROVER dispatch half (driver-run.ts)
+// so the verifier's challenge on a bare conjecture is actually addressed instead of stalling.
 //
 // BATCHING vs PER-NODE (the M3.4-report filtering, applied at THIS edge BEFORE composeBatches): crux
 // nodes (read from the raw af export's per-node `crux` flag — bead rk-mnp: rk's graph schema does
@@ -54,10 +40,9 @@ import type { GraphDocument } from "../graph/types";
 
 /** The projected view of one af-export node this planner consumes — a narrow slice of
  * ../vibefeld/docs/export-graph-v1.md's node shape, built at the edge (src/drive/driver-af.ts).
- * `statement` (M3.5-prep, src/drive/driver-live.ts's live prompt assembly) is data-carrying only —
- * no readiness/dispatch DECISION reads it. `childIds`, by contrast, is now LOAD-BEARING for the
- * readiness split below (isVerifierReady/isProverReady): its presence marks a recorded decomposition,
- * and the children's states decide verifier-readiness. `childIds` (not `deps`): af v1's export carries no separate
+ * `statement`/`childIds` (M3.5-prep, src/drive/driver-live.ts's live prompt assembly) are
+ * data-carrying only — no readiness/dispatch DECISION reads them; readiness reads af's own
+ * `proverReady`/`verifierReady` flags below. `childIds` (not `deps`): af v1's export carries no separate
  * `dependencies` array for a node (deliberately excluded, export-graph-v1.md's "Fields deliberately
  * not included in v1") — a node's own children ARE what its bottom-up validation depends on
  * (they must already be validated before the parent claim is verifier-ready), so `child_ids` is
@@ -72,40 +57,27 @@ export interface AfNodeView {
   author?: string;
   statement?: string;
   childIds?: string[];
+  /** af's OWN authoritative job classification, read straight off `af export --graph json`'s
+   * per-node `prover_ready`/`verifier_ready` flags (../vibefeld/internal/jobs; vibefeld d4493c8).
+   * Absent flag (false, or an af predating them) reads as `undefined`/`false` — not ready. rk never
+   * re-derives these. */
+  proverReady?: boolean;
+  verifierReady?: boolean;
 }
 
-/** True iff every direct child of `n` is epistemically cleared (validated/admitted/archived) — i.e.
- * `af verdicts apply` would not block acceptance of `n` on an unproven child. A node with no
- * children returns true vacuously, so callers requiring a real decomposition check `childIds`
- * length separately. `byId` maps every node id in the workspace to its view. */
-function allChildrenCleared(n: AfNodeView, byId: ReadonlyMap<string, AfNodeView>): boolean {
-  for (const cid of n.childIds ?? []) {
-    const child = byId.get(cid);
-    if (child === undefined || !CLEARED_EPISTEMIC.has(child.epistemicState)) return false;
-  }
-  return true;
-}
-
-/** VERIFIER-ready: the node has a recorded proof to check and it is fully built underneath — pending,
- * not blocked, carries at least one child (a decomposition), and every child is cleared. A childless
- * pending node is NEVER verifier-ready (it has no proof to verify — the rk-gn4 fix). `byId` supplies
- * the children's recorded states. (Parameter named `n`, not the colon-suffixed bare word this repo's
- * purity grep forbids — src/gates/sha256.ts import-guard convention, same as batch-plan.ts.) */
-export function isVerifierReady(n: AfNodeView, byId: ReadonlyMap<string, AfNodeView>): boolean {
-  if (n.epistemicState !== "pending" || n.workflowState === "blocked") return false;
-  if ((n.childIds ?? []).length === 0) return false;
-  return allChildrenCleared(n, byId);
-}
-
-/** PROVER-ready: the node still needs proof development — not blocked, and either explicitly
- * awaiting refinement (draft | needs_refinement, regardless of children) or a childless pending node
- * whose proof has not been started. A pending node WITH children is NOT prover-ready: it is either
- * verifier-ready (children all cleared) or waiting on its descendants (bottom-up), never re-proven
- * wholesale. Pure per-node — does not need the workspace map. */
+/** PROVER-ready iff af's exported `prover_ready` flag is set (../vibefeld/internal/jobs.FindProverJobs:
+ * not blocked, and pending-with-open-blocking-challenge or draft/needs_refinement). Reads af's
+ * recorded classification, never re-derives it. (Parameter named `n`, not the colon-suffixed bare
+ * word this repo's purity grep forbids — src/gates/sha256.ts import-guard convention.) */
 export function isProverReady(n: AfNodeView): boolean {
-  if (n.workflowState === "blocked" || !PROVER_EPISTEMIC.has(n.epistemicState)) return false;
-  if (n.epistemicState === "draft" || n.epistemicState === "needs_refinement") return true;
-  return (n.childIds ?? []).length === 0; // pending: prover-ready only until a decomposition exists
+  return n.proverReady === true;
+}
+
+/** VERIFIER-ready iff af's exported `verifier_ready` flag is set
+ * (../vibefeld/internal/jobs.FilterReadyVerifierJobs: a statement, pending, available, no open
+ * blocking challenge, AND every child cleared — bottom-up-ready). Reads af's classification. */
+export function isVerifierReady(n: AfNodeView): boolean {
+  return n.verifierReady === true;
 }
 
 /** Every prover-ready node id, sorted (deterministic). */
@@ -115,8 +87,7 @@ export function selectProverReadyNodes(nodes: readonly AfNodeView[]): string[] {
 
 /** Every verifier-ready node id, sorted (deterministic). */
 export function selectVerifierReadyNodes(nodes: readonly AfNodeView[]): string[] {
-  const byId = new Map(nodes.map((n) => [n.id, n] as const));
-  return nodes.filter((n) => isVerifierReady(n, byId)).map((n) => n.id).sort();
+  return nodes.filter(isVerifierReady).map((n) => n.id).sort();
 }
 
 export type DispatchExclusionReason = "critical-path" | "unknown-node";

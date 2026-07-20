@@ -25,7 +25,7 @@ import { structuralLossLines } from "../render/diagnostics-view";
 import type { GraphDocument, RegistryNode } from "../graph/types";
 import { readAfWorkspace, type AfParseResult, type AfWorkspaceView } from "../drive/driver-af";
 import { DEFAULT_BALLOON_NODE_CAP, detectBalloon } from "../drive/driver-balloon";
-import { planDispatch, planSummaryLines, selectReadyNodes } from "../drive/driver-plan";
+import { planDispatch, planSummaryLines, selectProverReadyNodes, selectVerifierReadyNodes } from "../drive/driver-plan";
 import { reportCommand, driverLogPath } from "./verify-report";
 import { runLiveVerify, DEFAULT_MAX_NODES, DEFAULT_MAX_TURNS } from "./verify-live";
 import type { Out } from "./args";
@@ -72,8 +72,13 @@ function reportDryRun(root: string, node: RegistryNode, out: Out, deps: VerifyCo
   }
   const view = ws.value;
   const cruxIds = view.nodes.filter((n) => n.crux).map((n) => n.id).sort();
-  const readyIds = selectReadyNodes(view.nodes);
-  const plan = planDispatch({ readyNodeIds: readyIds, cruxIds });
+  // rk-gn4: the dry-run must show BOTH halves of the loop truthfully — the old single "ready" line
+  // hid that a fresh workspace has NOTHING verifier-ready (its unproven root is a PROVER job). The
+  // dispatch plan (per-node/batch) is over the VERIFIER frontier only, since batching is a verifier-
+  // side concern; prover-ready nodes are always dispatched one prover turn at a time.
+  const proverReadyIds = selectProverReadyNodes(view.nodes);
+  const verifierReadyIds = selectVerifierReadyNodes(view.nodes);
+  const plan = planDispatch({ readyNodeIds: verifierReadyIds, cruxIds });
   const balloon = detectBalloon(view.nodeCount, DEFAULT_BALLOON_NODE_CAP);
 
   out.log(`rk verify --af ${node.id} (DRY RUN — no workers dispatched, nothing written)`);
@@ -85,11 +90,16 @@ function reportDryRun(root: string, node: RegistryNode, out: Out, deps: VerifyCo
       ? `  BALLOON TRIPWIRE: ${view.nodeCount} > cap ${balloon.cap} — a live run would classify the offending subtree and route (bd task / mandatory review), then ABORT.`
       : `  balloon tripwire: ${view.nodeCount} <= cap ${balloon.cap} — clear.`,
   );
-  out.log(`  verification-ready now (${readyIds.length}): ${readyIds.length === 0 ? "none" : readyIds.join(", ")}`);
+  out.log(`  prover-ready now (${proverReadyIds.length}): ${proverReadyIds.length === 0 ? "none" : proverReadyIds.join(", ")}`);
+  out.log(`  verifier-ready now (${verifierReadyIds.length}): ${verifierReadyIds.length === 0 ? "none" : verifierReadyIds.join(", ")}`);
+  if (proverReadyIds.length > 0 && verifierReadyIds.length === 0) {
+    out.log("  note: nothing is verifier-ready yet — a live run would dispatch PROVER turns first to produce proof content, then verify bottom-up (per-node prove-then-verify).");
+  }
   out.log(`  crux (per-node cross-vendor, never batched): ${cruxIds.length === 0 ? "none" : cruxIds.join(", ")}`);
+  out.log("  verifier dispatch plan (over the verifier frontier):");
   for (const line of planSummaryLines(plan, cruxIds)) out.log(`  ${line}`);
   out.log("  token usage: 0 (dry run dispatched no worker).");
-  out.log("  next: configure workers in .rk/config and run 'rk verify --af <id> --live' to dispatch — see docs/worker-contract.md.");
+  out.log("  next: configure workers in .rk/config (needs both prover.hard and verifier.hard) and run 'rk verify --af <id> --live' to dispatch — see docs/worker-contract.md.");
   return 0;
 }
 

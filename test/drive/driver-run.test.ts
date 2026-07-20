@@ -14,7 +14,11 @@ const IDENTITY: VerifierIdentity = { modelFamily: "gpt", backend: "codex", model
 const HASH = "a".repeat(64);
 
 function node(id: string, o: Partial<AfNodeView> = {}): AfNodeView {
-  return { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, ...o };
+  const base: AfNodeView = { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, ...o };
+  // rk-gn4: readiness now reads af's exported flags. Default `verifierReady` from the fixture's axes
+  // (pending + not blocked) unless the case sets a flag explicitly — mirrors af's authoritative
+  // classifier for these simple, challenge-free fixtures, preserving every pre-existing test's intent.
+  return { verifierReady: base.epistemicState === "pending" && base.workflowState !== "blocked", ...base };
 }
 function ws(nodes: AfNodeView[], count?: number): AfWorkspaceView {
   return { workspaceId: "proofs/lem-x", rootStatement: "P", nodes, nodeCount: count ?? nodes.length };
