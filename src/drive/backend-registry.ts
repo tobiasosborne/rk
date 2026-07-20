@@ -18,6 +18,13 @@ import { ROLES, TIERS, isNonBlankString, type Role, type Tier } from "./vocab";
 export interface RoleTierAssignment {
   backend: string;
   fallbacks: string[];
+  /** rk-7hi (M3.5 STOP-2 blocker): optional per-assignment model override. When present, it wins
+   * over the CLI's global `--model` flag and `DEFAULT_MODEL_BY_BACKEND` (src/drive/driver-live.ts's
+   * `resolveModel` — the ONLY way two backends in the same run carry two different explicit models,
+   * e.g. prover=claude pinned to `claude-opus-4-8` while verifier=codex stays on its own default).
+   * Family identity (src/drive/identity.ts) is derived from the BACKEND name, never this string —
+   * an arbitrary model id here cannot perturb the cross-vendor gate. */
+  model?: string;
 }
 
 export type WorkersAssignments = Partial<Record<Role, Partial<Record<Tier, RoleTierAssignment>>>>;
@@ -43,7 +50,7 @@ function validateAssignmentEntry(entry: unknown, path: string, issues: WorkersCo
     return undefined;
   }
   for (const key of Object.keys(entry)) {
-    if (key !== "backend" && key !== "fallbacks") issues.push({ path: `${path}.${key}`, message: `unknown key '${key}'` });
+    if (key !== "backend" && key !== "fallbacks" && key !== "model") issues.push({ path: `${path}.${key}`, message: `unknown key '${key}'` });
   }
   if (!isNonBlankString(entry.backend)) {
     issues.push({ path: `${path}.backend`, message: "must be a non-blank string" });
@@ -58,7 +65,17 @@ function validateAssignmentEntry(entry: unknown, path: string, issues: WorkersCo
     }
     fallbacks = raw as string[];
   }
-  return { backend: entry.backend, fallbacks };
+  // rk-7hi: `model` is optional, but when PRESENT it must be a non-blank string -- same discipline
+  // as `backend` above (a present-but-malformed field is rejected, never silently coerced/ignored).
+  let model: string | undefined;
+  if ("model" in entry) {
+    if (!isNonBlankString(entry.model)) {
+      issues.push({ path: `${path}.model`, message: "must be a non-blank string" });
+      return undefined;
+    }
+    model = entry.model;
+  }
+  return model === undefined ? { backend: entry.backend, fallbacks } : { backend: entry.backend, fallbacks, model };
 }
 
 /** Validates an untrusted `.rk/config.json`-shaped `workers` value. Returns `{ok:false, issues}`
@@ -139,6 +156,14 @@ export class BackendRegistry<B extends NamedBackend = NamedBackend> {
     const entry = this.config.assignments[role]?.[tier];
     if (!entry) return [];
     return [entry.backend, ...entry.fallbacks];
+  }
+
+  /** rk-7hi: the (role, tier) assignment's own explicit `model`, if `.rk/config.json` set one —
+   * `undefined` when nothing was configured for this pair OR the entry carries no `model` field.
+   * Deliberately independent of `resolve()`: the pin is per-ASSIGNMENT (the role×tier entry), not
+   * per resolved backend, so it applies whichever backend in the fallback chain actually resolves. */
+  modelFor(role: Role, tier: Tier): string | undefined {
+    return this.config.assignments[role]?.[tier]?.model;
   }
 
   /** The first backend in `chainFor(role, tier)` that is actually REGISTERED — a name present in
