@@ -102,5 +102,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `linker-43`: `checkMandatoryReview` (added by commit 7ede34c alongside the persisted balloon
  * counter) was wired into `linkerGate`'s findings array — a repeat/genuine-gap balloon now
  * surfaces its `MANDATORY-REVIEW` WARN through the full gate, not merely through the unit test.
- * See docs/gate-contracts.md Gate 2's new Check 15. */
-export const EXPECTED_FIXTURE_COUNT = 122;
+ * See docs/gate-contracts.md Gate 2's new Check 15.
+ * 123 (+1 over the then-pinned 122): rk-7hi (M3.5 STOP-2 blocker) — `config-03`: an empty-string
+ * `workers.assignments.<role>.<tier>.model` (the new optional per-assignment model override,
+ * src/drive/backend-registry.ts's `validateAssignmentEntry`) is a blocking ERROR at the loading
+ * edge, same discipline as a blank `backend` — the companion fixture to config-01/config-02 for
+ * the field this bead added so the TJO worker-model pin becomes expressible. */
+export const EXPECTED_FIXTURE_COUNT = 123;

@@ -168,7 +168,12 @@ gate ERROR. Known residual (deliberate scope boundary, tracked): syntactically u
 still degrades to defaults without a finding — a distinct failure mode from a malformed field.
 Corpus fixtures: `config-01` (typo'd `phase` — pre-fix, `phase.ts` treated any
 non-"consolidation" value as exploration, a silent severity demotion), `config-02` (malformed
-`shardsMaxLines` — pre-fix, the NaN comparison false-greened the line cap).
+`shardsMaxLines` — pre-fix, the NaN comparison false-greened the line cap), `config-03`
+(rk-7hi, M3.5 STOP-2 blocker: empty-string `workers.assignments.<role>.<tier>.model` — the new
+optional per-assignment model override added so a `--live` run can pin the claude side to an
+explicit model while the codex side stays on its own default; validated with the same
+non-blank-string discipline as `backend`; see `docs/worker-contract.md`'s isolation-tuple
+section and `src/drive/backend-registry.ts`'s `RoleTierAssignment`).
 
 **Fixture/harness invocation (read before running any AISM script against a fixture or
 historical tree).** Two harness pitfalls surfaced building the M0.2 corpus (recorded in full in

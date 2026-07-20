@@ -1,0 +1,18 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "workers.assignments.prover.hard.model: must be a non-blank string"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 1
+  },
+  "aism_behavior": "n/a -- .rk/config.json's workers.assignments.<role>.<tier>.model field is an rk-only concept (rk-7hi, M3.5 STOP-2 blocker); no AISM script reads or validates it.",
+  "notes": "rk-7hi (M3.5 STOP-2 blocker, ../rk-m3.5-baseline/STOP-REPORT-2-2026-07-20.md): reproduces the companion failure mode to config-01/config-02 for the NEW per-assignment `model` field validateAssignmentEntry (src/drive/backend-registry.ts) added so the TJO worker-model pin ('claude side = claude-opus-4-8, codex side = its default') is expressible at all. An empty-string `model` -- same discipline as a blank `backend` -- is rejected at the loading edge via validateWorkersConfig (unchanged rk-xbm mechanism: ANY malformation drops the whole `workers` field, never a partial/silently-guessed assignment) and surfaces through the synthetic `config` gate. aism_behavior: n/a -- this field has no AISM counterpart at all. Mutation-proven red-first: test/drive/backend-registry.test.ts's 'an EMPTY-STRING model is rejected' / 'a NON-STRING model (number) is rejected' cases, and test/drive/driver-live.test.ts's resolveModel precedence tests, were confirmed RED by perturbing the validation/resolution order and restoring (see the rk-7hi commit)."
+}
