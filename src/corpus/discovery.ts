@@ -92,6 +92,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * and the L5-promotion integration (`linker-35`..`linker-37`: fresh VALID promotes, stale does
  * not, VALID-WITH-CORRECTION correction-pending does not). See docs/gate-contracts.md Gate 2's
  * "Critical-path provenance" section for the full contract text.
+ * 121 (+4 over the then-pinned 117): 2026-07-19 M3 review repair wave, blockers 5-6 (commits
+ * 0446873 + 7e884e5) — `linker-39` (explicit atomic legacy-marker opt-in WARN), `linker-40`
+ * (unresolved north star fails closed), `linker-41` (L5 store corruption poisons promotion),
+ * `linker-42` (promoted shards continuously re-validated). The same wave HARDENED `linker-32`/
+ * `linker-33` from WARN to fail-closed ERROR (legacy never inferred; critical-path batch
+ * provenance is an ERROR).
  * 122 (+1 over the then-pinned 121): M3 repair wave completion step (review blocker 7c) —
  * `linker-43`: `checkMandatoryReview` (added by commit 7ede34c alongside the persisted balloon
  * counter) was wired into `linkerGate`'s findings array — a repeat/genuine-gap balloon now
