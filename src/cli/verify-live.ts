@@ -184,6 +184,12 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     dispatchVerify,
     dispatchClassification,
     applyVerdicts: (file) => applyVerdictFile(abs, file, deps.afCommand),
+    // Merge reconciliation (M3.8 cross-vendor rule + M3.5 live wiring): DriverDeps.isLoadBearing
+    // is required (PRD C9, apply-time cross-vendor half). The live CLI does not yet compute a
+    // critical path here, so use M3.8's documented strict default for a caller with no graph/
+    // north-star available: () => true — treat every node as load-bearing, enforcing cross-vendor
+    // on all accepts. (`() => false` would opt out of the rule, a validity regression.)
+    isLoadBearing: () => true,
     readShard: () => {
       try {
         return readFileSync(join(root, node.path), "utf8");

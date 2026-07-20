@@ -215,6 +215,10 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
       now: () => "2026-07-19T00:00:00Z",
       priorBalloonCount: 0,
       priorClassifications: [],
+      // This test exercises live dispatch + usage logging, not the cross-vendor rule (M3.8). Per
+      // the harness convention in driver-run.test.ts, `false` means "not load-bearing," under
+      // which decideCrossVendor is always satisfied — cross-vendor has its own dedicated tests.
+      isLoadBearing: () => false,
     };
 
     const r = await runVerifyDriver(deps);
