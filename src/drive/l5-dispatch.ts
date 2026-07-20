@@ -19,6 +19,7 @@
 
 import type { DispatchState } from "./bind-verdicts";
 import type { L5DispatchPlan } from "./l5-dispatch-plan";
+import { sha256Bytes } from "../refs/hash";
 import { appendL5Verdicts, type AppendL5Result } from "./l5-store-io";
 import { resolveTurn, type TurnFailureIssue, type TurnFailureStage } from "./worker-result";
 import type { VerdictDocument } from "./verdict-schema";
@@ -47,7 +48,7 @@ export interface L5DispatchDeps {
 
 export interface L5DispatchRejection {
   itemId: string;
-  stage: TurnFailureStage | "no-content-supplied";
+  stage: TurnFailureStage | "no-content-supplied" | "content-hash-mismatch";
   issues: TurnFailureIssue[];
 }
 
@@ -87,6 +88,18 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
         rejected.push({ itemId: member.itemId, stage: "no-content-supplied", issues: [{ path: "$.content", message: `no shard content supplied for '${member.itemId}'` }] });
         continue;
       }
+      // M3 blocker 1: bind the recorded hash to the EXACT dispatched bytes. `member.contentHash` is
+      // the plan's declared l5ContentHash-domain hash (src/drive/l5-dispatch-plan.ts, raw shard-file
+      // SHA-256, no normalization); the bytes we are about to send are `deps.content`. If they
+      // disagree, the plan is stale or the wrong bytes were supplied — dispatching them would judge
+      // one payload while recording another's hash, validating content no one reviewed. Discard the
+      // member BEFORE dispatch (no tokens spent, never recorded), and record the hash we PROVED from
+      // the dispatched bytes, not the caller-supplied claim.
+      const dispatchedHash = sha256Bytes(new TextEncoder().encode(content));
+      if (dispatchedHash !== member.contentHash) {
+        rejected.push({ itemId: member.itemId, stage: "content-hash-mismatch", issues: [{ path: "$.content", message: `dispatched content hashes to ${dispatchedHash} but the plan recorded ${member.contentHash} — stale plan or wrong bytes; discarded before dispatch` }] });
+        continue;
+      }
       const turnItem: TurnItem = {
         itemId: member.itemId,
         turnId: `${batch.claimId}:${member.itemId}`,
@@ -98,7 +111,7 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
       const result = await deps.backend.runTurn(sessionId, turnItem);
       const dispatchState: DispatchState = {
         itemId: member.itemId,
-        contentHash: member.contentHash,
+        contentHash: dispatchedHash,
         tier: "l5",
         claimId: batch.claimId,
         batchId: batch.batchId,

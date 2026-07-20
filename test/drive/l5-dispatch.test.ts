@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dispatchL5Plan, type L5DispatchDeps } from "../../src/drive/l5-dispatch";
 import { readL5Store } from "../../src/drive/l5-store-io";
+import { sha256Bytes } from "../../src/refs/hash";
 import type { L5DispatchPlan } from "../../src/drive/l5-dispatch-plan";
 import type { WorkerBackend, SessionSpec, TurnItem } from "../../src/drive/backend-types";
 import type { WorkerResult, WorkerUsage } from "../../src/drive/worker-result";
@@ -23,8 +24,15 @@ function tmpRoot(): string {
   return d;
 }
 
-const HASH_A = "a".repeat(64);
-const HASH_B = "b".repeat(64);
+// M3 blocker 1: l5-dispatch now binds the recorded hash to the EXACT dispatched bytes and rejects
+// any member whose supplied content does not hash to the plan's declared contentHash. So a plan's
+// contentHash must be the real l5ContentHash-domain hash (raw shard-file SHA-256) of the content
+// the deps supply — computed here, never a stand-in constant.
+const hashOf = (s: string): string => sha256Bytes(new TextEncoder().encode(s));
+const CONTENT_A = "shard a content";
+const CONTENT_B = "shard b content";
+const HASH_A = hashOf(CONTENT_A);
+const HASH_B = hashOf(CONTENT_B);
 const ZERO_USAGE: WorkerUsage = { input: 10, output: 5, cache_read: 0, cache_creation: 0 };
 
 function plan(overrides: Partial<L5DispatchPlan> = {}): L5DispatchPlan {
@@ -64,7 +72,7 @@ function fakeBackend(turnReplies: Record<string, unknown>, opts: { exitFor?: Rec
   return { backend, sessionSpecs, turns };
 }
 
-function deps(backend: WorkerBackend, contentOverrides: Record<string, string> = { a: "shard a content", b: "shard b content" }): L5DispatchDeps {
+function deps(backend: WorkerBackend, contentOverrides: Record<string, string> = { a: CONTENT_A, b: CONTENT_B }): L5DispatchDeps {
   return { backend, model: "claude-sonnet-5", content: new Map(Object.entries(contentOverrides)), sharedContext: "rubric text", nowIso: () => "2026-07-19T00:00:00.000Z" };
 }
 
@@ -124,9 +132,22 @@ describe("dispatchL5Plan — rejection paths never silently drop a member", () =
   test("no content supplied for an item is rejected without ever calling runTurn for it", async () => {
     const { backend, turns } = fakeBackend({ a: { verdict: "VALID", justification: "j" } });
     const root = tmpRoot();
-    const outcomes = await dispatchL5Plan(root, plan(), deps(backend, { a: "shard a content" })); // "b" has no content
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend, { a: CONTENT_A })); // "b" has no content
     expect(turns.map((t) => t.itemId)).toEqual(["a"]);
     expect(outcomes[0]!.rejected.map((r) => r.itemId)).toEqual(["b"]);
+  });
+
+  // M3 blocker 1: dispatching deps.content while recording an unrelated member.contentHash would
+  // validate bytes no one reviewed — the plan's hash must match the actually-dispatched bytes.
+  test("a member whose supplied bytes do not hash to the plan's contentHash is discarded before dispatch, never recorded", async () => {
+    const { backend, turns } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    // "a" declares HASH_A but the supplied content is DIFFERENT bytes (a stale plan / wrong source).
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend, { a: "TAMPERED bytes that do not match HASH_A", b: CONTENT_B }));
+    expect(turns.map((t) => t.itemId)).toEqual(["b"]); // "a" never dispatched (pre-fix: dispatched + recorded)
+    const rejA = outcomes[0]!.rejected.find((r) => r.itemId === "a");
+    expect(rejA?.stage).toBe("content-hash-mismatch");
+    expect(readL5Store(root).records.map((r) => r.itemId)).toEqual(["b"]); // "a" never reaches the ledger
   });
 });
 
@@ -139,8 +160,8 @@ describe("dispatchL5Plan — multi-batch", () => {
       cap: 10,
       excluded: [],
       batches: [
-        { batchId: "batch-1", claimId: "l5:batch-1", members: [{ itemId: "a", order: 0, contentHash: HASH_A }], score: 0 },
-        { batchId: "batch-2", claimId: "l5:batch-2", members: [{ itemId: "c", order: 0, contentHash: HASH_B }], score: 0 },
+        { batchId: "batch-1", claimId: "l5:batch-1", members: [{ itemId: "a", order: 0, contentHash: hashOf("content a") }], score: 0 },
+        { batchId: "batch-2", claimId: "l5:batch-2", members: [{ itemId: "c", order: 0, contentHash: hashOf("content c") }], score: 0 },
       ],
     };
     const outcomes = await dispatchL5Plan(root, twoBatchPlan, deps(backend, { a: "content a", c: "content c" }));
