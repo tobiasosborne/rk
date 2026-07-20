@@ -11,6 +11,7 @@ import { verifyCommand } from "../src/cli/verify";
 import type { AfParseResult, AfWorkspaceView } from "../src/drive/driver-af";
 import type { SessionSpec, TurnItem, WorkerBackend } from "../src/drive/backend-types";
 import type { WorkersConfig } from "../src/drive/backend-registry";
+import { DEFAULT_MODEL_BY_BACKEND } from "../src/drive/driver-live";
 
 function usageLine(o: { contractId: string; claimId: string; nodeId: string; sessionId: string; usage: { input: number; output: number; cache_read: number; cache_creation: number } }): string {
   return JSON.stringify({ kind: "usage", at: "2026-07-19T00:00:00Z", role: "verifier", ...o });
@@ -178,6 +179,105 @@ function twoReadyNodesWorkspace(): (a: string, id: string) => AfParseResult<AfWo
     },
   });
 }
+
+/** A prover-ready node and a DIFFERENT verifier-ready node -- both dispatched within round 0, so a
+ * single run exercises BOTH the prover and verifier sessions (rk-7hi: the two-dispatcher case). */
+function proverAndVerifierReadyWorkspace(): (a: string, id: string) => AfParseResult<AfWorkspaceView> {
+  return (_a, id) => ({
+    ok: true,
+    value: {
+      workspaceId: id,
+      rootStatement: "P",
+      nodeCount: 2,
+      nodes: [
+        { id: "1.1", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), proverReady: true, verifierReady: false },
+        { id: "1.2", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), proverReady: false, verifierReady: true },
+      ],
+    },
+  });
+}
+
+/** A fake backend whose NAME matches one of DEFAULT_MODEL_BY_BACKEND's real keys ("claude"/"codex")
+ * so the default-model fallback path is exercised honestly, while never spawning a real subprocess.
+ * Records the `spec.model` every `createSession` call actually received, keyed by backend name. */
+function fakeNamedBackend(name: string, seenModels: Record<string, string>): WorkerBackend {
+  return {
+    name,
+    modelFamily: "claude",
+    capabilities: { sessionResume: true },
+    async createSession(spec: SessionSpec) {
+      seenModels[name] = spec.model;
+      return { sessionId: `session-${name}` };
+    },
+    async runTurn(_sessionId: string, _item: TurnItem) {
+      return { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+    },
+  };
+}
+
+describe("rk verify --af --live (rk-7hi): per-assignment model reaches EACH backend independently", () => {
+  const dirs: string[] = [];
+  afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  // THE M3.5 STOP-2 case: the TJO pin "claude side = claude-opus-4-8, codex side = its default" is
+  // expressed ENTIRELY through .rk/config.json's per-assignment `model` field -- no --model flag at
+  // all. Before this bead there was no way to express this; the single global --model flag applied
+  // to BOTH roles verbatim (src/cli/verify-live.ts:117,130 pre-fix).
+  test("prover=claude pinned to claude-opus-4-8, verifier=codex on its own default -- in the SAME run, with NO --model flag", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seenModels: Record<string, string> = {};
+    const workers: WorkersConfig = {
+      assignments: {
+        prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } },
+      },
+    };
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: proverAndVerifierReadyWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeNamedBackend("claude", seenModels), fakeNamedBackend("codex", seenModels)],
+      preflightAf: () => ({ ok: true }),
+    });
+    void code;
+    const text = lines.join("\n");
+    expect(text).toContain("backend resolved: prover/hard -> 'claude' (model 'claude-opus-4-8')");
+    expect(text).toContain(`backend resolved: verifier/hard -> 'codex' (model '${DEFAULT_MODEL_BY_BACKEND.codex}')`);
+    // the ACTUAL createSession call each backend received -- not merely the preflight log line.
+    expect(seenModels.claude).toBe("claude-opus-4-8");
+    expect(seenModels.codex).toBe(DEFAULT_MODEL_BY_BACKEND.codex);
+    expect(seenModels.claude).not.toBe(seenModels.codex);
+  });
+
+  test("a global --model flag is now the FALLBACK, not the winner, once a per-assignment model is configured", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seenModels: Record<string, string> = {};
+    const workers: WorkersConfig = {
+      assignments: {
+        prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } }, // no per-assignment model -- inherits --model
+      },
+    };
+    const { out, lines } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5", "--max-campaign-tokens", "1000000", "--model", "gpt-5.1-codex-explicit"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: proverAndVerifierReadyWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeNamedBackend("claude", seenModels), fakeNamedBackend("codex", seenModels)],
+      preflightAf: () => ({ ok: true }),
+    });
+    // per-assignment model still wins for the prover, unaffected by the global flag...
+    expect(seenModels.claude).toBe("claude-opus-4-8");
+    // ...while the verifier (no per-assignment model) falls back to the global --model flag.
+    expect(seenModels.codex).toBe("gpt-5.1-codex-explicit");
+    expect(lines.join("\n")).toContain("backend resolved: verifier/hard -> 'codex' (model 'gpt-5.1-codex-explicit')");
+  });
+});
 
 describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend", () => {
   const dirs: string[] = [];

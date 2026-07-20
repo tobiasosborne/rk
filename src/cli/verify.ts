@@ -9,8 +9,11 @@
 //     backend calls (src/drive/driver-live.ts's glue over the M3.2 claude/codex adapters). A real
 //     spend must always be an EXPLICIT flag, never a default (task requirement) — omitting both
 //     `--dry-run` and `--live` still means dry-run, exactly as before this WP. `--max-turns`/
-//     `--max-nodes` are the safety valves (defaults src/cli/verify-live.ts names); `--model`
-//     overrides the interim per-backend default model (see that file's scope note 3).
+//     `--max-nodes` are the safety valves (defaults src/cli/verify-live.ts names); `--model` sets
+//     the GLOBAL default model for both roles, but a per-assignment `model` field in
+//     `.rk/config.json`'s `workers.assignments.<role>.<tier>` wins over it (rk-7hi -- the only way
+//     prover and verifier can carry two DIFFERENT explicit models in one run; src/drive/driver-
+//     live.ts's `resolveModel`).
 //
 // `<id>` names a REGISTRY node (its `workspace:` field locates the af proof dir, its `balloons`
 // counter carries prior-balloon state, its `contract` is the claim). Read-only projection first, so

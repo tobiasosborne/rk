@@ -20,11 +20,12 @@ import { CodexBackend } from "../drive/backend-codex";
 import {
   createLiveDispatcher,
   describeMissingWorkersConfig,
+  familyForBackend,
   liveDispatchClassification,
   liveDispatchProve,
   liveDispatchVerify,
   liveRecordProof,
-  DEFAULT_MODEL_BY_BACKEND,
+  resolveModel,
 } from "../drive/driver-live";
 import { encodeVerifierSeam } from "../drive/identity";
 import { parseCampaignBudget } from "./verify-live-budget";
@@ -109,12 +110,12 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   }
 
   const registry = new BackendRegistry<WorkerBackend>(workers, deps.backends ?? [new ClaudeBackend(), new CodexBackend()]);
-  const resolvedBackend = registry.resolve("verifier", "hard");
   const claimId = `claim-${node.id}`;
 
   const defsText = readDefinitionTexts(root, node.defs);
   const sharedContext = buildSharedContext({ conjecture: wsResult.value.rootStatement ?? node.contract, definitions: defsText, contractGuidance: HARD_TIER_GUIDANCE });
-  const model = opts.model ?? (resolvedBackend ? DEFAULT_MODEL_BY_BACKEND[resolvedBackend.name] ?? resolvedBackend.name : "unknown");
+  // rk-7hi: config's per-assignment model > global --model > default (driver-live.ts's resolveModel).
+  const model = resolveModel(registry, "verifier", "hard", opts.model);
 
   const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId, model, sharedContext });
   if (!created.ok) {
@@ -126,8 +127,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // Law 2). A `--live` run REFUSES to start without a prover backend too: a workspace with any
   // prover-ready node needs one, and starting a spend that cannot make prover progress is the exact
   // half-wired hole rk-gn4 fixes. The prover may use a different backend/model than the verifier.
-  const proverBackend = registry.resolve("prover", "hard");
-  const proverModel = opts.model ?? (proverBackend ? DEFAULT_MODEL_BY_BACKEND[proverBackend.name] ?? proverBackend.name : "unknown");
+  const proverModel = resolveModel(registry, "prover", "hard", opts.model);
   const proverCreated = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: `${claimId}-prover`, model: proverModel, sharedContext });
   if (!proverCreated.ok) {
     out.log(proverCreated.reason);
@@ -188,7 +188,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // The prover's identity seam, recorded as the af node author on refine (so the apply-time
   // cross-vendor rule can parse it against the verifier's seam). Built from the resolved prover
   // backend; a codex-fronted prover is family 'gpt' (vocab.ts), else 'claude'.
-  const proverIdentity: VerifierIdentity = { modelFamily: proverCreated.dispatcher.backendName === "codex" ? "gpt" : "claude", backend: proverCreated.dispatcher.backendName, model: proverModel, sessionId: `${claimId}-prover` };
+  const proverIdentity: VerifierIdentity = { modelFamily: familyForBackend(proverCreated.dispatcher.backendName), backend: proverCreated.dispatcher.backendName, model: proverModel, sessionId: `${claimId}-prover` };
   const proverSeam = encodeVerifierSeam(proverIdentity);
   if (!proverSeam.ok) {
     out.log(`rk verify --af ${node.id} --live: prover identity is not encodable -- ${proverSeam.reason}`);
@@ -197,7 +197,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   const recordProof = liveRecordProof(abs, proverSeam.value, deps.afCommand);
   const dispatchClassification = classCreated.ok ? liveDispatchClassification(classCreated.dispatcher) : async () => undefined;
 
-  const identity: VerifierIdentity = { modelFamily: created.dispatcher.backendName === "codex" ? "gpt" : "claude", backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
+  const identity: VerifierIdentity = { modelFamily: familyForBackend(created.dispatcher.backendName), backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
 
   // M3 blocker 7: the DURABLE balloon counter lives in the shard frontmatter the driver itself
   // writes (src/drive/driver-frontmatter.ts's applyBalloonMark), NOT in `node.balloons` — the graph
