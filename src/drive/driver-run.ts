@@ -207,7 +207,9 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
         const decision = checkBudget(tokensSpent, deps.budget);
         if (!decision.affordable) return { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
       }
-      const r = await verifyOneNode(deps, node, verifiedBySeam);
+      // rk-qxp (FIX 6): the mapper validates a challenge's blamed node id against the proof export —
+      // pass the current round's node-id set (byId is built from ws.nodes each round).
+      const r = await verifyOneNode(deps, node, verifiedBySeam, new Set(byId.keys()));
       tokensSpent += r.spentTokens; // accrue whether the turn applied or was discarded
       if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
       else {

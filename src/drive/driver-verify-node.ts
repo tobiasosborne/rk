@@ -52,7 +52,7 @@ export type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; 
  * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
  * the authoritative bytes immediately before apply — M3 blocker 1), or a reason it was skipped
  * (never applied); either way carries the turn's `spentTokens` for the campaign budget. */
-export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<VerifyNodeOutcome> {
+export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string, knownNodeIds: ReadonlySet<string>): Promise<VerifyNodeOutcome> {
   const turn = await deps.dispatchVerify(node);
   if (turn === undefined) return { spentTokens: 0, skip: "no worker available" };
   const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
@@ -89,7 +89,7 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
     deps.appendLog(JSON.stringify({ kind: "bind-failed", at: deps.now(), node: node.id, issues: bound.issues.map((i) => ({ path: i.path, message: i.message })), rawSnippet: boundedRawSnippet(turn.raw) }));
     return { spentTokens, skip: `verdict bind failed: ${detail}` };
   }
-  const mapped = afItemFromVerdictDocument(node.id, bound.document);
+  const mapped = afItemFromVerdictDocument(node.id, bound.document, knownNodeIds);
   if (!mapped.ok) return { spentTokens, skip: `verdict map failed: ${mapped.reason}` };
   // M3.8: the cross-vendor rule only gates PROMOTION — a challenge never accepts the node this
   // turn regardless (driver-verdict-map.ts's own invariant), so there is nothing to promote and

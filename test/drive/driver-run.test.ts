@@ -271,7 +271,10 @@ describe("bind-failure evidence (rk-qxp) — diagnosis-quality skip reason + per
     expect(h.logs.some((l) => l.includes('"kind":"bind-failed"'))).toBe(false);
     const challengeItem = applied.flatMap((f) => f.items).find((i) => i.verdict === "challenge");
     expect(challengeItem).toBeDefined();
-    expect(challengeItem!.target).toBe("1"); // coerced to the STRING form, not the number 1
+    // rk-qxp: the coerced string node id "1" lands as the af `node` (FIX 6 records the challenge on
+    // the blamed node); the af `target` is the aspect derived from category (none → "statement").
+    expect(challengeItem!.node).toBe("1"); // coerced to the STRING "1", not the number 1
+    expect(challengeItem!.target).toBe("statement");
   });
 });
 
@@ -454,7 +457,9 @@ describe("convergence requires a validated root (M3 blocker 2)", () => {
     const h = harness({
       workspaces: [round0, round1],
       config: { maxRounds: 5 },
-      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: "step 2", severity: "major", reason: "gap in step 2" }, justification: "the proof skips a case" }, role: "verifier", exit: 0 }),
+      // rk-qxp (FIX 6): the model targets a NODE ID at fault (here the reviewed root "1" itself),
+      // and the af aspect is derived from category ("gap" → af "gap"). item.node lands on "1".
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: "1", severity: "major", reason: "gap in the step", category: "gap" }, justification: "the proof skips a case" }, role: "verifier", exit: 0 }),
       applyVerdicts: challengeReport,
     });
     const r = await runVerifyDriver(h.deps);

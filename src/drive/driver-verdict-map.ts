@@ -20,6 +20,25 @@
 import type { VerdictDocument } from "./verdict-schema";
 import { SEVERITIES, CATEGORIES, type Severity, type Category } from "./vocab";
 
+// rk-qxp (FIX 6): af's challenge `target` is an ASPECT ENUM (statement|inference|context|
+// dependencies|scope|gap|type_error|domain|completeness — ../vibefeld/internal/schema/target.go),
+// NOT a node id. The MODEL-facing challenge names the node AT FAULT in its `target`; the ASPECT is
+// derived from the model's `category` via this fixed, documented map. Every rk category
+// (src/drive/vocab.ts's CATEGORIES) has an entry; a challenge with NO category falls through to
+// `statement` (af's own default). Keeping the model-facing schema unchanged means no compat event.
+const CATEGORY_TO_ASPECT: Record<Category, string> = {
+  gap: "gap",
+  dependency: "dependencies",
+  missing: "completeness",
+  incorrect: "inference",
+  unclear: "statement",
+  other: "statement",
+};
+/** af aspect for the model's `category` — absent/unknown category defaults to af's own `statement`. */
+function aspectForCategory(category: unknown): string {
+  return typeof category === "string" && category in CATEGORY_TO_ASPECT ? CATEGORY_TO_ASPECT[category as Category] : "statement";
+}
+
 export interface AfApplyItem {
   // Quoted key (not a bare identifier) so scripts/selftest.ts's purity grep — a line scanner
   // guarding against a stray `node`-colon-shaped import — never trips on a legitimate field name,
@@ -27,6 +46,8 @@ export interface AfApplyItem {
   "node": string;
   verdict: "accept" | "challenge";
   reason: string;
+  /** rk-qxp (FIX 6): af's challenge ASPECT enum (statement|inference|...|completeness), DERIVED
+   * from the model's `category` — NOT the model's node-id target (that becomes `node` above). */
   target?: string;
   severity?: string;
   category?: string;
@@ -39,10 +60,14 @@ export interface AfApplyItem {
 
 export type AfItemResult = { ok: true; item: AfApplyItem } | { ok: false; reason: string };
 
-/** Maps `doc`'s single verdict onto node `nodeId`. `doc` must be a hard-tier document with exactly
- * one verdict (the worker-contract's one-verdict-per-turn rule — verdict-schema enforces it), whose
- * `verdict` field is the RawHardOutcome object bind-verdicts carried through. */
-export function afItemFromVerdictDocument(nodeId: string, doc: VerdictDocument): AfItemResult {
+/** Maps `doc`'s single verdict onto the proof. `doc` must be a hard-tier document with exactly one
+ * verdict (the worker-contract's one-verdict-per-turn rule — verdict-schema enforces it), whose
+ * `verdict` field is the RawHardOutcome object bind-verdicts carried through. `nodeId` is the node
+ * UNDER REVIEW (where an accept is recorded). `knownNodeIds` is the set of node ids present in the
+ * proof export, used to validate a challenge's BLAMED node (rk-qxp FIX 6): a challenge is recorded
+ * on the node the model named at fault (`target`), which may be the reviewed node or a dependency;
+ * an unknown blamed node is a loud map failure, never a silently mis-attributed challenge. */
+export function afItemFromVerdictDocument(nodeId: string, doc: VerdictDocument, knownNodeIds: ReadonlySet<string>): AfItemResult {
   const entry = doc.verdicts[0];
   if (doc.verdicts.length !== 1 || entry === undefined) {
     return { ok: false, reason: `expected exactly one verdict, got ${doc.verdicts.length}` };
@@ -59,13 +84,17 @@ export function afItemFromVerdictDocument(nodeId: string, doc: VerdictDocument):
     return { ok: true, item: { "node": nodeId, verdict: "accept", reason: justification } };
   }
   if (outcome.outcome === "challenge") {
-    const target = outcome.target;
+    // rk-qxp (FIX 6): the model's `target` is the NODE ID at fault (its own model-facing schema),
+    // NOT af's aspect enum. Record the challenge ON that blamed node (item.node := target),
+    // validated present in the export; the af `target` ASPECT is derived from the model's category.
+    const blamed = outcome.target;
     const severity = outcome.severity;
     const reason = outcome.reason;
-    if (typeof target !== "string" || target.trim().length === 0) return { ok: false, reason: "challenge missing 'target'" };
+    if (typeof blamed !== "string" || blamed.trim().length === 0) return { ok: false, reason: "challenge missing 'target' (the node id at fault)" };
+    if (!knownNodeIds.has(blamed)) return { ok: false, reason: `challenge names blamed node '${blamed}' which is not present in the proof export — refusing to record a mis-attributed challenge` };
     if (typeof severity !== "string" || !SEVERITIES.has(severity as Severity)) return { ok: false, reason: "challenge 'severity' invalid" };
     if (typeof reason !== "string" || reason.trim().length === 0) return { ok: false, reason: "challenge missing 'reason'" };
-    const item: AfApplyItem = { "node": nodeId, verdict: "challenge", reason, target, severity };
+    const item: AfApplyItem = { "node": blamed, verdict: "challenge", reason, target: aspectForCategory(outcome.category), severity };
     if (typeof outcome.category === "string" && CATEGORIES.has(outcome.category as Category)) item.category = outcome.category;
     return { ok: true, item };
   }
