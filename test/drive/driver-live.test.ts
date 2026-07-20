@@ -10,10 +10,13 @@ import type { WorkerResult } from "../../src/drive/worker-result";
 import {
   createLiveDispatcher,
   describeMissingWorkersConfig,
+  familyForBackend,
   liveDispatchClassification,
   liveDispatchProve,
   liveDispatchVerify,
   proverItemFor,
+  resolveModel,
+  DEFAULT_MODEL_BY_BACKEND,
   toDispatchedTurn,
   verifierItemFor,
 } from "../../src/drive/driver-live";
@@ -81,6 +84,78 @@ describe("createLiveDispatcher — preflight loudness", () => {
     const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "claude"), []); // "claude" named, not registered
     const result = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "shared" });
     expect(result.ok).toBe(false);
+  });
+});
+
+// rk-7hi (M3.5 STOP-2 blocker): resolveModel's three-way precedence -- per-assignment `model` >
+// global `--model` > DEFAULT_MODEL_BY_BACKEND. This is the ONLY mechanism that lets prover and
+// verifier carry two DIFFERENT explicit models in the SAME run (the TJO worker-model pin).
+describe("resolveModel — per-assignment model > global --model > DEFAULT_MODEL_BY_BACKEND", () => {
+  test("per-assignment model wins over a global --model flag", () => {
+    const registry = new BackendRegistry<WorkerBackend>(
+      { assignments: { prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } } } },
+      [],
+    );
+    expect(resolveModel(registry, "prover", "hard", "claude-sonnet-4-5")).toBe("claude-opus-4-8");
+  });
+
+  test("the global --model flag wins over DEFAULT_MODEL_BY_BACKEND when no per-assignment model is set", () => {
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "codex"), [{ name: "codex" } as WorkerBackend]);
+    expect(resolveModel(registry, "verifier", "hard", "gpt-5.1-codex-explicit")).toBe("gpt-5.1-codex-explicit");
+  });
+
+  test("DEFAULT_MODEL_BY_BACKEND is the last resort: no per-assignment model, no global --model", () => {
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "codex"), [{ name: "codex" } as WorkerBackend]);
+    expect(resolveModel(registry, "verifier", "hard", undefined)).toBe(DEFAULT_MODEL_BY_BACKEND.codex);
+  });
+
+  test("undefined for both a global model AND an unresolvable backend falls back to the honest 'unknown' sentinel", () => {
+    const registry = new BackendRegistry<WorkerBackend>({ assignments: {} }, []);
+    expect(resolveModel(registry, "verifier", "hard", undefined)).toBe("unknown");
+  });
+
+  // THE two-dispatcher case the M3.5 STOP-2 report named: prover=claude pinned explicitly,
+  // verifier=codex left on its own default, in the SAME registry / SAME run.
+  test("a cross-vendor run: prover (claude) gets its pinned model, verifier (codex) gets its own default -- independently", () => {
+    const registry = new BackendRegistry<WorkerBackend>(
+      {
+        assignments: {
+          prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } },
+          verifier: { hard: { backend: "codex", fallbacks: [] } },
+        },
+      },
+      [{ name: "claude" } as WorkerBackend, { name: "codex" } as WorkerBackend],
+    );
+    // no --model flag passed at all (undefined) -- the pin lives entirely in config now.
+    expect(resolveModel(registry, "prover", "hard", undefined)).toBe("claude-opus-4-8");
+    expect(resolveModel(registry, "verifier", "hard", undefined)).toBe(DEFAULT_MODEL_BY_BACKEND.codex);
+    expect(resolveModel(registry, "prover", "hard", undefined)).not.toBe(resolveModel(registry, "verifier", "hard", undefined));
+  });
+
+  test("an empty global --model string is treated the same as absent (falls through to the next tier)", () => {
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "claude"), [{ name: "claude" } as WorkerBackend]);
+    expect(resolveModel(registry, "verifier", "hard", "")).toBe(DEFAULT_MODEL_BY_BACKEND.claude);
+  });
+});
+
+// rk-7hi: family identity is backend-derived and MUST stay completely independent of whatever
+// resolveModel picks -- an arbitrary per-assignment model string can never perturb the cross-vendor
+// gate (src/drive/identity.ts, untouched by this WP).
+describe("familyForBackend — family identity stays backend-derived, independent of any model string", () => {
+  test("the codex backend is always family 'gpt', regardless of its resolved model", () => {
+    expect(familyForBackend("codex")).toBe("gpt");
+  });
+  test("the claude backend is always family 'claude', even carrying an unrelated-looking model id", () => {
+    expect(familyForBackend("claude")).toBe("claude");
+  });
+  test("a claude-backend assignment pinned to an explicit opus model still records family 'claude' -- rk-7hi's core invariant", () => {
+    const registry = new BackendRegistry<WorkerBackend>(
+      { assignments: { prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } } } },
+      [{ name: "claude" } as WorkerBackend],
+    );
+    const resolvedModel = resolveModel(registry, "prover", "hard", undefined);
+    expect(resolvedModel).toBe("claude-opus-4-8");
+    expect(familyForBackend("claude")).toBe("claude"); // NOT derived from resolvedModel at all
   });
 });
 

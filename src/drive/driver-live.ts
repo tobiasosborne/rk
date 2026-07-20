@@ -19,11 +19,13 @@
 //    failure (exit 13) is reported to the driver loop as a real rejected turn, never silently
 //    retried on a fallback backend mid-claim (a fallback would need its OWN session, paying full
 //    cost with no cache credit — a real design point, deferred, not swept under this WP).
-// 3. `model` is NOT sourced from `.rk/config.json`'s `workers` config (that shape has no `model`
-//    field — extending it would be a Tier A schema change to src/drive/backend-registry.ts's
-//    validated surface, out of this WP's scope). `src/cli/verify.ts`'s `--model` flag, falling
-//    back to `DEFAULT_MODEL_BY_BACKEND` here, is the interim source — a named follow-up, not a
-//    silent guess.
+// 3. (rk-7hi, M3.5 STOP-2 repair, supersedes the original note) `model` per (role, tier) now HAS a
+//    config-sourced path: `.rk/config.json`'s `workers.assignments.<role>.<tier>.model`
+//    (src/drive/backend-registry.ts's `RoleTierAssignment.model`, `BackendRegistry.modelFor`) wins
+//    over `src/cli/verify.ts`'s single global `--model` flag, which wins over
+//    `DEFAULT_MODEL_BY_BACKEND` — see `resolveModel` below. This is what makes the prover and the
+//    verifier carry two DIFFERENT explicit models in the SAME run (the exact TJO worker-model pin
+//    the single global `--model` flag could not express).
 // 4. The balloon-classification prompt is a small, ad hoc, inline builder (`buildClassificationPrompt`
 //    below) — NOT part of src/drive/driver-prompts.ts's two pure exports (verifier/prover), which
 //    is the shape the task brief for this WP actually names.
@@ -39,18 +41,15 @@ import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type
 import type { AfNodeView } from "./driver-plan";
 import { recordProofRefine } from "./driver-af";
 import type { ProofContent, RecordProofResult } from "./driver-prove-node";
+// rk-7hi: model/family resolution now lives in its own pure module (280-line shard cap) —
+// re-exported here unchanged so every existing import site (src/cli/verify-live.ts, tests) is
+// unaffected by the split.
+export { DEFAULT_MODEL_BY_BACKEND, resolveModel, familyForBackend } from "./driver-live-model";
 
 const ZERO_USAGE: WorkerUsage = { input: 0, output: 0, cache_read: 0, cache_creation: 0 };
 export const DEFAULT_SESSION_TIMEOUT_MS = 120_000;
 export const DEFAULT_TURN_TIMEOUT_MS = 120_000;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 8_000;
-
-/** Interim per-backend model default (see file header, scope note 3) — never used when the CLI's
- * own `--model` flag supplies one explicitly. */
-export const DEFAULT_MODEL_BY_BACKEND: Record<string, string> = {
-  claude: "claude-sonnet-4-5",
-  codex: "gpt-5.1-codex",
-};
 
 /** The EXACT `.rk/config.json` shape a live run needs — printed verbatim in the loud error below,
  * never left for a reader to infer from prose. */
