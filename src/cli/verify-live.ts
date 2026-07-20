@@ -25,6 +25,7 @@ import {
   DEFAULT_MODEL_BY_BACKEND,
 } from "../drive/driver-live";
 import { buildSharedContext, type DefinitionText } from "../drive/driver-prompts";
+import { readBalloonCounterFromFields } from "../drive/driver-balloon";
 import type { VerifierIdentity } from "../drive/identity";
 import { loadSnapshot } from "../store/snapshot-load";
 import { listDir, parseFrontmatter } from "../gates/snapshot";
@@ -176,11 +177,33 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
 
   const identity: VerifierIdentity = { modelFamily: created.dispatcher.backendName === "codex" ? "gpt" : "claude", backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
 
+  // M3 blocker 7: the DURABLE balloon counter lives in the shard frontmatter the driver itself
+  // writes (src/drive/driver-frontmatter.ts's applyBalloonMark), NOT in `node.balloons` — the graph
+  // projection currently hard-codes `balloons: 0` (src/graph/from-registry.ts; see the repair-wave
+  // coordination note on threading it into the graph/board), so reading `node.balloons` would leave
+  // every balloon "first" forever and never escalate a repeat to mandatory-review. Read the counter
+  // straight off the shard the driver persists to, falling back to the (currently-zero) projection
+  // only when the shard itself cannot be read.
+  const shardText = ((): string | undefined => { try { return readFileSync(join(root, node.path), "utf8"); } catch { return undefined; } })();
+  const persistedBalloons = ((): { count: number; classifications: typeof node.balloons.classifications } => {
+    if (shardText === undefined) return { count: node.balloons.count, classifications: node.balloons.classifications };
+    const fm = parseFrontmatter(shardText);
+    if (!fm.present || !fm.terminated) return { count: node.balloons.count, classifications: node.balloons.classifications };
+    return readBalloonCounterFromFields(fm.fields);
+  })();
+
   const driverDeps: DriverDeps = {
     contractId: node.id,
     claimId,
     identity,
     queryWorkspace: () => readWorkspace(abs, node.workspace!),
+    // M3 blocker 1: re-read af's authoritative node hashes immediately before an apply — a real
+    // fresh `af export`, so a content edit during the model turn cannot validate unreviewed bytes.
+    // A failed re-read yields an empty map, discarding every pending verdict (fail closed).
+    reReadContentHashes: () => {
+      const fresh = readWorkspace(abs, node.workspace!);
+      return fresh.ok ? new Map(fresh.value.nodes.map((n) => [n.id, n.contentHash])) : new Map();
+    },
     dispatchVerify,
     dispatchClassification,
     applyVerdicts: (file) => applyVerdictFile(abs, file, deps.afCommand),
@@ -201,8 +224,8 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     createBdTask: createBdTaskEdge,
     appendLog: (line) => appendDriverLog(root, line),
     now: () => new Date().toISOString(),
-    priorBalloonCount: node.balloons.count,
-    priorClassifications: node.balloons.classifications,
+    priorBalloonCount: persistedBalloons.count,
+    priorClassifications: persistedBalloons.classifications,
   };
 
   let code: number;

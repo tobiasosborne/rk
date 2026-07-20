@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { runVerifyDriver, type DriverDeps, type DispatchedTurn } from "../../src/drive/driver-run";
-import type { AfWorkspaceView, ApplyReport } from "../../src/drive/driver-af";
+import type { AfWorkspaceView, ApplyReport, FilledVerdictFile } from "../../src/drive/driver-af";
 import type { AfNodeView } from "../../src/drive/driver-plan";
 import type { VerifierIdentity } from "../../src/drive/identity";
 import type { BalloonClassification } from "../../src/graph/types";
@@ -34,11 +34,16 @@ function harness(over: Partial<DriverDeps> & { workspaces: AfWorkspaceView[] }):
   const bdTasks: { title: string; description: string }[] = [];
   const written: string[] = [];
   let q = 0;
+  let lastWs: AfWorkspaceView | undefined;
   const deps: DriverDeps = {
     contractId: "lem-x",
     claimId: "claim-lem-x",
     identity: IDENTITY,
-    queryWorkspace: () => ({ ok: true, value: over.workspaces[Math.min(q++, over.workspaces.length - 1)]! }),
+    queryWorkspace: () => { const value = over.workspaces[Math.min(q++, over.workspaces.length - 1)]!; lastWs = value; return { ok: true, value }; },
+    // M3 blocker 1 default: the re-read agrees with the current round's query (no edit mid-turn),
+    // so nothing is discarded and every pre-existing test is unaffected; dedicated blocker-1 tests
+    // override this to simulate an af content edit between dispatch and apply.
+    reReadContentHashes: () => new Map((lastWs?.nodes ?? []).map((n) => [n.id, n.contentHash] as const)),
     dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0 }) as DispatchedTurn,
     dispatchClassification: () => ({ classification: "missing-fact", rationale: "def X unprovided" }),
     applyVerdicts: (file) => appliedReport(file.items.map((i) => i.node)),
@@ -62,7 +67,7 @@ function harness(over: Partial<DriverDeps> & { workspaces: AfWorkspaceView[] }):
 describe("balloon path (synthetic acceptance) — tripwire → classify → route → mark/task → ABORT", () => {
   const over = [node("1"), node("1.1"), node("1.2"), node("1.3"), node("1.4")]; // 5 > cap 3
 
-  test("missing-fact (first balloon) → bd provisioning task filed, shard NOT marked, aborts", async () => {
+  test("missing-fact (first balloon) → bd provisioning task filed AND counter persisted durably (blocker 7), aborts", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 } });
     const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
@@ -71,8 +76,24 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
     expect(r.balloon?.routing).toBe("bd-provision");
     expect(h.bdTasks.length).toBe(1);
     expect(h.bdTasks[0]!.title).toContain("provisioning");
-    expect(h.written.length).toBe(0); // bd routing does NOT mark the shard
+    // M3 blocker 7: EVERY classified balloon persists its counter (durable repeat-detection), so a
+    // first missing-fact balloon now bumps the shard's `balloons:` count — not left at 0 for the
+    // next event to keep reading as "first" forever.
+    expect(h.written.length).toBe(1);
+    expect(h.written[0]!).toContain("balloons: 1");
+    expect(h.written[0]!).toContain("missing-fact");
     expect(h.logs.some((l) => l.includes('"kind":"balloon"'))).toBe(true);
+  });
+
+  test("FIRST dag-dep balloon persists the counter durably (balloons: 1) AND files a factoring task — blocker 7 red", async () => {
+    const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 }, dispatchClassification: () => ({ classification: "dag-dep", rationale: "cross-cutting dependency" }) });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.balloon?.routing).toBe("bd-factoring");
+    expect(h.written.length).toBe(1); // pre-fix: 0 — bd routings never persisted the counter
+    expect(h.written[0]!).toContain("balloons: 1");
+    expect(h.written[0]!).toContain("dag-dep");
+    expect(h.bdTasks.length).toBe(1);
+    expect(h.bdTasks[0]!.title).toContain("factoring");
   });
 
   test("genuine-gap → mandatory-review: frontmatter mark WRITTEN, no bd task, aborts", async () => {
@@ -243,5 +264,85 @@ describe("cross-vendor rule (M3.8) — apply-time, load-bearing (critical-path) 
     const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("converged");
     expect(r.appliedNodeIds).toEqual(["1.1"]);
+  });
+});
+
+// M3 blocker 3: only a verifier may mint an af acceptance; per-node mode uses one non-batch apply
+// per node (no batch provenance) — the prover-overreach guard exempts the reviewer role, so without
+// an explicit role check a reviewer turn would sail through and record an af accept.
+describe("apply path — role and per-node provenance (M3 blocker 3)", () => {
+  test("a REVIEWER turn producing a valid accept is DISCARDED — never composed, never applied", async () => {
+    let applyCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1.1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "reviewer", exit: 0 }),
+      applyVerdicts: (file) => { applyCalls++; return appliedReport(file.items.map((i) => i.node)); },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.appliedNodeIds).toEqual([]); // pre-fix: ["1.1"] — reviewer minted an af accept
+    expect(applyCalls).toBe(0);
+    expect(r.status).toBe("aborted");
+    expect(h.logs.some((l) => l.includes("node-skipped") && l.includes("only 'verifier'"))).toBe(true);
+  });
+
+  test("per-node mode applies EACH ready node as its own non-batch verdict file (no batch provenance)", async () => {
+    const applies: FilledVerdictFile[] = [];
+    const round0 = ws([node("1.1"), node("1.2")]);
+    const round1 = ws([node("1.1", { epistemicState: "validated" }), node("1.2", { epistemicState: "validated" })]);
+    const h = harness({
+      workspaces: [round0, round1],
+      applyVerdicts: (file) => { applies.push(file); return appliedReport(file.items.map((i) => i.node)); },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
+    expect(applies.length).toBe(2); // pre-fix: 1 — all nodes in one batch apply
+    expect(applies.every((f) => f.items.length === 1)).toBe(true);
+    expect(applies.every((f) => f.batch_id === "")).toBe(true); // per-node carries NO batch_id
+  });
+});
+
+// M3 blocker 2: an empty frontier only converges when the root is af-validated; a recorded challenge
+// is repair-required, never counted as an accept.
+describe("convergence requires a validated root (M3 blocker 2)", () => {
+  function challengeReport(file: FilledVerdictFile): ApplyReport {
+    // af RECORDS the challenge successfully (status "applied") — the exact shape that pre-fix made
+    // the driver count as progress and then falsely report convergence.
+    return { exit: 0, batchId: file.batch_id, items: file.items.map((i) => ({ node: i.node, verdict: i.verdict, status: "applied" })), applied: file.items.length, blocked: 0, rejected: 0, aborted: false };
+  }
+
+  test("a challenged root does NOT converge and the challenge is not counted as an accept", async () => {
+    const round0 = ws([node("1")]);
+    const round1 = ws([node("1", { epistemicState: "needs_refinement" })]); // challenge recorded: root not validated, not ready
+    const h = harness({
+      workspaces: [round0, round1],
+      config: { maxRounds: 5 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: "step 2", severity: "major", reason: "gap in step 2" }, justification: "the proof skips a case" }, role: "verifier", exit: 0 }),
+      applyVerdicts: challengeReport,
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted"); // pre-fix: "converged"
+    expect(r.stopReason).toBe("root-unvalidated");
+    expect(r.appliedNodeIds).toEqual([]); // a challenge is NOT an accept
+    expect(h.logs.some((l) => l.includes('"verdict":"challenge"'))).toBe(true);
+  });
+});
+
+// M3 blocker 1: a verdict bound to pre-dispatch bytes must be re-confirmed against the authoritative
+// af node immediately before apply, and discarded on any hash mismatch.
+describe("re-read before apply (M3 blocker 1)", () => {
+  test("a verdict is DISCARDED when the af node's content hash changed between dispatch and apply", async () => {
+    let applyCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1.1")])], // node bound to HASH ("a"*64)
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      reReadContentHashes: () => new Map([["1.1", "b".repeat(64)]]), // af now reports DIFFERENT bytes
+      applyVerdicts: (file) => { applyCalls++; return appliedReport(file.items.map((i) => i.node)); },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(applyCalls).toBe(0); // pre-fix: 1 — applied a verdict bound to now-stale bytes
+    expect(r.appliedNodeIds).toEqual([]);
+    expect(r.status).toBe("aborted");
+    expect(h.logs.some((l) => l.includes("node-skipped") && l.includes("content hash changed"))).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import {
   buildBalloonEvent,
   detectBalloon,
   parseClassificationReview,
+  readBalloonCounterFromFields,
   routeBalloon,
   routingMarksShard,
 } from "../../src/drive/driver-balloon";
@@ -85,5 +86,27 @@ describe("buildBalloonEvent + log line", () => {
     expect(task.title).toContain("lem-x");
     expect(task.title).toContain("factoring");
     expect(task.description).toContain("dag-dep");
+  });
+});
+
+// M3 blocker 7: the durable read half — reading the persisted counter back out of the shard
+// frontmatter the driver wrote (parseFrontmatter renders a `- item` block list as a "; "-joined
+// string). This is what makes a repeat balloon detectable across runs.
+describe("readBalloonCounterFromFields — durable repeat-detection read-back", () => {
+  test("round-trips a persisted count + classification list from parsed frontmatter fields", () => {
+    const c = readBalloonCounterFromFields({ balloons: "2", balloon_classifications: "missing-fact; genuine-gap" });
+    expect(c.count).toBe(2);
+    expect(c.classifications).toEqual(["missing-fact", "genuine-gap"]);
+  });
+
+  test("a missing/blank/non-numeric count degrades to a zero counter (never guessed, never a throw)", () => {
+    expect(readBalloonCounterFromFields({}).count).toBe(0);
+    expect(readBalloonCounterFromFields({ balloons: "" }).count).toBe(0);
+    expect(readBalloonCounterFromFields({ balloons: "not-a-number" }).count).toBe(0);
+  });
+
+  test("an unrecognized classification token is dropped, not fabricated into the vocabulary", () => {
+    const c = readBalloonCounterFromFields({ balloons: "1", balloon_classifications: "missing-fact; bogus-class" });
+    expect(c.classifications).toEqual(["missing-fact"]);
   });
 });

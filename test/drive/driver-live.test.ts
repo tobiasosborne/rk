@@ -195,6 +195,7 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
       claimId: "claim-3",
       identity,
       queryWorkspace: () => ({ ok: true, value: ws }),
+      reReadContentHashes: () => new Map(ws.nodes.map((n) => [n.id, n.contentHash] as const)),
       dispatchVerify: liveDispatchVerify(result.dispatcher, "hard"),
       dispatchClassification: liveDispatchClassification(result.dispatcher),
       applyVerdicts: (file): ApplyReport => {
@@ -224,8 +225,11 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
     const r = await runVerifyDriver(deps);
     expect(r.status).toBe("converged");
     expect(r.appliedNodeIds.sort()).toEqual(["1.1", "1.2", "1.3"]);
-    expect(applied.length).toBe(1); // all 3 independent+ready nodes composed into one apply file
-    expect(applied[0]!.items.length).toBe(3);
+    // M3 blocker 3: pass-1 hard tier is per-node — each ready node is its OWN non-batch apply
+    // (empty batch_id), never one shared V2 batch apply that would stamp batch provenance on all 3.
+    expect(applied.length).toBe(3);
+    expect(applied.every((f) => f.items.length === 1)).toBe(true);
+    expect(applied.every((f) => f.batch_id === "")).toBe(true);
 
     const usageLines = logs.filter((l) => l.includes('"kind":"usage"'));
     expect(usageLines.length).toBe(3);

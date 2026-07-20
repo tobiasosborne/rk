@@ -20,7 +20,10 @@ export type DriverStopReason =
   | "prover-overreach"
   | "stuck-no-progress"
   | "retry-cap-exhausted"
-  | "balloon-abort";
+  | "balloon-abort"
+  // M3 blocker 2: the frontier emptied (no verification-ready node) but the claim's ROOT was not
+  // af-validated — a challenged/blocked/unproven root that must never be reported as convergence.
+  | "root-unvalidated";
 
 export const DEFAULT_MAX_STUCK_ROUNDS = 3;
 export const DEFAULT_NODE_RETRY_CAP = 3;

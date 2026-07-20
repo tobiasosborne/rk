@@ -27,6 +27,25 @@ export function detectBalloon(nodeCount: number, cap: number = DEFAULT_BALLOON_N
   return { ballooned: nodeCount > cap, nodeCount, cap };
 }
 
+/** M3 blocker 7 (durable repeat-balloon detection): reads a persisted balloon counter back out of a
+ * registry shard's parsed frontmatter fields — the SAME fields src/drive/driver-frontmatter.ts's
+ * `applyBalloonMark` writes (`balloons:` scalar count + a `balloon_classifications:` block list,
+ * which src/gates/snapshot.ts's `parseFrontmatter` surfaces as a "; "-joined string). This is the
+ * read half of the persist/read-back loop that makes a repeat balloon detectable across runs: the
+ * driver persists via `applyBalloonMark`, the CLI reads it back through here to set
+ * `priorBalloonCount`/`priorClassifications`. A missing/blank/non-numeric count degrades to 0 and an
+ * unrecognized classification token is dropped — never guessed, never a throw. */
+export function readBalloonCounterFromFields(fields: Record<string, string | undefined>): { count: number; classifications: BalloonClassification[] } {
+  const rawCount = fields.balloons;
+  const count = rawCount !== undefined && /^\d+$/.test(rawCount.trim()) ? Number.parseInt(rawCount.trim(), 10) : 0;
+  const rawList = fields.balloon_classifications ?? "";
+  const classifications = rawList
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s): s is BalloonClassification => CLASSIFICATION_SET.has(s as BalloonClassification));
+  return { count, classifications };
+}
+
 // --- Classification (from a real verifier-role review turn over the offending subtree) ---------
 
 export interface ClassificationReview {

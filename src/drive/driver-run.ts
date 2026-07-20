@@ -36,7 +36,6 @@
 // `async`/`await` keywords. Callers of `runVerifyDriver` now receive `Promise<DriverRunResult>`.
 
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
-import { deriveBatchId } from "./batch-composer";
 import { encodeVerifierSeam, type VerifierIdentity } from "./identity";
 // M3.8 (EDIT flagged for the M3 boundary review — this file's decision layer is L6 validity
 // semantics): the apply-time half of the cross-vendor rule (PRD C9), wired into `verifyOneNode`
@@ -123,6 +122,13 @@ export interface DriverDeps {
    * unknown); `() => false` is available for a repo that has deliberately opted out (constitution-
    * configurable per PRD C9, "default on"). Never silently guessed inside this module. */
   isLoadBearing(nodeId: string): boolean;
+  /** M3 blocker 1: re-read the authoritative af node content hashes (nodeId -> content_hash) as of
+   * NOW, called immediately before an apply. REQUIRED, never optional with a trust-the-query
+   * default: binding a verdict to the pre-dispatch hash and applying without re-confirming lets an
+   * edit during the model turn (or a stale caller) validate unreviewed bytes. The live edge
+   * re-runs `af export` here (src/cli/verify-live.ts); a node missing from the returned map is
+   * treated as a mismatch and its verdict discarded (fail closed). */
+  reReadContentHashes(): Map<string, string>;
   /** Registry shard bytes for `contractId`, or undefined if not found (mandatory-review then logs a
    * loud skip instead of marking). */
   readShard(): string | undefined;
@@ -159,6 +165,23 @@ function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
   return a.node < b.node ? -1 : a.node > b.node ? 1 : 0;
 }
 
+/** M3 blocker 2: convergence requires the claim's ROOT to be af-validated. An empty frontier (no
+ * verification-ready node) is NOT proof of success — it also describes a claim whose root was
+ * challenged, blocked, or left unproven. af's root is unconditionally id "1" (AF_ROOT_NODE_ID); a
+ * synthetic single-subtree fixture may carry only a deeper id, so the root is taken as the
+ * shallowest id (fewest dot-components, ties broken lexicographically). Returns true iff that node
+ * exists and af reports its epistemic state as `validated`. */
+function isRootValidated(nodes: readonly AfNodeView[]): boolean {
+  let root: AfNodeView | undefined;
+  for (const n of nodes) {
+    if (root === undefined) { root = n; continue; }
+    const dn = n.id.split(".").length;
+    const dr = root.id.split(".").length;
+    if (dn < dr || (dn === dr && n.id < root.id)) root = n;
+  }
+  return root !== undefined && root.epistemicState === "validated";
+}
+
 async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): Promise<DriverRunResult> {
   const subtree = deps.offendingSubtree ?? ws.nodes.map((n) => n.id);
   const parsed = parseClassificationReview(await deps.dispatchClassification([...subtree].sort()));
@@ -179,17 +202,26 @@ async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number)
   });
   deps.appendLog(balloonLogLine(event, deps.now()));
 
-  if (routingMarksShard(event.routing)) {
-    const shard = deps.readShard();
-    if (shard === undefined) {
-      deps.appendLog(JSON.stringify({ kind: "balloon-mark-skipped", at: deps.now(), contractId: deps.contractId, reason: "registry shard not found — cannot write mandatory-review mark" }));
-    } else {
-      const counter = { count: deps.priorBalloonCount + 1, classifications: [...deps.priorClassifications, event.classification] };
-      const marked = applyBalloonMark(shard, counter);
-      if (marked.ok) deps.writeShard(marked.content);
-      else deps.appendLog(JSON.stringify({ kind: "balloon-mark-skipped", at: deps.now(), contractId: deps.contractId, reason: marked.reason }));
-    }
+  // M3 blocker 7: persist the classified balloon's counter to the registry shard on EVERY balloon,
+  // BEFORE routing — not only on the mandatory-review routings. A first missing-fact/dag-dep
+  // balloon that only filed a bd task left the durable counter at 0, so the very next balloon on
+  // the same contract stayed "first" indefinitely and never escalated to mandatory-review. The
+  // persisted counter (count + classification history) is the durable state routeBalloon reads via
+  // `priorBalloonCount` on the next run (src/cli/verify-live.ts reads it back off this frontmatter).
+  const shard = deps.readShard();
+  if (shard === undefined) {
+    deps.appendLog(JSON.stringify({ kind: "balloon-mark-skipped", at: deps.now(), contractId: deps.contractId, reason: "registry shard not found — cannot persist balloon counter (repeat-detection will not be durable)" }));
   } else {
+    const counter = { count: deps.priorBalloonCount + 1, classifications: [...deps.priorClassifications, event.classification] };
+    const marked = applyBalloonMark(shard, counter);
+    if (marked.ok) deps.writeShard(marked.content);
+    else deps.appendLog(JSON.stringify({ kind: "balloon-mark-skipped", at: deps.now(), contractId: deps.contractId, reason: marked.reason }));
+  }
+
+  // Routing-specific side effect: a bd-routed balloon (missing-fact/dag-dep) ALSO files a
+  // provisioning/factoring task. mandatory-review (genuine-gap or repeat) needs nothing beyond the
+  // durable counter above — the persisted count/classification IS the mandatory-review flag.
+  if (!routingMarksShard(event.routing)) {
     const filed = deps.createBdTask(balloonBdTask(event));
     if (!filed) deps.appendLog(JSON.stringify({ kind: "balloon-bd-skipped", at: deps.now(), contractId: deps.contractId, reason: "bd unavailable — task NOT filed; resolve manually", task: balloonBdTask(event).title }));
   }
@@ -206,8 +238,10 @@ async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number)
 }
 
 /** Dispatches + binds a single node's verdict, applying the prover-overreach guard. Returns the af
- * item to apply, or a reason it was skipped (never applied). */
-async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<{ item: AfApplyItem } | { skip: string }> {
+ * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
+ * the authoritative bytes immediately before apply — M3 blocker 1), or a reason it was skipped
+ * (never applied). */
+async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<{ item: AfApplyItem; contentHash: string } | { skip: string }> {
   const turn = await deps.dispatchVerify(node);
   if (turn === undefined) return { skip: "no worker available" };
   // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,
@@ -220,6 +254,14 @@ async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam:
   if (overreach.discard) {
     deps.appendLog(JSON.stringify({ kind: "prover-overreach", at: deps.now(), node: node.id, reason: overreach.reason }));
     return { skip: `prover overreach: ${overreach.reason}` };
+  }
+  // M3 blocker 3: this apply path records af ACCEPTANCES, and only a verifier may author one
+  // (PRD C9 — provers prove, reviewers review). The overreach guard above deliberately EXEMPTS the
+  // reviewer role (a reviewer legitimately emits verdicts in other pipelines), so a reviewer turn
+  // would otherwise sail through and mint an af acceptance here. Require the exact `verifier` role;
+  // any other role's turn is discarded (logged as a node-skipped by the caller, never applied).
+  if (turn.role !== "verifier") {
+    return { skip: `role '${turn.role}' cannot mint an af verdict — only 'verifier' authors af acceptances (PRD C9)` };
   }
   if (turn.exit !== 0) return { skip: `worker exit ${turn.exit}` };
   if (node.author !== undefined && node.author === verifiedBySeam) return { skip: "reviewer==author (would be rejected by af)" };
@@ -241,7 +283,7 @@ async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam:
       return { skip: reason };
     }
   }
-  return { item: mapped.item };
+  return { item: mapped.item, contentHash: node.contentHash };
 }
 
 /** Drives one workspace claim to convergence or a named abort. */
@@ -272,47 +314,77 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
 
     const readyIds = selectReadyNodes(ws.nodes);
     if (readyIds.length === 0) {
-      return { status: "converged", message: `no verification-ready node remains (${appliedNodeIds.length} applied over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
+      // M3 blocker 2: an empty frontier only converges when the ROOT is actually validated —
+      // otherwise the campaign stalled on a challenged/blocked/unproven root and must abort with a
+      // named reason, never report success without an accepted proof of the contract.
+      if (isRootValidated(ws.nodes)) {
+        return { status: "converged", message: `root validated; no verification-ready node remains (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
+      }
+      return { status: "aborted", stopReason: "root-unvalidated", message: `frontier empty but the root claim is not validated — a recorded challenge, block, or unproven root never converges (${appliedNodeIds.length} accept(s) over ${round} round(s))`, appliedNodeIds, outcomes, rounds: round };
     }
 
     const byId = new Map(ws.nodes.map((n) => [n.id, n] as const));
-    const items: AfApplyItem[] = [];
+    const composed: { item: AfApplyItem; contentHash: string }[] = [];
     for (const id of readyIds) {
       const node = byId.get(id)!;
       const attemptsSoFar = attempts.get(id) ?? 0;
       if (checkRetryCap(attemptsSoFar, config.nodeRetryCap).exhausted) continue;
       const r = await verifyOneNode(deps, node, verifiedBySeam);
-      if ("item" in r) items.push(r.item);
+      if ("item" in r) composed.push(r);
       else {
         attempts.set(id, attemptsSoFar + 1);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: r.skip }));
       }
     }
 
-    if (items.length === 0) {
+    if (composed.length === 0) {
       roundsWithoutProgress++;
       const stuck = evaluateStuckGuard(roundsWithoutProgress, config.maxStuckRounds);
       if (stuck.abort) return { status: "aborted", stopReason: "stuck-no-progress", message: stuck.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
       continue;
     }
 
-    const ordered = [...items].sort(childrenFirst);
-    const memberIds = ordered.map((i) => i.node);
-    const file: FilledVerdictFile = {
-      schema_version: "1",
-      batch_id: deriveBatchId(deps.contractId, memberIds),
-      verified_by: verifiedBySeam,
-      items: ordered,
-    };
-    const report = deps.applyVerdicts(file);
-    for (const o of report.items) {
-      outcomes.push(o);
-      deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
-      if (o.status === "applied") appliedNodeIds.push(o.node);
-      else attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
+    // M3 blocker 1: re-read the authoritative af node hashes immediately before apply and discard
+    // any verdict whose bound bytes changed between dispatch and apply (an edit during the model
+    // turn, or a stale caller). A node absent from the re-read (deleted/renamed) counts as a
+    // mismatch — fail closed, never validate content that can no longer be re-confirmed.
+    const fresh = deps.reReadContentHashes();
+
+    // M3 blocker 3: pass-1 hard tier is all per-node (batchEligibleIds empty) — apply each verdict
+    // as its OWN non-batch af verdicts-apply file (empty batch_id), in children-first order so a
+    // child is recorded before its parent. Only an actual composed batch may share one apply and a
+    // real batch_id; a per-node acceptance must never carry batch provenance it did not earn.
+    // M3 blocker 2: only an af-recorded ACCEPT is validation progress. A recorded challenge is
+    // repair-required (its verdict-outcome log line carries verdict:"challenge"), never counted.
+    const ordered = [...composed].sort((a, b) => childrenFirst(a.item, b.item));
+    let acceptsThisRound = 0;
+    for (const { item, contentHash } of ordered) {
+      const current = fresh.get(item.node);
+      if (current === undefined || current !== contentHash) {
+        deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: item.node, reason: `stale verdict discarded: af node content hash changed between dispatch and apply (bound ${contentHash}, current ${current ?? "absent"})` }));
+        attempts.set(item.node, (attempts.get(item.node) ?? 0) + 1);
+        continue;
+      }
+      const file: FilledVerdictFile = {
+        schema_version: "1",
+        batch_id: "",
+        verified_by: verifiedBySeam,
+        items: [item],
+      };
+      const report = deps.applyVerdicts(file);
+      for (const o of report.items) {
+        outcomes.push(o);
+        deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
+        if (o.status === "applied" && o.verdict === "accept") {
+          appliedNodeIds.push(o.node);
+          acceptsThisRound++;
+        } else {
+          attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
+        }
+      }
     }
 
-    if (report.applied > 0) roundsWithoutProgress = 0;
+    if (acceptsThisRound > 0) roundsWithoutProgress = 0;
     else {
       roundsWithoutProgress++;
       const stuck = evaluateStuckGuard(roundsWithoutProgress, config.maxStuckRounds);
