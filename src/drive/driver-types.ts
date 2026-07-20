@@ -17,13 +17,20 @@ import type { Role } from "./vocab";
 import type { WorkerUsage } from "./worker-result";
 
 import { DEFAULT_BALLOON_NODE_CAP } from "./driver-balloon";
-import { DEFAULT_MAX_STUCK_ROUNDS, DEFAULT_NODE_RETRY_CAP } from "./driver-guardrails";
+import { DEFAULT_MAX_STUCK_ROUNDS, DEFAULT_NODE_RETRY_CAP, DEFAULT_NODE_CHURN_CAP, DEFAULT_MAX_CHURN_ROUNDS } from "./driver-guardrails";
 
 export interface DriverConfig {
   balloonCap: number;
   maxStuckRounds: number;
   nodeRetryCap: number;
   maxRounds: number;
+  /** rk-cpk (review 2026-07-20 FU2): per-node proof records tolerated since the last epistemic
+   * advancement before the churn cap aborts the run on that node (spend protection, not validity). */
+  nodeChurnCap: number;
+  /** rk-cpk: rounds of tree growth since the last epistemic advancement before the churn cap aborts.
+   * Catches a prove/challenge chain extending fresh leaves that the stuck guard's per-write reset
+   * blinds it to. */
+  maxChurnRounds: number;
 }
 
 export const DEFAULT_DRIVER_CONFIG: DriverConfig = {
@@ -31,6 +38,8 @@ export const DEFAULT_DRIVER_CONFIG: DriverConfig = {
   maxStuckRounds: DEFAULT_MAX_STUCK_ROUNDS,
   nodeRetryCap: DEFAULT_NODE_RETRY_CAP,
   maxRounds: 50,
+  nodeChurnCap: DEFAULT_NODE_CHURN_CAP,
+  maxChurnRounds: DEFAULT_MAX_CHURN_ROUNDS,
 };
 
 /** One dispatched worker turn's already-parsed result (the injected dispatcher owns the spawn +

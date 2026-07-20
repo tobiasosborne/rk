@@ -36,7 +36,7 @@
 // `async`/`await` keywords. Callers of `runVerifyDriver` now receive `Promise<DriverRunResult>`.
 
 import { encodeVerifierSeam } from "./identity";
-import { checkBudget, checkRetryCap, evaluateStuckGuard } from "./driver-guardrails";
+import { checkBudget, checkRetryCap, evaluateStuckGuard, evaluateChurnGuard } from "./driver-guardrails";
 import { detectBalloon } from "./driver-balloon";
 import { handleBalloon } from "./driver-balloon-run";
 import { selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "./driver-plan";
@@ -102,6 +102,13 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   const outcomes: VerdictItemOutcome[] = [];
   const attempts = new Map<string, number>();
   let roundsWithoutProgress = 0;
+  // rk-cpk (review FU2): churn accounting, distinct from the stuck guard. The stuck guard resets on
+  // ANY structural write (a recorded proof), so a prove/challenge chain that grows the tree every
+  // round while nothing ever validates never trips it. These counters measure STRUCTURAL WRITES since
+  // the last EPISTEMIC advancement (an accept): `proofRecordsByNode` per node, `roundsOfGrowthWithout
+  // Advance` the run of growth-only rounds. An accept clears BOTH (genuine progress is never churn).
+  const proofRecordsByNode = new Map<string, number>();
+  let roundsOfGrowthWithoutAdvance = 0;
   let round = 0;
   // rk-s9t: running campaign token total, summed across EVERY dispatched turn (applied or
   // discarded). The pre-dispatch checks below (and handleBalloon's) read it; verifyOneNode returns
@@ -135,6 +142,12 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
 
     const byId = new Map(ws.nodes.map((n) => [n.id, n] as const));
     let progressed = false;
+    // rk-cpk: split `progressed` (proof OR accept — drives the stuck guard, unchanged) into its two
+    // components for the churn cap. `structuralWrite` = a proof was recorded (the tree grew);
+    // `epistemicAdvance` = a node newly reached validated (an af accept applied). Only the latter is
+    // real progress; a structural write with no advance is what the churn cap counts.
+    let structuralWrite = false;
+    let epistemicAdvance = false;
 
     // PROVE half (rk-gn4): dispatch a PROVER turn over each prover-ready node and record its
     // decomposition into af. A recorded proof IS progress — af re-classifies the node next round and
@@ -152,7 +165,13 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       }
       const pr = await proveOneNode(deps, node);
       tokensSpent += pr.spentTokens; // accrue whether the proof recorded or the turn was discarded
-      if ("recorded" in pr) progressed = true;
+      if ("recorded" in pr) {
+        progressed = true;
+        // rk-cpk: a recorded proof is a STRUCTURAL write, not epistemic advancement — count it per
+        // node so a spinning prove/refine cycle is caught by the churn cap the stuck guard misses.
+        structuralWrite = true;
+        proofRecordsByNode.set(id, (proofRecordsByNode.get(id) ?? 0) + 1);
+      }
       else {
         attempts.set(id, attemptsSoFar + 1);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: pr.skip }));
@@ -203,7 +222,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
         for (const o of report.items) {
           outcomes.push(o);
           deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
-          if (o.status === "applied" && o.verdict === "accept") { appliedNodeIds.push(o.node); progressed = true; }
+          if (o.status === "applied" && o.verdict === "accept") { appliedNodeIds.push(o.node); progressed = true; epistemicAdvance = true; /* rk-cpk: an accept is the ONLY epistemic advancement — a node newly validated */ }
           else attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
         }
       }
@@ -215,6 +234,23 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       roundsWithoutProgress++;
       const stuck = evaluateStuckGuard(roundsWithoutProgress, config.maxStuckRounds);
       if (stuck.abort) return { status: "aborted", stopReason: "stuck-no-progress", message: stuck.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
+    }
+
+    // rk-cpk (review FU2): churn cap — abort a run that only GROWS (records proofs) without ever
+    // ADVANCING (validating a node). An epistemic advance clears the churn state (genuine progress is
+    // never churn); a growth-only round accrues it. This catches the spinning prove/challenge chain
+    // that resets the stuck guard every round — earlier than maxRounds/budget, and naming the
+    // offending node(s) so an operator sees WHERE it spun. Never converges a run; only aborts sooner.
+    if (epistemicAdvance) {
+      roundsOfGrowthWithoutAdvance = 0;
+      proofRecordsByNode.clear();
+    } else if (structuralWrite) {
+      roundsOfGrowthWithoutAdvance++;
+    }
+    const churn = evaluateChurnGuard(proofRecordsByNode, roundsOfGrowthWithoutAdvance, config.nodeChurnCap, config.maxChurnRounds);
+    if (churn.abort) {
+      deps.appendLog(JSON.stringify({ kind: "churn-cap", at: deps.now(), reason: churn.reason, offenders: churn.offenders }));
+      return { status: "aborted", stopReason: "churn-cap", message: churn.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
     }
   }
 

@@ -540,3 +540,73 @@ describe("prover dispatch (rk-gn4) — prove-then-verify per node, never a prove
     expect(r.stopReason).toBe("budget-exhausted");
   });
 });
+
+// rk-cpk (review 2026-07-20 FU2): the stuck guard resets on ANY structural write, so a spinning
+// verifier-challenge → prover-refine chain (a proof recorded every round, ZERO nodes ever reaching
+// validated) resets it every round and never trips — it would burn the whole campaign token cap on
+// one branch before maxRounds/valves abort. The churn cap counts structural writes, NOT progress:
+// per-node proof records and rounds of tree growth SINCE the last epistemic advancement (an accept).
+// It aborts EARLIER than maxRounds/budget, with the offending node id(s) — never converges a run.
+describe("churn cap (rk-cpk) — spinning prove/refine cycle aborts with node attribution", () => {
+  const proverBody = { children: [{ statement: "sub-step", justification: "modus_ponens" }] };
+
+  test("one node re-proved past nodeChurnCap with no accept aborts 'churn-cap' naming that node", async () => {
+    // Node "1" stays prover-ready every round and records a proof every round; NOTHING ever validates.
+    // The stuck guard never fires (each proof resets it); the churn cap catches the spin at cap 3.
+    const spin = ws([node("1", { proverReady: true, verifierReady: false })]);
+    const h = harness({
+      workspaces: [spin], // queryWorkspace clamps to the last element, so every round returns `spin`
+      config: { nodeChurnCap: 3, maxChurnRounds: 6, maxRounds: 50 },
+      dispatchProve: () => ({ raw: proverBody, role: "prover", exit: 0 }) as DispatchedTurn,
+      recordProof: () => ({ ok: true }),
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("churn-cap");           // pre-fix: no such guard — spins to maxRounds
+    expect(r.rounds).toBe(3);                          // aborts EARLY (round 3), not maxRounds 50
+    expect(r.message).toContain("1");                  // names the offending node
+    expect(r.appliedNodeIds).toEqual([]);              // never validated anything
+    const churnLog = h.logs.map((l) => JSON.parse(l)).find((o) => o.kind === "churn-cap");
+    expect(churnLog).toBeDefined();
+    expect(churnLog.offenders).toEqual([{ nodeId: "1", proofRecords: 3 }]);
+  });
+
+  test("a chain extending a fresh leaf each round (no single node repeats) aborts via maxChurnRounds", async () => {
+    // Each round a DIFFERENT node is prover-ready → per-node counts stay at 1, but the tree keeps
+    // GROWING with zero validation. The rounds-of-growth counter catches it at maxChurnRounds 6.
+    const leaves = ["1", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"];
+    const workspaces = leaves.map((id) => ws([node(id, { proverReady: true, verifierReady: false })]));
+    const h = harness({
+      workspaces,
+      config: { nodeChurnCap: 3, maxChurnRounds: 6, maxRounds: 50 },
+      dispatchProve: () => ({ raw: proverBody, role: "prover", exit: 0 }) as DispatchedTurn,
+      recordProof: () => ({ ok: true }),
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("churn-cap");
+    expect(r.rounds).toBe(6);                          // six growth rounds → abort, well before maxRounds
+    expect(r.message).toContain("no epistemic advancement");
+    const churnLog = h.logs.map((l) => JSON.parse(l)).find((o) => o.kind === "churn-cap");
+    expect(churnLog.offenders.length).toBe(6);         // six distinct leaves, each ×1
+  });
+
+  test("a genuinely advancing run (an accept every round) NEVER trips the churn cap, then converges", async () => {
+    // Every round records a proof (structural growth) AND lands an accept (epistemic advancement).
+    // The accept resets the churn state each round, so the cap never fires despite 7 proof records.
+    const active = ws([node("1.1", { proverReady: true, verifierReady: false }), node("2.1", { verifierReady: true })]);
+    const done = ws([node("1", { epistemicState: "validated", closed: true, proverReady: false, verifierReady: false })]);
+    const workspaces = [active, active, active, active, active, active, active, done]; // 7 active rounds then converge
+    const h = harness({
+      workspaces,
+      config: { nodeChurnCap: 3, maxChurnRounds: 6, maxRounds: 50 },
+      dispatchProve: () => ({ raw: proverBody, role: "prover", exit: 0 }) as DispatchedTurn,
+      recordProof: () => ({ ok: true }),
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");                                   // genuine progress, not churn
+    expect(h.logs.some((l) => l.includes('"kind":"churn-cap"'))).toBe(false);
+    const proofs = h.logs.filter((l) => l.includes('"kind":"proof-recorded"')).length;
+    expect(proofs).toBeGreaterThanOrEqual(6);                            // the tree grew a lot, yet no churn abort
+  });
+});

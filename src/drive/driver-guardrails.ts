@@ -37,7 +37,14 @@ export type DriverStopReason =
   // rk-s9t (M3 repair-wave verdict (c)): the campaign-level token budget cannot afford the NEXT
   // real model call. Fail-closed, pre-dispatch — the run stops BEFORE requesting a call it cannot
   // pay for, never a mid-flight silent truncation of a call already in progress.
-  | "budget-exhausted";
+  | "budget-exhausted"
+  // rk-cpk (review 2026-07-20 FU2): the stuck guard resets on ANY structural write, so a spinning
+  // verifier-challenge → prover-refine chain (a proof recorded every round, zero nodes ever reaching
+  // validated) never trips it. The churn cap counts STRUCTURAL WRITES per node and rounds of tree
+  // growth SINCE the last epistemic advancement (an accept), and aborts — earlier than
+  // maxRounds/budget — when the tree spins with zero validation. Spend protection, never validity: it
+  // only ever aborts a run that was not converging anyway.
+  | "churn-cap";
 
 export const DEFAULT_MAX_STUCK_ROUNDS = 3;
 export const DEFAULT_NODE_RETRY_CAP = 3;
@@ -119,6 +126,64 @@ export function checkRetryCap(attemptsSoFar: number, cap: number = DEFAULT_NODE_
     return { exhausted: true, reason: `node exhausted its per-node retry cap (${attemptsSoFar}/${cap} attempts) — no further dispatch` };
   }
   return { exhausted: false };
+}
+
+// --- Churn cap (rk-cpk, review 2026-07-20 FU2) ------------------------------------------------
+
+/** Per-node proof records tolerated SINCE THE LAST epistemic advancement before the run is declared
+ * to be churning on that node. A node legitimately re-refined after one or two distinct challenges is
+ * normal; being re-proved past this with NO node ever reaching validated is thrashing — structural
+ * writes with nothing to show for them. Set equal to the per-node retry cap (both bound how hard ONE
+ * node is worked before the driver gives up on it). Conservative: real proofs converge far below 3
+ * re-refinements-without-a-single-validation. */
+export const DEFAULT_NODE_CHURN_CAP = 3;
+
+/** Rounds of tree growth (>=1 proof recorded) SINCE the last epistemic advancement before the run is
+ * declared churning. Twice the stuck cap's headroom (2×3): a genuinely advancing campaign records an
+ * accept well within six growth rounds, whereas six consecutive structural-only rounds with zero
+ * validation is a prove/challenge chain extending fresh leaves — caught long before maxRounds (50)
+ * burns the campaign token cap on one spinning branch. */
+export const DEFAULT_MAX_CHURN_ROUNDS = 6;
+
+export interface ChurnDecision {
+  abort: boolean;
+  reason?: string;
+  /** The node id(s) whose structural writes drove the churn, each with its proof-record count SINCE
+   * the last epistemic advancement — so an operator knows WHERE the run spun, not merely THAT it did.
+   * Sorted by count (desc), then id (asc), for a deterministic, most-offending-first report. */
+  offenders?: { nodeId: string; proofRecords: number }[];
+}
+
+/** The churn cap (review 2026-07-20 FU2). The stuck guard resets on any structural write, so a
+ * spinning verifier-challenge → prover-refine chain — each round records a proof (extending the tree)
+ * while ZERO nodes ever reach validated — resets it every round and never trips; the run then burns
+ * the campaign token cap on one branch before maxRounds/valves abort. This guard counts STRUCTURAL
+ * WRITES, not progress: `proofRecordsByNode` is per-node proof records SINCE the last epistemic
+ * advancement, `roundsOfGrowthWithoutAdvance` the run of growth-but-no-advance rounds. It aborts when
+ * either a single node is re-proved to `nodeChurnCap` OR the tree has grown for `maxChurnRounds`
+ * rounds — in BOTH cases only while ZERO epistemic advancement occurred, since the caller clears both
+ * counters on any accept. So it NEVER fires while accepts are landing: it can only abort a run
+ * EARLIER, never converge one that would not have (the validity fence). Pure: the loop owns the
+ * counters and the clock/log; this only decides and names the offenders. */
+export function evaluateChurnGuard(
+  proofRecordsByNode: ReadonlyMap<string, number>,
+  roundsOfGrowthWithoutAdvance: number,
+  nodeChurnCap: number = DEFAULT_NODE_CHURN_CAP,
+  maxChurnRounds: number = DEFAULT_MAX_CHURN_ROUNDS,
+): ChurnDecision {
+  const offenders = [...proofRecordsByNode.entries()]
+    .map(([id, proofRecords]) => ({ nodeId: id, proofRecords }))
+    .sort((a, b) => b.proofRecords - a.proofRecords || (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));
+
+  const thrashed = offenders.find((o) => o.proofRecords >= nodeChurnCap);
+  if (thrashed !== undefined) {
+    return { abort: true, offenders, reason: `churn cap: node ${thrashed.nodeId} re-proved ${thrashed.proofRecords} time(s) (cap ${nodeChurnCap}) with no epistemic advancement — a spinning prove/refine cycle on one node` };
+  }
+  if (roundsOfGrowthWithoutAdvance >= maxChurnRounds) {
+    const where = offenders.length > 0 ? offenders.map((o) => `${o.nodeId}×${o.proofRecords}`).join(", ") : "(no per-node records)";
+    return { abort: true, offenders, reason: `churn cap: ${roundsOfGrowthWithoutAdvance} round(s) of tree growth (cap ${maxChurnRounds}) with no epistemic advancement — proof records with no node reaching validated: ${where}` };
+  }
+  return { abort: false };
 }
 
 // --- Campaign-level token budget (rk-s9t) -----------------------------------------------------
