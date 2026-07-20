@@ -78,6 +78,34 @@ export interface VerifierItemInput {
    * available proxy for l5). Empty for a leaf. */
   deps: readonly string[];
   tier: Tier;
+  /** rk-jit (STOP-4): true iff this node has a statement but NO recorded proof body (no children,
+   * no dependencies) — src/drive/driver-plan.ts's `isProoflessNode`, computed at the edge
+   * (src/drive/driver-live.ts's `verifierItemFor`). When set, the prompt HARD-FORBIDS an accept:
+   * nothing has been derived, so there is nothing to verify and an accept would be vacuous. Optional
+   * and defaulting to `false` (a contentful node) so existing callers stay source-compatible. */
+  proofless?: boolean;
+}
+
+/** rk-jit (STOP-4): the non-negotiable instruction block emitted when the node under review has NO
+ * proof body. A verifier cannot accept what does not exist; it MUST return the tier's NEGATIVE
+ * verdict naming what is missing. This is the prompt-side half of the bootstrap-deadlock fix — the
+ * structural backstop in src/drive/driver-verify-node.ts discards a vacuous accept even if a model
+ * ignores this rule, so the two are belt-and-suspenders. Tier-appropriate: the hard tier challenges;
+ * l5 returns INVALID. */
+function prooflessVerdictRule(tier: Tier): string {
+  const forbidden = tier === "hard" ? 'the "accept" outcome' : 'a "VALID" or "VALID-WITH-CORRECTION" verdict';
+  const required =
+    tier === "hard"
+      ? 'a "challenge" outcome targeting this node, severity "critical" or "major", category "missing", whose "reason" states that NO proof or derivation has been recorded for this statement and one must be produced first'
+      : 'an "INVALID" verdict whose "justification" states that NO proof or derivation has been recorded for this statement and one must be produced first';
+  return [
+    "HARD RULE — NOTHING TO VERIFY: this node carries a statement but NO recorded proof body (no",
+    "sub-steps / children, and no cited dependencies). No reasoning has been written down, so there",
+    "is nothing whose validity you could check. The statement's own apparent truth is NOT a proof.",
+    `You therefore MUST NOT return ${forbidden}: it would certify a verification that did not happen,`,
+    "and rk discards such a vacuous accept regardless of what you write.",
+    `You MUST instead return ${required}. There is no other admissible response for a node in this state.`,
+  ].join("\n");
 }
 
 const HARD_VERDICT_INSTRUCTIONS = [
@@ -106,11 +134,17 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
   lines.push("");
   lines.push(`Dependencies (${item.deps.length}): ${item.deps.length === 0 ? "(none)" : item.deps.join(", ")}`);
   lines.push("");
-  lines.push(
-    "Scope: judge whether this node's OWN inference is validly established GIVEN its dependencies " +
-      "above as already correct — do not re-derive or re-verify the dependencies themselves, only " +
-      "this node's step from them.",
-  );
+  if (item.proofless === true) {
+    // rk-jit (STOP-4): a proofless node gets the HARD RULE in place of the normal verification
+    // scope — there is no inference to judge, only a missing proof to demand.
+    lines.push(prooflessVerdictRule(item.tier));
+  } else {
+    lines.push(
+      "Scope: judge whether this node's OWN inference is validly established GIVEN its dependencies " +
+        "above as already correct — do not re-derive or re-verify the dependencies themselves, only " +
+        "this node's step from them.",
+    );
+  }
   lines.push("");
   lines.push(item.tier === "hard" ? HARD_VERDICT_INSTRUCTIONS : L5_VERDICT_INSTRUCTIONS);
   return lines.join("\n");

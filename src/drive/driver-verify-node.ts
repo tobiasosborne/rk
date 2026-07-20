@@ -10,7 +10,7 @@
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
 import { crossVendorRejectionMessage, decideCrossVendor } from "./cross-vendor";
 import { detectProverOverreach, usageTokens } from "./driver-guardrails";
-import type { AfNodeView } from "./driver-plan";
+import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { afItemFromVerdictDocument, type AfApplyItem } from "./driver-verdict-map";
 import type { DriverDeps } from "./driver-types";
 
@@ -28,7 +28,7 @@ export function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
  * (0 when no worker was available or the dispatcher reported no usage) — reported on BOTH the apply
  * and the skip branch so the caller adds it to the running campaign total regardless of whether the
  * verdict was ever applied (a rejected/discarded turn spent real tokens too). */
-export type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; contentHash: string } | { skip: string });
+export type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; contentHash: string } | { skip: string; vacuousNode?: string });
 
 /** Dispatches + binds a single node's verdict, applying the prover-overreach guard. Returns the af
  * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
@@ -70,6 +70,20 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
   // caller's `items[]` array — i.e. strictly before a verdict file naming this item is composed
   // or written (runVerifyDriver's `applyVerdicts` call sees only items that already cleared this).
   if (mapped.item.verdict === "accept") {
+    // rk-jit (STOP-4): NEW fail-closed validity backstop. An `accept` on a node with no recorded
+    // proof body (isProoflessNode: statement present, but no children and no dependencies) has
+    // verified NOTHING — the bare statement's own truth is not a proof. Discard it HERE, BEFORE the
+    // cross-vendor gate and REGARDLESS of that gate's outcome, so a vacuous bootstrap accept can
+    // never be applied (STOP-4's deadlock: af marks a bare root verifier-ready, a real verifier
+    // accepts it, and nothing ever flips it prover-ready → stuck-no-progress). Strictly ADDITIVE: it
+    // only ever discards MORE, never accepts more, so it weakens no existing guard — the
+    // role/hash/exit/bind/map checks above already ran in their unchanged order, and cross-vendor
+    // still runs (below) for every contentful accept. `vacuousNode` lets the loop (driver-run.ts)
+    // name the real abort cause instead of an opaque stuck-no-progress.
+    if (isProoflessNode(node)) {
+      deps.appendLog(JSON.stringify({ kind: "vacuous-accept-discarded", at: deps.now(), node: node.id, reason: "accept on a node with no recorded proof body (no children, no dependencies) — nothing to verify; a prover pass must run first" }));
+      return { spentTokens, skip: `vacuous accept discarded: node '${node.id}' has no recorded proof body (no children, no dependencies) — an accept verifies nothing; a prover must produce proof content first`, vacuousNode: node.id };
+    }
     const decision = decideCrossVendor(node.author, verifiedBySeam, deps.isLoadBearing(node.id));
     if (!decision.satisfied) {
       const reason = crossVendorRejectionMessage(node.id, decision);

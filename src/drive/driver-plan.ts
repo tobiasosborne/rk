@@ -57,6 +57,14 @@ export interface AfNodeView {
   author?: string;
   statement?: string;
   childIds?: string[];
+  /** rk-jit (STOP-4): the af `inference` field — the rule justifying this node's own step
+   * (../vibefeld/internal/schema/inference.go). Data-carrying only (no readiness decision reads it);
+   * used by `isProoflessNode` to tell a DERIVED leaf (e.g. `modus_ponens`, `by_definition`) from a
+   * bare un-proven claim. NOTE af DEFAULTS an empty inference to `"assumption"` ("global hypothesis",
+   * record_proof.go:114) for both a fresh `af init` root AND any prover child that omitted its
+   * justification — so `""`/`"assumption"` both read as "no recorded proof body" there. Absent/
+   * non-string in the export → undefined. */
+  inference?: string;
   /** af's OWN authoritative job classification, read straight off `af export --graph json`'s
    * per-node `prover_ready`/`verifier_ready` flags (../vibefeld/internal/jobs; vibefeld d4493c8).
    * Absent flag (false, or an af predating them) reads as `undefined`/`false` — not ready. rk never
@@ -91,6 +99,35 @@ export function isProverReady(n: AfNodeView): boolean {
  * blocking challenge, AND every child cleared — bottom-up-ready). Reads af's classification. */
 export function isVerifierReady(n: AfNodeView): boolean {
   return n.verifierReady === true;
+}
+
+/** rk-jit (STOP-4): a node with a STATEMENT but no recorded PROOF BODY — no decomposition
+ * (`childIds`, the prover's sub-steps) and no cited reference dependencies (`deps`, af's
+ * `dependencies[]`). This is the bare-conjecture bootstrap shape af marks `verifier_ready` (a fresh
+ * `af init` root: `inference:"assumption"`, zero children, zero dependencies — characterized live in
+ * ../rk-m3.5-baseline STOP-REPORT-4): there is a claim to make but NOTHING a verifier could check
+ * for validity, so an `accept` on it is vacuous (the statement's own truth is not a proof). A node is
+ * NOT proofless the moment it EITHER decomposes into children OR cites a dependency — a leaf proven
+ * "by step 1.2" HAS proof content — so this fires ONLY on the genuinely bare node and the
+ * accept-discard built on it (src/drive/driver-verify-node.ts) is strictly fail-closed (discards
+ * more, never accepts more). `inference` is deliberately NOT read: af defaults a bare root's
+ * inference to "assumption", so a present inference string is not evidence anything was proven. A
+ * node with no statement at all is out of scope (the bootstrap case always has a statement; a
+ * statementless node is a different, malformed shape this predicate leaves alone).
+ *
+ * PROOF-BODY signals, any ONE of which makes a node NOT proofless (so this fires only on the truly
+ * bare node): (1) children — it decomposed into sub-steps; (2) dependencies — it cites other nodes
+ * ("by step 1.2"); (3) a real inference rule. On (3): af defaults an un-justified node's inference
+ * to `"assumption"` ("global hypothesis" — record_proof.go:114, ../vibefeld/internal/schema/
+ * inference.go), so `""` and `"assumption"` are BOTH treated as "no proof recorded"; any other
+ * inference (`modus_ponens`, `by_definition`, ...) is a recorded justification and the node is left
+ * for the verifier to judge. This matches the task's "no justification/inference text and no
+ * children" exactly. */
+export function isProoflessNode(n: AfNodeView): boolean {
+  const hasStatement = typeof n.statement === "string" && n.statement.trim().length > 0;
+  const inference = typeof n.inference === "string" ? n.inference.trim() : "";
+  const hasInference = inference !== "" && inference !== "assumption";
+  return hasStatement && (n.childIds ?? []).length === 0 && (n.deps ?? []).length === 0 && !hasInference;
 }
 
 /** Every prover-ready node id, sorted (deterministic). */

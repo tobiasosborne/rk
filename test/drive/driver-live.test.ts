@@ -293,7 +293,10 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
     const identity: VerifierIdentity = { modelFamily: "claude", backend: "fake", model: "m", sessionId: "pending" };
     const logs: string[] = [];
     const applied: FilledVerdictFile[] = [];
-    const ws: AfWorkspaceView = { workspaceId: "proofs/x", rootStatement: "P", nodeCount: 3, nodes: [node("1.1"), node("1.2"), node("1.3")] };
+    // rk-jit (STOP-4): these leaves are genuinely PROVEN (each carries a real inference rule), so the
+    // new vacuous-accept backstop (isProoflessNode) leaves them for the verifier to accept — the
+    // discard fires only on a BARE node (no children, no deps, inference empty/"assumption").
+    const ws: AfWorkspaceView = { workspaceId: "proofs/x", rootStatement: "P", nodeCount: 3, nodes: [node("1.1", { inference: "arithmetic" }), node("1.2", { inference: "arithmetic" }), node("1.3", { inference: "arithmetic" })] };
 
     const deps: DriverDeps = {
       contractId: "lem-x",

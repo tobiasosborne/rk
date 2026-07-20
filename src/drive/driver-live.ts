@@ -38,7 +38,7 @@ import type { DispatchModel, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
 import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierItemInput } from "./driver-prompts";
-import type { AfNodeView } from "./driver-plan";
+import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { recordProofRefine } from "./driver-af";
 import type { ProofContent, RecordProofResult } from "./driver-prove-node";
 // rk-7hi: model/family resolution now lives in its own pure module (280-line shard cap) —
@@ -206,6 +206,10 @@ export function verifierItemFor(node: AfNodeView, tier: Tier): VerifierItemInput
     statement: node.statement ?? `(no statement recorded by af export for node ${node.id})`,
     deps: node.deps ?? [],
     tier,
+    // rk-jit (STOP-4): computed on the REAL node (its actual statement/children/deps), not the
+    // placeholder-filled item — the prompt's HARD-RULE branch and driver-verify-node.ts's discard
+    // read the SAME predicate so they never disagree about whether a node is bare.
+    proofless: isProoflessNode(node),
   };
 }
 

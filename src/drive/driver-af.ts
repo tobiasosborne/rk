@@ -79,6 +79,10 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     // `child_ids` are already real v1 export fields; threaded through for live prompt assembly.
     statement: typeof n.statement === "string" ? n.statement : undefined,
     childIds: Array.isArray(n.child_ids) ? n.child_ids.map((c: unknown) => String(c)) : undefined,
+    // rk-jit (STOP-4): the af `inference` rule, threaded through so `isProoflessNode` can tell a
+    // derived leaf from a bare un-proven claim (af defaults an unjustified node's inference to
+    // "assumption"). Non-string/absent → undefined. Data-carrying only; no readiness read touches it.
+    inference: typeof n.inference === "string" ? n.inference : undefined,
     // rk-gn4: af's OWN authoritative per-node job classification (vibefeld d4493c8,
     // ../vibefeld/internal/jobs via `af export --graph json`). `omitempty` on the af side means a
     // false flag is ABSENT from the JSON, so an absent key reads as `false` here. An OLD af that

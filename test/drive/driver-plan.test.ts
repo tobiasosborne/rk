@@ -2,7 +2,7 @@
 // crux → per-node, wires composeBatches for an eligible pool, and reports unknown ids (never drops).
 
 import { describe, expect, test } from "bun:test";
-import { isProverReady, isVerifierReady, planDispatch, selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "../../src/drive/driver-plan";
+import { isProoflessNode, isProverReady, isVerifierReady, planDispatch, selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "../../src/drive/driver-plan";
 import type { GraphDocument, RegistryNode } from "../../src/graph/types";
 import { GRAPH_SCHEMA_VERSION } from "../../src/graph/types";
 
@@ -16,6 +16,34 @@ function regNode(id: string, o: Partial<RegistryNode> = {}): RegistryNode {
 function doc(nodes: RegistryNode[]): GraphDocument {
   return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
 }
+
+describe("isProoflessNode — the bare-conjecture emptiness predicate (rk-jit / STOP-4)", () => {
+  test("statement present, no children, no deps → proofless (the fresh af-init root shape)", () => {
+    // Mirrors ../rk-m3.5-baseline pristine node 1: statement, inference:'assumption', no child_ids,
+    // no dependencies. inference is NOT read (af defaults a bare root to 'assumption', not a proof).
+    expect(isProoflessNode(afNode("1", { statement: "min_i n_i <= sum_i p_i n_i." }))).toBe(true);
+  });
+  test("a node with children is NOT proofless (it decomposed into sub-steps)", () => {
+    expect(isProoflessNode(afNode("1", { statement: "S", childIds: ["1.1"] }))).toBe(false);
+  });
+  test("a leaf that CITES a dependency is NOT proofless (proof content: 'by step 1.2')", () => {
+    expect(isProoflessNode(afNode("1.3", { statement: "S", deps: ["1.2"] }))).toBe(false);
+  });
+  test("a leaf with a REAL inference rule is NOT proofless, even with no children/deps", () => {
+    expect(isProoflessNode(afNode("1.4", { statement: "0 <= 1", inference: "arithmetic" }))).toBe(false);
+    expect(isProoflessNode(afNode("1.5", { statement: "S", inference: "by_definition" }))).toBe(false);
+  });
+  test("inference 'assumption' (af's default for an UN-justified node) still reads as proofless", () => {
+    // af defaults an empty inference to 'assumption' (global hypothesis) — record_proof.go:114 — so
+    // it must NOT count as a recorded proof body, or the bootstrap deadlock is never caught.
+    expect(isProoflessNode(afNode("1", { statement: "S", inference: "assumption" }))).toBe(true);
+    expect(isProoflessNode(afNode("1", { statement: "S", inference: "" }))).toBe(true);
+  });
+  test("a node with no statement at all is NOT flagged (out of scope — the bootstrap case has a statement)", () => {
+    expect(isProoflessNode(afNode("1", { statement: undefined }))).toBe(false);
+    expect(isProoflessNode(afNode("1", { statement: "   " }))).toBe(false);
+  });
+});
 
 describe("readiness split — rk reads af's OWN exported prover_ready/verifier_ready flags", () => {
   // Ground truth: af's authoritative internal/jobs classifier, surfaced per-node in

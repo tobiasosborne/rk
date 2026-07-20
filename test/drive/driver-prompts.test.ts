@@ -110,6 +110,41 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
   });
 });
 
+describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)", () => {
+  test("a proofless node's prompt HARD-FORBIDS accept and DEMANDS a challenge naming the missing proof", () => {
+    const proofless = buildVerifierTurnPrompt({ nodeId: "1", statement: "min_i n_i <= sum_i p_i n_i.", deps: [], tier: "hard", proofless: true });
+    // Forbids accepting a node with nothing to verify...
+    expect(proofless).toContain("NOTHING TO VERIFY");
+    expect(proofless).toContain("MUST NOT");
+    // ...and demands the negative verdict (a challenge) instead.
+    expect(proofless).toContain('"challenge"');
+    expect(proofless.toLowerCase()).toContain("no proof");
+    // The normal "judge this node's inference" scope line has NO meaning for a proofless node and
+    // must NOT be emitted in its place.
+    expect(proofless).not.toContain("Scope: judge whether this node's OWN inference");
+  });
+
+  test("a CONTENTFUL node's prompt keeps the normal scope line and never emits the proofless HARD RULE", () => {
+    const contentful = buildVerifierTurnPrompt({ nodeId: "1.2", statement: "S", deps: ["1.1"], tier: "hard", proofless: false });
+    expect(contentful).toContain("Scope: judge whether this node's OWN inference");
+    expect(contentful).not.toContain("NOTHING TO VERIFY");
+    // Still carries the normal accept/challenge output schema.
+    expect(contentful).toContain('"outcome": "accept"');
+  });
+
+  test("proofless flag omitted defaults to contentful behavior (backward-compatible input)", () => {
+    const dflt = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard" });
+    expect(dflt).toContain("Scope: judge whether this node's OWN inference");
+    expect(dflt).not.toContain("NOTHING TO VERIFY");
+  });
+
+  test("l5-tier proofless prompt demands INVALID (its negative verdict), not a challenge", () => {
+    const proofless = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "l5", proofless: true });
+    expect(proofless).toContain("NOTHING TO VERIFY");
+    expect(proofless).toContain('"INVALID"');
+  });
+});
+
 describe("OUTPUT_SCHEMA_REF", () => {
   test("one distinct ref per tier", () => {
     expect(OUTPUT_SCHEMA_REF.l5).not.toBe(OUTPUT_SCHEMA_REF.hard);

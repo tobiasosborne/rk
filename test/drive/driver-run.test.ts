@@ -283,6 +283,49 @@ describe("cross-vendor rule (M3.8) — apply-time, load-bearing (critical-path) 
   });
 });
 
+// rk-jit (STOP-4): the bootstrap deadlock. af marks a fresh proofless root verifier-ready; a real
+// verifier ACCEPTS the bare true statement; that accept is vacuous (nothing was proven). The NEW
+// structural backstop discards it BEFORE apply regardless of provenance (fail-closed, additive), and
+// the run's abort names the real cause instead of an opaque stuck-no-progress.
+describe("vacuous-accept discard on a proofless node (rk-jit / STOP-4)", () => {
+  test("an accept on a PROOFLESS node is discarded + logged, never applied — even when cross-vendor would PASS", async () => {
+    let applyCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1", { statement: "min_i n_i <= sum_i p_i n_i." })])], // bare conjecture: no children, no deps
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      isLoadBearing: () => false, // non-load-bearing → the cross-vendor gate WOULD accept; the discard must still fire
+      applyVerdicts: (file) => { applyCalls++; return appliedReport(file.items.map((i) => i.node)); },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.appliedNodeIds).toEqual([]);
+    expect(applyCalls).toBe(0); // never composed into a verdict file, let alone applied
+    expect(h.logs.some((l) => l.includes("vacuous-accept-discarded") && l.includes('"node":"1"'))).toBe(true);
+  });
+
+  test("a CONTENTFUL node's accept still APPLIES — the discard is additive-only, never over-discards", async () => {
+    const round0 = ws([node("1", { statement: "S", deps: ["1.1"] })]); // cites a dependency → has proof content
+    const round1 = ws([node("1", { statement: "S", deps: ["1.1"], epistemicState: "validated" })]);
+    const h = harness({ workspaces: [round0, round1] });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
+    expect(r.appliedNodeIds).toEqual(["1"]);
+    expect(h.logs.some((l) => l.includes("vacuous-accept-discarded"))).toBe(false);
+  });
+
+  test("a run that only ever produced vacuous accepts aborts stopReason 'bootstrap-vacuous-accepts', naming the node/count and the missing prover", async () => {
+    const h = harness({
+      workspaces: [ws([node("1", { statement: "S" })])],
+      config: { maxStuckRounds: 3, maxRounds: 10 },
+      isLoadBearing: () => true,
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("bootstrap-vacuous-accepts"); // NOT the opaque "stuck-no-progress"
+    expect(r.message).toContain("node '1'");
+    expect(r.message.toLowerCase()).toContain("prover");
+  });
+});
+
 // M3 blocker 3: only a verifier may mint an af acceptance; per-node mode uses one non-batch apply
 // per node (no batch provenance) — the prover-overreach guard exempts the reviewer role, so without
 // an explicit role check a reviewer turn would sail through and record an af accept.

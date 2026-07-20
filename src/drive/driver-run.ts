@@ -89,6 +89,15 @@ function classifyRootConvergence(nodes: readonly AfNodeView[]): { converged: tru
   return { converged: true };
 }
 
+/** rk-jit (STOP-4): a deterministic, node-sorted enumeration of vacuous-accept counts for the abort
+ * message — e.g. "node '1' ×3, node '1.2' ×1". Pure. */
+function vacuousDetail(vacuousAccepts: ReadonlyMap<string, number>): string {
+  return [...vacuousAccepts.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([id, n]) => `node '${id}' ×${n}`)
+    .join(", ");
+}
+
 /** Drives one workspace claim to convergence or a named abort. */
 export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult> {
   const config = { ...DEFAULT_DRIVER_CONFIG, ...deps.config };
@@ -101,6 +110,10 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   const appliedNodeIds: string[] = [];
   const outcomes: VerdictItemOutcome[] = [];
   const attempts = new Map<string, number>();
+  // rk-jit (STOP-4): per-node count of accepts discarded as vacuous (a verifier accepted a proofless
+  // node — nothing to verify). Non-empty at a stuck abort means the run dead-ended on the bootstrap
+  // deadlock, not a generic stall; the abort names the real cause + counts. Never touches convergence.
+  const vacuousAccepts = new Map<string, number>();
   let roundsWithoutProgress = 0;
   // rk-cpk (review FU2): churn accounting, distinct from the stuck guard. The stuck guard resets on
   // ANY structural write (a recorded proof), so a prove/challenge chain that grows the tree every
@@ -194,6 +207,9 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
       else {
         attempts.set(id, attemptsSoFar + 1);
+        // rk-jit (STOP-4): tally a vacuous-accept discard so a stuck abort can name the bootstrap
+        // deadlock as its cause instead of the opaque stuck-no-progress.
+        if (r.vacuousNode !== undefined) vacuousAccepts.set(r.vacuousNode, (vacuousAccepts.get(r.vacuousNode) ?? 0) + 1);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: r.skip }));
       }
     }
@@ -233,7 +249,15 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
     else {
       roundsWithoutProgress++;
       const stuck = evaluateStuckGuard(roundsWithoutProgress, config.maxStuckRounds);
-      if (stuck.abort) return { status: "aborted", stopReason: "stuck-no-progress", message: stuck.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
+      if (stuck.abort) {
+        // rk-jit (STOP-4): if the stall was caused by vacuous accepts on proofless node(s), name the
+        // real cause (the bootstrap deadlock) and enumerate the counts — never the opaque
+        // stuck-no-progress an operator can only diagnose from the raw log. Convergence untouched.
+        if (vacuousAccepts.size > 0) {
+          return { status: "aborted", stopReason: "bootstrap-vacuous-accepts", message: `no progress and the verifier accepted proofless node(s) that were discarded as vacuous (${vacuousDetail(vacuousAccepts)}) — a fresh conjecture cannot bootstrap: a PROVER must produce proof content before a verifier has anything to verify. ${stuck.reason!}`, appliedNodeIds, outcomes, rounds: round + 1 };
+        }
+        return { status: "aborted", stopReason: "stuck-no-progress", message: stuck.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
+      }
     }
 
     // rk-cpk (review FU2): churn cap — abort a run that only GROWS (records proofs) without ever
@@ -254,5 +278,9 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
     }
   }
 
+  // rk-jit (STOP-4): same bootstrap-deadlock naming at the maxRounds fall-through.
+  if (vacuousAccepts.size > 0) {
+    return { status: "aborted", stopReason: "bootstrap-vacuous-accepts", message: `hit maxRounds (${config.maxRounds}) without convergence; the verifier accepted proofless node(s) that were discarded as vacuous (${vacuousDetail(vacuousAccepts)}) — a PROVER must produce proof content first`, appliedNodeIds, outcomes, rounds: round };
+  }
   return { status: "aborted", stopReason: "stuck-no-progress", message: `hit maxRounds (${config.maxRounds}) without convergence`, appliedNodeIds, outcomes, rounds: round };
 }

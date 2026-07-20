@@ -44,7 +44,14 @@ export type DriverStopReason =
   // growth SINCE the last epistemic advancement (an accept), and aborts — earlier than
   // maxRounds/budget — when the tree spins with zero validation. Spend protection, never validity: it
   // only ever aborts a run that was not converging anyway.
-  | "churn-cap";
+  | "churn-cap"
+  // rk-jit (STOP-4): the run ended without progress AND a real verifier returned `accept` on one or
+  // more PROOFLESS nodes (statement, but no children and no dependencies), each of which the
+  // structural backstop (src/drive/driver-verify-node.ts) discarded as vacuous. This names the true
+  // cause of the bootstrap deadlock — the verifier accepted a bare conjecture with nothing to verify,
+  // so nothing ever flipped it prover-ready — instead of the opaque `stuck-no-progress` an operator
+  // could only diagnose by reading .rk/driver-log.jsonl. A prover must produce proof content first.
+  | "bootstrap-vacuous-accepts";
 
 export const DEFAULT_MAX_STUCK_ROUNDS = 3;
 export const DEFAULT_NODE_RETRY_CAP = 3;
