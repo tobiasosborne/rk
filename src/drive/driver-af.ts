@@ -78,6 +78,10 @@ export function parseAfExport(rawJson: string, workspaceId: string): AfParseResu
     // M3.5-prep additive read (src/drive/driver-plan.ts's AfNodeView doc comment): `statement` and
     // `child_ids` are already real v1 export fields; threaded through for live prompt assembly.
     statement: typeof n.statement === "string" ? n.statement : undefined,
+    // rk-jit repair (STOP-4, blocker 1): af's node `type` (a real v1 export field, graph.go:48),
+    // threaded so `isProoflessNode` can pin the fresh-root shape (`id:"1", type:"claim"`) exactly and
+    // never discard a legitimate terminal-assumption LEAF. Non-string/absent → undefined.
+    type: typeof n.type === "string" ? n.type : undefined,
     childIds: Array.isArray(n.child_ids) ? n.child_ids.map((c: unknown) => String(c)) : undefined,
     // rk-jit (STOP-4): the af `inference` rule, threaded through so `isProoflessNode` can tell a
     // derived leaf from a bare un-proven claim (af defaults an unjustified node's inference to

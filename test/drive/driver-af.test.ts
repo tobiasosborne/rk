@@ -27,6 +27,10 @@ describe("parseAfExport — af export --graph json → node view (reads recorded
     const n11 = r.value.nodes.find((n) => n.id === "1.1")!;
     expect(n11.crux).toBe(false); // omitted-if-false
     expect(n11.epistemicState).toBe("validated");
+    // rk-jit repair (STOP-4, blocker 1): af's `type` field is threaded so isProoflessNode can pin the
+    // fresh-root shape (id "1", type "claim") without discarding legitimate terminal-assumption leaves.
+    expect(n1.type).toBe("claim");
+    expect(n11.type).toBe("claim");
   });
   test("rejects a body with no nodes[] array", () => {
     expect(parseAfExport("{}", "w").ok).toBe(false);

@@ -55,6 +55,18 @@ describe("parseDriverLogLine", () => {
     expect(r.ok).toBe(true);
   });
 
+  // blocker-review FU4: the driver writes 'proof-recorded' (a prover decomposition landed) and
+  // 'churn-cap' (a growth-only run aborted); the parser's allowlist previously OMITTED both, so real
+  // driver logs mis-reported them as "unrecognized 'kind'" / "could not be parsed". Recognize them.
+  test("the driver's own 'proof-recorded' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "proof-recorded", at: "t", node: "1.1", children: 3 }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("the driver's own 'churn-cap' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "churn-cap", at: "t", reason: "grew 6 rounds without advance", offenders: ["1.2"] }), 1);
+    expect(r.ok).toBe(true);
+  });
+
   // rk-53r (P3) + rk-jit (STOP-4): the driver writes these two discard kinds; the report reader
   // must RECOGNIZE them (never print "unrecognized 'kind'"), and validate their node/reason fields.
   test("the driver's own 'cross-vendor-rejected' kind is recognized, never 'unrecognized'", () => {

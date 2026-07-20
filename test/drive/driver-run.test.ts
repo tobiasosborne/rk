@@ -14,7 +14,10 @@ const IDENTITY: VerifierIdentity = { modelFamily: "gpt", backend: "codex", model
 const HASH = "a".repeat(64);
 
 function node(id: string, o: Partial<AfNodeView> = {}): AfNodeView {
-  const base: AfNodeView = { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, ...o };
+  // Default `type: "claim"` — af's fresh-init root and every prover child are `claim` nodes
+  // (../vibefeld/internal/schema/nodetype.go), and isProoflessNode's blocker-1 narrowing requires
+  // `type:"claim"` on the root; a case overrides it explicitly.
+  const base: AfNodeView = { id, type: "claim", epistemicState: "pending", workflowState: "available", crux: false, contentHash: HASH, ...o };
   // rk-gn4: readiness now reads af's exported flags. Default `verifierReady` from the fixture's axes
   // (pending + not blocked) unless the case sets a flag explicitly — mirrors af's authoritative
   // classifier for these simple, challenge-free fixtures, preserving every pre-existing test's intent.
@@ -323,6 +326,38 @@ describe("vacuous-accept discard on a proofless node (rk-jit / STOP-4)", () => {
     expect(r.stopReason).toBe("bootstrap-vacuous-accepts"); // NOT the opaque "stuck-no-progress"
     expect(r.message).toContain("node '1'");
     expect(r.message.toLowerCase()).toContain("prover");
+  });
+
+  // blocker-review FU2: an EARLY vacuous discard, then genuine PROGRESS, then a LATER unrelated stall
+  // must NOT be mislabeled "bootstrap-vacuous-accepts". The tally is cleared on progress, so the final
+  // stall reports its real cause. Pre-fix (cumulative, never cleared): stopReason was wrongly
+  // "bootstrap-vacuous-accepts". Post-fix: "stuck-no-progress".
+  test("a vacuous discard cleared by later progress does NOT mislabel a subsequent unrelated stall", async () => {
+    // round 0: bare root '1' → vacuous accept discarded (proofless), no progress.
+    // round 1: '1.1' (contentful, cites a dep) accepts + APPLIES → progress, clears the tally.
+    // round 2+: '1' now contentful (has deps) and verifier-ready, but its accept is af-BLOCKED every
+    //           round → no progress → stuck. The tally is empty, so this is stuck-no-progress.
+    const ws0 = ws([node("1", { statement: "S" })]);
+    const ws1 = ws([node("1", { statement: "S", deps: ["1.1"], verifierReady: false }), node("1.1", { statement: "T", deps: ["x"] })]);
+    const ws2 = ws([node("1", { statement: "S", deps: ["1.1"], verifierReady: true }), node("1.1", { statement: "T", deps: ["x"], epistemicState: "validated" })]);
+    const h = harness({
+      workspaces: [ws0, ws1, ws2],
+      config: { maxStuckRounds: 3, maxRounds: 20 },
+      isLoadBearing: () => false,
+      applyVerdicts: (file) => {
+        const nId = file.items[0]!.node;
+        if (nId === "1.1") return appliedReport(["1.1"]);
+        // af refuses to apply the root's accept (a real, non-vacuous block) — the "unrelated stall".
+        return { exit: 5, batchId: file.batch_id, items: [{ node: nId, verdict: "accept", status: "blocked-by:dependency-not-cleared" }], applied: 0, blocked: 1, rejected: 0, aborted: false };
+      },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    // a vacuous discard DID happen early (proving the tally was populated then cleared)...
+    expect(h.logs.some((l) => l.includes("vacuous-accept-discarded") && l.includes('"node":"1"'))).toBe(true);
+    // ...yet the final stall is named by its REAL cause, not the stale bootstrap discard.
+    expect(r.stopReason).toBe("stuck-no-progress");
+    expect(r.stopReason).not.toBe("bootstrap-vacuous-accepts");
   });
 });
 

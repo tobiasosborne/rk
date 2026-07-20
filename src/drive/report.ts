@@ -43,10 +43,13 @@ export interface UsageLogRecord { kind: "usage"; at: string; contractId: string;
 export interface VerdictOutcomeLogRecord { kind: "verdict-outcome"; at: string; node : string; verdict: string; status: string; exit: number; }
 export interface BalloonLogRecord { kind: "balloon"; at: string; contractId: string; nodeCount: number; cap: number; classification: string; routing: string; priorBalloonCount: number; offendingSubtree: string[]; rationale: string; }
 export interface BalloonUnclassifiedLogRecord { kind: "balloon-unclassified"; at: string; contractId: string; nodeCount: number; cap: number; reason: string; }
-/** The four remaining kinds (mark-skipped/bd-skipped/prover-overreach/node-skipped) are diagnostic
- * only — this report's math never reads their fields, so they get the loud-but-minimal check
- * (valid JSON object, recognized kind) rather than full per-field validation. */
-export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-bd-skipped" | "prover-overreach" | "node-skipped"; at: string; }
+/** The remaining diagnostic-only kinds — this report's math never reads their fields, so they get
+ * the loud-but-minimal check (valid JSON object, recognized kind) rather than full per-field
+ * validation. `proof-recorded` (a prover turn recorded a decomposition, src/drive/driver-prove-
+ * node.ts) and `churn-cap` (a growth-only run aborted, src/drive/driver-run.ts) were previously
+ * OMITTED from the allowlist and so mis-reported as `unrecognized 'kind'` / "could not be parsed"
+ * even though rk's OWN driver writes them — recognized here alongside the other four. */
+export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-bd-skipped" | "prover-overreach" | "node-skipped" | "proof-recorded" | "churn-cap"; at: string; }
 /** rk-53r (P3) + rk-jit (STOP-4): the driver's two per-node DISCARD kinds. `cross-vendor-rejected`
  * (driver-verify-node.ts) is written whenever the cross-vendor gate refuses an accept;
  * `vacuous-accept-discarded` is the new backstop discard of an accept on a proofless node. Both were
@@ -58,7 +61,7 @@ export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-
 export interface DiscardLogRecord { kind: "cross-vendor-rejected" | "vacuous-accept-discarded"; at: string; node : string; reason: string; }
 
 export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | OtherDriverLogRecord;
-const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped"]);
+const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap"]);
 
 export interface DriverLogIssue { line: number; message: string; }
 export interface DriverLogParseResult { records: DriverLogRecord[]; issues: DriverLogIssue[]; }

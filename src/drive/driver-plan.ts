@@ -56,6 +56,15 @@ export interface AfNodeView {
   contentHash: string;
   author?: string;
   statement?: string;
+  /** rk-jit repair (STOP-4, blocker 1): af's node `type` (../vibefeld/internal/schema/nodetype.go —
+   * `claim | local_assume | local_discharge | case | qed`; af has NO distinct axiom/global-assumption
+   * node type). Threaded (already a real v1 export field, ../vibefeld/internal/export/graph.go:48) so
+   * `isProoflessNode` can pin the BOOTSTRAP ROOT shape exactly — a fresh `af init` conjecture is
+   * `id:"1", type:"claim"`, whereas a legitimate terminal-assumption LEAF (af tutorial
+   * docs/tutorial-sqrt2.md, AISM node 1.1.1) is also `type:"claim", inference:"assumption"` and must
+   * NOT be discarded. Absent/non-string in the export → undefined. Data-carrying only; no readiness
+   * decision reads it. */
+  type?: string;
   childIds?: string[];
   /** rk-jit (STOP-4): the af `inference` field — the rule justifying this node's own step
    * (../vibefeld/internal/schema/inference.go). Data-carrying only (no readiness decision reads it);
@@ -101,33 +110,43 @@ export function isVerifierReady(n: AfNodeView): boolean {
   return n.verifierReady === true;
 }
 
-/** rk-jit (STOP-4): a node with a STATEMENT but no recorded PROOF BODY — no decomposition
- * (`childIds`, the prover's sub-steps) and no cited reference dependencies (`deps`, af's
- * `dependencies[]`). This is the bare-conjecture bootstrap shape af marks `verifier_ready` (a fresh
- * `af init` root: `inference:"assumption"`, zero children, zero dependencies — characterized live in
- * ../rk-m3.5-baseline STOP-REPORT-4): there is a claim to make but NOTHING a verifier could check
- * for validity, so an `accept` on it is vacuous (the statement's own truth is not a proof). A node is
- * NOT proofless the moment it EITHER decomposes into children OR cites a dependency — a leaf proven
- * "by step 1.2" HAS proof content — so this fires ONLY on the genuinely bare node and the
- * accept-discard built on it (src/drive/driver-verify-node.ts) is strictly fail-closed (discards
- * more, never accepts more). `inference` is deliberately NOT read: af defaults a bare root's
- * inference to "assumption", so a present inference string is not evidence anything was proven. A
- * node with no statement at all is out of scope (the bootstrap case always has a statement; a
- * statementless node is a different, malformed shape this predicate leaves alone).
+/** rk-jit (STOP-4), NARROWED to the bootstrap ROOT by the blocker-1 repair (docs/reviews/
+ * 2026-07-20-vacuous-accept-guard-codex.md): the ONE genuinely un-bootstrappable shape af marks
+ * `verifier_ready` — a FRESH `af init` root conjecture (`id:"1", type:"claim"`, no recorded proof
+ * body: no children, no cited dependencies, inference empty or the "assumption" default). There is a
+ * claim to make but NOTHING a verifier could check for validity, so an `accept` on it is vacuous (the
+ * statement's own truth is not a proof), and until a PROVER decomposes it nothing can ever flip it
+ * prover-ready — the STOP-REPORT-4 deadlock.
  *
- * PROOF-BODY signals, any ONE of which makes a node NOT proofless (so this fires only on the truly
- * bare node): (1) children — it decomposed into sub-steps; (2) dependencies — it cites other nodes
- * ("by step 1.2"); (3) a real inference rule. On (3): af defaults an un-justified node's inference
- * to `"assumption"` ("global hypothesis" — record_proof.go:114, ../vibefeld/internal/schema/
- * inference.go), so `""` and `"assumption"` are BOTH treated as "no proof recorded"; any other
- * inference (`modus_ponens`, `by_definition`, ...) is a recorded justification and the node is left
- * for the verifier to judge. This matches the task's "no justification/inference text and no
- * children" exactly. */
+ * WHY ROOT-ONLY (blocker 1). af has NO distinct axiom/global-assumption node type
+ * (../vibefeld/internal/schema/nodetype.go: claim | local_assume | local_discharge | case | qed), and
+ * a LEGITIMATE terminal-assumption leaf is exactly `type:"claim", inference:"assumption"`, childless,
+ * dependency-free — the af tutorial accepts one (../vibefeld/docs/tutorial-sqrt2.md:271-282) and the
+ * real AISM leaf `1.1.1` was VALIDATED with that shape. The earlier predicate (statement + no
+ * children + no deps + bare inference, ANY id) would have discarded those accepts forever: their
+ * parents would never become bottom-up-ready and a valid proof could never close. af defaults an
+ * un-justified node's inference to `"assumption"` for BOTH a fresh root AND any prover child that
+ * omitted its justification (../vibefeld/cmd/af/record_proof.go:109), so the inference value alone can
+ * NOT distinguish them — only the fresh-root shape (`id:"1", type:"claim"`, bare) is unambiguous, and
+ * every genuine terminal assumption leaf is left for the verifier to judge on its merits (af's
+ * designed epistemics). The prompt-side hard-forbid (driver-prompts.ts) uses this same predicate, so
+ * it too now fires ONLY on the bootstrap root. The discard built on this (driver-verify-node.ts)
+ * stays strictly fail-closed (discards more, never accepts more).
+ *
+ * A node with no statement at all is out of scope (the bootstrap case always has a statement; a
+ * statementless root is a different, malformed shape this predicate leaves alone). */
 export function isProoflessNode(n: AfNodeView): boolean {
   const hasStatement = typeof n.statement === "string" && n.statement.trim().length > 0;
   const inference = typeof n.inference === "string" ? n.inference.trim() : "";
-  const hasInference = inference !== "" && inference !== "assumption";
-  return hasStatement && (n.childIds ?? []).length === 0 && (n.deps ?? []).length === 0 && !hasInference;
+  const bareInference = inference === "" || inference === "assumption";
+  return (
+    n.id === "1" &&
+    n.type === "claim" &&
+    hasStatement &&
+    bareInference &&
+    (n.childIds ?? []).length === 0 &&
+    (n.deps ?? []).length === 0
+  );
 }
 
 /** Every prover-ready node id, sorted (deterministic). */

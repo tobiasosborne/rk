@@ -7,7 +7,9 @@ import type { GraphDocument, RegistryNode } from "../../src/graph/types";
 import { GRAPH_SCHEMA_VERSION } from "../../src/graph/types";
 
 function afNode(id: string, o: Partial<AfNodeView> = {}): AfNodeView {
-  return { id, epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), ...o };
+  // Default `type: "claim"` — af's fresh-init root AND every prover child are `claim` nodes
+  // (../vibefeld/internal/schema/nodetype.go); a case sets a different type explicitly.
+  return { id, type: "claim", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), ...o };
 }
 
 function regNode(id: string, o: Partial<RegistryNode> = {}): RegistryNode {
@@ -17,31 +19,48 @@ function doc(nodes: RegistryNode[]): GraphDocument {
   return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
 }
 
-describe("isProoflessNode — the bare-conjecture emptiness predicate (rk-jit / STOP-4)", () => {
-  test("statement present, no children, no deps → proofless (the fresh af-init root shape)", () => {
+describe("isProoflessNode — the bootstrap-ROOT emptiness predicate (rk-jit / STOP-4, blocker-1 narrowed)", () => {
+  test("the fresh af-init root (id 1, type claim, no children/deps) → proofless (the STOP-4 deadlock)", () => {
     // Mirrors ../rk-m3.5-baseline pristine node 1: statement, inference:'assumption', no child_ids,
-    // no dependencies. inference is NOT read (af defaults a bare root to 'assumption', not a proof).
+    // no dependencies. inference default is NOT read as proof (af defaults a bare root to 'assumption').
     expect(isProoflessNode(afNode("1", { statement: "min_i n_i <= sum_i p_i n_i." }))).toBe(true);
-  });
-  test("a node with children is NOT proofless (it decomposed into sub-steps)", () => {
-    expect(isProoflessNode(afNode("1", { statement: "S", childIds: ["1.1"] }))).toBe(false);
-  });
-  test("a leaf that CITES a dependency is NOT proofless (proof content: 'by step 1.2')", () => {
-    expect(isProoflessNode(afNode("1.3", { statement: "S", deps: ["1.2"] }))).toBe(false);
-  });
-  test("a leaf with a REAL inference rule is NOT proofless, even with no children/deps", () => {
-    expect(isProoflessNode(afNode("1.4", { statement: "0 <= 1", inference: "arithmetic" }))).toBe(false);
-    expect(isProoflessNode(afNode("1.5", { statement: "S", inference: "by_definition" }))).toBe(false);
-  });
-  test("inference 'assumption' (af's default for an UN-justified node) still reads as proofless", () => {
-    // af defaults an empty inference to 'assumption' (global hypothesis) — record_proof.go:114 — so
-    // it must NOT count as a recorded proof body, or the bootstrap deadlock is never caught.
     expect(isProoflessNode(afNode("1", { statement: "S", inference: "assumption" }))).toBe(true);
     expect(isProoflessNode(afNode("1", { statement: "S", inference: "" }))).toBe(true);
   });
-  test("a node with no statement at all is NOT flagged (out of scope — the bootstrap case has a statement)", () => {
+  test("the root with children is NOT proofless (it decomposed into sub-steps)", () => {
+    expect(isProoflessNode(afNode("1", { statement: "S", childIds: ["1.1"] }))).toBe(false);
+  });
+  test("the root that CITES a dependency is NOT proofless (proof content: 'by step 1.2')", () => {
+    expect(isProoflessNode(afNode("1", { statement: "S", deps: ["1.2"] }))).toBe(false);
+  });
+  test("the root with a REAL inference rule is NOT proofless (a recorded justification)", () => {
+    expect(isProoflessNode(afNode("1", { statement: "0 <= 1", inference: "arithmetic" }))).toBe(false);
+    expect(isProoflessNode(afNode("1", { statement: "S", inference: "by_definition" }))).toBe(false);
+  });
+  test("a root with no statement at all is NOT flagged (out of scope — the bootstrap case has a statement)", () => {
     expect(isProoflessNode(afNode("1", { statement: undefined }))).toBe(false);
     expect(isProoflessNode(afNode("1", { statement: "   " }))).toBe(false);
+  });
+
+  // --- blocker-1 regressions (docs/reviews/2026-07-20-vacuous-accept-guard-codex.md) --------------
+  // af has NO distinct axiom node type; a LEGITIMATE terminal-assumption LEAF is exactly
+  // type:"claim", inference:"assumption", childless, dependency-free. The earlier (any-id) predicate
+  // would have discarded such accepts forever — parents never bottom-up-ready, valid proofs never
+  // close. Narrowing to the fresh ROOT shape (id "1" AND type "claim") fixes it: these leaves get
+  // NORMAL verifier review (af's designed epistemics), never a vacuous discard.
+  test("a tutorial-shape terminal assumption LEAF (non-root claim/assumption, childless) is NOT proofless", () => {
+    // ../vibefeld/docs/tutorial-sqrt2.md:271-282 — a childless claim/assumption node the af tutorial
+    // accepts. Non-root, so it is never the bootstrap deadlock.
+    expect(isProoflessNode(afNode("1.2", { statement: "sqrt(2) is irrational (assumed for contradiction)", inference: "assumption" }))).toBe(false);
+  });
+  test("the real AISM leaf 1.1.1 shape (deep claim/assumption leaf, VALIDATED live) is NOT proofless", () => {
+    // ../almost-idempotent-stochastic-maps/proofs/lem-classical-equiv/ledger — node 1.1.1 was a
+    // childless, dependency-free claim/assumption step that af VALIDATED. It must reach the verifier.
+    expect(isProoflessNode(afNode("1.1.1", { statement: "p_i >= 0 for each i", inference: "assumption" }))).toBe(false);
+  });
+  test("a root whose type is NOT 'claim' (e.g. a qed/local_assume root) is NOT flagged — the type conjunct", () => {
+    expect(isProoflessNode(afNode("1", { type: "qed", statement: "S", inference: "assumption" }))).toBe(false);
+    expect(isProoflessNode(afNode("1", { type: "local_assume", statement: "S", inference: "assumption" }))).toBe(false);
   });
 });
 
