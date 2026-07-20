@@ -26,6 +26,13 @@
 import { bindVerdicts, type DispatchState } from "./bind-verdicts";
 import { deriveBatchId } from "./batch-composer";
 import { encodeVerifierSeam, type VerifierIdentity } from "./identity";
+// M3.8 (EDIT flagged for the M3 boundary review — this file's decision layer is L6 validity
+// semantics): the apply-time half of the cross-vendor rule (PRD C9), wired into `verifyOneNode`
+// below. `decideCrossVendor` is pure (src/drive/cross-vendor.ts); this is the ONE call site that
+// gates an ACCEPT item before it is ever added to `items[]` (hence before a verdict file is ever
+// written) on a load-bearing (critical-path) node whose recorded author and the dispatching
+// verifier's identity are same-family or unparseable.
+import { crossVendorRejectionMessage, decideCrossVendor } from "./cross-vendor";
 import {
   DEFAULT_MAX_STUCK_ROUNDS,
   DEFAULT_NODE_RETRY_CAP,
@@ -92,6 +99,15 @@ export interface DriverDeps {
    * subtree; returns the already-parsed worker output. */
   dispatchClassification(subtree: string[]): unknown;
   applyVerdicts(file: FilledVerdictFile): ApplyReport;
+  /** M3.8 (PRD C9 cross-vendor rule, apply-time half): true iff `nodeId` is load-bearing — on the
+   * path to the north-star contract (PRD C2's critical-path query, `src/graph/query-path.ts`'s
+   * `computeCriticalPath`, computed by the CLI wiring over the loaded GraphDocument + configured
+   * north star). REQUIRED, not optional with a silent default: a caller with no graph/north-star
+   * available must decide explicitly — the strict, validity-preserving choice is `() => true`
+   * (treat every node as load-bearing, requiring cross-vendor, when critical-path membership is
+   * unknown); `() => false` is available for a repo that has deliberately opted out (constitution-
+   * configurable per PRD C9, "default on"). Never silently guessed inside this module. */
+  isLoadBearing(nodeId: string): boolean;
   /** Registry shard bytes for `contractId`, or undefined if not found (mandatory-review then logs a
    * loud skip instead of marking). */
   readShard(): string | undefined;
@@ -197,6 +213,19 @@ function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: strin
   if (!bound.ok) return { skip: `verdict bind failed: ${bound.issues.map((i) => i.message).join("; ")}` };
   const mapped = afItemFromVerdictDocument(node.id, bound.document);
   if (!mapped.ok) return { skip: `verdict map failed: ${mapped.reason}` };
+  // M3.8: the cross-vendor rule only gates PROMOTION — a challenge never accepts the node this
+  // turn regardless (driver-verdict-map.ts's own invariant), so there is nothing to promote and
+  // nothing to gate. Checked here, per-item, BEFORE `mapped.item` is ever returned into the
+  // caller's `items[]` array — i.e. strictly before a verdict file naming this item is composed
+  // or written (runVerifyDriver's `applyVerdicts` call sees only items that already cleared this).
+  if (mapped.item.verdict === "accept") {
+    const decision = decideCrossVendor(node.author, verifiedBySeam, deps.isLoadBearing(node.id));
+    if (!decision.satisfied) {
+      const reason = crossVendorRejectionMessage(node.id, decision);
+      deps.appendLog(JSON.stringify({ kind: "cross-vendor-rejected", at: deps.now(), node: node.id, reason: decision.reason }));
+      return { skip: reason };
+    }
+  }
   return { item: mapped.item };
 }
 

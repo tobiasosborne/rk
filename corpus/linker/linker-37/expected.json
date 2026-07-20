@@ -1,0 +1,8 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "aism_behavior": "class-driven (no AISM counterpart).",
+  "notes": "M3.8 deliverable 3: a 'status: stated' shard whose L5 store record is FRESH (l5ContentHash matches this file's current sha256 exactly) but VALID-WITH-CORRECTION -- never promotes (src/drive/l5-promote.ts rule (g), correctionRequiresReVerificationBeforePromotion always true: a fresh VALID-WITH-CORRECTION never promotes on the flagged bytes, since nothing has independently re-verified the corrected bytes yet). Zero findings -- correction-pending is a legitimate, silent non-promotion state, not itself a defect. Sibling: linker-35 (fresh plain VALID, same shard shape, DOES promote)."
+}

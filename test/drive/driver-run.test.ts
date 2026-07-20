@@ -42,6 +42,11 @@ function harness(over: Partial<DriverDeps> & { workspaces: AfWorkspaceView[] }):
     dispatchVerify: () => ({ raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0 }) as DispatchedTurn,
     dispatchClassification: () => ({ classification: "missing-fact", rationale: "def X unprovided" }),
     applyVerdicts: (file) => appliedReport(file.items.map((i) => i.node)),
+    // M3.8: permissive default so every PRE-EXISTING test above (none of which sets `node.author`
+    // or cares about cross-vendor) is unaffected — `false` means "not load-bearing," under which
+    // decideCrossVendor is always satisfied regardless of family. Dedicated cross-vendor tests
+    // below override this per-case.
+    isLoadBearing: () => false,
     readShard: () => "---\nid: lem-x\nkind: lemma\ncontract: P\n---\nbody\n",
     writeShard: (c) => written.push(c),
     createBdTask: (t) => { bdTasks.push(t); return true; },
@@ -184,5 +189,59 @@ describe("guardrails inside the loop", () => {
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("stuck-no-progress");
     expect(r.message).toContain("stuck");
+  });
+});
+
+// M3.8: apply-time cross-vendor enforcement (PRD C9), wired into verifyOneNode. IDENTITY (the
+// driver's own verifier identity, declared at the top of this file) is gpt/codex/gpt-5.6/s1 —
+// verifiedBySeam = "gpt|codex|gpt-5.6|s1".
+describe("cross-vendor rule (M3.8) — apply-time, load-bearing (critical-path) nodes", () => {
+  test("same-family accept on a load-bearing node is REJECTED per-item BEFORE any verdict file is applied", () => {
+    let applyCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1.1", { author: "gpt|other-backend|gpt-4|sx" })])], // same family (gpt) as the verifier
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      isLoadBearing: () => true,
+      applyVerdicts: (file) => {
+        applyCalls++;
+        return appliedReport(file.items.map((i) => i.node));
+      },
+    });
+    const r = runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.appliedNodeIds).toEqual([]);
+    expect(applyCalls).toBe(0); // the verdict file was never even composed, let alone applied
+    expect(h.logs.some((l) => l.includes("cross-vendor-rejected") && l.includes('"reason":"same-family"'))).toBe(true);
+  });
+
+  test("cross-family accept on a load-bearing node PASSES and applies normally", () => {
+    const round0 = ws([node("1.1", { author: "claude|claude-code|opus|sy" })]); // different family (claude) from the verifier (gpt)
+    const round1 = ws([node("1.1", { author: "claude|claude-code|opus|sy", epistemicState: "validated" })]);
+    const h = harness({ workspaces: [round0, round1], isLoadBearing: () => true });
+    const r = runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
+    expect(r.appliedNodeIds).toEqual(["1.1"]);
+  });
+
+  test("unparseable/absent author on a load-bearing node fails closed with the DISTINCT 'identity-unparseable' reason, never conflated with same-family", () => {
+    const h = harness({
+      workspaces: [ws([node("1.1")])], // no `author` set at all
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      isLoadBearing: () => true,
+    });
+    const r = runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.appliedNodeIds).toEqual([]);
+    expect(h.logs.some((l) => l.includes("cross-vendor-rejected") && l.includes('"reason":"identity-unparseable"'))).toBe(true);
+    expect(h.logs.some((l) => l.includes('"reason":"same-family"'))).toBe(false);
+  });
+
+  test("same-family accept on a NON-load-bearing node is allowed (recorded, never rejected)", () => {
+    const round0 = ws([node("1.1", { author: "gpt|other-backend|gpt-4|sx" })]);
+    const round1 = ws([node("1.1", { author: "gpt|other-backend|gpt-4|sx", epistemicState: "validated" })]);
+    const h = harness({ workspaces: [round0, round1], isLoadBearing: () => false });
+    const r = runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged");
+    expect(r.appliedNodeIds).toEqual(["1.1"]);
   });
 });

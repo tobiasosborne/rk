@@ -84,5 +84,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * keys, review blocker 4). The concurrent corpus/graph additions (conflict-banked-unfresh-*,
  * conflict-fr-superseded, review blockers 6-7) live under corpus/graph/, which is NOT in
  * GATE_DIRS — they run under the bun-test harness (see corpus/README.md's Graph fixtures
- * section and bead rk-b09 for the selftest-visibility follow-up). */
-export const EXPECTED_FIXTURE_COUNT = 109;
+ * section and bead rk-b09 for the selftest-visibility follow-up).
+ * 117 (+8 over the then-pinned 109): M3.8 (cross-vendor rule, worktree agent-a9b12837c0ead0e82) —
+ * Gate 2's new critical-path provenance check (`linker-31`..`linker-34`, `linker-38`: same-family
+ * POST-convention ERROR, no-parseable-seam legacy WARNING, batch-validated-on-critical-path
+ * WARNING, cross-family golden pass, explicit `provenance: legacy-same-family` marker WARNING)
+ * and the L5-promotion integration (`linker-35`..`linker-37`: fresh VALID promotes, stale does
+ * not, VALID-WITH-CORRECTION correction-pending does not). See docs/gate-contracts.md Gate 2's
+ * "Critical-path provenance" section for the full contract text. */
+export const EXPECTED_FIXTURE_COUNT = 117;

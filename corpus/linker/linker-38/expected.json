@@ -1,0 +1,15 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/thm-main.md",
+      "message_pattern": "explicitly marked 'provenance: legacy-same-family'"
+    }
+  ],
+  "exit_code": 0,
+  "config_override": { "northStarId": "thm-main" },
+  "aism_behavior": "class-driven (no AISM counterpart -- the explicit marker is an rk-only escape hatch, documented in docs/gate-contracts.md Gate 2).",
+  "notes": "M3.8 Check 13, explicit-marker escape hatch: byte-identical ledger to linker-31 (same family gpt/gpt, both parseable, POST-convention) -- the ONLY difference is this shard's frontmatter carries 'provenance: retrofit note; legacy-same-family'. The marker downgrades what would otherwise be an ERROR (linker-31) to a WARNING, proving the escape hatch works for administratively-grandfathered data that happens to carry a parseable seam (distinct from linker-32's mechanically-detected 'no parseable seam at all' legacy path)."
+}

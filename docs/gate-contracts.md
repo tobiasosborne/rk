@@ -248,7 +248,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | gate | structural (blocks in both phases) | non-structural (demoted to WARN in exploration) | rationale |
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
-| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class |
+| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), Check 14 (L5 promotion, M3.8) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and L5 promotion are likewise consolidation-weight validity/status concerns over an af-validated claim, not DAG-coherence structural checks |
 | **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
@@ -584,6 +584,64 @@ is stale against the code and must not be treated as ground truth).
     NODE_THRESHOLD` (default 26) ⇒ WARN `REFACTOR: <ws> has <n> nodes (><cap>) — factor <id>
     into sub-lemmas` (argument.py:251-259, boundary confirmed by AISM's own test suite:
     exactly 26 does not warn, 27 does — `scripts/tests/test_argument.py:107-108`).
+13. **Critical-path provenance** (M3.8, `src/gates/linker-crossvendor.ts`) — PRD C2/C9's
+    cross-vendor rule, the CONTINUOUS half (the apply-time half lives in
+    `src/drive/cross-vendor.ts`, checked before an af `accept` item is ever written — see below).
+    Presence-conditional on `config.northStarId` (M2.5's own "no default" contract): absent ⇒
+    zero findings, named on the coverage line, never a silent guess at which registry id is the
+    north star. When configured, every shard on the critical path to the configured north star
+    (`src/graph/query-path.ts`'s `computeCriticalPath`, the same over-inclusive OR-route closure
+    M2.5/M3.4 already use) with `af: validated` and an introspectable, currently-validated af
+    workspace is checked against its root node's identity provenance
+    (`src/gates/linker-workspace.ts`'s `introspectRootIdentity` — the SAME direct-ledger read
+    path `introspectWorkspace` already uses for contract/node-count, since this gate is pure and
+    may not shell out to `af export`):
+    - `validationBatchId` present ⇒ WARN, always, independent of family — PRD C3's critical-path
+      exclusion says a critical-path node should never be batch-validated; a batch id here means
+      that rule was not honored, caught retrospectively (a node can become load-bearing AFTER a
+      batch validated it — the exact "path membership changes... not only at verdict-apply time"
+      scenario C2 names).
+    - **Cutover semantics** (decided here, normative): both `author` and `validatedBy` are run
+      through `src/drive/identity.ts`'s `decodeVerifierSeam` (never a bespoke parse). If EITHER
+      side fails to decode, or `validatedBy` was never recorded at all (a node validated with no
+      identity — AISM's real shape, see below), the node reads as **legacy: predates the
+      verifier-identity seam convention** ⇒ WARN, never ERROR, never a demotion. If BOTH sides
+      decode and the two `modelFamily` values are EQUAL (POST-convention same-family) ⇒ ERROR,
+      UNLESS the shard's frontmatter `provenance:` field contains the literal substring
+      `legacy-same-family` (an explicit, administrative grandfathering marker — a freeform-field
+      substring check, not a grammar this check owns; Gate 4 remains the owner of `provenance:`'s
+      own "report `<label>`" grammar), in which case it is WARN instead. Different families ⇒
+      satisfied, no finding. Stated as one line: **absence of a parseable seam = legacy = warning;
+      a parseable seam that is same-family = error (unless explicitly marked legacy).** This is
+      the split the brief calls for between the two enforcement points: the apply-time check
+      (below) is about to mint a NEW validation event and fails closed on an unresolvable
+      identity; this continuous check is retrospective over ALREADY-recorded validations and
+      grandfathers what it cannot resolve, per PRD C9's standing directive ("existing results
+      validated under the old same-family regime... are not demoted").
+    - Coverage is folded into Gate 2's one coverage line as
+      `critical-path provenance: <checked>/<criticalPathSize> checked` (or
+      `no north star configured` / `configured north star not found in registry`).
+14. **L5 promotion** (M3.8, `src/gates/linker-l5.ts`) — `src/drive/l5-promote.ts`'s
+    `stated`→`proved-mod-audit` promotion query (M3.7's L5 verdict store), wired into Gate 2 per
+    that module's own header ("wiring this into Gate 2 is EXPLICITLY M3.8's job"). Reads
+    `.rk/l5-verdicts.jsonl` straight off the snapshot's already-loaded text map (`.rk` is included
+    one level deep, the same mechanism Gate 7 relies on for `.rk/generated.json`) — presence-
+    conditional: the file's total absence is a legitimate state (a campaign that has never
+    dispatched an L5 review) ⇒ zero findings, named on the coverage line as `L5 store: absent (no
+    promotions)`, never an ERROR. When present, every `status: stated` shard is queried via
+    `promotionStateFor` against its current hash (`fileSha256`, the same raw-bytes sha256 domain
+    `l5ContentHash` is pinned to, docs/worker-contract.md section (f)) ⇒ a fresh `VALID` verdict
+    produces a non-blocking WARN, `L5 promotable: '<id>' has a fresh VALID L5 verdict... status is
+    still 'stated'`. This is a STATUS-COMPUTATION INPUT, not a validity check on its own: it never
+    rewrites the shard's frontmatter (Gate 2 is a checker, not a mutator) and it never feeds
+    `checkStatus`'s availability predicate (`proved-mod-audit` is not `rigorous` per PRD §5's
+    ladder table and does not count as available regardless), so this promotion has zero bearing
+    on any OTHER check's pass/fail verdict — it is purely an informational nudge naming which
+    shards are eligible for a researcher to manually re-label. Stale, `INVALID`, and
+    `VALID-WITH-CORRECTION` (correction-pending, rule (g)) verdicts all produce no finding at all
+    — "not yet promotable" is a silent, legitimate state, not a defect. A malformed line in the
+    store itself is surfaced as its own WARN (never silently dropped, CLAUDE.md L2) but does not
+    block the shard-level promotion query.
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set
@@ -699,6 +757,25 @@ features layered on the same pure functions, not gate verdicts.
   Gate 1's already-ratified stricter behavior, not a new rule. Fixtures: `linker-29`
   (multi-line deps with an unknown id must produce the unknown-dep ERROR), `linker-30`
   (malformed line ⇒ ERROR where AISM registers the shard clean). See Checks 2a/2b.
+- **[no AISM counterpart] Critical-path provenance (Check 13) + L5 promotion (Check 14)** (M3.8,
+  worktree agent-a9b12837c0ead0e82). AISM never recorded per-node author/verifier identity at all
+  (`argument.py` has no concept of a "verifier family," and — confirmed by a spot-check of all 44
+  AISM workspaces' ledgers — 0/44 carry a `node.author`/`node_validated.verified_by`/`.batch_id`
+  field of any kind) and never had an L5 verdict store (M3.7 is rk's own addition, "orphaned in
+  v1" per PRD C9). Both checks are therefore genuinely new surface, not a divergence from any
+  characterized AISM behavior — `aism_behavior: class-driven (no AISM counterpart)` on every
+  fixture below. The cross-vendor rule's OTHER half — apply-time enforcement, before a same-family
+  accept on a load-bearing node is ever written to a verdict file — lives in
+  `src/drive/cross-vendor.ts` / `src/drive/driver-run.ts`'s `verifyOneNode` (docs/worker-
+  contract.md section (e)); it is NOT part of this gate and carries no corpus fixture of its own
+  (it is Tier-A driver logic, covered by `test/drive/cross-vendor.test.ts` and
+  `test/drive/driver-run.test.ts`'s dedicated `describe` block instead, per this codebase's
+  gates-vs-drive split). Fixtures: `linker-31` (same-family POST-convention ⇒ ERROR), `linker-32`
+  (no parseable seam at all, AISM's real shape ⇒ WARNING legacy-same-family), `linker-33`
+  (batch-validated on the critical path ⇒ WARNING), `linker-34` (cross-family ⇒ golden pass),
+  `linker-35`/`linker-36`/`linker-37` (L5 promotion: fresh VALID promotes, stale/correction-pending
+  do not), `linker-38` (same-family + explicit `provenance: legacy-same-family` marker ⇒ WARNING
+  not ERROR).
 
 **Historical schema-drift tolerance.** Two fields were added mid-campaign and must be tolerated
 on historical commits — load-bearing for the **M0.3 robustness run** (F4, repurposed per the
@@ -782,6 +859,14 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-28` | **[rk-sj6, M1 review B3] duplicate registry id across recursive discovery** — `argument/lem-x.md` + `argument/nested/lem-x.md` both `id: lem-x` (each passes its own id==stem check) ⇒ structural ERROR naming both claiming paths; pre-fix both registered silently and graph checks ran on an overwritten identity |
 | `linker-29` | **[rk-wc3, dogfood-2] multi-line YAML `deps:` naming an unknown id** — the natural block-list style that pre-fix parsed to an EMPTY deps list (dogfood-1's live `3/3 ... 0 errors` over an edgeless graph) ⇒ the list now parses and `unknown dep 'lem-nonexistent'` ERROR fires |
 | `linker-30` | **[rk-wc3 sibling] genuinely malformed frontmatter line in a linker shard** — a colon-less line after a non-empty-valued key (not a list continuation) ⇒ ERROR `frontmatter line without ':'` (Gate 2 now reads `fm.malformedLines` exactly as Gate 1 always has; AISM registers the shard clean with zero diagnostic) |
+| `linker-31` | **[M3.8] critical-path node validated POST-convention SAME-family** — `author`/`validated_by` both parse as the same `modelFamily`, no legacy marker ⇒ ERROR (Check 13) |
+| `linker-32` | **[M3.8] critical-path node validated with NO parseable identity at all** — AISM's real shape (0/44 workspaces carry these fields) ⇒ WARNING `legacy-same-family`, never ERROR (Check 13, grandfathering golden case) |
+| `linker-33` | **[M3.8] critical-path node validated via a BATCH** (`af verdicts apply`, cross-family so isolated from the same-family check) ⇒ WARNING naming the batch id (Check 13) |
+| `linker-34` | **[M3.8] critical-path node validated CROSS-family** — golden pass, zero findings (Check 13) |
+| `linker-35` | **[M3.8] `status: stated` shard with a fresh VALID L5 verdict** ⇒ WARN `L5 promotable` (the L5-promotion check, `src/gates/linker-l5.ts`) |
+| `linker-36` | **[M3.8] `status: stated` shard, L5 verdict bound to a stale hash** ⇒ no promotion, zero findings |
+| `linker-37` | **[M3.8] `status: stated` shard, fresh `VALID-WITH-CORRECTION`** ⇒ correction-pending, no promotion, zero findings (rule (g)) |
+| `linker-38` | **[M3.8] critical-path node, same shape as `linker-31`, but shard carries `provenance: legacy-same-family`** ⇒ WARNING not ERROR (Check 13, explicit-marker escape hatch) |
 
 ---
 
