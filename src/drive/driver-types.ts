@@ -69,8 +69,13 @@ export interface DriverDeps {
   queryWorkspace(): AfParseResult<AfWorkspaceView>;
   /** Dispatch a verifier turn over one ready node. `undefined` = no worker available (skipped).
    * MAY return a Promise (M3.5-prep, src/drive/driver-live.ts's real backend calls — see the file
-   * header's flagged injection-point note); every existing synchronous fake still type-checks. */
-  dispatchVerify(node: AfNodeView): DispatchedTurn | undefined | Promise<DispatchedTurn | undefined>;
+   * header's flagged injection-point note); every existing synchronous fake still type-checks.
+   * GAP 10 (RUN-REPORT-9): `allNodes` is the current round's full export node set — the live edge
+   * (src/drive/driver-live.ts's `verifierItemFor`) resolves `node`'s declared `dependencies` to their
+   * statements from it so the verifier is given the CONTENT it judges the node's step against, not
+   * just dependency ids (which it correctly refused to certify against, stalling forever). A fake that
+   * ignores the second argument still type-checks (fewer-param functions are assignable). */
+  dispatchVerify(node: AfNodeView, allNodes: readonly AfNodeView[]): DispatchedTurn | undefined | Promise<DispatchedTurn | undefined>;
   /** rk-gn4: dispatch a PROVER turn over one prover-ready node — the missing half of the M3.6
    * driver. Returns the prover's already-parsed decomposition body (role MUST be "prover"), or
    * `undefined` when no prover worker is available (skipped). MAY return a Promise (same live-edge

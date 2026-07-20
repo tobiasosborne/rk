@@ -42,7 +42,7 @@ import { handleBalloon } from "./driver-balloon-run";
 import { selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "./driver-plan";
 import { childrenFirst, verifyOneNode } from "./driver-verify-node";
 import { proveOneNode } from "./driver-prove-node";
-import { stallReasonClass, appendStallCause } from "./driver-stall";
+import { stallReasonClass, appendStallCause, challengeStallClass } from "./driver-stall";
 import { DEFAULT_DRIVER_CONFIG, type DriverDeps, type DriverRunResult } from "./driver-types";
 import type { AfApplyItem } from "./driver-verdict-map";
 import type { FilledVerdictFile, VerdictItemOutcome } from "./driver-af";
@@ -220,7 +220,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       }
       // rk-qxp (FIX 6): the mapper validates a challenge's blamed node id against the proof export —
       // pass the current round's node-id set (byId is built from ws.nodes each round).
-      const r = await verifyOneNode(deps, node, verifiedBySeam, new Set(byId.keys()));
+      const r = await verifyOneNode(deps, node, verifiedBySeam, new Set(byId.keys()), ws.nodes);
       tokensSpent += r.spentTokens; // accrue whether the turn applied or was discarded
       if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
       else {
@@ -260,7 +260,19 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
           outcomes.push(o);
           deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
           if (o.status === "applied" && o.verdict === "accept") { appliedNodeIds.push(o.node); progressed = true; epistemicAdvance = true; /* rk-cpk: an accept is the ONLY epistemic advancement — a node newly validated */ }
-          else attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
+          else {
+            attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
+            // rk-dp1 (RUN-REPORT-9): an APPLIED challenge is NOT progress — it re-blocks the node. The
+            // stall classifier previously counted only node-SKIPPED reasons, so run A's dependency-
+            // content challenge loop (node '1.7' challenged 3× on the same grounds) never appeared in
+            // the stuck abort's dominant-cause line. Count it per-node (with the model's category, kept
+            // — unlike a skip class — so the operator sees WHICH node spun) into the same since-progress
+            // tally, cleared on any progress below. Message-only: no abort/verdict/convergence semantics.
+            if (o.status === "applied" && o.verdict === "challenge") {
+              const c = challengeStallClass(o.node, item.category);
+              stallCauses.set(c, (stallCauses.get(c) ?? 0) + 1);
+            }
+          }
         }
       }
     }

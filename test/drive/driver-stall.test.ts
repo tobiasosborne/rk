@@ -3,7 +3,7 @@
 // aggregate, and that the summary names the dominant class deterministically.
 
 import { describe, expect, test } from "bun:test";
-import { appendStallCause, stallReasonClass, summarizeStallCauses } from "../../src/drive/driver-stall";
+import { appendStallCause, challengeStallClass, stallReasonClass, summarizeStallCauses } from "../../src/drive/driver-stall";
 
 const CROSS_VENDOR_RUN_A =
   "cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=gpt) — fails closed, never conflated with a confirmed same-family violation";
@@ -31,6 +31,23 @@ describe("stallReasonClass — collapses node/per-turn detail to a stable class"
 
   test("an unrecognized shape is returned as-is (still a usable class)", () => {
     expect(stallReasonClass("no worker available")).toBe("no worker available");
+  });
+});
+
+// rk-dp1 (RUN-REPORT-9): a repeated APPLIED challenge on one node is a distinct stall class that
+// KEEPS the node id (unlike a skip class) so the operator sees WHICH node spun (run A: node '1.7',
+// dependency-content challenge loop, invisible in the old summary).
+describe("challengeStallClass — per-node challenge class, node id KEPT", () => {
+  test("keeps the node id and folds in the model's category", () => {
+    expect(challengeStallClass("1.7", "dependency")).toBe("repeated challenge on node '1.7' (dependency)");
+  });
+  test("an absent/blank category renders 'uncategorized' (total, never throws)", () => {
+    expect(challengeStallClass("1.7")).toBe("repeated challenge on node '1.7' (uncategorized)");
+    expect(challengeStallClass("1.7", "   ")).toBe("repeated challenge on node '1.7' (uncategorized)");
+  });
+  test("flows through summarizeStallCauses as a dominant cause naming the node + count", () => {
+    const causes = new Map<string, number>([[challengeStallClass("1.7", "dependency"), 3], ["worker exit 12", 1]]);
+    expect(summarizeStallCauses(causes)).toBe("dominant cause: repeated challenge on node '1.7' (dependency) ×3");
   });
 });
 

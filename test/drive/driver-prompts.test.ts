@@ -65,7 +65,7 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
 
   test("shared-prefix-first: sharedContext + '\\n\\n' + turn always puts the byte-stable shared block at position 0", () => {
     const turnA = buildVerifierTurnPrompt({ nodeId: "1.1", statement: "A", deps: [], tier: "hard" });
-    const turnB = buildVerifierTurnPrompt({ nodeId: "1.2", statement: "B", deps: ["1.1"], tier: "hard" });
+    const turnB = buildVerifierTurnPrompt({ nodeId: "1.2", statement: "B", deps: [{ id: "1.1", statement: "A holds", epistemicState: "validated" }], tier: "hard" });
     const firstCallA = `${shared}\n\n${turnA}`;
     const firstCallB = `${shared}\n\n${turnB}`;
     // Different items, but the identical shared prefix leads both -- this is the property a
@@ -76,15 +76,44 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
   });
 
   test("hard-tier verifier prompt carries accept/challenge instructions, never VALID/INVALID vocabulary", () => {
-    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: ["1.1", "1.2"], tier: "hard" });
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [{ id: "1.1", statement: "lemma one", epistemicState: "validated" }, { id: "1.2", statement: "lemma two", epistemicState: "validated" }], tier: "hard" });
     expect(turn).toContain('"outcome": "accept"');
     expect(turn).toContain('"outcome": "challenge"');
-    expect(turn).toContain("Dependencies (2): 1.1, 1.2");
+    expect(turn).toContain("Dependencies (already established) (2):");
     expect(turn).not.toContain("VALID");
   });
 
+  // GAP 10 (RUN-REPORT-9): the verifier prompt must render each declared dependency's STATEMENT
+  // (content), not just its id — node '1.7' (deps 1.4/1.5/1.6) was challenged forever because the
+  // verifier was shown only ids and, fail-closed, refused to certify a step against content it never
+  // saw ("the contents of dependencies 1.4, 1.5, 1.6 are not provided...").
+  test("dependency section renders each dep's id, statement, and validated flag (GAP 10)", () => {
+    const turn = buildVerifierTurnPrompt({
+      nodeId: "1.7",
+      statement: "min_i n_i <= sum_i p_i n_i",
+      deps: [
+        { id: "1.4", statement: "each n_i >= min_j n_j", epistemicState: "validated" },
+        { id: "1.5", statement: "sum_i p_i = 1", epistemicState: "validated" },
+        { id: "1.6", statement: "p_i >= 0 for all i", epistemicState: "pending" },
+      ],
+      tier: "hard",
+    });
+    expect(turn).toContain("Dependencies (already established) (3):");
+    // each dependency's id AND its STATEMENT (the content the fix provides)
+    expect(turn).toContain("### 1.4 [validated]");
+    expect(turn).toContain("each n_i >= min_j n_j");
+    expect(turn).toContain("### 1.5 [validated]");
+    expect(turn).toContain("sum_i p_i = 1");
+    // a not-yet-validated dep is flagged truthfully, never presented as settled
+    expect(turn).toContain("### 1.6 [not yet validated — state: pending]");
+    expect(turn).toContain("p_i >= 0 for all i");
+    // the scope line uses the deps but must NOT invite re-validating them (validity fence)
+    expect(turn.toLowerCase()).toContain("do not re-derive");
+    expect(turn.toLowerCase()).toContain("re-verify the dependencies");
+  });
+
   test("hard-tier verifier prompt requires the challenge target to be a QUOTED JSON STRING, with a concrete example (rk-qxp)", () => {
-    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: ["1.1"], tier: "hard" });
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [{ id: "1.1", statement: "lemma one", epistemicState: "validated" }], tier: "hard" });
     // The concrete quoted-string example a model can copy verbatim.
     expect(turn).toContain('"target": "1"');
     // And an explicit instruction that a bare number is wrong.
@@ -97,7 +126,8 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
     expect(turn).toContain("VALID-WITH-CORRECTION");
     expect(turn).toContain('"INVALID"');
     expect(turn).toContain("justification");
-    expect(turn).toContain("Dependencies (0): (none)");
+    expect(turn).toContain("Dependencies (already established) (0):");
+    expect(turn).toContain("(none)");
   });
 
   test("prover prompt asks for a proof step as a children[] decomposition, never a verdict, and uses none of the forbidden verdict vocabulary", () => {
@@ -168,7 +198,7 @@ describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)
   });
 
   test("a CONTENTFUL node's prompt keeps the normal scope line and never emits the proofless HARD RULE", () => {
-    const contentful = buildVerifierTurnPrompt({ nodeId: "1.2", statement: "S", deps: ["1.1"], tier: "hard", proofless: false });
+    const contentful = buildVerifierTurnPrompt({ nodeId: "1.2", statement: "S", deps: [{ id: "1.1", statement: "T", epistemicState: "validated" }], tier: "hard", proofless: false });
     expect(contentful).toContain("Scope: judge whether this node's OWN inference");
     expect(contentful).not.toContain("NOTHING TO VERIFY");
     // Still carries the normal accept/challenge output schema.

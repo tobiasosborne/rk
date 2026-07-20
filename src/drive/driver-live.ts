@@ -37,7 +37,7 @@ import type { SessionRecord } from "./session";
 import type { DispatchModel, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
-import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierItemInput } from "./driver-prompts";
+import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
 import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { recordProofRefine } from "./driver-af";
 import type { ProofContent, RecordProofResult } from "./driver-prove-node";
@@ -238,11 +238,31 @@ export function createLiveDispatcher(opts: LiveDispatcherOptions): CreateLiveDis
  * produced. Those deps are part of the node's content_hash, which the driver re-reads and sends as
  * `expect_hash`, so a verdict is invalidated if they change. `statement` falls back to a
  * self-teaching placeholder (never a crash) if the export never carried one. */
-export function verifierItemFor(node: AfNodeView, tier: Tier): VerifierItemInput {
+export function verifierItemFor(node: AfNodeView, tier: Tier, allNodes: readonly AfNodeView[]): VerifierItemInput {
+  // GAP 10 (RUN-REPORT-9): resolve each declared dependency id to its statement + epistemic state so
+  // the verifier is shown the CONTENT it is judging the node's step against — not just the id (which
+  // it correctly refused to certify against, stalling `1.7` forever in run A).
+  const byId = new Map(allNodes.map((n) => [n.id, n] as const));
+  const deps: VerifierDep[] = (node.deps ?? []).map((depId) => {
+    const dep = byId.get(depId);
+    if (dep === undefined) {
+      // A declared dependency absent from the export is an item-construction FAILURE, never a silent
+      // omission — a silent omission is EXACTLY the bug this fixes (the verifier judging a step against
+      // content it cannot see). Fail loudly so the missing-dependency invariant is impossible to miss.
+      throw new Error(
+        `verifierItemFor: node '${node.id}' declares dependency '${depId}' but no such node is present in the af export (${allNodes.length} node(s)) — cannot assemble the verifier's dependency context. This is an export/graph invariant violation, not a recoverable skip.`,
+      );
+    }
+    return {
+      id: depId,
+      statement: dep.statement ?? `(no statement recorded by af export for node ${depId})`,
+      epistemicState: dep.epistemicState,
+    };
+  });
   return {
     nodeId: node.id,
     statement: node.statement ?? `(no statement recorded by af export for node ${node.id})`,
-    deps: node.deps ?? [],
+    deps,
     tier,
     // rk-jit (STOP-4): computed on the REAL node (its actual statement/children/deps), not the
     // placeholder-filled item — the prompt's HARD-RULE branch and driver-verify-node.ts's discard
@@ -252,10 +272,12 @@ export function verifierItemFor(node: AfNodeView, tier: Tier): VerifierItemInput
 }
 
 /** The one live `dispatchVerify` a `DriverDeps` needs: dispatches `node` as a turn on `dispatcher`,
- * building its prompt via src/drive/driver-prompts.ts. */
+ * building its prompt via src/drive/driver-prompts.ts. GAP 10: `allNodes` (the current round's full
+ * export view) is threaded so `verifierItemFor` can resolve `node`'s declared dependencies to their
+ * content — the driver hands its per-round node set at the call site (src/drive/driver-run.ts). */
 export function liveDispatchVerify(dispatcher: LiveRoleTierDispatcher, tier: Tier) {
-  return (node: AfNodeView): Promise<DispatchedTurn> =>
-    dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier)));
+  return (node: AfNodeView, allNodes: readonly AfNodeView[]): Promise<DispatchedTurn> =>
+    dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier, allNodes)));
 }
 
 /** Builds the prover item input for one af node — the node's RECORDED dependencies (`node.deps`, rk

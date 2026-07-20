@@ -52,8 +52,10 @@ export type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; 
  * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
  * the authoritative bytes immediately before apply — M3 blocker 1), or a reason it was skipped
  * (never applied); either way carries the turn's `spentTokens` for the campaign budget. */
-export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string, knownNodeIds: ReadonlySet<string>): Promise<VerifyNodeOutcome> {
-  const turn = await deps.dispatchVerify(node);
+export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string, knownNodeIds: ReadonlySet<string>, allNodes: readonly AfNodeView[]): Promise<VerifyNodeOutcome> {
+  // GAP 10: `allNodes` (this round's full export view) is forwarded to `dispatchVerify` so the live
+  // edge can resolve the node's declared dependencies to their content for the verifier's context.
+  const turn = await deps.dispatchVerify(node, allNodes);
   if (turn === undefined) return { spentTokens: 0, skip: "no worker available" };
   const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
   // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,

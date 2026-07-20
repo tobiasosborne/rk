@@ -172,9 +172,11 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   }
 
   const rawDispatchVerify = liveDispatchVerify(created.dispatcher, "hard");
-  const dispatchVerify: DriverDeps["dispatchVerify"] = (n): Promise<DispatchedTurn | undefined> => {
+  const dispatchVerify: DriverDeps["dispatchVerify"] = (n, allNodes): Promise<DispatchedTurn | undefined> => {
     checkValves(n.id);
-    return rawDispatchVerify(n);
+    // GAP 10: forward the round's full node set so verifierItemFor can resolve n's declared
+    // dependencies to their content for the verifier's context.
+    return rawDispatchVerify(n, allNodes);
   };
   // rk-gn4: prover dispatch shares the SAME safety valves (a prover turn is a real spend too) and the
   // SAME campaign budget (enforced in the driver loop). The prover session is created lazily on its

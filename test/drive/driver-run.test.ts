@@ -414,6 +414,32 @@ describe("stall-cause legibility on a stuck abort", () => {
   });
 });
 
+// rk-dp1 (RUN-REPORT-9): run A stalled on a repeated APPLIED challenge (node '1.7', deps 1.4/1.5/1.6,
+// challenged 3× on dependency-content grounds), but the classifier counted only node-SKIPPED reasons,
+// so the stuck abort named the round count and NOT the dominant cause. This proves an applied-challenge
+// loop now names the offending node in the stuck message.
+describe("stall-cause legibility: repeated applied challenge on one node (rk-dp1)", () => {
+  test("a challenge loop on one node names that node in the stuck abort's dominant cause", async () => {
+    // '1.7' (deps [1.4], 1.4 validated) is verifier-ready every round; the verifier CHALLENGES it
+    // (dependency-content) each round → the challenge APPLIES but is never progress → stuck.
+    const wsRound = ws([
+      node("1.7", { statement: "min_i n_i <= sum_i p_i n_i", deps: ["1.4"] }),
+      node("1.4", { statement: "each n_i >= min_j n_j", epistemicState: "validated" }),
+    ]);
+    const h = harness({
+      workspaces: [wsRound],
+      config: { maxStuckRounds: 2, maxRounds: 5 },
+      dispatchVerify: () => ({ raw: { verdict: { outcome: "challenge", target: "1.7", severity: "major", reason: "the contents of dependency 1.4 are not provided", category: "dependency" }, justification: "cannot verify" }, role: "verifier", exit: 0 }),
+      // af applies the challenge (re-blocks the node) but validates nothing — applied:0.
+      applyVerdicts: (file) => ({ exit: 0, batchId: file.batch_id, items: file.items.map((i) => ({ node: i.node, verdict: i.verdict, status: "applied" })), applied: 0, blocked: 0, rejected: 0, aborted: false }),
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("stuck-no-progress");
+    expect(r.message).toContain("repeated challenge on node '1.7' (dependency)");
+  });
+});
+
 // rk-jit (STOP-4): the bootstrap deadlock. af marks a fresh proofless root verifier-ready; a real
 // verifier ACCEPTS the bare true statement; that accept is vacuous (nothing was proven). The NEW
 // structural backstop discards it BEFORE apply regardless of provenance (fail-closed, additive), and

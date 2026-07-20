@@ -28,6 +28,20 @@ export function stallReasonClass(reason: string): string {
   return s.trim();
 }
 
+/** RUN-REPORT-9 (rk-dp1): a stall CLASS for a repeatedly-APPLIED challenge on ONE node — the
+ * dependency-content challenge loop (node '1.7', deps 1.4/1.5/1.6 all validated) that stalled run A
+ * yet never surfaced in the summary, because the classifier only counted node-SKIPPED reasons, not
+ * applied challenges. DELIBERATELY UNLIKE `stallReasonClass`: it KEEPS the node id (the operator must
+ * know WHICH node spun) and folds in the model's challenge category, so the dominant-cause line reads
+ * "repeated challenge on node '1.7' (dependency) ×3". Message-only; no abort/verdict semantics.
+ * Deterministic and total — an absent/blank category renders "uncategorized". (Parameter named
+ * `nodeId`, not the colon-suffixed bare word this repo's purity grep forbids — driver-plan.ts's
+ * `isProverReady` convention.) */
+export function challengeStallClass(nodeId: string, category?: string): string {
+  const cat = typeof category === "string" && category.trim().length > 0 ? category.trim() : "uncategorized";
+  return `repeated challenge on node '${nodeId}' (${cat})`;
+}
+
 /** Summarizes accumulated stall causes (a class→count tally) into a one-line "dominant cause:
  * <class> ×<count>" suffix, or `undefined` when the tally is empty (no skips recorded — nothing to
  * add). The dominant class is the highest count; ties break lexicographically for determinism. */

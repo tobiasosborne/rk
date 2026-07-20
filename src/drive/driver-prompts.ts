@@ -70,13 +70,29 @@ export function buildSharedContext(input: SharedContextInput): string {
 
 // --- Verifier turn prompt (item 2..N content only) ------------------------------------------------
 
+/** GAP 10 (RUN-REPORT-9): one declared dependency, RESOLVED to its content. Before this, the verifier
+ * was shown only a dependency's id and — correctly fail-closed — refused to certify an inference from
+ * content it was never given ("the contents of dependencies 1.4, 1.5, 1.6 are not provided, so it is
+ * impossible to verify..."), stalling the dependency-using node forever. The resolution happens at the
+ * edge (src/drive/driver-live.ts's `verifierItemFor`), so this pure builder just renders it. */
+export interface VerifierDep {
+  /** The dependency's absolute node id (from af's `dependencies[]`, rk B2). */
+  id: string;
+  /** The dependency node's own statement — the CONTENT the verifier judges THIS node's step against. */
+  statement: string;
+  /** af epistemic state of the dependency (`validated` | `pending` | ...) — rendered as an
+   * already-established-or-not flag so the verifier sees whether the depended-on claim is settled. */
+  epistemicState: string;
+}
+
 export interface VerifierItemInput {
   nodeId: string;
   statement: string;
-  /** This node's own child claims (af v1's export carries no separate `dependencies` array —
-   * src/drive/driver-plan.ts's `AfNodeView.childIds` doc comment explains why this is the honest
-   * available proxy for l5). Empty for a leaf. */
-  deps: readonly string[];
+  /** This node's declared dependencies (rk B2's `dependencies[]`), each RESOLVED to its statement and
+   * epistemic state at the edge (src/drive/driver-live.ts's `verifierItemFor`). GAP 10: rendered as a
+   * dependency-content section so a node leaning on a validated sibling can actually be verified.
+   * Empty for a node with no recorded dependencies. */
+  deps: readonly VerifierDep[];
   tier: Tier;
   /** rk-jit (STOP-4): true iff this node has a statement but NO recorded proof body (no children,
    * no dependencies) — src/drive/driver-plan.ts's `isProoflessNode`, computed at the edge
@@ -127,10 +143,29 @@ const L5_VERDICT_INSTRUCTIONS = [
   '"correction" is required on, and only on, a "VALID-WITH-CORRECTION" verdict.',
 ].join("\n");
 
+/** GAP 10: renders the "Dependencies (already established)" section — each declared dependency's id,
+ * validated-or-not flag, and STATEMENT (the content the verifier judges the node's step against). The
+ * verifier uses these as given; the scope line below forbids re-deriving them. A node with no recorded
+ * dependencies renders an honest "(none)", never a blank section. */
+function renderVerifierDeps(deps: readonly VerifierDep[]): string {
+  const lines: string[] = [];
+  lines.push(`Dependencies (already established) (${deps.length}):`);
+  if (deps.length === 0) {
+    lines.push("(none)");
+    return lines.join("\n");
+  }
+  for (const d of deps) {
+    const flag = d.epistemicState === "validated" ? "validated" : `not yet validated — state: ${d.epistemicState}`;
+    lines.push(`### ${d.id} [${flag}]`);
+    lines.push(d.statement.trim());
+  }
+  return lines.join("\n");
+}
+
 /** Builds the verifier's per-turn content (never the shared context — see file header). Includes
- * the node statement, its dependencies, the verification SCOPE (what to judge, and — just as
- * important — what NOT to re-derive), and the tier-appropriate verdict-JSON output instructions
- * matching src/drive/verdict-raw.ts's two raw shapes exactly. */
+ * the node statement, its dependencies' CONTENT (GAP 10), the verification SCOPE (what to judge, and
+ * — just as important — what NOT to re-derive), and the tier-appropriate verdict-JSON output
+ * instructions matching src/drive/verdict-raw.ts's two raw shapes exactly. */
 export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
   const lines: string[] = [];
   lines.push(`## Verify node ${item.nodeId}`);
@@ -138,7 +173,7 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
   lines.push("Statement:");
   lines.push(item.statement.trim());
   lines.push("");
-  lines.push(`Dependencies (${item.deps.length}): ${item.deps.length === 0 ? "(none)" : item.deps.join(", ")}`);
+  lines.push(renderVerifierDeps(item.deps));
   lines.push("");
   if (item.proofless === true) {
     // rk-jit (STOP-4): a proofless node gets the HARD RULE in place of the normal verification
@@ -146,9 +181,9 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
     lines.push(prooflessVerdictRule(item.tier));
   } else {
     lines.push(
-      "Scope: judge whether this node's OWN inference is validly established GIVEN its dependencies " +
-        "above as already correct — do not re-derive or re-verify the dependencies themselves, only " +
-        "this node's step from them.",
+      "Scope: judge whether this node's OWN inference is validly established GIVEN the dependencies " +
+        "listed above (with their statements) as already correct — do not re-derive, re-prove, or " +
+        "re-verify the dependencies themselves, only this node's step from them.",
     );
   }
   lines.push("");

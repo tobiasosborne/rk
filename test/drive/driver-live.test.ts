@@ -306,15 +306,27 @@ describe("extractSingleJsonObject — conservative, single-object-only extractio
 });
 
 describe("liveDispatchVerify / verifierItemFor", () => {
-  test("uses the node's RECORDED deps (rk B2) and its statement, never inventing either", () => {
+  test("resolves each RECORDED dep (rk B2) to its statement + epistemic state, keeping the node statement (GAP 10)", () => {
     const n = node("1.1", { statement: "P holds", deps: ["1.1.1", "1.1.2"] });
-    const item = verifierItemFor(n, "hard");
-    expect(item.deps).toEqual(["1.1.1", "1.1.2"]);
+    const all = [n, node("1.1.1", { statement: "lemma A", epistemicState: "validated" }), node("1.1.2", { statement: "lemma B", epistemicState: "pending" })];
+    const item = verifierItemFor(n, "hard", all);
+    expect(item.deps).toEqual([
+      { id: "1.1.1", statement: "lemma A", epistemicState: "validated" },
+      { id: "1.1.2", statement: "lemma B", epistemicState: "pending" },
+    ]);
     expect(item.statement).toBe("P holds");
   });
   test("a node with no recorded statement gets an honest placeholder, never a crash", () => {
     const n = node("1.2", { statement: undefined });
-    expect(verifierItemFor(n, "hard").statement).toContain("no statement recorded");
+    expect(verifierItemFor(n, "hard", [n]).statement).toContain("no statement recorded");
+  });
+  // GAP 10: a declared dependency the export does not carry is a LOUD item-construction failure — a
+  // silent omission is exactly the bug this fixes (the verifier judging a step against content it
+  // cannot see). This is the perturbation-proof: drop the dependency's node from the export → throw.
+  test("a declared dependency missing from the export throws a loud, self-naming error (GAP 10)", () => {
+    const n = node("1.7", { statement: "S", deps: ["1.4", "1.5"] });
+    const all = [n, node("1.4", { statement: "dep four", epistemicState: "validated" })]; // 1.5 absent
+    expect(() => verifierItemFor(n, "hard", all)).toThrow(/declares dependency '1\.5'/);
   });
 });
 
