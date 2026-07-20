@@ -99,6 +99,26 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "bind-failed", at: "t", node: "1", issues: [], rawSnippet: 42 }), 1);
     expect(r.ok).toBe(false);
   });
+
+  // GAP 7(b): the driver's new 'parse-failed' evidence record — persisted whenever a nominally
+  // successful turn's output could not be extracted to a single JSON object (exit 12), carrying node
+  // + role + a bounded raw snippet. Must be RECOGNIZED (never "unrecognized 'kind'").
+  test("the new 'parse-failed' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "prose {\"verdict\":\"VALID\"} more prose" }), 1);
+    expect(r.ok).toBe(true);
+  });
+  test("a 'parse-failed' record missing its 'node' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", role: "verifier", rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(false);
+  });
+  test("a 'parse-failed' record with an unknown 'role' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "wizard", rawSnippet: "x" }), 1);
+    expect(r.ok).toBe(false);
+  });
+  test("a 'parse-failed' record whose 'rawSnippet' is not a string is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: 42 }), 1);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("parseDriverLog — corrupted-tail precedent (mirrors l5-store's parseL5Log)", () => {
@@ -169,6 +189,15 @@ describe("buildReport — honest empty states", () => {
     ];
     const r = buildReport(records, "camp");
     expect(r.bindFailures).toBe(2);
+  });
+
+  test("parse-failed records are counted (GAP 7b), never silently dropped", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "prose {} prose" } as DriverLogRecord,
+      { kind: "parse-failed", at: "t", node: "2", role: "prover", rawSnippet: "```json\n{}\n``` extra" } as DriverLogRecord,
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.parseFailures).toBe(2);
   });
 });
 

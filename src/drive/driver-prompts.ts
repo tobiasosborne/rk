@@ -109,7 +109,8 @@ function prooflessVerdictRule(tier: Tier): string {
 }
 
 const HARD_VERDICT_INSTRUCTIONS = [
-  "Respond with EXACTLY one JSON object and nothing else, matching:",
+  "Respond with EXACTLY one bare JSON object and NOTHING else — no markdown code fences (no ```),",
+  "no surrounding prose or commentary, just the raw JSON object. It must match:",
   '{"verdict": {"outcome": "accept"} | {"outcome": "challenge", "target": <node id as a JSON string>, "severity": "critical" | "major" | "minor" | "note", "reason": <string>, "category"?: "gap" | "missing" | "dependency" | "incorrect" | "unclear" | "other"}, "justification": <string>}',
   '"accept" means this node\'s claim is validly established given its dependencies below.',
   '"challenge" means it is not; it MUST name a "target" (the node or dependency at fault), a "severity", and a non-blank "reason". There is no third outcome.',
@@ -120,7 +121,8 @@ const HARD_VERDICT_INSTRUCTIONS = [
 ].join("\n");
 
 const L5_VERDICT_INSTRUCTIONS = [
-  "Respond with EXACTLY one JSON object and nothing else, matching:",
+  "Respond with EXACTLY one bare JSON object and NOTHING else — no markdown code fences (no ```),",
+  "no surrounding prose or commentary, just the raw JSON object. It must match:",
   '{"verdict": "VALID" | "VALID-WITH-CORRECTION" | "INVALID", "justification": <string>, "correction"?: {"description": <string>, "correctedContentHash": <64-hex-char lowercase SHA-256>}}',
   '"correction" is required on, and only on, a "VALID-WITH-CORRECTION" verdict.',
 ].join("\n");
@@ -163,13 +165,18 @@ export interface ProverItemInput {
 }
 
 const PROVER_OUTPUT_INSTRUCTIONS = [
-  "Respond with EXACTLY one JSON object and nothing else, matching:",
-  '{"children": [{"statement": <string>, "justification"?: <inference rule name>, "depends"?: [<node id>, ...]}, ...]}',
+  "Respond with EXACTLY one bare JSON object and NOTHING else — no markdown code fences (no ```),",
+  "no surrounding prose or commentary. Match:",
+  '{"children": [{"statement": <string>, "justification"?: <derivation label>, "depends"?: [<node id>, ...]}, ...]}',
   'Each element of "children" is one sub-step of the proof: its "statement" is the sub-claim, its',
-  'optional "justification" names the inference rule that establishes it (e.g. modus_ponens,',
-  'by_definition, contradiction), and its optional "depends" lists the node ids it relies on. Order',
-  'the children so each one only relies on earlier children or the dependencies above. Provide at',
-  'least one child. Do NOT judge the statement — only decompose and justify it.',
+  'optional "justification" is a SHORT free-text derivation label naming how the step is established',
+  '— use a named logical rule where one genuinely applies (e.g. modus_ponens, by_definition,',
+  'contradiction), or a domain-appropriate label for a mathematical step (e.g.',
+  'multiplication_by_positive, monotonicity, algebraic_manipulation). Write the label that TRULY',
+  'describes the inference; do not force a logical-rule name onto an arithmetic/algebraic step. Its',
+  'optional "depends" lists the node ids it relies on. Order the children so each one only relies on',
+  'earlier children or the dependencies above. Provide at least one child. Do NOT judge the',
+  'statement — only decompose and justify it.',
 ].join("\n");
 
 /** Builds the prover's per-turn content: a request for a `children[]` decomposition that

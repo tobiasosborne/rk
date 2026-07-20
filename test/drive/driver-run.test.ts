@@ -259,6 +259,37 @@ describe("bind-failure evidence (rk-qxp) — diagnosis-quality skip reason + per
     expect(skip!).toContain("$.verdict.target");
   });
 
+  // GAP 7(b): an exit-12 turn that carries the raw model output (a parse/extraction failure from
+  // driver-live.ts's toDispatchedTurn) persists a 'parse-failed' evidence record — node, role, and a
+  // bounded raw snippet — instead of the raw output being unrecoverable behind "worker exit 12"
+  // (STOP-REPORT-6: the claude verifier's output could not be quoted at all).
+  test("an exit-12 turn carrying rawText logs a 'parse-failed' record (node + role + bounded snippet)", async () => {
+    const raw = 'Sure! Here is the verdict: {"verdict":"VALID","justification":"looks fine"}';
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => ({ raw: undefined, role: "verifier", exit: 12, rawText: raw }),
+    });
+    await runVerifyDriver(h.deps);
+    const parseFailed = h.logs.find((l) => l.includes('"kind":"parse-failed"'));
+    expect(parseFailed).toBeDefined();
+    expect(parseFailed!).toContain('"node":"1"');
+    expect(parseFailed!).toContain('"role":"verifier"');
+    expect(parseFailed!).toContain('"rawSnippet"');
+    expect(parseFailed!).toContain("looks fine"); // the raw output is quotable from the log
+    // still surfaces as a node skip (exit 12), never a silent pass
+    expect(h.logs.some((l) => l.includes("node-skipped") && l.includes("worker exit 12"))).toBe(true);
+  });
+  test("an exit-12 turn with NO rawText (backend produced nothing) logs no 'parse-failed' record", async () => {
+    const h = harness({
+      workspaces: [ws([node("1")])],
+      config: { maxStuckRounds: 1, maxRounds: 2 },
+      dispatchVerify: () => ({ raw: undefined, role: "verifier", exit: 12 }),
+    });
+    await runVerifyDriver(h.deps);
+    expect(h.logs.some((l) => l.includes('"kind":"parse-failed"'))).toBe(false);
+  });
+
   test("an INTEGER-number challenge target (e.g. 1) is coerced to the string '1', binds, and reaches apply — no bind-failed record", async () => {
     const applied: FilledVerdictFile[] = [];
     const h = harness({

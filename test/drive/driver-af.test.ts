@@ -79,6 +79,24 @@ describe("buildRecordProofChildren — ProofContent → af record-proof --childr
   test("omits an empty depends and an absent justification", () => {
     expect(buildRecordProofChildren({ children: [{ statement: "S", depends: [] }] })).toEqual([{ statement: "S" }]);
   });
+  // GAP 6 seam: a FREE-TEXT justification (a real math step outside af's known logic-rule set) is
+  // passed straight through as af's `inference` VERBATIM — no enum bridge, no coercion. af now
+  // accepts any non-blank free-text inference (../vibefeld schema.ValidateJustification), so this is
+  // the shape that records the prover's true derivation label (the live GAP-6 label was exactly
+  // "multiplication_by_positive"). rk deliberately does NOT map it to a logic rule (that would be a
+  // provenance lie).
+  test("passes a free-text (non-enum) justification through as `inference`, verbatim", () => {
+    const children = buildRecordProofChildren({
+      children: [
+        { statement: "multiply the weighted inequality by w_i > 0", justification: "multiplication_by_positive" },
+        { statement: "monotone step", justification: "monotonicity", depends: ["#0"] },
+      ],
+    });
+    expect(children).toEqual([
+      { statement: "multiply the weighted inequality by w_i > 0", inference: "multiplication_by_positive" },
+      { statement: "monotone step", inference: "monotonicity", depends: ["#0"] },
+    ]);
+  });
 });
 
 // rk FU5: a live run must fail loudly at preflight against an af too old to emit the

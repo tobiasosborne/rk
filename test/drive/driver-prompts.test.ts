@@ -117,6 +117,25 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
     const b = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: [] });
     expect(a).toBe(b);
   });
+
+  // GAP 6: the justification is now presented as a free-text derivation label (af accepts any
+  // non-blank string), inviting domain math labels while still naming the recognized logical rules.
+  test("prover prompt presents justification as a free-text derivation label, inviting domain steps", () => {
+    const turn = buildProverTurnPrompt({ nodeId: "1.1", statement: "S", deps: ["1"] });
+    expect(turn).toContain("derivation label");
+    expect(turn).toContain("modus_ponens"); // recognized rules still invited where they apply
+    expect(turn).toContain("multiplication_by_positive"); // a domain label is explicitly welcomed
+  });
+
+  // GAP 7(c): both verifier tiers instruct a BARE JSON object — no fences, no prose — the prompt-side
+  // half of the exit-12 fix.
+  test("verifier prompt (both tiers) forbids markdown fences / surrounding prose", () => {
+    for (const tier of ["hard", "l5"] as const) {
+      const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier });
+      expect(turn.toLowerCase()).toContain("no markdown code fences");
+      expect(turn).toContain("bare JSON object");
+    }
+  });
 });
 
 describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)", () => {

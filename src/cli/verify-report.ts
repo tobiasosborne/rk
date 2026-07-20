@@ -24,7 +24,9 @@ export function driverLogPath(root: string): string {
 function discardsLine(r: CampaignReport): string {
   // rk-qxp: `bind-failed` is surfaced on the same line — a non-zero count on an unmeasured campaign
   // is the "no verdict ever bound/landed" signature (e.g. a challenge target the model failed to quote).
-  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures}`;
+  // GAP 7(b): `parse-failed` alongside it — a nominally-successful turn whose output was not a single
+  // bare JSON object (exit 12); the raw snippet is in the driver-log for diagnosis.
+  return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures} parse-failed=${r.parseFailures}`;
 }
 
 export function reportLines(r: CampaignReport): string[] {

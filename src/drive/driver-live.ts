@@ -85,14 +85,52 @@ export function buildRegistry(workers: WorkersConfig, backends: WorkerBackend[])
  * job is turning a `WorkerResult` into the pre-bind `{raw: unknown, exit}` shape `DispatchedTurn`
  * needs. A parse failure on a nominally-successful exit is reported as 12 (schema-invalid), never
  * silently swallowed. */
+/** GAP 7(a): a CONSERVATIVE, encoding-layer-only extraction of the single JSON object a turn is
+ * required to be. It strips at most ONE surrounding markdown code fence (```json … ``` or ``` … ```)
+ * plus surrounding whitespace, then requires the ENTIRE remainder to `JSON.parse` to exactly one
+ * JSON OBJECT. Anything else fails: prose around JSON, multiple concatenated objects, a bare array or
+ * primitive, or "no object" (JSON.parse itself rejects trailing content and multiple values). This
+ * is DELIBERATELY not a scan-for-first-brace or embedded-object extraction — picking the "wrong"
+ * `{...}` out of a mixed blob risks binding a bogus verdict, and verdict extraction is a validity
+ * semantic; the only tolerance added here is a fenced-but-otherwise-clean object, the one shape a
+ * model reliably emits despite the "bare JSON" instruction. Ambiguous output still fails (loudly, and
+ * persisted by the edge — see DispatchedTurn.rawText). */
+export function extractSingleJsonObject(rawText: string): { ok: true; value: Record<string, unknown> } | { ok: false } {
+  const candidate = stripSingleFence(rawText);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    return { ok: false };
+  }
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) return { ok: true, value: parsed as Record<string, unknown> };
+  return { ok: false };
+}
+
+/** Removes at most one surrounding ```-fence from `s` (after trimming). A fence is recognized only
+ * when the opening line is a bare ``` optionally followed by a simple language tag (e.g. ```json)
+ * and a matching closing ``` exists — otherwise the input is returned trimmed but unchanged, so a
+ * value that merely CONTAINS backticks is never mangled. */
+function stripSingleFence(s: string): string {
+  const t = s.trim();
+  if (!t.startsWith("```")) return t;
+  const firstNl = t.indexOf("\n");
+  if (firstNl === -1) return t;
+  const tag = t.slice(3, firstNl).trim();
+  if (tag !== "" && !/^[A-Za-z0-9_-]+$/.test(tag)) return t; // opening line carried more than a language tag — not a clean fence
+  const closeIdx = t.lastIndexOf("```");
+  if (closeIdx <= firstNl) return t; // no closing fence after the opening line
+  return t.slice(firstNl + 1, closeIdx).trim();
+}
+
 export function toDispatchedTurn(role: Role, result: WorkerResult): DispatchedTurn {
   if (result.exit !== 0) return { raw: undefined, role, exit: result.exit, usage: result.usage };
   if (result.rawText === undefined) return { raw: undefined, role, exit: 12, usage: result.usage };
-  try {
-    return { raw: JSON.parse(result.rawText), role, exit: 0, usage: result.usage };
-  } catch {
-    return { raw: undefined, role, exit: 12, usage: result.usage };
-  }
+  const extracted = extractSingleJsonObject(result.rawText);
+  if (extracted.ok) return { raw: extracted.value, role, exit: 0, usage: result.usage };
+  // GAP 7(b): parse/extraction failed — carry the raw text so the driver edge persists a bounded
+  // `parse-failed` snippet (previously discarded; the node-skipped reason was the bare "worker exit 12").
+  return { raw: undefined, role, exit: 12, usage: result.usage, rawText: result.rawText };
 }
 
 export interface LiveDispatcherOptions {

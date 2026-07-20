@@ -39,6 +39,20 @@ describe("reportLines — FU4: discard diagnostics render even with zero usage r
     expect(discards!).toContain("bind-failed=1");
   });
 
+  // GAP 7(b): a parse/extraction failure (the claude-verifier exit-12 gap) renders its own count on
+  // the discards line, even on an otherwise unmeasured (zero-usage) deadlock run.
+  test("parse-failed count renders on the discards line (GAP 7b), even with zero usage records", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "parse-failed", at: "t1", node: "1", role: "verifier", rawSnippet: 'Here is the verdict: {"verdict":"VALID"}' } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-parsefail");
+    expect(report.measured).toBe(false);
+    const lines = reportLines(report);
+    const discards = lines.find((l) => l.includes("discards:"));
+    expect(discards).toBeDefined();
+    expect(discards!).toContain("parse-failed=1");
+  });
+
   test("a measured report still prints the discards line (unchanged path)", () => {
     const records: DriverLogRecord[] = [
       { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,

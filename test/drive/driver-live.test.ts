@@ -18,6 +18,7 @@ import {
   resolveModel,
   DEFAULT_MODEL_BY_BACKEND,
   toDispatchedTurn,
+  extractSingleJsonObject,
   verifierItemFor,
 } from "../../src/drive/driver-live";
 import { buildProverTurnPrompt } from "../../src/drive/driver-prompts";
@@ -245,6 +246,62 @@ describe("toDispatchedTurn — WorkerResult -> DispatchedTurn discipline", () =>
     const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) });
     expect(t.exit).toBe(0);
     expect(t.raw).toEqual({ verdict: { outcome: "accept" }, justification: "ok" });
+  });
+
+  // GAP 7(a): a model that ignores the "bare JSON" instruction and wraps its single object in a
+  // markdown fence is tolerated at the ENCODING layer — the fence + whitespace are stripped and the
+  // lone object is used. This is the one and only tolerance added; nothing else is scanned for.
+  test("exit 0 + a single fenced ```json object -> extracted, exit 0", () => {
+    const body = { verdict: "VALID", justification: "ok" };
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: "```json\n" + JSON.stringify(body) + "\n```" });
+    expect(t.exit).toBe(0);
+    expect(t.raw).toEqual(body);
+  });
+  test("exit 0 + a bare ``` fence (no language tag) around one object -> extracted, exit 0", () => {
+    const body = { verdict: "VALID", justification: "ok" };
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: "```\n" + JSON.stringify(body) + "\n```\n" });
+    expect(t.exit).toBe(0);
+    expect(t.raw).toEqual(body);
+  });
+
+  // GAP 7(a)+(b): AMBIGUOUS output still fails (loudly), and the raw text is CARRIED so the edge can
+  // persist it. These are the mis-extraction cases the conservative rule deliberately refuses.
+  test("exit 0 + prose wrapped around JSON -> exit 12, raw undefined, rawText carried for evidence", () => {
+    const raw = 'Here is my verdict:\n{"verdict":"VALID","justification":"ok"}\nHope that helps!';
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw });
+    expect(t.exit).toBe(12);
+    expect(t.raw).toBeUndefined();
+    expect(t.rawText).toBe(raw); // persisted, not thrown away
+  });
+  test("exit 0 + MULTIPLE concatenated objects -> exit 12 (never pick one), rawText carried", () => {
+    const raw = '{"verdict":"VALID","justification":"a"}{"verdict":"INVALID","justification":"b"}';
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw });
+    expect(t.exit).toBe(12);
+    expect(t.rawText).toBe(raw);
+  });
+  test("exit 0 + a bare JSON ARRAY (not an object) -> exit 12, rawText carried", () => {
+    const raw = '[{"verdict":"VALID"}]';
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: raw });
+    expect(t.exit).toBe(12);
+    expect(t.rawText).toBe(raw);
+  });
+  test("a successful bare-object parse carries NO rawText (evidence only on failure)", () => {
+    const t = toDispatchedTurn("verifier", { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: '{"verdict":"VALID","justification":"ok"}' });
+    expect(t.exit).toBe(0);
+    expect(t.rawText).toBeUndefined();
+  });
+});
+
+describe("extractSingleJsonObject — conservative, single-object-only extraction (GAP 7a)", () => {
+  test("a lone object (bare or fenced) is accepted; prose/multiple/array/primitive are refused", () => {
+    expect(extractSingleJsonObject('{"a":1}')).toEqual({ ok: true, value: { a: 1 } });
+    expect(extractSingleJsonObject('```json\n{"a":1}\n```')).toEqual({ ok: true, value: { a: 1 } });
+    expect(extractSingleJsonObject('prefix {"a":1}').ok).toBe(false);
+    expect(extractSingleJsonObject('{"a":1}{"b":2}').ok).toBe(false);
+    expect(extractSingleJsonObject('[{"a":1}]').ok).toBe(false);
+    expect(extractSingleJsonObject('42').ok).toBe(false);
+    expect(extractSingleJsonObject('"just a string"').ok).toBe(false);
+    expect(extractSingleJsonObject('null').ok).toBe(false);
   });
 });
 

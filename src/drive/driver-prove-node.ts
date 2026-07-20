@@ -13,6 +13,7 @@
 //   isRootValidated) — recording proof content alone never converges a claim.
 
 import { detectProverOverreach, usageTokens } from "./driver-guardrails";
+import { boundedRawSnippet } from "./driver-verify-node";
 import type { AfNodeView } from "./driver-plan";
 import type { DriverDeps } from "./driver-types";
 
@@ -86,7 +87,14 @@ export async function proveOneNode(deps: DriverDeps, node: AfNodeView): Promise<
     deps.appendLog(JSON.stringify({ kind: "prover-overreach", at: deps.now(), node: node.id, reason: overreach.reason }));
     return { spentTokens, skip: `prover overreach: ${overreach.reason}` };
   }
-  if (turn.exit !== 0) return { spentTokens, skip: `prover worker exit ${turn.exit}` };
+  if (turn.exit !== 0) {
+    // GAP 7(b): persist the raw output on an exit-12 parse/extraction failure (same evidence trail
+    // as the verifier path) rather than losing it behind "prover worker exit 12".
+    if (turn.rawText !== undefined) {
+      deps.appendLog(JSON.stringify({ kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role, rawSnippet: boundedRawSnippet(turn.rawText) }));
+    }
+    return { spentTokens, skip: `prover worker exit ${turn.exit}` };
+  }
   const proof = extractProofContent(turn.raw);
   if (proof === undefined) return { spentTokens, skip: "prover produced no usable proof content (need a non-empty children[] decomposition)" };
   const rec = await deps.recordProof(node, proof);

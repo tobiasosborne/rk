@@ -239,7 +239,7 @@ post-hoc classification of why a call didn't apply:
 | 0 | process succeeded, `rawText` should contain a verdict | proceed to parse + bind (may still be rejected at those stages) |
 | 10 | timeout | see "Retry ownership" below — never a blind resume |
 | 11 | budget exceeded | stop dispatching further turns on this session; report, do not retry blindly |
-| 12 | schema-invalid output | exit was 0 but parsing/binding failed — log the rejection reason (`TurnOutcome.issues`), never apply a partially-valid document |
+| 12 | schema-invalid output | exit was 0 but parsing/binding failed — log the rejection reason (`TurnOutcome.issues`), never apply a partially-valid document. Encoding tolerance (GAP 7a): `toDispatchedTurn` strips at most one surrounding markdown code fence and requires the whole remainder to parse to exactly one JSON object; ambiguous output (prose around JSON, multiple objects, a bare array/primitive) still fails 12. On a parse/extraction failure the driver persists a `parse-failed` driver-log record — node, role, and a bounded 500-char raw snippet — so the model's output is recoverable, never lost behind the bare "worker exit 12" reason |
 | 13 | backend unavailable | fall back per `.rk/config`'s per-role×tier fallback chain (M3.2); if none, abort the claim |
 
 Any other nonzero code the backend's own process naturally returns (crash, killed) is treated as

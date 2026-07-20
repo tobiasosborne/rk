@@ -53,6 +53,12 @@ export interface DispatchedTurn {
   role: Role;
   exit: number;
   usage?: WorkerUsage;
+  /** GAP 7(b): the backend's raw output text, carried ONLY on an exit-12 parse/extraction failure
+   * (src/drive/driver-live.ts's `toDispatchedTurn`), so the driver edge can persist a bounded
+   * snippet as a `parse-failed` evidence record instead of throwing the model output away (the
+   * STOP-REPORT-6 gap: an exit-12 previously surfaced as the bare string "worker exit 12", raw
+   * output unrecoverable). Undefined on success and on every non-parse failure. */
+  rawText?: string;
 }
 
 export interface DriverDeps {

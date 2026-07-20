@@ -31,7 +31,7 @@ export function childrenFirst(a: AfApplyItem, b: AfApplyItem): number {
  * JSON regardless of the snippet's content. Never throws (a value that cannot be stringified — e.g.
  * a BigInt — falls back to `String(raw)`). */
 const RAW_SNIPPET_CAP = 500;
-function boundedRawSnippet(raw: unknown): string {
+export function boundedRawSnippet(raw: unknown): string {
   let s: string;
   try {
     s = typeof raw === "string" ? raw : JSON.stringify(raw);
@@ -75,7 +75,15 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
   if (turn.role !== "verifier") {
     return { spentTokens, skip: `role '${turn.role}' cannot mint an af verdict — only 'verifier' authors af acceptances (PRD C9)` };
   }
-  if (turn.exit !== 0) return { spentTokens, skip: `worker exit ${turn.exit}` };
+  if (turn.exit !== 0) {
+    // GAP 7(b): an exit-12 parse/extraction failure carries the model's raw output (driver-live.ts's
+    // `toDispatchedTurn`) — persist a bounded snippet as evidence so the stop is self-diagnosing,
+    // instead of the raw string being unrecoverable behind "worker exit 12" (STOP-REPORT-6).
+    if (turn.rawText !== undefined) {
+      deps.appendLog(JSON.stringify({ kind: "parse-failed", at: deps.now(), node: node.id, role: turn.role, rawSnippet: boundedRawSnippet(turn.rawText) }));
+    }
+    return { spentTokens, skip: `worker exit ${turn.exit}` };
+  }
   if (node.author !== undefined && node.author === verifiedBySeam) return { spentTokens, skip: "reviewer==author (would be rejected by af)" };
   const state: DispatchState = { itemId: node.id, contentHash: node.contentHash, tier: "hard", claimId: deps.claimId, verifier: deps.identity };
   const bound = bindVerdicts(state, turn.raw);

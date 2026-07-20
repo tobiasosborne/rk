@@ -68,8 +68,18 @@ export interface DiscardLogRecord { kind: "cross-vendor-rejected" | "vacuous-acc
  * records above document (the selftest forbids a Node builtin import's exact spelling in a PURITY
  * file; the wire field is genuinely named this). */
 export interface BindFailedLogRecord { kind: "bind-failed"; at: string; node : string; issues: { path: string; message: string }[]; rawSnippet: string; }
+/** GAP 7(b): the driver's parse/extraction-failure EVIDENCE record (src/drive/driver-verify-node.ts
+ * and driver-prove-node.ts). Written whenever a nominally-successful (exit 0) turn's output could not
+ * be extracted to the single JSON object it must be (src/drive/driver-live.ts's `toDispatchedTurn`
+ * → exit 12), carrying the node, the turn's role, and a bounded, JSON-safe snippet of the raw model
+ * output — so a live stop can quote what the model actually returned instead of only "worker exit 12"
+ * (the STOP-REPORT-6 gap: the claude verifier's output was unrecoverable). This report only COUNTS
+ * these (the math never reads `rawSnippet`), but they MUST be RECOGNIZED (never `unrecognized 'kind'`).
+ * The `node` field is spelled with a space before its colon — same purity-grep false-positive the
+ * records above document. */
+export interface ParseFailedLogRecord { kind: "parse-failed"; at: string; node : string; role: Role; rawSnippet: string; }
 
-export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | OtherDriverLogRecord;
+export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | OtherDriverLogRecord;
 const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap"]);
 
 export interface DriverLogIssue { line: number; message: string; }
@@ -119,6 +129,11 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (!Array.isArray(parsed.issues)) return fail("bind-failed record: 'issues' must be an array");
       if (typeof parsed.rawSnippet !== "string") return fail("bind-failed record: 'rawSnippet' must be a string");
       return { ok: true, record: parsed as unknown as BindFailedLogRecord };
+    case "parse-failed":
+      if (!isNonBlankString(parsed.node)) return fail("parse-failed record: missing/mistyped 'node'");
+      if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`parse-failed record: 'role' must be one of ${[...ROLES].join(", ")}`);
+      if (typeof parsed.rawSnippet !== "string") return fail("parse-failed record: 'rawSnippet' must be a string");
+      return { ok: true, record: parsed as unknown as ParseFailedLogRecord };
     default:
       if (typeof parsed.kind === "string" && OTHER_KINDS.has(parsed.kind)) return { ok: true, record: parsed as unknown as OtherDriverLogRecord };
       return fail(`unrecognized 'kind': ${JSON.stringify(parsed.kind)}`);
@@ -166,6 +181,11 @@ export interface CampaignReport {
    * a challenge whose "target" was an unquotable number). A non-zero value on an otherwise
    * unmeasured campaign is the signature of a live stop where NO verdict ever landed. */
   bindFailures: number;
+  /** GAP 7(b): count of 'parse-failed' evidence records — a nominally-successful turn whose output
+   * could not be extracted to the single JSON object it must be (exit 12). Like `bindFailures`, a
+   * non-zero value on an otherwise unmeasured campaign is the signature of a live stop where the
+   * worker's output never bound; the raw snippet is in the driver-log for diagnosis. */
+  parseFailures: number;
   nodeRows: NodeReportRow[];
   claimRows: ClaimReportRow[];
   parseIssues: DriverLogIssue[];
@@ -265,10 +285,12 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
   }
   const discards: DiscardCounts = { crossVendorRejected: 0, vacuousAcceptDiscarded: 0 };
   let bindFailures = 0;
+  let parseFailures = 0;
   for (const r of records) {
     if (r.kind === "cross-vendor-rejected") discards.crossVendorRejected++;
     else if (r.kind === "vacuous-accept-discarded") discards.vacuousAcceptDiscarded++;
     else if (r.kind === "bind-failed") bindFailures++;
+    else if (r.kind === "parse-failed") parseFailures++;
   }
 
   const nodeRows: NodeReportRow[] = allKeys(state).map((k) => {
@@ -290,5 +312,5 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
 
   const grand = grandTotal(state);
   const attributionIssues = computeAttributionIssues(usageRecords);
-  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
+  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, parseFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
 }
