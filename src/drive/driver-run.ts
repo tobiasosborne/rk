@@ -47,9 +47,12 @@ import { crossVendorRejectionMessage, decideCrossVendor } from "./cross-vendor";
 import {
   DEFAULT_MAX_STUCK_ROUNDS,
   DEFAULT_NODE_RETRY_CAP,
+  checkBudget,
   checkRetryCap,
   detectProverOverreach,
   evaluateStuckGuard,
+  usageTokens,
+  type BudgetConfig,
   type DriverStopReason,
 } from "./driver-guardrails";
 import {
@@ -143,6 +146,17 @@ export interface DriverDeps {
   /** Offending subtree for a balloon (default: all node ids). */
   offendingSubtree?: string[];
   config?: Partial<DriverConfig>;
+  /** rk-s9t (M3 milestone review verdict (c)): the campaign-level token spend guard. OPTIONAL in
+   * this pure type so every synthetic/dry test harness runs with no cap (and every pre-existing
+   * caller still type-checks), but REQUIRED-FOR-LIVE at the edge — src/cli/verify-live.ts refuses
+   * to start a `--live` run without `--max-campaign-tokens`, the exact hole the review named (a
+   * real-token run with no ceiling). When set, the loop tracks total tokens spent across EVERY
+   * dispatched turn (input+output+cache, applied OR discarded — mirroring l5-dispatch's blocker-8
+   * "a rejected turn still spent real tokens" rule) and, before EACH real dispatch, refuses a call
+   * it cannot afford, aborting with stopReason "budget-exhausted" rather than truncating mid-call.
+   * The counter is plain arithmetic over injected `DispatchedTurn.usage` values, so the core stays
+   * pure (no fs/clock/env). */
+  budget?: BudgetConfig;
 }
 
 export interface DriverRunResult {
@@ -182,8 +196,16 @@ function isRootValidated(nodes: readonly AfNodeView[]): boolean {
   return root !== undefined && root.epistemicState === "validated";
 }
 
-async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number): Promise<DriverRunResult> {
+async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number, tokensSpent: number): Promise<DriverRunResult> {
   const subtree = deps.offendingSubtree ?? ws.nodes.map((n) => n.id);
+  // rk-s9t rule 2: the balloon-classification turn is itself a real model call — refuse it too when
+  // the campaign budget cannot afford it (fail closed; budget precedence over the balloon dispatch).
+  if (deps.budget) {
+    const decision = checkBudget(tokensSpent, deps.budget);
+    if (!decision.affordable) {
+      return { status: "aborted", stopReason: "budget-exhausted", message: `budget-exhausted before balloon classification: ${decision.reason}`, appliedNodeIds: [], outcomes: [], rounds: 0 };
+    }
+  }
   const parsed = parseClassificationReview(await deps.dispatchClassification([...subtree].sort()));
   if (!parsed.ok) {
     // Classification failed — still abort (the tripwire fired), but say so loudly; no mark/task on
@@ -237,13 +259,20 @@ async function handleBalloon(deps: DriverDeps, ws: AfWorkspaceView, cap: number)
   };
 }
 
+/** The outcome of one `verifyOneNode` call. `spentTokens` (rk-s9t) is the turn's all-in token cost
+ * (0 when no worker was available or the dispatcher reported no usage) — reported on BOTH the apply
+ * and the skip branch so the caller adds it to the running campaign total regardless of whether the
+ * verdict was ever applied (a rejected/discarded turn spent real tokens too). */
+type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; contentHash: string } | { skip: string });
+
 /** Dispatches + binds a single node's verdict, applying the prover-overreach guard. Returns the af
  * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
  * the authoritative bytes immediately before apply — M3 blocker 1), or a reason it was skipped
- * (never applied). */
-async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<{ item: AfApplyItem; contentHash: string } | { skip: string }> {
+ * (never applied); either way carries the turn's `spentTokens` for the campaign budget. */
+async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string): Promise<VerifyNodeOutcome> {
   const turn = await deps.dispatchVerify(node);
-  if (turn === undefined) return { skip: "no worker available" };
+  if (turn === undefined) return { spentTokens: 0, skip: "no worker available" };
+  const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
   // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,
   // independent of whether the resulting verdict is ever applied (src/drive/report.ts reads this
   // "usage" kind; every other kind this loop appends is untouched by this addition).
@@ -253,7 +282,7 @@ async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam:
   const overreach = detectProverOverreach(turn.role, turn.raw);
   if (overreach.discard) {
     deps.appendLog(JSON.stringify({ kind: "prover-overreach", at: deps.now(), node: node.id, reason: overreach.reason }));
-    return { skip: `prover overreach: ${overreach.reason}` };
+    return { spentTokens, skip: `prover overreach: ${overreach.reason}` };
   }
   // M3 blocker 3: this apply path records af ACCEPTANCES, and only a verifier may author one
   // (PRD C9 — provers prove, reviewers review). The overreach guard above deliberately EXEMPTS the
@@ -261,15 +290,15 @@ async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam:
   // would otherwise sail through and mint an af acceptance here. Require the exact `verifier` role;
   // any other role's turn is discarded (logged as a node-skipped by the caller, never applied).
   if (turn.role !== "verifier") {
-    return { skip: `role '${turn.role}' cannot mint an af verdict — only 'verifier' authors af acceptances (PRD C9)` };
+    return { spentTokens, skip: `role '${turn.role}' cannot mint an af verdict — only 'verifier' authors af acceptances (PRD C9)` };
   }
-  if (turn.exit !== 0) return { skip: `worker exit ${turn.exit}` };
-  if (node.author !== undefined && node.author === verifiedBySeam) return { skip: "reviewer==author (would be rejected by af)" };
+  if (turn.exit !== 0) return { spentTokens, skip: `worker exit ${turn.exit}` };
+  if (node.author !== undefined && node.author === verifiedBySeam) return { spentTokens, skip: "reviewer==author (would be rejected by af)" };
   const state: DispatchState = { itemId: node.id, contentHash: node.contentHash, tier: "hard", claimId: deps.claimId, verifier: deps.identity };
   const bound = bindVerdicts(state, turn.raw);
-  if (!bound.ok) return { skip: `verdict bind failed: ${bound.issues.map((i) => i.message).join("; ")}` };
+  if (!bound.ok) return { spentTokens, skip: `verdict bind failed: ${bound.issues.map((i) => i.message).join("; ")}` };
   const mapped = afItemFromVerdictDocument(node.id, bound.document);
-  if (!mapped.ok) return { skip: `verdict map failed: ${mapped.reason}` };
+  if (!mapped.ok) return { spentTokens, skip: `verdict map failed: ${mapped.reason}` };
   // M3.8: the cross-vendor rule only gates PROMOTION — a challenge never accepts the node this
   // turn regardless (driver-verdict-map.ts's own invariant), so there is nothing to promote and
   // nothing to gate. Checked here, per-item, BEFORE `mapped.item` is ever returned into the
@@ -280,10 +309,10 @@ async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam:
     if (!decision.satisfied) {
       const reason = crossVendorRejectionMessage(node.id, decision);
       deps.appendLog(JSON.stringify({ kind: "cross-vendor-rejected", at: deps.now(), node: node.id, reason: decision.reason }));
-      return { skip: reason };
+      return { spentTokens, skip: reason };
     }
   }
-  return { item: mapped.item, contentHash: node.contentHash };
+  return { spentTokens, item: mapped.item, contentHash: node.contentHash };
 }
 
 /** Drives one workspace claim to convergence or a named abort. */
@@ -300,6 +329,10 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   const attempts = new Map<string, number>();
   let roundsWithoutProgress = 0;
   let round = 0;
+  // rk-s9t: running campaign token total, summed across EVERY dispatched turn (applied or
+  // discarded). The pre-dispatch checks below (and handleBalloon's) read it; verifyOneNode returns
+  // each turn's cost so it accrues here regardless of the turn's outcome.
+  let tokensSpent = 0;
 
   for (; round < config.maxRounds; round++) {
     const q = deps.queryWorkspace();
@@ -308,7 +341,7 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
 
     const balloon = detectBalloon(ws.nodeCount, config.balloonCap);
     if (balloon.ballooned) {
-      const result = await handleBalloon(deps, ws, config.balloonCap);
+      const result = await handleBalloon(deps, ws, config.balloonCap, tokensSpent);
       return { ...result, appliedNodeIds, outcomes, rounds: round };
     }
 
@@ -329,8 +362,18 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
       const node = byId.get(id)!;
       const attemptsSoFar = attempts.get(id) ?? 0;
       if (checkRetryCap(attemptsSoFar, config.nodeRetryCap).exhausted) continue;
+      // rk-s9t rule 2: pre-dispatch remaining-budget check — BEFORE the real model call, refuse any
+      // node whose next turn the campaign budget cannot afford, aborting rather than requesting a
+      // token past the cap. Fires per-node so the (cap+1)th token is never requested.
+      if (deps.budget) {
+        const decision = checkBudget(tokensSpent, deps.budget);
+        if (!decision.affordable) {
+          return { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
+        }
+      }
       const r = await verifyOneNode(deps, node, verifiedBySeam);
-      if ("item" in r) composed.push(r);
+      tokensSpent += r.spentTokens; // accrue whether the turn applied or was discarded
+      if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
       else {
         attempts.set(id, attemptsSoFar + 1);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: r.skip }));

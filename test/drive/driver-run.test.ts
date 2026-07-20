@@ -328,6 +328,85 @@ describe("convergence requires a validated root (M3 blocker 2)", () => {
   });
 });
 
+// rk-s9t (M3 repair-wave verdict (c)): a campaign-level token cap + a pre-dispatch remaining-budget
+// check are the live spend guard --max-turns/--max-nodes never were (those bound call COUNT, not
+// tokens). The counter lives in runVerifyDriver's loop; the check fires BEFORE every real dispatch.
+describe("campaign token budget (rk-s9t)", () => {
+  // Each turn reports 40 all-in tokens; cap 100, reserve 10 → 3 dispatches (0→40→80) then the 4th
+  // node's pre-dispatch check (spent 120 >= cap 100) aborts. The reserve also blocks any call that
+  // could not be afforded to completion.
+  const usage40 = { input: 40, output: 0, cache_read: 0, cache_creation: 0 };
+
+  test("the run ABORTS with 'budget-exhausted' once spend reaches the cap — never a mid-flight truncation", async () => {
+    let dispatchCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1.1"), node("1.2"), node("1.3"), node("1.4")])],
+      config: { maxRounds: 3 },
+      budget: { maxCampaignTokens: 100, perCallReserve: 10 },
+      dispatchVerify: () => { dispatchCalls++; return { raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0, usage: usage40 }; },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("budget-exhausted"); // pre-fix: no such guard, would apply/converge
+    // rule 2: the (cap+1)th token is NEVER requested — only 3 calls fired (0→40→80), the 4th refused.
+    expect(dispatchCalls).toBe(3);
+    expect(r.appliedNodeIds).toEqual([]); // aborted inside the dispatch loop, before any apply
+  });
+
+  test("a cap below one call's reserve refuses the FIRST dispatch — no token ever requested", async () => {
+    let dispatchCalls = 0;
+    const h = harness({
+      workspaces: [ws([node("1.1")])],
+      config: { maxRounds: 3 },
+      budget: { maxCampaignTokens: 5, perCallReserve: 10 }, // 0 + 10 > 5
+      dispatchVerify: () => { dispatchCalls++; return { raw: { verdict: { outcome: "accept" }, justification: "ok" }, role: "verifier", exit: 0, usage: usage40 }; },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("budget-exhausted");
+    expect(dispatchCalls).toBe(0); // the very first call was never even attempted
+  });
+
+  test("a REJECTED turn still counts toward spend (tokens are spent whether or not it applies)", async () => {
+    // Turns fail (exit 13 → discarded, never applied). If discarded turns did NOT count, spend would
+    // stay 0 and the loop would abort 'stuck-no-progress'; because they DO count, spend reaches the
+    // cap and the abort is 'budget-exhausted' instead — the assertion that distinguishes the two.
+    const h = harness({
+      workspaces: [ws([node("1.1"), node("1.2"), node("1.3"), node("1.4")])],
+      config: { maxRounds: 3, maxStuckRounds: 3 },
+      budget: { maxCampaignTokens: 100, perCallReserve: 10 },
+      dispatchVerify: () => ({ raw: undefined, role: "verifier", exit: 13, usage: usage40 }), // rejected, but spent 40
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("budget-exhausted"); // pre-fix (only accepts counted): "stuck-no-progress"
+    expect(r.appliedNodeIds).toEqual([]);
+  });
+
+  test("no budget set (synthetic/dry harness) → the cap is not enforced at all (optional field)", async () => {
+    const round0 = ws([node("1.1")]);
+    const round1 = ws([node("1.1", { epistemicState: "validated" })]);
+    const h = harness({ workspaces: [round0, round1] }); // no `budget`
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("converged"); // budget guard dormant when unset
+  });
+
+  test("the balloon classification call is ALSO refused when the budget cannot afford it (rule 2: every real call)", async () => {
+    let classCalls = 0;
+    const over = [node("1"), node("1.1"), node("1.2"), node("1.3"), node("1.4")]; // 5 > cap 3
+    const h = harness({
+      workspaces: [ws(over, 5)],
+      config: { balloonCap: 3 },
+      budget: { maxCampaignTokens: 5, perCallReserve: 10 }, // 0 + 10 > 5, cannot afford the classify turn
+      dispatchClassification: () => { classCalls++; return { classification: "missing-fact", rationale: "x" }; },
+    });
+    const r = await runVerifyDriver(h.deps);
+    expect(r.status).toBe("aborted");
+    expect(r.stopReason).toBe("budget-exhausted"); // budget precedence over the balloon dispatch
+    expect(classCalls).toBe(0); // the classification model call was never made
+  });
+});
+
 // M3 blocker 1: a verdict bound to pre-dispatch bytes must be re-confirmed against the authoritative
 // af node immediately before apply, and discarded on any hash mismatch.
 describe("re-read before apply (M3 blocker 1)", () => {
