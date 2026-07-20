@@ -115,6 +115,52 @@ export interface L5LogParseResult {
   issues: L5LogIssue[];
 }
 
+/** BLOCKER 6 (M3-review): the append-only ordinal chain's integrity, checked over the parsed
+ * records IN FILE ORDER. A healthy `.rk/l5-verdicts.jsonl` is written by a single writer that
+ * assigns `ordinal = 1 + max-on-disk` starting at 0 and never reuses or skips one, so record i (in
+ * file order) MUST carry ordinal i: 0,1,2,…,N-1, strictly increasing, contiguous, unique. Any
+ * deviation — a duplicate ordinal, an out-of-order pair, a gap (a cleanly-deleted line that leaves
+ * no parse issue behind), or a truncated prefix (first ordinal ≠ 0) — is tamper or loss the plain
+ * latest-by-ordinal query cannot see, and is exactly what let an earlier VALID survive a later
+ * truncated INVALID. Returns one human-readable string per problem; empty ⇒ chain intact. Pure. */
+export function assessL5OrdinalChain(records: readonly L5StoredVerdict[]): string[] {
+  const problems: string[] = [];
+  const seen = new Set<number>();
+  for (let i = 0; i < records.length; i++) {
+    const ord = records[i]!.ordinal;
+    if (seen.has(ord)) problems.push(`duplicate ordinal ${ord} (two records claim the same append position)`);
+    seen.add(ord);
+    if (ord !== i) {
+      problems.push(
+        `ordinal ${ord} at file position ${i} breaks the contiguous append-only chain (a healthy single-writer log has record i carrying ordinal i; expected ${i}) — gap, reorder, duplicate, or truncated prefix`,
+      );
+    }
+  }
+  return problems;
+}
+
+export interface L5StoreHealth {
+  healthy: boolean;
+  /** Every reason the store is not trustworthy: parse-level issues (line-attributed) rendered as
+   * strings, followed by ordinal-chain problems. Empty iff `healthy`. */
+  problems: string[];
+}
+
+/** BLOCKER 6 (M3-review): is the store trustworthy enough to drive promotion? The store is healthy
+ * iff `parseL5Log` reported ZERO issues (no corrupted/truncated/blank lines) AND the ordinal chain
+ * is intact (`assessL5OrdinalChain`). A single corrupt line makes the WHOLE store untrustworthy —
+ * a truncated tail line's own `itemId` is unknowable, so it could belong to ANY shard, which is
+ * precisely why an earlier VALID must not be trusted to be the latest verdict once anything after
+ * it is unreadable. Callers (the linker's promotion check; the writer's append guard) fail closed
+ * on `!healthy`. Pure. */
+export function l5StoreHealthy(parsed: L5LogParseResult): L5StoreHealth {
+  const problems = [
+    ...parsed.issues.map((i) => `line ${i.line}: ${i.message}`),
+    ...assessL5OrdinalChain(parsed.records),
+  ];
+  return { healthy: problems.length === 0, problems };
+}
+
 /** Splits raw `.rk/l5-verdicts.jsonl` TEXT (already read by the fs edge, src/drive/l5-store-io.ts)
  * into records, one JSONL line at a time, via src/drive/l5-record.ts's `parseL5StoredVerdictLine`.
  * A single trailing empty line (the normal artifact of every appended line ending in `\n`) is

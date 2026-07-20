@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/l5-verdicts.jsonl",
+      "message_pattern": "L5 store integrity compromised — promotion poisoned, fail closed"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "class-driven (no AISM counterpart -- the L5 verdict store is M3.7's own deliverable, first wired to a gate in M3.8).",
+  "notes": "M3.8 Check 14, HARDENED by the 2026-07-19 M3 review (blocker 6): byte-identical to linker-35 (a 'status: stated' shard with a fresh VALID L5 verdict that would otherwise be 'L5 promotable') EXCEPT the store carries a second, truncated line whose own itemId is unreadable. Previously a corrupt line was a WARN that merely degraded coverage while the earlier VALID still promoted -- exactly the hole where an earlier VALID survives a later unreadable INVALID. Now the corrupt/ordinally-broken store POISONS promotion: the store itself is a fail-closed ERROR and NO 'L5 promotable' nudge is emitted. Sibling: linker-35 (same shard, clean store, promotes)."
+}

@@ -20,7 +20,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { buildL5StoredVerdict, serializeL5StoredVerdict, type L5StoredVerdict } from "./l5-record";
-import { parseL5Log, type L5LogParseResult } from "./l5-store";
+import { l5StoreHealthy, parseL5Log, type L5LogParseResult } from "./l5-store";
 import { sha256Bytes } from "../refs/hash";
 import type { VerdictDocument } from "./verdict-schema";
 
@@ -74,6 +74,26 @@ export function appendL5Verdicts(
   const path = l5StorePath(root);
   mkdirSync(dirname(path), { recursive: true });
   const existing = readL5Store(root);
+
+  // BLOCKER 6 (M3-review): REFUSE to append through a corrupt store. A truncated/garbage tail line
+  // or a broken ordinal chain (duplicate/gap/reorder) means the on-disk state is untrustworthy: its
+  // true latest ordinal is unknowable, so blindly writing `max+1` would cement the corruption and
+  // could let an earlier VALID outlive a later, unreadable INVALID. Fail closed — write NOTHING and
+  // report every document as rejected. The corruption must be repaired (out of band) before the log
+  // can grow again. (Single-writer, no-daemon model — CLAUDE.md §7 — so there is no live contention
+  // to reconcile; a corrupt file is a real defect, not a transient race.)
+  const health = l5StoreHealthy(existing);
+  if (!health.healthy) {
+    return {
+      ok: false,
+      appended: [],
+      rejected: documents.map((document) => ({
+        document,
+        reason: `store integrity compromised, refusing to append through corruption: ${health.problems.join("; ")}`,
+      })),
+    };
+  }
+
   let ordinal = nextOrdinal(existing.records);
 
   const appended: L5StoredVerdict[] = [];

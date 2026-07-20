@@ -92,6 +92,37 @@ describe("appendL5Verdicts", () => {
   });
 });
 
+describe("appendL5Verdicts — BLOCKER 6: refuse to append through a corrupt store", () => {
+  test("a corrupted tail line on disk makes the next append REFUSE (nothing written, all rejected)", () => {
+    const root = tmpRoot();
+    appendL5Verdict(root, l5Doc("a", "a".repeat(64)));
+    // Corrupt the on-disk store: append a truncated/garbage line by hand.
+    const path = l5StorePath(root);
+    writeFileSync(path, readFileSync(path, "utf8") + '{"schemaVersion":"1","ordinal":1', "utf8");
+
+    const result = appendL5Verdicts(root, [l5Doc("b", "b".repeat(64))]);
+    expect(result.ok).toBe(false);
+    expect(result.appended).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]!.reason).toContain("store integrity");
+    // The corrupt file was NOT extended with the new record (no append through corruption).
+    expect(readFileSync(path, "utf8")).not.toContain('"itemId":"b"');
+  });
+
+  test("a duplicate ordinal on disk (both lines parse) likewise blocks the append", () => {
+    const root = tmpRoot();
+    const path = l5StorePath(root);
+    appendL5Verdict(root, l5Doc("a", "a".repeat(64)));
+    // Duplicate ordinal 0 by copying the line — parses cleanly, but breaks the append-only chain.
+    const line = readFileSync(path, "utf8").trim();
+    writeFileSync(path, line + "\n" + line + "\n", "utf8");
+
+    const result = appendL5Verdicts(root, [l5Doc("b", "b".repeat(64))]);
+    expect(result.ok).toBe(false);
+    expect(result.appended).toEqual([]);
+  });
+});
+
 describe("MUTATION-PROOF: append-only enforcement", () => {
   test("if the writer truncated instead of appending, this test would go red -- simulating that bug directly against the same file path", () => {
     const root = tmpRoot();

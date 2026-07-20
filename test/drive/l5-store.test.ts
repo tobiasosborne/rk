@@ -5,7 +5,7 @@
 // covers the remaining four plus the coverage/reporting shapes).
 
 import { describe, expect, test } from "bun:test";
-import { coverage, freshVerdicts, knownShardIds, latestVerdictFor, parseL5Log } from "../../src/drive/l5-store";
+import { assessL5OrdinalChain, coverage, freshVerdicts, knownShardIds, l5StoreHealthy, latestVerdictFor, parseL5Log } from "../../src/drive/l5-store";
 import { serializeL5StoredVerdict, type L5StoredVerdict } from "../../src/drive/l5-record";
 
 const HASH_A = "a".repeat(64);
@@ -63,6 +63,57 @@ describe("latestVerdictFor", () => {
     const latest = latestVerdictFor(records, "lem-1", HASH_A);
     expect(latest?.record.ordinal).toBe(1);
     expect(latest?.fresh).toBe(false);
+  });
+});
+
+describe("assessL5OrdinalChain — BLOCKER 6: append-only ordinal integrity", () => {
+  test("a healthy contiguous chain 0,1,2 has no problems", () => {
+    expect(assessL5OrdinalChain([rec({ ordinal: 0 }), rec({ ordinal: 1 }), rec({ ordinal: 2 })])).toEqual([]);
+  });
+
+  test("an empty log has no problems", () => {
+    expect(assessL5OrdinalChain([])).toEqual([]);
+  });
+
+  test("a DUPLICATE ordinal is a chain problem (two records claim the same append position)", () => {
+    const problems = assessL5OrdinalChain([rec({ ordinal: 0 }), rec({ ordinal: 1 }), rec({ ordinal: 1 })]);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.join(" ")).toContain("duplicate ordinal 1");
+  });
+
+  test("a GAP breaks the contiguous chain (a cleanly-deleted line, no parse issue to catch it)", () => {
+    const problems = assessL5OrdinalChain([rec({ ordinal: 0 }), rec({ ordinal: 2 })]);
+    expect(problems.length).toBeGreaterThan(0);
+  });
+
+  test("OUT-OF-ORDER ordinals in file order are a chain problem", () => {
+    const problems = assessL5OrdinalChain([rec({ ordinal: 1 }), rec({ ordinal: 0 })]);
+    expect(problems.length).toBeGreaterThan(0);
+  });
+
+  test("a log that does not start at 0 (truncated prefix) is a chain problem", () => {
+    const problems = assessL5OrdinalChain([rec({ ordinal: 3 }), rec({ ordinal: 4 })]);
+    expect(problems.length).toBeGreaterThan(0);
+  });
+});
+
+describe("l5StoreHealthy — BLOCKER 6: parse issues OR chain problems poison the store", () => {
+  test("healthy when there are no parse issues and the chain is contiguous", () => {
+    const text = serializeL5StoredVerdict(rec({ ordinal: 0 })) + "\n" + serializeL5StoredVerdict(rec({ ordinal: 1 })) + "\n";
+    expect(l5StoreHealthy(parseL5Log(text)).healthy).toBe(true);
+  });
+
+  test("a parse issue (corrupted tail) poisons health", () => {
+    const good = serializeL5StoredVerdict(rec({ ordinal: 0 }));
+    const text = good + "\n" + '{"schemaVersion":"1","ordinal":1,"itemId":"x"'; // truncated
+    const h = l5StoreHealthy(parseL5Log(text));
+    expect(h.healthy).toBe(false);
+    expect(h.problems.length).toBeGreaterThan(0);
+  });
+
+  test("a duplicate ordinal (both lines parse) poisons health", () => {
+    const text = serializeL5StoredVerdict(rec({ ordinal: 0 })) + "\n" + serializeL5StoredVerdict(rec({ ordinal: 0 })) + "\n";
+    expect(l5StoreHealthy(parseL5Log(text)).healthy).toBe(false);
   });
 });
 

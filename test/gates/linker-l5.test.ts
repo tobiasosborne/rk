@@ -94,11 +94,74 @@ describe("checkL5Promotion — correction-pending does not promote", () => {
   });
 });
 
-describe("checkL5Promotion — corrupted store lines are surfaced (WARN), never silently dropped", () => {
-  test("a malformed JSONL line produces a WARN naming the line number", () => {
+describe("checkL5Promotion — BLOCKER 6: a corrupt store POISONS promotion (ERROR, not a WARN nudge)", () => {
+  test("a malformed store line -> ERROR on the store, and NO promotion is trusted", () => {
     const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [L5_STORE_PATH]: "not json at all\n" });
     const r = checkL5Promotion(snapshot, [lemma()]);
     expect(r.present).toBe(true);
-    expect(r.findings.some((f) => f.severity === "WARN" && f.path === L5_STORE_PATH && f.line === 1)).toBe(true);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === L5_STORE_PATH)).toBe(true);
+  });
+
+  test("a fresh VALID record is NOT promoted when the store also carries a corrupt line (an earlier VALID must not survive a later unreadable record)", () => {
+    // Line 0 = the shard's fresh VALID; line 1 = a truncated/garbage record whose itemId is unknowable.
+    const store = l5Line({ ordinal: 0 }) + "\n" + '{"schemaVersion":"1","ordinal":1,"itemId":"lem-x"' + "\n";
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [L5_STORE_PATH]: store });
+    const r = checkL5Promotion(snapshot, [lemma()]);
+    expect(r.promotable).toBe(0);
+    expect(r.findings.some((f) => f.message.includes("L5 promotable"))).toBe(false);
+    expect(r.findings.some((f) => f.severity === "ERROR")).toBe(true);
+  });
+
+  test("a duplicate-ordinal chain break poisons promotion", () => {
+    const store = l5Line({ ordinal: 0 }) + "\n" + l5Line({ ordinal: 0 }) + "\n";
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [L5_STORE_PATH]: store });
+    const r = checkL5Promotion(snapshot, [lemma()]);
+    expect(r.promotable).toBe(0);
+    expect(r.findings.some((f) => f.severity === "ERROR")).toBe(true);
+  });
+});
+
+describe("checkL5Promotion — BLOCKER 6b: already-promoted shards are continuously re-validated", () => {
+  const PMA_BODY = "---\nid: lem-x\nkind: lemma\nstatus: proved-mod-audit\naf: none\ncontract: c\n---\n";
+  const PMA_HASH = sha256Hex(new TextEncoder().encode(PMA_BODY));
+  function pmaLine(overrides: Record<string, unknown> = {}): string {
+    return l5Line({ l5ContentHash: PMA_HASH, ...overrides });
+  }
+
+  test("a proved-mod-audit shard still backed by a fresh VALID verdict -> no finding (support intact)", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: PMA_BODY, [L5_STORE_PATH]: pmaLine() + "\n" });
+    const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
+    expect(r.findings).toEqual([]);
+  });
+
+  test("a proved-mod-audit shard whose latest verdict is INVALID -> ERROR: demote", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: PMA_BODY, [L5_STORE_PATH]: pmaLine({ verdict: "INVALID", justification: "flaw found" }) + "\n" });
+    const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH && f.message.includes("proved-mod-audit"))).toBe(true);
+  });
+
+  test("a proved-mod-audit shard edited after promotion (hash now stale) -> ERROR: demote", () => {
+    const edited = PMA_BODY + "\nedited after audit\n";
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: edited, [L5_STORE_PATH]: pmaLine() + "\n" }); // record bound to the OLD hash
+    const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH)).toBe(true);
+  });
+
+  test("a proved-mod-audit shard with NO L5 verdict at all (store present) -> ERROR: unsupported promotion", () => {
+    const otherLine = l5Line({ itemId: "someone-else", l5ContentHash: "a".repeat(64) });
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: PMA_BODY, [L5_STORE_PATH]: otherLine + "\n" });
+    const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH)).toBe(true);
+  });
+
+  test("a proved-mod-audit shard whose latest verdict is a fresh VALID-WITH-CORRECTION (correction-pending) -> ERROR: demote", () => {
+    const line = pmaLine({
+      verdict: "VALID-WITH-CORRECTION",
+      justification: "one fix",
+      correction: { description: "fix", correctedContentHash: "b".repeat(64) },
+    });
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: PMA_BODY, [L5_STORE_PATH]: line + "\n" });
+    const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH)).toBe(true);
   });
 });

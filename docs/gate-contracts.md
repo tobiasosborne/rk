@@ -647,16 +647,33 @@ is stale against the code and must not be treated as ground truth).
     `promotionStateFor` against its current hash (`fileSha256`, the same raw-bytes sha256 domain
     `l5ContentHash` is pinned to, docs/worker-contract.md section (f)) ⇒ a fresh `VALID` verdict
     produces a non-blocking WARN, `L5 promotable: '<id>' has a fresh VALID L5 verdict... status is
-    still 'stated'`. This is a STATUS-COMPUTATION INPUT, not a validity check on its own: it never
-    rewrites the shard's frontmatter (Gate 2 is a checker, not a mutator) and it never feeds
-    `checkStatus`'s availability predicate (`proved-mod-audit` is not `rigorous` per PRD §5's
-    ladder table and does not count as available regardless), so this promotion has zero bearing
-    on any OTHER check's pass/fail verdict — it is purely an informational nudge naming which
-    shards are eligible for a researcher to manually re-label. Stale, `INVALID`, and
-    `VALID-WITH-CORRECTION` (correction-pending, rule (g)) verdicts all produce no finding at all
-    — "not yet promotable" is a silent, legitimate state, not a defect. A malformed line in the
-    store itself is surfaced as its own WARN (never silently dropped, CLAUDE.md L2) but does not
-    block the shard-level promotion query.
+    still 'stated'`. For a `stated` shard this is a STATUS-COMPUTATION INPUT only: it never rewrites
+    the shard's frontmatter (Gate 2 is a checker, not a mutator) and it never feeds `checkStatus`'s
+    availability predicate (`proved-mod-audit` is not `rigorous` per PRD §5's ladder table), so a
+    stated shard's promotability has zero bearing on any OTHER check — it is purely an informational
+    nudge. For a `stated` shard, stale / `INVALID` / `VALID-WITH-CORRECTION` (correction-pending,
+    rule (g)) verdicts all produce no finding at all — "not yet promotable" is a silent, legitimate
+    state, not a defect.
+    - **Store-integrity poisoning** (2026-07-19 M3 review, blocker 6): the store is first checked
+      for health via `src/drive/l5-store.ts`'s `l5StoreHealthy` — ZERO parse issues (no truncated,
+      garbage, or blank lines) AND an intact append-only ordinal chain (record i in file order
+      carries ordinal i: 0,1,2,…, strictly increasing, unique, contiguous — `assessL5OrdinalChain`
+      catches duplicates, gaps, reorders, and a truncated prefix). A single corrupt line makes the
+      WHOLE store untrustworthy (a truncated line's own `itemId` is unknowable, so it could belong
+      to any shard — precisely how an earlier `VALID` could survive a later truncated `INVALID`).
+      An unhealthy store ⇒ **ERROR** (`path: .rk/l5-verdicts.jsonl`), promotion POISONED (no `stated`
+      shard is nudged, no `proved-mod-audit` shard can be confirmed) — no longer the pre-review WARN
+      that merely degraded coverage. The writer (`src/drive/l5-store-io.ts`'s `appendL5Verdicts`)
+      likewise REFUSES to append through a corrupt store, writing nothing.
+    - **Continuous re-validation of already-promoted shards** (2026-07-19 M3 review, blocker 6b):
+      Check 14 no longer queries only `stated` shards. Every `status: proved-mod-audit` shard is
+      re-queried via `promotionStateFor` against its current hash; if the current L5 state is
+      anything other than `promotable` — edited-to-stale, `INVALID`, correction-pending, OR no
+      supporting verdict at all (`no-verdict`; `proved modulo audit` is the L5 soft-tier outcome, so
+      a promoted shard with no L5 backing is unsupported) — it is an **ERROR** naming the reason and
+      calling for demotion/re-verification. A promoted label the history no longer supports is a
+      false validity claim, not a silent state. (Presence-conditional: a repo with NO L5 store at
+      all cannot be re-validated this way — tracked as a follow-up bead.)
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set

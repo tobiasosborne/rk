@@ -17,18 +17,24 @@
 // recomputing a second, possibly-differently-normalized hash.
 //
 // WHAT THIS CHECK DOES NOT DO: it never rewrites the registry shard's `status:` field (Gate 2 is a
-// checker, not a mutator) and it never feeds into `checkStatus`'s availability predicate (M3.8's
-// brief: "L5 promotion is a status-computation input" — but `proved-mod-audit` is NOT `rigorous`
-// per PRD §5's ladder table and does not count as `isAvailable`, so this promotion has no bearing
-// on any EXISTING check's pass/fail verdict). It surfaces a non-blocking WARN naming which
-// `status: stated` shards are eligible to be manually bumped to `proved-mod-audit` — an
-// informational nudge, never itself a validity violation.
+// checker, not a mutator) and it never feeds into `checkStatus`'s availability predicate
+// (`proved-mod-audit` is NOT `rigorous` per PRD §5's ladder table and does not count as
+// `isAvailable`). For `status: stated` shards it surfaces only a non-blocking WARN naming which are
+// eligible to be manually bumped to `proved-mod-audit` — an informational nudge.
+//
+// WHAT IT DOES ERROR ON (2026-07-19 M3 review, blocker 6): (1) a corrupt or ordinally-broken store
+// (truncated line, duplicate/gapped/reordered ordinal) POISONS promotion — no shard is trusted and
+// the store itself is a fail-closed ERROR, because a validity ledger that can silently hide a
+// demotion is a defect, not a coverage footnote; (2) an ALREADY-promoted `proved-mod-audit` shard
+// whose current L5 state is not `promotable` (edited-to-stale, INVALID, correction-pending, or no
+// supporting verdict at all) is an ERROR — a promoted label the history no longer supports is a
+// false validity claim (continuous re-validation + demotion, not just the `stated`→promotable nudge).
 
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { fileSha256 } from "./snapshot";
 import type { Lemma } from "./linker-parse";
-import { parseL5Log } from "../drive/l5-store";
+import { l5StoreHealthy, parseL5Log } from "../drive/l5-store";
 import { promotionStateFor } from "../drive/l5-promote";
 
 export const L5_STORE_PATH = ".rk/l5-verdicts.jsonl";
@@ -51,30 +57,68 @@ export function checkL5Promotion(snapshot: RepoSnapshot, lemmas: readonly Lemma[
   const text = snapshot.get(L5_STORE_PATH);
   if (text === undefined) return ABSENT;
 
-  const { records, issues } = parseL5Log(text);
+  const parsed = parseL5Log(text);
   const findings: Finding[] = [];
-  // A corrupted line in the store is surfaced (CLAUDE.md L2: never a silent skip) but WARN-only —
-  // it degrades this check's own coverage, it does not block the whole gate (the store's own
-  // integrity is not a registry-shard defect).
-  for (const issue of issues) {
-    findings.push({ severity: "WARN", path: L5_STORE_PATH, line: issue.line, message: `L5 store line malformed: ${issue.message}` });
+
+  // BLOCKER 6 (M3-review): a corrupt or ordinally-broken store POISONS promotion. A truncated tail
+  // line, a duplicate/gapped/reordered ordinal — any of these means the true latest verdict for
+  // SOME shard is unknowable (the corrupt line's own itemId cannot be read), so no promotion can be
+  // trusted and no already-promoted shard can be confirmed. This is no longer a WARN that merely
+  // degrades coverage: a validity ledger that can silently hide a demotion is a fail-closed ERROR.
+  const health = l5StoreHealthy(parsed);
+  if (!health.healthy) {
+    for (const p of health.problems) {
+      findings.push({ severity: "ERROR", path: L5_STORE_PATH, message: `L5 store integrity compromised — promotion poisoned, fail closed: ${p}` });
+    }
+    // Every already-promoted shard is now unconfirmable against a corrupt store.
+    for (const l of lemmas) {
+      if (l.status === "proved-mod-audit") {
+        findings.push({
+          severity: "ERROR",
+          path: l.path,
+          message: `'${l.id}' is labeled 'proved-mod-audit' but the L5 store is corrupt, so its promotion can no longer be confirmed — repair the store or demote`,
+        });
+      }
+    }
+    return { findings, present: true, checked: 0, promotable: 0 };
   }
 
+  const records = parsed.records;
   let checked = 0;
   let promotable = 0;
   for (const l of lemmas) {
-    if (l.status !== "stated") continue;
     const currentHash = fileSha256(snapshot, l.path);
     if (currentHash === undefined) continue; // shard file present but unhashed should not happen; skip rather than guess
-    checked++;
-    const decision = promotionStateFor(records, l.id, currentHash);
-    if (decision.status === "promotable") {
-      promotable++;
-      findings.push({
-        severity: "WARN",
-        path: l.path,
-        message: `L5 promotable: '${l.id}' has a fresh VALID L5 verdict (ordinal ${decision.record.ordinal}) while registry frontmatter still reads 'status: stated' — consider bumping to 'proved-mod-audit'`,
-      });
+
+    if (l.status === "stated") {
+      checked++;
+      const decision = promotionStateFor(records, l.id, currentHash);
+      if (decision.status === "promotable") {
+        promotable++;
+        findings.push({
+          severity: "WARN",
+          path: l.path,
+          message: `L5 promotable: '${l.id}' has a fresh VALID L5 verdict (ordinal ${decision.record.ordinal}) while registry frontmatter still reads 'status: stated' — consider bumping to 'proved-mod-audit'`,
+        });
+      }
+    } else if (l.status === "proved-mod-audit") {
+      // BLOCKER 6b (M3-review): continuously re-validate ALREADY-promoted shards, not just `stated`
+      // ones. A shard bumped to 'proved-mod-audit' can later be edited (its verdict goes stale), get
+      // a fresh INVALID / VALID-WITH-CORRECTION verdict, or never have had any supporting L5 verdict
+      // at all — in every such case the label is a false validity claim. When the store is present,
+      // a 'proved-mod-audit' shard whose current L5 state is anything other than `promotable` is an
+      // ERROR: demote or re-verify. (`no-verdict` is included deliberately — 'proved modulo audit'
+      // is the L5 soft-tier outcome, so a promoted shard with no L5 backing at all is unsupported;
+      // stricter reading per CLAUDE.md L5. Presence-conditional: a repo with NO L5 store cannot be
+      // checked this way — see the candidate-bead note in the repair report.)
+      const decision = promotionStateFor(records, l.id, currentHash);
+      if (decision.status !== "promotable") {
+        findings.push({
+          severity: "ERROR",
+          path: l.path,
+          message: `'${l.id}' is labeled 'proved-mod-audit' but the L5 history no longer supports promotion (${decision.reason}) — demote to 'stated' or re-verify (a promoted shard that was edited, invalidated, or has a correction pending is a false validity claim)`,
+        });
+      }
     }
   }
 

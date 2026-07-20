@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-demote.md",
+      "message_pattern": "is labeled 'proved-mod-audit' but the L5 history no longer supports promotion (invalid)"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "class-driven (no AISM counterpart -- L5 promotion/demotion is M3.7/M3.8's own deliverable).",
+  "notes": "M3.8 Check 14, HARDENED by the 2026-07-19 M3 review (blocker 6b): a shard previously bumped to 'status: proved-mod-audit' whose LATEST L5 verdict (fresh: l5ContentHash matches the shard's current raw bytes) is INVALID. Previously Check 14 only queried 'status: stated' shards, so an already-promoted shard could remain 'proved-mod-audit' after a later INVALID (or an edit, or a correction-pending verdict) with zero findings -- a false validity claim. The check now continuously re-validates already-promoted shards and ERRORs to force a demote/re-verify. l5ContentHash is the real sha256 of this shard file's raw bytes (docs/worker-contract.md section (f)). Sibling: linker-35 (stated->promotable nudge, the opposite direction)."
+}
