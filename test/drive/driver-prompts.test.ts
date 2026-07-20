@@ -181,6 +181,25 @@ describe("buildVerifierTurnPrompt / buildProverTurnPrompt — shared-prefix-firs
       expect(turn).toContain("bare JSON object");
     }
   });
+
+  // rk-d1n (M3.5 live debug): verbose reason/justification strings correlate with the exit-12 parse
+  // deaths (a runaway free-text field runs past the output budget and truncates mid-string → invalid
+  // JSON). Both tiers' verdict instructions now cap those fields and say truncation FAILS. The rule is
+  // present for a normal (contentful) node and for a proofless node (the instructions block is always
+  // appended).
+  test("verifier prompt (both tiers) caps reason/justification to CONCISE and warns truncation FAILS", () => {
+    for (const tier of ["hard", "l5"] as const) {
+      const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier });
+      expect(turn).toContain("CONCISE");
+      expect(turn).toContain("3 sentences");
+      expect(turn.toLowerCase()).toContain("truncated");
+      expect(turn).toContain("FAILS");
+    }
+  });
+  test("the conciseness cap is present even on a proofless-node prompt (instructions block always appended)", () => {
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard", proofless: true });
+    expect(turn).toContain("CONCISE");
+  });
 });
 
 describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)", () => {

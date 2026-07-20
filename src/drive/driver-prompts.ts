@@ -134,6 +134,11 @@ const HARD_VERDICT_INSTRUCTIONS = [
   // JSON STRING IN QUOTES — e.g. "target": "1" — never a bare number, and a dotted id MUST be quoted
   // (e.g. "target": "1.10"; the number 1.10 parses to 1.1 and would name the wrong node).
   'The "target" MUST be a JSON string in quotes, e.g. "target": "1" or "target": "1.10" — never a bare number.',
+  // rk-d1n (M3.5 live debug): verbose "reason"/"justification" strings correlate with the exit-12
+  // parse deaths (a long free-text field ran past the model's output budget and cut off mid-string,
+  // yielding unterminated JSON). Cap them HARD and say so — a terse field is cheaper AND does not
+  // truncate. This is a generation-side mitigation; the extractor still fails an unterminated object.
+  'Keep the "reason" and "justification" strings CONCISE: at most 3 sentences (~400 characters each). State only the essential finding — do NOT restate the node, re-derive the proof, or enumerate every detail. A long explanation risks being truncated mid-string, which produces invalid JSON and FAILS.',
 ].join("\n");
 
 const L5_VERDICT_INSTRUCTIONS = [
@@ -141,6 +146,9 @@ const L5_VERDICT_INSTRUCTIONS = [
   "no surrounding prose or commentary, just the raw JSON object. It must match:",
   '{"verdict": "VALID" | "VALID-WITH-CORRECTION" | "INVALID", "justification": <string>, "correction"?: {"description": <string>, "correctedContentHash": <64-hex-char lowercase SHA-256>}}',
   '"correction" is required on, and only on, a "VALID-WITH-CORRECTION" verdict.',
+  // rk-d1n (M3.5 live debug): same conciseness cap as the hard tier — a runaway "justification" is the
+  // failure mode behind the exit-12 parse deaths (truncated mid-string → unterminated JSON).
+  'Keep the "justification" (and any correction "description") string CONCISE: at most 3 sentences (~400 characters). State only the essential finding. A long explanation risks being truncated mid-string, which produces invalid JSON and FAILS.',
 ].join("\n");
 
 /** GAP 10: renders the "Dependencies (already established)" section — each declared dependency's id,
