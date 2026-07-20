@@ -33,7 +33,7 @@ export const NONRIGOROUS_TIER_CLASS = "rk-nonrigorous";
 
 /** PRD §5's "rigorous" column, verbatim: only these three statuses are rigorous. `proved-mod-audit`
  * (paper-proved, not re-verified here), `numerical` (a permanent ceiling), and the frontier/
- * graveyard statuses are all explicitly NOT rigorous. */
+ * obstruction/disproved statuses are all explicitly NOT rigorous. */
 export const RIGOROUS_STATUSES: ReadonlySet<RigourStatus> = new Set<RigourStatus>([
   "cited", "proved", "consensus",
 ]);
@@ -85,8 +85,8 @@ export const STATUS_STYLES: Record<RigourStatus, StatusStyle> = {
   heuristic: mk("heuristic", "heuristic", "#7c3aed", "honestly labeled non-result"),
   numerical: mk("numerical", "numerical", "#c2410c", "evidence bundle with invariant; a ceiling, never a rung"),
   open: mk("open", "open", "#64748b", "frontier: not yet attempted or in progress"),
-  obstruction: mk("obstruction", "obstruction", "#b91c1c", "graveyard: a recorded barrier"),
-  disproved: mk("disproved", "disproved", "#7f1d1d", "graveyard: shown false"),
+  obstruction: mk("obstruction", "obstruction", "#b91c1c", "a recorded barrier to this route"),
+  disproved: mk("disproved", "disproved", "#7f1d1d", "shown false by evidence"),
 };
 
 export function statusStyle(status: RigourStatus): StatusStyle {
@@ -212,10 +212,37 @@ export function renderStatusCss(): string {
   return rules.join("\n");
 }
 
-/** The rigour-ladder legend as an HTML fragment: one row per status naming its swatch (coloured
- * from the map), class, label, tier word, and meaning. Rendered on the dashboard so a reader can
- * decode every node colour without leaving the page. Rigorous rows are grouped before
- * non-rigorous ones and labelled as such. */
+// rk-38f (1): af/fr/bd are named throughout a render but glossed nowhere beyond a bare
+// build-status word ("export"/"export"/"read", diagnostics-view.ts). Expanded once, in plain
+// words, on the legend — the one place every reader passes through.
+export const SOURCE_GLOSSARY: Record<"af" | "fr" | "bd", { name: string; meaning: string }> = {
+  af: { name: "af", meaning: "proof-ledger kernel — validates a node's proof workspace against its claim" },
+  fr: { name: "fr", meaning: "exploration frontier — the cycle/attempt log behind the graveyard and taint sections" },
+  bd: { name: "bd", meaning: "issue tracker — cross-session work items, read but never authored by rk" },
+};
+
+function sourceGlossaryBlock(): string {
+  const items = (["af", "fr", "bd"] as const).map((k) => {
+    const g = SOURCE_GLOSSARY[k];
+    return `<li><code>${g.name}</code> — ${g.meaning}</li>`;
+  }).join("");
+  return `<div class="rk-legend-glossary"><h4>vocabulary</h4><ul>${items}</ul></div>`;
+}
+
+/** rk-38f (3), PINNED DECISION: "graveyard" names ONLY the dead-route cycles page
+ * (graveyard-view.ts) — a node's `obstruction`/`disproved` STATUS is always named by its status
+ * word, never "graveyard" (SC5 dry-run observed a live reader conflate the two). */
+function graveyardDistinctionNote(): string {
+  return (
+    `<p class="rk-legend-note">"graveyard" names ONLY the dead-route graveyard page (dead fr ` +
+    `cycles) — a node's <strong>obstruction</strong> or <strong>disproved</strong> status is ` +
+    `always called by its status name, never "graveyard".</p>`
+  );
+}
+
+/** The rigour-ladder legend: one row per status naming its swatch, class, label, tier word, and
+ * meaning, rigorous rows grouped before non-rigorous. Also carries the af/fr/bd vocabulary
+ * expansion and the graveyard/status-name distinction note (rk-38f). */
 export function renderLegend(): string {
   const rows = (title: string, statuses: RigourStatus[]): string => {
     const items = statuses.map((s) => {
@@ -236,6 +263,8 @@ export function renderLegend(): string {
     `<div class="rk-legend">` +
     rows("rigorous (PRD §5)", rigorous) +
     rows("not rigorous", nonrigorous) +
+    sourceGlossaryBlock() +
+    graveyardDistinctionNote() +
     `</div>`
   );
 }

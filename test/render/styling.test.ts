@@ -66,6 +66,36 @@ describe("render/styling — the single styling source of truth", () => {
     }
     expect(legend).toContain("rigorous");
   });
+
+  // rk-38f (1): af/fr/bd are otherwise glossed only as export/export/read (diagnostics-view.ts) —
+  // the legend is the one place every reader sees regardless of source status, so it expands each
+  // abbreviation once in plain words.
+  test("renderLegend expands af/fr/bd once, in plain words, not just export/export/read", () => {
+    const legend = renderLegend();
+    expect(legend).toContain("proof-ledger kernel");
+    expect(legend).toContain("exploration frontier");
+    expect(legend).toContain("issue tracker");
+  });
+
+  // rk-38f (3), PINNED DECISION: "graveyard" names ONLY the dead-route page; node statuses are
+  // always named by their status word. The legend states this explicitly so a reader who has seen
+  // "graveyard" used for the dead-route page does not also read it onto an obstruction/disproved
+  // node.
+  test("renderLegend explicitly distinguishes the dead-route graveyard page from node statuses", () => {
+    const legend = renderLegend();
+    expect(legend.toLowerCase()).toContain("graveyard");
+    expect(legend).toContain("obstruction");
+    expect(legend).toContain("disproved");
+    expect(legend).toContain("dead-route");
+  });
+
+  // rk-38f (3): the per-status meaning strings themselves must never use "graveyard" for a node
+  // status — that word is reserved for the dead-route page (src/render/graveyard-view.ts). Using
+  // it here is the exact conflation the SC5 dry-run flagged (false-cognate risk).
+  test("obstruction/disproved status meanings never use the word 'graveyard' (reserved for the dead-route page)", () => {
+    expect(statusStyle("obstruction").meaning.toLowerCase()).not.toContain("graveyard");
+    expect(statusStyle("disproved").meaning.toLowerCase()).not.toContain("graveyard");
+  });
 });
 
 describe("render/styling — effectivePresentation (M2 boundary review, landing-blocker #1)", () => {

@@ -57,4 +57,23 @@ describe("render/defs-view", () => {
     expect(html).toContain("def-bare");
     expect(html.toLowerCase()).toContain("unset");
   });
+
+  // rk-38f (2): campaign-specific node-id prefixes (dtr, icap, hx, conj-rh, ...) are undefined
+  // anywhere on the page — a false-cognate trap was observed live (conj-rh misread as Riemann
+  // Hypothesis). rk cannot know campaign vocabulary, but a def's own `id` IS the literal
+  // node-id/term prefix a campaign uses elsewhere (dashboard links, DAG labels) — this data
+  // already exists (defs-edge.ts), it was just never framed as the glossary a reader needs. Frame
+  // it explicitly, using only fields already rendered — no new data source.
+  test("when definitions exist, frames the index explicitly as the campaign's node-id glossary", () => {
+    const html = renderDefsIndex({
+      defs: [{ id: "conj-rh", path: "definitions/conj-rh.md", term: "Riemann Hypothesis", kind: "cited", status: "locked", aliases: [] }],
+    });
+    expect(html.toLowerCase()).toContain("false-cognate");
+    expect(html.toLowerCase()).toContain("node-id");
+  });
+
+  test("day-1 vacuity: no definitions means no glossary framing note either (nothing to gloss)", () => {
+    const html = renderDefsIndex({ defs: [] });
+    expect(html.toLowerCase()).not.toContain("false-cognate");
+  });
 });

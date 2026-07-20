@@ -91,6 +91,21 @@ function conventionsBlock(conventions: string | undefined): string {
   );
 }
 
+/** rk-38f (2): a campaign's node-id prefixes (dtr, icap, hx, conj-rh, ...) are undefined anywhere
+ * else on a render — rk cannot know campaign vocabulary, but each def's own `id` IS the literal
+ * prefix the campaign uses elsewhere (dashboard links, DAG labels), and `term` is its plain-English
+ * meaning; that pairing already exists in `data.defs`, it was just never framed as the glossary a
+ * reader needs. Renders ONLY when there is something to gloss (day-1 vacuity: no defs, no note). */
+function glossaryFramingNote(defCount: number): string {
+  if (defCount === 0) return "";
+  return (
+    `<p class="rk-defs-glossary-note">This index doubles as this campaign's node-id glossary: ` +
+    `each entry's <code>id</code> is a literal node-id/term prefix used elsewhere on this site ` +
+    `(dashboard links, DAG labels) — consult it before assuming a plain-English reading of an ` +
+    `unfamiliar id (a false-cognate trap: an id need not mean what it looks like).</p>`
+  );
+}
+
 /** Renders the full definitions index (grouped by kind, then status, alias lists shown) plus the
  * conventions ledger section. */
 export function renderDefsIndex(data: DefsData): string {
@@ -98,7 +113,9 @@ export function renderDefsIndex(data: DefsData): string {
     ? `<p class="rk-none">no definitions found under definitions/.</p>`
     : groupedSections(data.defs);
   return (
-    `<div class="rk-defs"><h2>definitions index (${data.defs.length})</h2>${index}` +
+    `<div class="rk-defs"><h2>definitions index (${data.defs.length})</h2>` +
+    glossaryFramingNote(data.defs.length) +
+    index +
     conventionsBlock(data.conventions) +
     `</div>`
   );
