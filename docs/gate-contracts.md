@@ -256,7 +256,8 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | **Gate 7 — freshness** (M2.6) | (none) | manifest-malformation findings, per-entry STALE, per-entry declared-but-missing | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. Classified WHOLE-GATE non-structural for the same reason Gates 4-6 are: the subject matter (a repo's own adopted generated-output convention) is consolidation-shaped by construction, not a per-check carve-out |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
-ids/aliases" class, and Gate 2's Check 12 (brittleness) and Gate 1's Checks 10-11/13-14 are
+ids/aliases" class, and Gate 2's Check 12 (brittleness) and Check 15 (mandatory review, M3 review
+blocker 7c) and Gate 1's Checks 10-11/13-14 are
 already WARN-only in both phases (nothing to demote) — noted here so their absence from the tables
 above reads as a deliberate, considered call, not an oversight: the WHOLE-GATE non-structural
 classification for Gates 4-6 (and now Gate 7) is a deliberate policy choice (their subject matter
@@ -674,6 +675,29 @@ is stale against the code and must not be treated as ground truth).
       calling for demotion/re-verification. A promoted label the history no longer supports is a
       false validity claim, not a silent state. (Presence-conditional: a repo with NO L5 store at
       all cannot be re-validated this way — tracked as a follow-up bead.)
+15. **Mandatory review** (WARN only, never blocks the gate; M3 review blocker 7c,
+    `src/gates/linker-graph.ts`'s `checkMandatoryReview`) — surfaces the SAME
+    `isMandatoryReview` threshold `src/drive/driver-balloon.ts`'s `routeBalloon` uses to route a
+    balloon event: `l.balloons.count >= 2` (a REPEAT balloon on this contract) OR
+    `l.balloons.classifications.includes("genuine-gap")` (a first balloon already classified as a
+    genuine gap, never merely `missing-fact`/`dag-dep` on a first occurrence) ⇒ WARN
+    `MANDATORY-REVIEW: <id> has ballooned <n> time(s) (classifications: <list>) — the contract's
+    hypotheses are suspect, review before further decomposition`, one per qualifying shard. The
+    counter itself is read from the shard's OWN persisted `balloons:`/`balloon_classifications:`
+    frontmatter (`src/gates/linker-parse.ts`, threaded through `Lemma.balloons` since commit
+    7ede34c) — the routing decision is never persisted (`driver-run.ts`'s `handleBalloon` marks
+    every balloon event, mandatory-review or not), so this check reconstructs the threshold purely
+    from the durable counter rather than trusting a stored verdict. Commit 7ede34c added
+    `checkMandatoryReview` itself plus the board-facing render flag (`⚠MANDATORY-REVIEW` on
+    `argument/INDEX.md`/`DAG.md` rows, `linker-render.ts`) but left the check unwired from
+    `linkerGate` — a shard past the threshold rendered the board flag yet produced no gate
+    finding at all, the exact "state visible on the board but never checked" gap CLAUDE.md L2
+    forbids. This wiring closes that gap: `checkMandatoryReview(lemmas)` is now spread into
+    `linkerGate`'s findings array alongside `checkBrittleness` (Check 12), same WARN tier, same
+    "informational nudge, not a validity violation" footing. `aism_behavior: class-driven (no
+    AISM counterpart — AISM's `argument.py` has no balloon-routing or classification concept at
+    all; the balloon/classification machinery is rk's own M3 addition, orphaned pre-7c the same
+    way L5 promotion was pre-M3.8)`. Fixture: `linker-43`.
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set
@@ -899,6 +923,7 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-36` | **[M3.8] `status: stated` shard, L5 verdict bound to a stale hash** ⇒ no promotion, zero findings |
 | `linker-37` | **[M3.8] `status: stated` shard, fresh `VALID-WITH-CORRECTION`** ⇒ correction-pending, no promotion, zero findings (rule (g)) |
 | `linker-38` | **[M3.8] critical-path node, same shape as `linker-31`, but shard carries `provenance: legacy-same-family`** ⇒ WARNING not ERROR (Check 13, explicit-marker escape hatch) |
+| `linker-43` | **[M3 review blocker 7c] `checkMandatoryReview` wired into `linkerGate`** — a shard with `balloons: 2` + `balloon_classifications: [missing-fact, dag-dep]` (a repeat balloon) ⇒ WARN `MANDATORY-REVIEW` through the full gate (Check 15), golden pass otherwise |
 
 ---
 

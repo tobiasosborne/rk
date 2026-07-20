@@ -384,6 +384,46 @@ describe("parseRegistry / balloon counter parsing (M3 blocker 7b)", () => {
   });
 });
 
+// M3 review blocker 7c (docs/reviews/2026-07-19-m3-milestone-review-codex.md finding 7): commit
+// 7ede34c wired the persisted balloon counter into linker-parse.ts/from-registry.ts and gave
+// linker-graph.ts a tested checkMandatoryReview(lemmas), but never spread it into linkerGate's
+// findings array — so a repeat/genuine-gap balloon never surfaced through the gate itself, only
+// through the unit-level checkMandatoryReview tests in test/gates/linker-graph.test.ts. This test
+// exercises the FULL gate (linkerGate.run), not the unit, closing that gap.
+describe("linkerGate / checkMandatoryReview wiring (M3 review blocker 7c)", () => {
+  test("a shard with a repeat balloon (count >= 2) surfaces a MANDATORY-REVIEW WARN through the full gate", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-hot.md":
+        "---\nid: lem-hot\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n" +
+        "balloons: 2\nballoon_classifications:\n- missing-fact\n- dag-dep\n---\n",
+    });
+    const result = linkerGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    const finding = result.findings.find((f) => f.message.includes("MANDATORY-REVIEW"));
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe("WARN");
+    expect(finding?.path).toBe("argument/lem-hot.md");
+    expect(finding?.message).toContain("lem-hot has ballooned 2 times");
+  });
+
+  test("a shard with a first-balloon genuine-gap classification ALSO surfaces the WARN through the full gate", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-gap.md":
+        "---\nid: lem-gap\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n" +
+        "balloons: 1\nballoon_classifications:\n- genuine-gap\n---\n",
+    });
+    const result = linkerGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.some((f) => f.message.includes("MANDATORY-REVIEW"))).toBe(true);
+  });
+
+  test("a shard with no balloon marks emits no MANDATORY-REVIEW finding through the full gate", () => {
+    const snapshot = snapshotFromFiles({
+      "argument/lem-clean.md": "---\nid: lem-clean\nkind: lemma\nstatus: stated\naf: none\ncontract: c\n---\n",
+    });
+    const result = linkerGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.some((f) => f.message.includes("MANDATORY-REVIEW"))).toBe(false);
+  });
+});
+
 describe("linkerGate coverage line / ignored-file count (rk-9pk)", () => {
   test("the coverage line names the ignored-file count and their names, even when zero " +
     "(never a silent omission, CLAUDE.md L2)", () => {

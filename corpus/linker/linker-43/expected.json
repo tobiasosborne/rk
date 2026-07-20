@@ -1,0 +1,14 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/lem-hot.md",
+      "message_pattern": "MANDATORY-REVIEW: lem-hot has ballooned 2 times (classifications: missing-fact; dag-dep) — the contract's hypotheses are suspect, review before further decomposition"
+    }
+  ],
+  "exit_code": 0,
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no balloon-routing or classification concept at all; the balloon/classification machinery is rk's own M3 addition).",
+  "notes": "M3 review blocker 7c: commit 7ede34c threaded the persisted balloons:/balloon_classifications: frontmatter into Lemma and gave linker-graph.ts a tested checkMandatoryReview(lemmas), but never spread it into linkerGate's findings array -- a repeat/genuine-gap balloon flagged the board (linker-render.ts's MANDATORY-REVIEW mark on INDEX/DAG rows) yet produced no gate finding at all. This fixture is a repeat balloon (count 2, classifications missing-fact + dag-dep) -> WARN through the FULL gate (linkerGate.run), not merely the checkMandatoryReview unit (test/gates/linker-graph.test.ts already covered the unit). WARN only, never blocks the gate -- same tier as checkBrittleness (Check 12); verdict stays pass."
+}

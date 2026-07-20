@@ -1,9 +1,12 @@
 // ROLE: Gate 2 — argument/linker (argument/**/*.md, recursive). Contract: docs/gate-contracts.md
 // "Gate 2 — argument / linker". Orchestrates parseRegistry (linker-parse.ts, checks 1-5),
-// checkAcyclic/checkImports/checkStatus/checkContracts/checkOrphans/checkBrittleness +
-// af-workspace introspection (linker-graph.ts, checks 6-10, 12), checkGenerated
-// (linker-render.ts, check 11), checkCriticalPathProvenance (linker-crossvendor.ts, check 13 —
-// M3.8), and checkL5Promotion (linker-l5.ts, check 14 — M3.8).
+// checkAcyclic/checkImports/checkStatus/checkContracts/checkOrphans/checkBrittleness/
+// checkMandatoryReview + af-workspace introspection (linker-graph.ts, checks 6-10, 12, 15),
+// checkGenerated (linker-render.ts, check 11), checkCriticalPathProvenance
+// (linker-crossvendor.ts, check 13 — M3.8), and checkL5Promotion (linker-l5.ts, check 14 —
+// M3.8). Check 15 (mandatory review, M3 review blocker 7c): checkMandatoryReview itself and its
+// isMandatoryReview predicate were added in commit 7ede34c but never wired into this gate until
+// now.
 // PURITY: pure — no fs/network/clock (L3).
 
 import type { Gate, GateResult } from "./framework";
@@ -15,6 +18,7 @@ import {
   checkBrittleness,
   checkContracts,
   checkImports,
+  checkMandatoryReview,
   checkOrphans,
   checkStatus,
   introspectWorkspace,
@@ -81,6 +85,11 @@ export const linkerGate: Gate = {
       ...checkOrphans(lemmas, wsDirs),
       ...generatedFindings,
       ...checkBrittleness(lemmas, nodeCounts, config.linkerBrittlenessSoftCap),
+      // M3 review blocker 7c (docs/reviews/2026-07-19-m3-milestone-review-codex.md finding 7):
+      // checkMandatoryReview (linker-graph.ts) was added in commit 7ede34c but never wired here,
+      // so a repeat/genuine-gap balloon never surfaced through the gate — only through its own
+      // unit test. WARN tier, same as checkBrittleness above.
+      ...checkMandatoryReview(lemmas),
       ...crossVendor.findings,
       ...l5.findings,
     ];

@@ -91,5 +91,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * WARNING, cross-family golden pass, explicit `provenance: legacy-same-family` marker WARNING)
  * and the L5-promotion integration (`linker-35`..`linker-37`: fresh VALID promotes, stale does
  * not, VALID-WITH-CORRECTION correction-pending does not). See docs/gate-contracts.md Gate 2's
- * "Critical-path provenance" section for the full contract text. */
-export const EXPECTED_FIXTURE_COUNT = 121;
+ * "Critical-path provenance" section for the full contract text.
+ * 122 (+1 over the then-pinned 121): M3 repair wave completion step (review blocker 7c) —
+ * `linker-43`: `checkMandatoryReview` (added by commit 7ede34c alongside the persisted balloon
+ * counter) was wired into `linkerGate`'s findings array — a repeat/genuine-gap balloon now
+ * surfaces its `MANDATORY-REVIEW` WARN through the full gate, not merely through the unit test.
+ * See docs/gate-contracts.md Gate 2's new Check 15. */
+export const EXPECTED_FIXTURE_COUNT = 122;

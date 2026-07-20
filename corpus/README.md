@@ -83,6 +83,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `linker-40` | argument/linker | configured `northStarId` resolves to no registry node ⇒ fail-closed ERROR on `.rk/config.json` | **M3 review blocker 5d** (0446873): an unresolved north star previously yielded an empty critical set that silently permitted every batch and checked nothing; now a hard misconfiguration ERROR (and `composeBatches` excludes every candidate, reason `north-star-unresolved`). The distinct "no northStarId configured at all" state stays silent by design. | landed |
 | `linker-41` | argument/linker | L5 store with a truncated tail line + a would-be-promotable `stated` shard ⇒ ERROR, promotion poisoned, no nudge | **M3 review blocker 6** (7e884e5): a corrupt line was a WARN that degraded coverage while an earlier VALID still promoted — exactly the hole where an earlier VALID survives a later unreadable INVALID. Any parse/ordinal/hash/chain issue now poisons promotion; the writer also refuses to append through corruption. Sibling: `linker-35` (same shard, clean store, promotes). | landed |
 | `linker-42` | argument/linker | `proved-mod-audit` shard whose fresh latest L5 verdict is INVALID ⇒ ERROR: demote/re-verify | **M3 review blocker 6b** (7e884e5): Check 14 previously queried only `status: stated`, so an already-promoted shard could remain `proved-mod-audit` after a later INVALID/edit/correction-pending with zero findings — a false validity claim. Promoted shards are now continuously re-validated. Sibling: `linker-35` (stated→promotable, the opposite direction). | landed |
+| `linker-43` | argument/linker | repeat balloon (`balloons: 2`, classifications `missing-fact`/`dag-dep`) ⇒ WARN `MANDATORY-REVIEW` through the FULL gate | **M3 review blocker 7c**: commit 7ede34c threaded the persisted `balloons:`/`balloon_classifications:` frontmatter into `Lemma` and gave `linker-graph.ts` a tested `checkMandatoryReview(lemmas)`, but never spread it into `linkerGate`'s findings array — a repeat/genuine-gap balloon flagged the board (`linker-render.ts`'s `MANDATORY-REVIEW` mark) yet produced no gate finding at all. `checkMandatoryReview(lemmas)` is now spread into `linkerGate` alongside `checkBrittleness` (Check 12), same WARN tier — this fixture exercises the full gate, not merely the unit (`test/gates/linker-graph.test.ts` already covered the unit). `aism_behavior`: class-driven, no AISM counterpart (the balloon/classification machinery is rk's own M3 addition). | landed |
 | `refs-01` [PLAN] | refs | 19/19 false-green (all payloads absent) | aism-dbq: pre-fix, "the fabrication gate verifies nothing — 19/19 externals skip — and false-greens on a clean checkout" (`docs/plans/2026-07-10-project-remediation-plan.md:51`) | landed |
 | `refs-02` | refs | fabricated quote, ≥40 chars | class-driven (no incident on record) | landed |
 | `refs-03` | refs | fabricated quote, <40 chars | class-driven (no incident on record) | landed |
@@ -148,11 +149,15 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `freshness-10` | freshness | extra top-level manifest key ⇒ loud ERROR (`additionalProperties: false` enforced at runtime) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-11` | freshness | extra per-entry key ⇒ loud ERROR, entry never half-accepted | **M2 boundary review blocker 4** (613b304). | landed |
 
-Totals: 2 config + 15 defs + 42 argument/linker + 8 refs + 20 provenance + 8 runs +
-15 report-shards + 11 freshness = **121 fixtures** across the eight gates named in
+Totals: 2 config + 15 defs + 43 argument/linker + 8 refs + 20 provenance + 8 runs +
+15 report-shards + 11 freshness = **122 fixtures** across the eight gates named in
 `docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
 with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
 are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).
+`linker-43` (+1 over the then-pinned 121) is the M3 repair wave's completion step (review blocker
+7c): `checkMandatoryReview` (added by commit 7ede34c alongside the persisted balloon counter) was
+wired into `linkerGate` — see its own row above and `docs/gate-contracts.md` Gate 2's new
+Check 15.
 `linker-31`..`linker-38` (+8 over the then-pinned 109) are M3.8 (worktree agent-a9b12837c0ead0e82,
 cross-vendor rule + L5-promotion integration): Gate 2's critical-path provenance check and the
 L5-promotion check — see their own rows above and `docs/gate-contracts.md` Gate 2's
