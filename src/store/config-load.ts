@@ -1,7 +1,10 @@
 // EDGE — fs. Reads `<root>/.rk/config.json` if present and merges it over DEFAULT_GATE_CONFIG
-// (src/gates/config.ts); falls back to the defaults untouched when the file is absent or
-// unparseable. docs/gate-contracts.md names no repo as required to carry this file — a fresh
-// checkout with no `.rk/config.json` is a legitimate default-config state, not an error.
+// (src/gates/config.ts); falls back to the defaults, UNTOUCHED VALUES ONLY, when the file is
+// absent, unparseable, or not shaped like a config object. docs/gate-contracts.md names no repo
+// as required to carry this file — a fresh checkout with no `.rk/config.json` is a legitimate
+// default-config state, not an error; that ONE case (file absent) is silent by design (CLAUDE.md
+// SC1: cold start must never require a config file). The other two whole-file failure modes below
+// are never silent — see rk-45m.
 //
 // rk-bdd (2026-07-18 M0.3 re-review, finding 6) assessed this file for the same relocation as
 // src/gates/{corpus-run,corpus-discovery}.ts (moved to src/corpus/ that same session — both were
@@ -12,19 +15,49 @@
 // real import site updated; the two immutable review records under docs/reviews/ still cite the
 // old src/gates/config-load.ts path (frozen by their own UPDATE POLICY, never corrected). The
 // src/gates/ purity allowlist that carried this file's exemption is now empty.
+//
+// rk-45m: residual from rk-xbm (M1 repair wave) -- `validateConfigOverrides` (src/gates/config.ts)
+// already turns a malformed/unknown FIELD into a loud, structural, non-demotable ERROR finding
+// (rk-xbm). But the two whole-file failure modes below -- the bytes are not valid JSON at all, or
+// the JSON parses but its top-level shape is not an object -- never reached that validator; both
+// silently fell back to defaults with an EMPTY `_configValidation` summary, no finding at all. A
+// misplaced comma silently reverted an entire repo's gate config to strict defaults with zero
+// signal -- worse than a crash, because it renders as a green run. Both branches below now build a
+// loud finding via `configError` (src/gates/config.ts) -- the exact same `structural: true`,
+// never-demotable-by-phase.ts finding shape `validateConfigOverrides` already produces for a
+// malformed field (docs/gate-contracts.md's Phase matrix "Mechanism" section names "parse errors"
+// as one of the four canonical STRUCTURAL classes outright, so this is not a new policy, just
+// closing a gap in an already-decided one). The gate CONFIG VALUES themselves still degrade to
+// `DEFAULT_GATE_CONFIG`, unchanged, never a partial/garbled parse -- `rk check` never crashes on a
+// bad `.rk/config.json`, it fails LOUD instead of failing SILENT.
 
 import { join } from "node:path";
 import type { GateConfig } from "../gates/config";
-import { mergeGateConfig, validateConfigOverrides } from "../gates/config";
+import { CONFIG_PATH, configError, mergeGateConfig, validateConfigOverrides } from "../gates/config";
 
 function noValidation(): NonNullable<GateConfig["_configValidation"]> {
   return { findings: [], checked: 0, total: 0 };
+}
+
+/** rk-45m: the shared shape for both whole-file failure modes below -- one loud finding, `checked:
+ * 0` (nothing could even be checked field-by-field), `total: 1` (the file itself is the one thing
+ * that failed), mirroring how a single malformed field is counted by `validateConfigOverrides`. */
+function wholeFileFailure(message: string): NonNullable<GateConfig["_configValidation"]> {
+  return { findings: [configError(message)], checked: 0, total: 1 };
+}
+
+function describeTopLevelShape(parsed: unknown): string {
+  if (parsed === null) return "null";
+  if (Array.isArray(parsed)) return "an array";
+  return `a ${typeof parsed}`;
 }
 
 export async function loadGateConfig(root: string): Promise<GateConfig> {
   const path = join(root, ".rk", "config.json");
   const file = Bun.file(path);
   if (!(await file.exists())) {
+    // Case (a) -- file ABSENT. Legitimate cold-start path (SC1): silent, defaults apply, no
+    // finding. Must stay this way -- do not conflate with the two cases below.
     const config = mergeGateConfig(undefined);
     config._configValidation = noValidation();
     return config;
@@ -33,21 +66,35 @@ export async function loadGateConfig(root: string): Promise<GateConfig> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
-  } catch {
-    // A corrupt config.json degrades to defaults rather than crashing `rk check` outright — the
-    // same "absent/unparseable input becomes a visible degraded state, never a hard crash"
-    // pattern every gate follows for its own inputs (docs/gate-contracts.md's shared
-    // philosophy). Deliberately UNCHANGED by rk-xbm (below): malformed JSON *syntax* is a
-    // distinct failure mode from a malformed *field value* -- out of this bead's named scope
-    // (CLAUDE.md L11). `rk check` itself may choose to surface this via its own diagnostics
-    // later; this function's contract is just "never throw on a bad config file".
+  } catch (e) {
+    // Case (b) -- file PRESENT but UNPARSEABLE JSON syntax (rk-45m). Never silent: one loud,
+    // structural ERROR naming the file and carrying the underlying JSON.parse SyntaxError text
+    // (the specific token/position complaint the runtime already computed, when the runtime
+    // provides one -- Bun/JavaScriptCore's JSON.parse does not expose a line/column, only a
+    // reason string; there is no "line" to report beyond the whole-file sentinel `line: 1`
+    // `configError` already uses for every other config finding). Gate config VALUES still
+    // degrade to strict defaults -- `rk check` never crashes on a bad config file -- but the run
+    // is never silently green about it.
+    const detail = e instanceof Error ? e.message : String(e);
     const config = mergeGateConfig(undefined);
-    config._configValidation = noValidation();
+    config._configValidation = wholeFileFailure(
+      `${CONFIG_PATH} is not valid JSON -- ${detail} -- using the strict defaults ` +
+        `(DEFAULT_GATE_CONFIG) rather than silently discarding your configuration; a single ` +
+        `syntax error must never produce a silently-green run (rk-45m)`,
+    );
     return config;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    // Same whole-file principle as case (b): the JSON is syntactically valid but is not usable as
+    // a config object at all (e.g. a bare array, string, number, or `null`) -- there are no
+    // per-field problems to enumerate because there are no fields, so this is reported the same
+    // way as an unparseable file rather than silently defaulted (rk-45m).
     const config = mergeGateConfig(undefined);
-    config._configValidation = noValidation();
+    config._configValidation = wholeFileFailure(
+      `${CONFIG_PATH} must be a JSON object at the top level, got ${describeTopLevelShape(parsed)} ` +
+        `-- using the strict defaults (DEFAULT_GATE_CONFIG) rather than silently discarding your ` +
+        `configuration (rk-45m)`,
+    );
     return config;
   }
 

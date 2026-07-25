@@ -101,11 +101,14 @@ export interface GateConfig {
    * `validateConfigOverrides`'s findings (plus a checked/total pair) from the point they're
    * computed (the edge, which alone sees the raw parsed JSON and its unknown keys) to
    * `configGate.run` below (which only ever receives an already-merged `GateConfig`, the same as
-   * every other gate — L3 pure core, no gate touches fs itself). Always present with a
-   * `{findings: [], checked: 0, total: 0}` default when `loadGateConfig` had nothing to validate
-   * (no `.rk/config.json`, or one that failed to parse as JSON at all — that failure mode is
-   * unchanged by this bead, see config-load.ts), so `configGate` never has to special-case
-   * `undefined`. */
+   * every other gate — L3 pure core, no gate touches fs itself). Always present: `{findings: [],
+   * checked: 0, total: 0}` when there was nothing to validate at all (no `.rk/config.json`, the
+   * legitimate cold-start default state); `{findings: [configError(...)], checked: 0, total: 1}`
+   * when the file is present but the WHOLE file is unusable -- unparseable JSON syntax, or valid
+   * JSON whose top-level shape is not an object (rk-45m; previously both silently degraded to the
+   * empty summary with no finding at all, see config-load.ts's `parseFailureValidation`) -- and
+   * the ordinary per-field summary otherwise. `configGate` never has to special-case any of these;
+   * it just renders whatever `findings`/`checked`/`total` it is handed. */
   _configValidation?: ConfigValidationSummary;
 }
 
@@ -148,13 +151,21 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "workers",
 ]);
 
-const CONFIG_PATH = ".rk/config.json";
+/** Exported so `src/store/config-load.ts` (the impure edge that actually reads the file) can
+ * build the SAME shape of finding for the two whole-file failure modes it alone can detect --
+ * "the bytes are not valid JSON at all" and "the JSON parses but its top-level shape is not an
+ * object" (rk-45m). Both are, structurally, the same class of fault this function already
+ * exists for: a config problem about the checking apparatus itself, never a per-field value. */
+export const CONFIG_PATH = ".rk/config.json";
 
-function configError(message: string): Finding {
+export function configError(message: string): Finding {
   // structural: true -- a config validation failure is a validity-semantics fault about the
   // checking apparatus itself (CLAUDE.md L6), not an ordinary completeness/freshness finding; it
   // must never be silently demoted to WARN by src/gates/phase.ts's exploration matrix (the exact
-  // shape of drift this bead exists to close).
+  // shape of drift this bead exists to close). docs/gate-contracts.md's Phase matrix "Mechanism"
+  // section names "parse errors" as one of the four canonical STRUCTURAL classes outright -- an
+  // unparseable `.rk/config.json` (rk-45m) is textually exactly that, so it uses this same
+  // constructor rather than inventing a second, weaker finding shape.
   return { severity: "ERROR", path: CONFIG_PATH, line: 1, message, structural: true };
 }
 

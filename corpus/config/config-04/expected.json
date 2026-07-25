@@ -1,0 +1,18 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "is not valid JSON"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 1
+  },
+  "aism_behavior": "n/a -- .rk/config.json and its runtime validation are an rk-only concept, no AISM script reads or validates it.",
+  "notes": "rk-45m (residual from rk-xbm's M1 repair wave): a single trailing comma -- the exact incident class named in the bead (a stray misplaced comma silently reverting a repo to strict defaults with zero signal). Before this fix, src/store/config-load.ts's JSON.parse catch block returned mergeGateConfig(undefined) with an EMPTY _configValidation summary ({findings: [], checked: 0, total: 0}) -- no finding at all, a green run governed by defaults the user never chose. Now the catch block builds one loud, structural, non-demotable ERROR via src/gates/config.ts's (now-exported) `configError`, naming the file and carrying the underlying JSON.parse SyntaxError text verbatim (Bun/JavaScriptCore's JSON.parse exposes no line/column, only a reason string, hence the shared `.rk/config.json:1` sentinel every other config finding already uses). Gate config VALUES still degrade to DEFAULT_GATE_CONFIG untouched -- rk check never crashes on a bad config file -- but the run is never silently green about it. Mutation-proven red-first: reverting the catch block to its pre-fix `noValidation()` return made test/store/config-load.test.ts's unparseable-JSON tests fail RED (empty findings instead of length 1), confirmed by hand during implementation, then restored."
+}

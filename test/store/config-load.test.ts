@@ -80,19 +80,72 @@ describe("loadGateConfig (edge: reads .rk/config.json)", () => {
     expect(cfg.linkerBrittlenessSoftCap).toBe(DEFAULT_GATE_CONFIG.linkerBrittlenessSoftCap);
   });
 
-  test("falls back to defaults on unparseable JSON, never throws", async () => {
+  test("falls back to defaults on unparseable JSON, never throws, but is no longer silent", async () => {
     const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
     dirs.push(root);
     mkdirSync(join(root, ".rk"), { recursive: true });
     writeFileSync(join(root, ".rk", "config.json"), "{ not json");
     const cfg = await loadGateConfig(root);
-    // rk-xbm: unchanged, deliberately -- malformed JSON *syntax* is a distinct failure mode from
-    // a malformed *field value* (out of this bead's named scope, see config-load.ts's header
-    // comment); still degrades silently to defaults, no config-error finding.
+    // rk-45m: the gate config VALUES still degrade to strict defaults (never throw, never a
+    // partial/garbled merge) -- but this is no longer a SILENT degrade. The `phase` field
+    // (per L2) sets in DEFAULT_GATE_CONFIG, but a loud, structural, non-demotable ERROR finding
+    // now names the file and the parser's own complaint.
     const { _configValidation, ...rest } = cfg;
     expect(rest).toEqual(DEFAULT_GATE_CONFIG);
-    expect(_configValidation).toEqual({ findings: [], checked: 0, total: 0 });
+    expect(_configValidation!.findings).toHaveLength(1);
+    expect(_configValidation!.checked).toBe(0);
+    expect(_configValidation!.total).toBe(1);
+    const finding = _configValidation!.findings[0]!;
+    expect(finding.severity).toBe("ERROR");
+    expect(finding.structural).toBe(true);
+    expect(finding.path).toBe(".rk/config.json");
+    // "which file, what the parser objected to" (rk-45m bar): message must name the file and
+    // carry the underlying JSON.parse SyntaxError text, not a generic "invalid config" blurb.
+    expect(finding.message).toContain(".rk/config.json");
+    expect(finding.message).toMatch(/not valid JSON/i);
   });
+
+  test("a single trailing comma (the exact incident named in rk-45m) is a loud finding, not a silent green run", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), '{ "phase": "consolidation", }');
+    const cfg = await loadGateConfig(root);
+    expect(cfg._configValidation!.findings).toHaveLength(1);
+    expect(cfg._configValidation!.findings[0]!.structural).toBe(true);
+  });
+
+  test("valid JSON but wrong top-level shape (an array) is also a loud finding, never silently defaulted", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), "[1, 2, 3]");
+    const cfg = await loadGateConfig(root);
+    const { _configValidation, ...rest } = cfg;
+    expect(rest).toEqual(DEFAULT_GATE_CONFIG);
+    expect(_configValidation!.findings).toHaveLength(1);
+    expect(_configValidation!.checked).toBe(0);
+    expect(_configValidation!.total).toBe(1);
+    expect(_configValidation!.findings[0]!.structural).toBe(true);
+    expect(_configValidation!.findings[0]!.message).toMatch(/JSON object/i);
+  });
+
+  test("valid JSON but top-level null is also a loud finding (typeof null === 'object' trap)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-config-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), "null");
+    const cfg = await loadGateConfig(root);
+    expect(cfg._configValidation!.findings).toHaveLength(1);
+    expect(cfg._configValidation!.findings[0]!.structural).toBe(true);
+  });
+
+  // Mutation proof (rk-45m): temporarily reverting the JSON.parse catch block in
+  // src/store/config-load.ts to `return mergeGateConfig(undefined)` with `noValidation()` (the
+  // pre-fix behavior) makes the first and second tests above fail RED (`findings` empty instead
+  // of length 1) -- confirmed by hand during implementation, then restored. Same for the
+  // top-level-shape branch: reverting it to the old silent `noValidation()` return makes the
+  // array/null tests above fail RED for the identical reason.
 });
 
 // rk-xbm (M1 review B1): config-load.ts:39's old `parsed as Partial<GateConfig>` cast let ANY
