@@ -34,18 +34,22 @@
 // `await` on a non-Promise resolves on the next microtask, changing nothing observable), so no
 // existing test's ASSERTIONS changed, only its `test(...)` callback and call site gained
 // `async`/`await` keywords. Callers of `runVerifyDriver` now receive `Promise<DriverRunResult>`.
+//
+// rk-y83/rk-tbg shard-cap split: the per-round PROVE-half + VERIFY-half + verdict-apply dispatch
+// (previously inlined here) now lives in src/drive/driver-run-round.ts's `dispatchRound`. This file
+// keeps the LOOP skeleton only — af query, the balloon tripwire, the empty-frontier convergence
+// classification, and the cross-round stuck/churn guardrail bookkeeping — and calls `dispatchRound`
+// once per round for the dispatch/apply half. No decision rule moved; only the wiring did.
 
 import { encodeVerifierSeam } from "./identity";
-import { checkBudget, checkRetryCap, evaluateStuckGuard, evaluateChurnGuard } from "./driver-guardrails";
+import { evaluateStuckGuard, evaluateChurnGuard } from "./driver-guardrails";
 import { detectBalloon } from "./driver-balloon";
 import { handleBalloon } from "./driver-balloon-run";
 import { selectProverReadyNodes, selectVerifierReadyNodes, type AfNodeView } from "./driver-plan";
-import { childrenFirst, verifyOneNode } from "./driver-verify-node";
-import { proveOneNode } from "./driver-prove-node";
+import { dispatchRound, type RoundState } from "./driver-run-round";
 import { stallReasonClass, appendStallCause, challengeStallClass } from "./driver-stall";
 import { DEFAULT_DRIVER_CONFIG, type DriverDeps, type DriverRunResult } from "./driver-types";
-import type { AfApplyItem } from "./driver-verdict-map";
-import type { FilledVerdictFile, VerdictItemOutcome } from "./driver-af";
+import type { VerdictItemOutcome } from "./driver-af";
 import type { DriverStopReason } from "./driver-guardrails";
 
 // Re-exported so pre-existing importers keep their `from "./driver-run"` paths after the split.
@@ -126,6 +130,13 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   // Message-only; cleared on progress alongside the other since-progress tallies.
   const stallCauses = new Map<string, number>();
   const noteSkip = (reason: string) => { const c = stallReasonClass(reason); stallCauses.set(c, (stallCauses.get(c) ?? 0) + 1); };
+  // rk-dp1 (RUN-REPORT-9): companion to noteSkip for an APPLIED challenge (see driver-run-round.ts's
+  // dispatchRound, which calls this) — DELIBERATELY keeps the node id (challengeStallClass), unlike
+  // stallReasonClass, so a stuck abort names WHICH node spun on a repeated challenge.
+  const noteChallengeStall = (nodeId: string, category: string | undefined) => {
+    const c = challengeStallClass(nodeId, category);
+    stallCauses.set(c, (stallCauses.get(c) ?? 0) + 1);
+  };
   let roundsWithoutProgress = 0;
   // rk-cpk (review FU2): churn accounting, distinct from the stuck guard. The stuck guard resets on
   // ANY structural write (a recorded proof), so a prove/challenge chain that grows the tree every
@@ -139,6 +150,10 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
   // discarded). The pre-dispatch checks below (and handleBalloon's) read it; verifyOneNode returns
   // each turn's cost so it accrues here regardless of the turn's outcome.
   let tokensSpent = 0;
+  // The per-round dispatch/apply half (driver-run-round.ts's dispatchRound) mutates these SAME
+  // references round over round — not copied, so every tally above stays authoritative for this
+  // loop's own stuck/churn bookkeeping below.
+  const roundState: RoundState = { attempts, proofRecordsByNode, vacuousSinceProgress, appliedNodeIds, outcomes };
 
   for (; round < config.maxRounds; round++) {
     const q = deps.queryWorkspace();
@@ -166,116 +181,19 @@ export async function runVerifyDriver(deps: DriverDeps): Promise<DriverRunResult
     }
 
     const byId = new Map(ws.nodes.map((n) => [n.id, n] as const));
-    let progressed = false;
+    // PROVE half + VERIFY half + apply (rk-gn4/M3 blockers 1/3), split out to driver-run-round.ts
+    // (rk-y83/rk-tbg shard-cap split) — byte-for-byte the same dispatch/apply this loop always ran,
+    // now returning its progress flags instead of mutating locals directly. `dispatch.done` means a
+    // pre-dispatch budget check failed mid-round; return its abort result immediately, same as the
+    // inline early-returns this replaced.
+    const dispatch = await dispatchRound(deps, round, config.nodeRetryCap, proverReadyIds, verifierReadyIds, ws.nodes, byId, verifiedBySeam, tokensSpent, roundState, noteSkip, noteChallengeStall);
+    if (dispatch.done) return dispatch.result;
+    tokensSpent = dispatch.tokensSpent;
     // rk-cpk: split `progressed` (proof OR accept — drives the stuck guard, unchanged) into its two
     // components for the churn cap. `structuralWrite` = a proof was recorded (the tree grew);
     // `epistemicAdvance` = a node newly reached validated (an af accept applied). Only the latter is
     // real progress; a structural write with no advance is what the churn cap counts.
-    let structuralWrite = false;
-    let epistemicAdvance = false;
-
-    // PROVE half (rk-gn4): dispatch a PROVER turn over each prover-ready node and record its
-    // decomposition into af. A recorded proof IS progress — af re-classifies the node next round and
-    // the verifier path takes over. proveOneNode NEVER mints a verdict (driver-prove-node.ts): it
-    // calls no apply/bind, and its role + overreach guards discard any verdict a prover smuggles.
-    for (const id of proverReadyIds) {
-      const node = byId.get(id)!;
-      const attemptsSoFar = attempts.get(id) ?? 0;
-      if (checkRetryCap(attemptsSoFar, config.nodeRetryCap).exhausted) continue;
-      // rk-s9t rule 2: pre-dispatch budget check — a prover turn accrues to the SAME campaign cap
-      // and the (cap+1)th token is never requested regardless of role.
-      if (deps.budget) {
-        const decision = checkBudget(tokensSpent, deps.budget);
-        if (!decision.affordable) return { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
-      }
-      // GAP 8: the round's fresh node-id set (parallel to verifyOneNode's `new Set(byId.keys())`
-      // below) — buildRecordProofChildren needs it to translate a prover's forward-sibling `depends`
-      // into af's `#N` in-batch namespace and to distinguish an existing dependency from one.
-      const pr = await proveOneNode(deps, node, new Set(byId.keys()));
-      tokensSpent += pr.spentTokens; // accrue whether the proof recorded or the turn was discarded
-      if ("recorded" in pr) {
-        progressed = true;
-        // rk-cpk: a recorded proof is a STRUCTURAL write, not epistemic advancement — count it per
-        // node so a spinning prove/refine cycle is caught by the churn cap the stuck guard misses.
-        structuralWrite = true;
-        proofRecordsByNode.set(id, (proofRecordsByNode.get(id) ?? 0) + 1);
-      }
-      else {
-        attempts.set(id, attemptsSoFar + 1);
-        noteSkip(pr.skip);
-        deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: pr.skip }));
-      }
-    }
-
-    // VERIFY half: dispatch a VERIFIER turn over each verifier-ready node, bind, collect apply items.
-    // Unchanged validity path (M3 repair wave — verifier-only, per-node, hash-re-bound).
-    const composed: { item: AfApplyItem; contentHash: string }[] = [];
-    for (const id of verifierReadyIds) {
-      const node = byId.get(id)!;
-      const attemptsSoFar = attempts.get(id) ?? 0;
-      if (checkRetryCap(attemptsSoFar, config.nodeRetryCap).exhausted) continue;
-      if (deps.budget) {
-        const decision = checkBudget(tokensSpent, deps.budget);
-        if (!decision.affordable) return { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds, outcomes, rounds: round + 1 };
-      }
-      // rk-qxp (FIX 6): the mapper validates a challenge's blamed node id against the proof export —
-      // pass the current round's node-id set (byId is built from ws.nodes each round).
-      const r = await verifyOneNode(deps, node, verifiedBySeam, new Set(byId.keys()), ws.nodes);
-      tokensSpent += r.spentTokens; // accrue whether the turn applied or was discarded
-      if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
-      else {
-        attempts.set(id, attemptsSoFar + 1);
-        // rk-jit (STOP-4): tally a vacuous-accept discard so a stuck abort can name the bootstrap
-        // deadlock as its cause instead of the opaque stuck-no-progress. Cleared on progress (below).
-        if (r.vacuousNode !== undefined) vacuousSinceProgress.set(r.vacuousNode, (vacuousSinceProgress.get(r.vacuousNode) ?? 0) + 1);
-        noteSkip(r.skip);
-        deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: id, reason: r.skip }));
-      }
-    }
-
-    if (composed.length > 0) {
-      // M3 blocker 1: re-read the authoritative af node hashes immediately before apply and discard
-      // any verdict whose bound bytes changed between dispatch and apply. A node absent from the
-      // re-read (deleted/renamed) counts as a mismatch — fail closed.
-      const fresh = deps.reReadContentHashes();
-      // M3 blocker 3: pass-1 hard tier is all per-node — each verdict is its OWN non-batch apply
-      // (empty batch_id), children-first so a child is recorded before its parent. M3 blocker 2:
-      // only an af-recorded ACCEPT is progress; a recorded challenge is never counted.
-      const ordered = [...composed].sort((a, b) => childrenFirst(a.item, b.item));
-      for (const { item, contentHash } of ordered) {
-        const current = fresh.get(item.node);
-        if (current === undefined || current !== contentHash) {
-          const staleReason = `stale verdict discarded: af node content hash changed between dispatch and apply (bound ${contentHash}, current ${current ?? "absent"})`;
-          noteSkip(staleReason);
-          deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: item.node, reason: staleReason }));
-          attempts.set(item.node, (attempts.get(item.node) ?? 0) + 1);
-          continue;
-        }
-        // rk B1: send the bound content hash as `expect_hash` so af RE-checks it (and verifier-ready
-        // availability) atomically under its own state read — the kernel guarantee the driver-side
-        // re-read above cannot give on its own. Both guards agree here; the af one is authoritative.
-        const file: FilledVerdictFile = { schema_version: "1", batch_id: "", verified_by: verifiedBySeam, items: [{ ...item, expect_hash: contentHash }] };
-        const report = deps.applyVerdicts(file);
-        for (const o of report.items) {
-          outcomes.push(o);
-          deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
-          if (o.status === "applied" && o.verdict === "accept") { appliedNodeIds.push(o.node); progressed = true; epistemicAdvance = true; /* rk-cpk: an accept is the ONLY epistemic advancement — a node newly validated */ }
-          else {
-            attempts.set(o.node, (attempts.get(o.node) ?? 0) + 1);
-            // rk-dp1 (RUN-REPORT-9): an APPLIED challenge is NOT progress — it re-blocks the node. The
-            // stall classifier previously counted only node-SKIPPED reasons, so run A's dependency-
-            // content challenge loop (node '1.7' challenged 3× on the same grounds) never appeared in
-            // the stuck abort's dominant-cause line. Count it per-node (with the model's category, kept
-            // — unlike a skip class — so the operator sees WHICH node spun) into the same since-progress
-            // tally, cleared on any progress below. Message-only: no abort/verdict/convergence semantics.
-            if (o.status === "applied" && o.verdict === "challenge") {
-              const c = challengeStallClass(o.node, item.category);
-              stallCauses.set(c, (stallCauses.get(c) ?? 0) + 1);
-            }
-          }
-        }
-      }
-    }
+    const { progressed, structuralWrite, epistemicAdvance } = dispatch;
 
     // Progress this round = a recorded proof OR an af-applied accept. No progress → stuck guard.
     // FU2: any progress also clears the vacuous-since-progress tally — a stall AFTER progress is a
