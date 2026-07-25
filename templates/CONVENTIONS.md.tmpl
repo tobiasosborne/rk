@@ -16,9 +16,21 @@ Each entry fixes one convention and records why. Append; do not rewrite.
 
 ## Naming and ids
 
-Shard ids use the prefix `{{RK_SLOT_SHARD_PREFIX}}-` with the layer convention
-(`{{RK_SLOT_SHARD_PREFIX}}-def-<slug>`, `-lem-`, `-thm-`, `-prop-`, `-cor-`, `-op-`, `-obs-`).
-Ids are stable and greppable; a rename is a deliberate, logged act.
+Every id equals its own filename stem — that is a gate rule, not a preference, so the id and the
+path can never drift apart. There is **no campaign-wide prefix** on registry or definition ids.
+
+- `definitions/def-<slug>.md` → `id: def-<slug>`.
+- `argument/<layer>-<slug>.md` → `id: <layer>-<slug>`, where `<layer>` is `lem` (lemma), `thm`
+  (theorem), `prop` (proposition), `cor` (corollary), `op` (open problem), or `obs` (obstruction).
+  Shards may sit at any depth under `argument/`; the id never encodes the directory.
+- The north star is `{{RK_SLOT_NORTH_STAR_ID}}`, named by `.rk/config.json`'s `northStarId`.
+- `{{RK_SLOT_SHARD_PREFIX}}` is a **different namespace**: it is `.rk/config.json`'s `shardsPrefix`,
+  the `SHARD-ID` header prefix for LaTeX report shards (`{{RK_SLOT_SHARD_PREFIX}}-01-INTRO`), and it
+  applies only if this campaign adopts a `report/` tree. Never put it on a registry or definition id.
+
+Ids are stable and greppable; a rename is a deliberate, logged act — rename the file, change `id:`,
+update every `deps:`/`routes:`/`defs:` that referenced it (and `northStarId`, if it was the north
+star). `rk check` catches the dangling references; it cannot catch a rename you never finished.
 
 ## Ledger
 

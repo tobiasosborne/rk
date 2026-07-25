@@ -6,18 +6,35 @@
 // already follows for the `phase` key alone).
 
 import type { GateConfig } from "../gates/config";
+import { NORTH_STAR_SHARD_ID } from "./north-star";
 
 /** The subset of `GateConfig` this WP stamps: `phase` (M1.3), `shardsPrefix` (R12 — per-repo,
- * never a literal default), and `linkerBrittlenessSoftCap` (the brittleness soft cap — audit R9:
+ * never a literal default), `linkerBrittlenessSoftCap` (the brittleness soft cap — audit R9:
  * "surface it as an explicit constitution/config slot," which this mirrors into `.rk/config.json`
- * so `rk check`'s linker gate reads the SAME number the stamped constitution documents). No other
- * `GateConfig` key is stamped: `shardsMaxLines`, `provenanceStatusTableFile`, and
- * `refsMinRunReportingLength` are left to `mergeGateConfig`'s own defaults (R7/R10/R16, already
- * justified in the residue audit) unless a later `rk` command decides otherwise. */
+ * so `rk check`'s linker gate reads the SAME number the stamped constitution documents), and
+ * `northStarId` (generality audit 2026-07-25 finding M3 — see below). No other `GateConfig` key is
+ * stamped: `shardsMaxLines`, `provenanceStatusTableFile`, and `refsMinRunReportingLength` are left
+ * to `mergeGateConfig`'s own defaults (R7/R10/R16, already justified in the residue audit) unless a
+ * later `rk` command decides otherwise.
+ *
+ * `workers` is deliberately NOT stamped, despite being the other key finding M3 names as
+ * undiscoverable. Every possible value of it names a specific backend vendor, and a general tool
+ * must not stamp a vendor choice into a stranger's campaign any more than it may stamp a shard-id
+ * prefix (R12). An empty `{"assignments": {}}` would be a decision-shaped placeholder that decides
+ * nothing, against this module's "only write what was actually decided" rule. The discoverability
+ * half of the finding is met instead by documenting the key — shape, roles, tiers, and the
+ * refuses-to-guess behavior — in the stamped constitution's section 5, which is where a researcher
+ * looks. */
 export interface RkConfigStub {
   phase: GateConfig["phase"];
   shardsPrefix: string;
   linkerBrittlenessSoftCap: number;
+  /** The registry id of the north-star shard `rk init` seeds alongside this file
+   * (`src/scaffold/north-star.ts`). PRD C2's critical-path provenance check — the campaign's
+   * central continuously-checked validity guarantee — is presence-conditional on this key: absent,
+   * it walks an empty path and reports itself satisfied while covering nothing. Bound here rather
+   * than left for the user to discover in rk's own (unstamped) docs. */
+  northStarId: string;
 }
 
 export function buildRkConfig(params: {
@@ -29,6 +46,7 @@ export function buildRkConfig(params: {
     phase: params.phase,
     shardsPrefix: params.shardsPrefix,
     linkerBrittlenessSoftCap: params.brittlenessSoftCap,
+    northStarId: NORTH_STAR_SHARD_ID,
   };
 }
 

@@ -8,7 +8,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { parseFrontmatter } from "../../src/gates/snapshot";
+import { AF_STATES, KINDS, MATH_STATUS } from "../../src/gates/linker-lemma";
+import { fillTemplate } from "../../src/scaffold/slots";
+import { NORTH_STAR_SHARD_ID, NORTH_STAR_SHARD_PATH } from "../../src/scaffold/north-star";
 
 const TEMPLATES_ROOT = join(import.meta.dir, "..", "..", "templates");
 
@@ -27,7 +31,15 @@ function findTmpl(dir: string, base = ""): string[] {
 const TMPL_FILES = findTmpl(TEMPLATES_ROOT);
 const read = (rel: string) => readFileSync(join(TEMPLATES_ROOT, rel), "utf8");
 
-const VALID_CLASSIFICATIONS = ["authored-append-only", "rewritten-whole", "generated"];
+const VALID_CLASSIFICATIONS = ["authored-append-only", "rewritten-whole", "generated", "campaign-seed"];
+
+// Templates whose stamped output is a REGISTRY SHARD, not a document: Gate 2's frontmatter must be
+// the first non-blank content of the file (src/gates/snapshot.ts's `parseFrontmatter` returns
+// `present: false` for anything else), so these physically cannot carry a leading HTML ROLE
+// header. They are NOT skipped silently — describe-block (a2) below asserts the equivalent
+// contract for them (the manifest declares the class; the body states it in prose), and (g)
+// parses each one with the linker's own parser.
+const SHARD_TMPL_FILES = new Set(["argument/north-star.md.tmpl"]);
 
 // Constitution slots that must appear EXACTLY ONCE (uniqueness matters — a duplicated north-star
 // or phase declaration is an authoring error). PROJECT_NAME is deliberately excluded: it recurs
@@ -68,13 +80,14 @@ describe("templates / sanity", () => {
         "docs/worklog.md.tmpl",
         "definitions/README.md.tmpl",
         "argument/README.md.tmpl",
+        "argument/north-star.md.tmpl",
       ].sort(),
     );
   });
 });
 
 describe("templates / (a) ROLE-UPDATE-POLICY-TRIGGER headers", () => {
-  for (const rel of TMPL_FILES) {
+  for (const rel of TMPL_FILES.filter((r) => !SHARD_TMPL_FILES.has(r))) {
     test(`${rel} carries a header with a valid classification`, () => {
       const body = read(rel);
       // The header is the leading HTML comment; it must carry all three fields in order.
@@ -90,6 +103,27 @@ describe("templates / (a) ROLE-UPDATE-POLICY-TRIGGER headers", () => {
       const updatePolicy = header.slice(upIdx, trIdx);
       const found = VALID_CLASSIFICATIONS.filter((c) => updatePolicy.includes(c));
       expect(found).toHaveLength(1);
+    });
+  }
+});
+
+// The header exemption above is a NAMED exemption, never a silent skip (CLAUDE.md L2): a shard
+// template still has to declare what happens to it after stamping, it just cannot do so in a
+// leading HTML comment. It declares it twice — mechanically in the manifest, and in prose in the
+// body a researcher actually reads.
+describe("templates / (a2) shard templates declare their post-stamp class without a header", () => {
+  const manifest = JSON.parse(readFileSync(join(TEMPLATES_ROOT, "manifest.json"), "utf8"));
+
+  for (const rel of TMPL_FILES.filter((r) => SHARD_TMPL_FILES.has(r))) {
+    test(`${rel} is manifest-classified campaign-seed and says so in its body`, () => {
+      const entries = manifest.stamped.filter((e: { template: string | null }) => e.template === rel);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].classification).toBe("campaign-seed");
+      // `campaign-seed` means: stamped once, campaign-owned thereafter, NEVER re-stamped by
+      // `rk upgrade`. The body must say that, because the manifest is not what a user reads.
+      const body = read(rel);
+      expect(body.toLowerCase()).toContain("rk upgrade");
+      expect(body.toLowerCase()).toMatch(/never (re-?stamps|rewrites|overwrites)/);
     });
   }
 });
@@ -199,8 +233,34 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.3.0 for the M2.6 freshness-gate constitution update (rk-19i)", () => {
-    expect(manifest.template_version).toBe("1.3.0");
+  test("template_version was bumped to 1.4.0 for the M2/M3 command refresh + north-star seed", () => {
+    expect(manifest.template_version).toBe("1.4.0");
+  });
+
+  // A version bump whose changes are INVISIBLE to a per-file diff (a brand-new stamped path, a new
+  // `.rk/config.json` key — neither of which exists in the older repo to diff against) makes
+  // `rk upgrade`'s manual-diff plan actively misleading. The changelog is what `rk upgrade` prints
+  // so the plan names what a diff cannot show.
+  test("every stamped template_version has a changelog entry, newest first", () => {
+    expect(Array.isArray(manifest.changelog)).toBe(true);
+    expect(manifest.changelog.length).toBeGreaterThanOrEqual(1);
+    expect(manifest.changelog[0].version).toBe(manifest.template_version);
+    for (const e of manifest.changelog) {
+      expect(e.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(Array.isArray(e.changes)).toBe(true);
+      expect(e.changes.length).toBeGreaterThanOrEqual(1);
+      for (const c of e.changes) expect(typeof c).toBe("string");
+    }
+  });
+
+  test("the north-star shard is stamped, campaign-seed, at the path the code names", () => {
+    const entry = manifest.stamped.find((e: { path: string }) => e.path === NORTH_STAR_SHARD_PATH);
+    expect(entry).toBeDefined();
+    expect(entry.template).toBe("argument/north-star.md.tmpl");
+    expect(entry.classification).toBe("campaign-seed");
+    // The shard's id MUST equal its filename stem (Gate 2 check 1) — assert the manifest path and
+    // the code constant agree, so a rename of one without the other cannot ship.
+    expect(basename(entry.path, ".md")).toBe(NORTH_STAR_SHARD_ID);
   });
 
   test("definitions/README.md and argument/README.md are stamped, rewritten-whole (rk-o1y)", () => {
@@ -297,12 +357,117 @@ describe("templates / (f) constitution truthfulness (rk-huq, rk-19i)", () => {
   // from a given binary, which the text is allowed to say; the freshness GATE's own present-tense
   // behavior (hand-editing a DECLARED generated file fails `rk check` today) must not be hedged.
   test("freshness-gate behavior is stated as present-tense fact, not hedged as a future capability (rk-19i)", () => {
-    expect(claude).toContain("hand-editing one of those\n> files fails `rk check` today");
+    // Whitespace-normalized: the CLAIM is the contract, the line wrap is not (a reflow of the
+    // router paragraph must not be able to turn this assertion red or, worse, green).
+    const flat = claude.replace(/\s+/g, " ");
+    expect(flat).toContain("hand-editing one of those files fails `rk check` today");
     expect(claude).toContain(".rk/generated.json");
     expect(claude.toLowerCase()).not.toContain("a freshness check that fails");
   });
 
-  test("rk render (the HTML rendering command) may still be honestly hedged as not-yet-shipped", () => {
-    expect(claude).toContain("may not exist yet in this binary");
+  // The 1.3.0 constitution hedged `rk render` as "a rendering command that may not exist yet in
+  // this binary" and never named `rk verify`/`graph`/`refs`/`doctor` — text written before M2.4
+  // shipped. A constitution that understates its own tool sends the researcher to hand-roll
+  // subsystems the binary already ships (generality audit 2026-07-25, finding M2).
+  test("the constitution names every shipped command and no longer hedges rk render", () => {
+    for (const cmd of ["rk check", "rk phase", "rk graph", "rk render", "rk refs", "rk verify", "rk doctor", "rk upgrade"]) {
+      expect(claude).toContain(cmd);
+    }
+    expect(claude).not.toContain("may not exist yet in this binary");
+  });
+
+  // The concretely damaging half of M2: stamped L1 told the user to recompute hashes and grep
+  // quotes BY HAND for every `cited` claim, while `rk refs` ships exactly that.
+  test("L1 points at rk refs rather than hand-hashing and hand-grepping (finding M2)", () => {
+    const l1 = claude.slice(claude.indexOf("**L1 —"), claude.indexOf("**L2 —"));
+    expect(l1).toContain("rk refs add");
+    expect(l1).toContain("rk refs quote");
+    expect(l1).not.toContain("grep -F");
+    expect(l1.toLowerCase()).not.toContain("recompute the hash");
+  });
+
+  // Finding M3: `northStarId` and `workers` are load-bearing config keys documented only inside
+  // rk's own docs, which are never stamped into a campaign.
+  test("the constitution documents the .rk/config.json keys the tool actually reads (finding M3)", () => {
+    for (const key of ["northStarId", "workers", "shardsPrefix", "linkerBrittlenessSoftCap", "phase"]) {
+      expect(claude).toContain(key);
+    }
+    // northStarId's documentation must state the guarantee it powers AND the fail-closed rule —
+    // a key documented as "the north star's id" teaches nothing about why it matters.
+    const nsSection = claude.slice(claude.indexOf("`northStarId`"));
+    expect(nsSection.toLowerCase()).toContain("critical path");
+    expect(nsSection.toLowerCase()).toContain("cross-vendor");
+    // `workers` must name the role/tier vocabulary a user has to type, not just the key name.
+    for (const token of ["prover", "verifier", "reviewer", "l5", "hard"]) {
+      expect(claude).toContain(token);
+    }
+  });
+
+  // Finding M5, and its twin in the constitution the audit did not name: `shardsPrefix` is Gate
+  // 6's LaTeX report-shard namespace, NOT a registry-id convention. Rule 4 stamped
+  // "ids using the campaign's shard prefix ({{RK_SLOT_SHARD_PREFIX}}-...)", contradicting both
+  // stamped schema READMEs (`def-widget`, `lem-widget-bound`).
+  test("no stamped template tells the user to prefix registry ids with the shard prefix (finding M5)", () => {
+    for (const rel of TMPL_FILES) {
+      const body = read(rel);
+      expect(body).not.toMatch(/\{\{RK_SLOT_SHARD_PREFIX\}\}-(def|lem|thm|prop|cor|op|obs)\b/);
+    }
+  });
+
+  test("CONVENTIONS.md.tmpl teaches the real id convention and scopes the shard prefix to report shards", () => {
+    const conv = read("CONVENTIONS.md.tmpl");
+    const flat = conv.replace(/\s+/g, " "); // wrap-insensitive: a reflow must not flip this
+    expect(conv).toContain("def-");
+    // each of the six argument-layer prefixes named AND glossed, not just alluded to
+    for (const layer of ["lem", "thm", "prop", "cor", "op", "obs"]) expect(flat).toContain(`\`${layer}\` (`);
+    expect(conv).toContain("no campaign-wide prefix");
+    expect(conv).toContain("shardsPrefix");
+    expect(conv.toLowerCase()).toContain("report");
+  });
+});
+
+// The strongest assertion available about a stamped shard: run the LINKER's own parser over the
+// slot-substituted template and check the record it produces, rather than token-matching the text
+// (bead rk-ssu: token matching cannot catch semantic drift between templates and gates).
+describe("templates / (g) the seeded north-star shard parses as a Gate 2 registry shard", () => {
+  const NORTH_STAR = "Every widget with property P is close to a gadget";
+  const stamped = fillTemplate(read("argument/north-star.md.tmpl"), {
+    RK_SLOT_NORTH_STAR_ID: NORTH_STAR_SHARD_ID,
+    RK_SLOT_NORTH_STAR: NORTH_STAR,
+    RK_SLOT_PROJECT_NAME: "my-conjecture",
+  });
+
+  test("frontmatter is present, terminated, and free of malformed lines", () => {
+    const fm = parseFrontmatter(stamped);
+    expect(fm.present).toBe(true);
+    expect(fm.terminated).toBe(true);
+    expect(fm.malformedLines).toEqual([]);
+  });
+
+  test("id equals the filename stem and every enum field is a value Gate 2 accepts", () => {
+    const fm = parseFrontmatter(stamped);
+    expect(fm.fields.id).toBe(NORTH_STAR_SHARD_ID);
+    expect(fm.fields.id).toBe(basename(NORTH_STAR_SHARD_PATH, ".md"));
+    expect(KINDS.has(fm.fields.kind!)).toBe(true);
+    expect(MATH_STATUS.has(fm.fields.status!)).toBe(true);
+    expect(AF_STATES.has(fm.fields.af!)).toBe(true);
+  });
+
+  test("the contract is the north-star string byte-for-byte (the anti-drift join key)", () => {
+    const fm = parseFrontmatter(stamped);
+    expect(fm.fields.contract).toBe(NORTH_STAR);
+  });
+
+  // A seeded north star must start at the BOTTOM of the rigour ladder. Stamping anything the
+  // ladder treats as rigorous (`proved`/`cited`/`consensus`) would make a brand-new campaign's
+  // dashboard claim its unproven target result is established — the cardinal error (L0).
+  test("the seeded status is not a rigorous rung", () => {
+    const fm = parseFrontmatter(stamped);
+    expect(["proved", "cited", "consensus"]).not.toContain(fm.fields.status);
+    expect(fm.fields.status).toBe("conjecture");
+  });
+
+  test("no unfilled slot survives substitution", () => {
+    expect(stamped).not.toContain("{{RK_SLOT_");
   });
 });

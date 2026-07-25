@@ -8,6 +8,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initCommand, initHelp } from "../src/cli/init";
+import { checkCommand } from "../src/cli/check";
+import { parseFrontmatter } from "../src/gates/snapshot";
 import { TEMPLATE_MANIFEST } from "../src/scaffold/templates-embed";
 import { buildPreCommitHookScript } from "../src/scaffold/hooks";
 
@@ -414,5 +416,110 @@ describe("rk init: .rk/ stub files", () => {
     expect(settings.hooks.UserPromptSubmit[0].hooks.map((h: { command: string }) => h.command)).toEqual(["fr turn-begin", "fr board"]);
     expect(settings.hooks.Stop[0].hooks.map((h: { command: string }) => h.command)).toEqual(["fr check"]);
     expect(settings.hooks.PreCompact[0].hooks.map((h: { command: string }) => h.command)).toEqual(["bd prime"]);
+  });
+});
+
+// Generality audit 2026-07-25, finding M1: `rk init` probed `fr` and `bd` and warned loudly when
+// either was missing, but never probed `af` — the validity kernel the whole hard tier and the
+// rigour ladder's `proved` rung depend on. Its absence surfaced only much later, inside
+// `rk verify`, after the user had already built a campaign on top of it.
+describe("rk init: af probe (finding M1)", () => {
+  test("af absent from PATH: a loud warning naming what depends on it, exit code still 0", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await initCommand(["North star", "--root", root], out, noSpawnDeps());
+    expect(code).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("'af' not found on PATH");
+    // The warning must say WHAT breaks, or it is noise a user rationally ignores.
+    expect(text).toContain("rk verify");
+    expect(text.toLowerCase()).toContain("proved");
+    expect(lines.some((l) => l.includes("af: skipped"))).toBe(true);
+  });
+
+  test("af present on PATH: reported ok, and NEVER invoked (rk init runs no af subcommand)", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const deps = noSpawnDeps();
+    deps.which = (bin: string) => (bin === "af" ? "/usr/bin/af" : null);
+    const { out, lines } = capture();
+    const code = await initCommand(["North star", "--root", root], out, deps);
+    expect(code).toBe(0);
+    expect(lines.some((l) => l.includes("af: ok"))).toBe(true);
+    expect(lines.some((l) => l.includes("'af' not found on PATH"))).toBe(false);
+    expect(deps.calls.some((c) => c.bin === "af")).toBe(false);
+  });
+});
+
+// Finding M3: PRD C2's critical-path provenance check — "every node on the path to the north-star
+// contract must carry cross-vendor, non-batch validation provenance, checked continuously on every
+// link run" — is the tool's central continuous validity guarantee, and it is presence-conditional
+// on `.rk/config.json`'s `northStarId`. Stamped without one, it has an EMPTY path to check in
+// every repo rk creates: it reports satisfied while covering nothing.
+describe("rk init: the north star is bound, not just narrated (finding M3)", () => {
+  const NORTH_STAR = "Every widget with property P is close to a gadget";
+
+  async function stamp(): Promise<string> {
+    const root = tmpRoot();
+    dirs.push(root);
+    await initCommand([NORTH_STAR, "--root", root], capture().out, noSpawnDeps());
+    return root;
+  }
+
+  test("a north-star registry shard is seeded and .rk/config.json's northStarId resolves to it", async () => {
+    const root = await stamp();
+    const config = JSON.parse(readFileSync(join(root, ".rk", "config.json"), "utf8"));
+    expect(typeof config.northStarId).toBe("string");
+    const shardPath = join(root, "argument", `${config.northStarId}.md`);
+    expect(existsSync(shardPath)).toBe(true);
+    // The binding is only real if the shard's own id agrees — Gate 2 keys everything off `id`.
+    const fm = parseFrontmatter(readFileSync(shardPath, "utf8"));
+    expect(fm.present).toBe(true);
+    expect(fm.fields.id).toBe(config.northStarId);
+  });
+
+  test("the seeded shard's contract is the argument byte-for-byte (the anti-drift join key)", async () => {
+    const root = await stamp();
+    const config = JSON.parse(readFileSync(join(root, ".rk", "config.json"), "utf8"));
+    const fm = parseFrontmatter(readFileSync(join(root, "argument", `${config.northStarId}.md`), "utf8"));
+    expect(fm.fields.contract).toBe(NORTH_STAR);
+    // The same string the constitution stamps, so the two can never disagree at stamp time.
+    expect(readFileSync(join(root, "CLAUDE.md"), "utf8")).toContain(NORTH_STAR);
+  });
+
+  test("the critical-path provenance check reports a non-empty path on the freshly stamped repo", async () => {
+    const root = await stamp();
+    const { out, lines } = capture();
+    await checkCommand(["--root", root], out);
+    const linkerLine = lines.find((l) => l.startsWith("checked linker:"));
+    expect(linkerLine).toBeDefined();
+    // The vacuous state the finding is about. If this string ever comes back on a fresh scaffold,
+    // the guarantee covers nothing again.
+    expect(linkerLine).not.toContain("no north star configured");
+    expect(linkerLine).toMatch(/critical-path provenance: \d+ checked \/ [1-9]\d* on path/);
+  });
+
+  test("a freshly stamped scaffold is still green in BOTH phases with the seeded shard", async () => {
+    for (const phase of ["exploration", "consolidation"] as const) {
+      const root = await stamp();
+      const cfgPath = join(root, ".rk", "config.json");
+      const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+      cfg.phase = phase;
+      writeFileSync(cfgPath, `${JSON.stringify(cfg, null, 2)}\n`);
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out);
+      expect({ phase, code, errors: lines.filter((l) => l.startsWith("ERROR")) }).toEqual({ phase, code: 0, errors: [] });
+    }
+  });
+
+  test("a multi-line north-star contract is refused — it cannot be a one-line shard contract", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await initCommand(["line one\nline two", "--root", root], out, noSpawnDeps());
+    expect(code).toBe(2);
+    expect(lines[0]).toContain("one line");
+    expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
   });
 });

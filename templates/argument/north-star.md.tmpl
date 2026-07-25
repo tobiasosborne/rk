@@ -1,0 +1,42 @@
+---
+id: {{RK_SLOT_NORTH_STAR_ID}}
+kind: theorem
+contract: {{RK_SLOT_NORTH_STAR}}
+status: conjecture
+af: none
+---
+
+# North star — {{RK_SLOT_PROJECT_NAME}}
+
+This is the campaign's north star: the single result the repository exists to establish, or to
+honestly refute. `rk init` seeded it so the id `.rk/config.json`'s `northStarId` names resolves to
+a real node from day one — without it, `rk check`'s critical-path provenance check (every node on
+the path to this result must carry cross-vendor, non-batch validation) would have an empty path to
+walk and would report itself satisfied while covering nothing.
+
+**Class: campaign-seed.** Stamped once, yours from here on. `rk upgrade` never rewrites this file,
+and nothing regenerates it — edit it freely; it is not boilerplate. This header block is prose, not
+a schema field: delete it once the shard has real content.
+
+Edit checklist, in the order these usually come up:
+
+- `contract:` is the one-line canonical statement and the join key for everything else. Once an
+  `af` workspace exists it is byte-matched against that workspace's root conjecture, so a change
+  here is a change there. Keep it one line.
+- `kind:` is `theorem` as stamped. Change it to `open-problem`, `proposition`, or any other value
+  in `argument/README.md`'s kind list if that is the honest shape of the target.
+- `status:` starts at `conjecture`, the bottom of the rigour ladder. It moves up only when an
+  external oracle certifies it (`CLAUDE.md` L0). Nothing promotes it automatically, and nothing
+  should promote it by hand.
+- `deps:` and `routes:` are absent, i.e. empty. Add the results this one rests on as they appear —
+  `deps:` for unconditional prerequisites (AND), `routes:` for alternative sufficient sets (OR).
+  Every id added here joins the critical path, which is the whole point of the file.
+- `defs:` lists the `definitions/` ids the statement uses.
+- `workspace:` and `af:` come later, when the proof is seeded in `af` (see `rk verify --help`).
+
+Renaming this shard is a deliberate, logged act, and it is three edits, not one: rename the file,
+change `id:` to the new filename stem, and change `.rk/config.json`'s `northStarId` to match. Do
+only some of them and `rk check` FAILS with `configured north star ... could not be resolved` — the
+check fails closed rather than degrading to a silent pass.
+
+Full frontmatter contract: `argument/README.md`.

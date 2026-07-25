@@ -2,7 +2,8 @@
 // "<north-star contract>"` (M1.2, PRD C1): stamps the full scaffold from templates/manifest.json
 // (src/scaffold/templates-embed.ts — compiled-in, no runtime dependency on templates/ existing on
 // disk), writes .rk/config.json + .rk/oracles.json + .rk/template-version, installs Claude Code
-// session hooks + a git pre-commit hook, and best-effort bootstraps fr/bd if present on PATH.
+// session hooks + a git pre-commit hook, probes for af, and best-effort bootstraps fr/bd if present
+// on PATH.
 // Every pure decision (slot values, the stamp plan, conflict detection) is computed by
 // src/scaffold/*.ts BEFORE any fs write — this file's job is sequencing the writes and reporting,
 // never deciding what a slot should contain.
@@ -17,6 +18,7 @@ import { detectConflicts } from "../scaffold/conflicts";
 import { buildRkConfig, buildOraclesStub } from "../scaffold/config-stub";
 import { buildClaudeSettings, buildPreCommitHookScript } from "../scaffold/hooks";
 import { TEMPLATE_MANIFEST, TEMPLATE_TEXT } from "../scaffold/templates-embed";
+import { NORTH_STAR_SHARD_ID } from "../scaffold/north-star";
 
 const UNSET_MARKER = "UNSET — fill in before first session";
 
@@ -99,6 +101,18 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
     out.log("  next: if you really mean a north-star starting with '-', there is currently no escape hatch — rephrase it.");
     return 2;
   }
+  if (/[\r\n]/.test(northStar)) {
+    // The contract is now stamped as the `contract:` line of a real registry shard (finding M3), and
+    // a Gate 2 contract is one line by construction — PRD C2 calls it "the one-line statement" and
+    // makes it the universal join key, byte-matched against the af root conjecture. A newline would
+    // silently truncate it there while the prose documents kept the full text, manufacturing exactly
+    // the contract drift the join key exists to detect. Refuse rather than rewrite the user's
+    // string: a silently-normalized contract would no longer byte-match anything they typed.
+    out.log("rk init: refusing a multi-line north-star contract — it must be one line (it becomes the `contract:` join key of a registry shard, byte-matched against the af root conjecture).");
+    for (const l of USAGE_LINES) out.log(`  ${l}`);
+    out.log("  next: state the target result in a single line; the long form belongs in PRD.md / the shard body.");
+    return 2;
+  }
 
   const auditCadence = parsePositiveInt(auditCadenceFlag, "--audit-cadence");
   const brittleness = parsePositiveInt(brittlenessFlag, "--brittleness-soft-cap");
@@ -129,6 +143,10 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
     RK_SLOT_AUDIT_CADENCE: String(auditCadence.value ?? 10),
     RK_SLOT_BRITTLENESS_SOFT_CAP: String(brittleness.value ?? 26),
     RK_SLOT_SHARD_PREFIX: shardPrefix,
+    // Not user-supplied and not derived from the project: one constant, shared with
+    // `.rk/config.json`'s `northStarId` below (src/scaffold/north-star.ts explains why a constant
+    // rather than a flag).
+    RK_SLOT_NORTH_STAR_ID: NORTH_STAR_SHARD_ID,
   };
 
   const plan = planStamp(TEMPLATE_MANIFEST, TEMPLATE_TEXT, slotValues);
@@ -194,6 +212,24 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
     hooksInstalled = 4; // the four Claude Code hooks still installed; git pre-commit skipped
   }
 
+  // Generality audit 2026-07-25, finding M1: af is the validity kernel the whole hard tier and the
+  // rigour ladder's `proved` rung rest on, and it was the one required binary `rk init` never
+  // looked for — its absence surfaced only much later, inside `rk verify`, after a campaign had
+  // already been built on the assumption. Unlike fr/bd there is nothing to bootstrap (af workspaces
+  // are seeded per-proof, not per-repo), so this is a presence probe and nothing more: af is never
+  // invoked here.
+  let afStatus = "skipped (af not on PATH)";
+  if (which("af")) {
+    afStatus = "ok";
+  } else {
+    out.log(
+      "rk init: WARNING 'af' not found on PATH — the validity kernel is missing. Without it " +
+        "`rk verify` cannot run and no claim can reach the rigour ladder's `proved` rung (only " +
+        "`stated`/`conjecture`/`numerical` and the cited/consensus oracles remain reachable). " +
+        "Install af, then `rk doctor` to confirm the version this rk expects.",
+    );
+  }
+
   let frStatus = "skipped (fr not on PATH)";
   if (which("fr")) {
     const r = await spawn("fr", ["init", northStar], root);
@@ -211,7 +247,13 @@ export async function initCommand(argv: string[], out: Out, deps: InitCommandDep
   }
 
   const fileCount = plan.files.length + 4; // + .rk/config.json, .rk/oracles.json, .rk/template-version, .claude/settings.json
-  out.log(`rk init: stamped ${fileCount} files, ${plan.dirs.length} directories, ${hooksInstalled} hooks; fr: ${frStatus}; bd: ${bdStatus}`);
+  out.log(`rk init: stamped ${fileCount} files, ${plan.dirs.length} directories, ${hooksInstalled} hooks; af: ${afStatus}; fr: ${frStatus}; bd: ${bdStatus}`);
+  out.log(
+    `  north star: '${northStar}' is bound to registry shard ${NORTH_STAR_SHARD_ID} ` +
+      `(argument/${NORTH_STAR_SHARD_ID}.md, status: conjecture) and to .rk/config.json's northStarId, so ` +
+      "the critical-path provenance check has a resolvable root from the first `rk check`. Edit the shard; " +
+      "rename it only with .rk/config.json in the same commit.",
+  );
   if (hooksInstalled === 5) {
     // rk-e8v: the installed .git/hooks/pre-commit hook execs bare `rk check` — if `rk` is not on
     // PATH every commit fails. Name the requirement AND the resolved path this invocation used,

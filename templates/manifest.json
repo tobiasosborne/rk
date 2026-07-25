@@ -1,8 +1,15 @@
 {
-  "template_version": "1.3.0",
+  "template_version": "1.4.0",
   "slot_syntax": "{{RK_SLOT_<NAME>}}",
   "unfilled_slot_grep": "\\{\\{RK_SLOT_",
-  "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure).",
+  "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure). The ONE addition to that layout is argument/thm-north-star.md: PRD.md:79-85 fixes the DIRECTORIES, and this is content, not structure — the single registry result whose contract is already known at stamp time (it is `rk init`'s own argument), seeded so PRD C2's critical-path provenance guarantee has a resolvable root from day one instead of an empty path it reports as satisfied (generality audit 2026-07-25, finding M3).",
+  "classifications": {
+    "rewritten-whole": "re-stamped whole by a future `rk upgrade`; campaign-owned slot VALUES inside must be preserved by hand.",
+    "authored-append-only": "campaign-authored; never re-stamped, never overwritten.",
+    "generated": "a build output; never hand-edited, never stamped as authored content.",
+    "campaign-seed": "stamped ONCE as a starting point, campaign-owned thereafter — `rk upgrade` never rewrites it. Distinct from authored-append-only, which is stamped as an empty skeleton and grows by appending; a seed is stamped WITH content the campaign then rewrites in place.",
+    "directory": "created empty; `template` is null."
+  },
   "slots": [
     { "name": "RK_SLOT_PROJECT_NAME", "description": "Short campaign/repo name.", "unique": false },
     { "name": "RK_SLOT_GOAL", "description": "One-paragraph mission statement.", "unique": true },
@@ -12,7 +19,8 @@
     { "name": "RK_SLOT_PHASE", "description": "Current phase: exploration or consolidation.", "unique": true },
     { "name": "RK_SLOT_AUDIT_CADENCE", "description": "Audit cadence in cycles; session close blocks past it.", "unique": true },
     { "name": "RK_SLOT_BRITTLENESS_SOFT_CAP", "description": "Linker brittleness soft cap in nodes. Conservative inherited starting value 26; tune per campaign.", "unique": true },
-    { "name": "RK_SLOT_SHARD_PREFIX", "description": "Per-repo shard-id prefix. Stamped from the project; never defaults to any campaign name (audit R12/rk-psm).", "unique": true }
+    { "name": "RK_SLOT_SHARD_PREFIX", "description": "Per-repo SHARD-ID prefix for LaTeX report shards (.rk/config.json's shardsPrefix, Gate 6). Stamped from the project; never defaults to any campaign name (audit R12/rk-psm). NOT a registry/definition id prefix — stamping it as one was finding M5.", "unique": true },
+    { "name": "RK_SLOT_NORTH_STAR_ID", "description": "Registry id of the seeded north-star shard. NOT user-supplied: src/scaffold/north-star.ts owns the value and .rk/config.json's northStarId is stamped to match it.", "unique": false }
   ],
   "stamped": [
     { "path": "CLAUDE.md", "template": "CLAUDE.md.tmpl", "classification": "rewritten-whole" },
@@ -26,6 +34,7 @@
     { "path": "definitions/README.md", "template": "definitions/README.md.tmpl", "classification": "rewritten-whole" },
     { "path": "argument/", "template": null, "classification": "directory" },
     { "path": "argument/README.md", "template": "argument/README.md.tmpl", "classification": "rewritten-whole" },
+    { "path": "argument/thm-north-star.md", "template": "argument/north-star.md.tmpl", "classification": "campaign-seed" },
     { "path": "proofs/", "template": null, "classification": "directory" },
     { "path": "runs/", "template": null, "classification": "directory" },
     { "path": "refs/", "template": null, "classification": "directory" },
@@ -33,5 +42,18 @@
     { "path": ".rk/", "template": null, "classification": "directory" },
     { "path": ".frontier/", "template": null, "classification": "directory" },
     { "path": ".beads/", "template": null, "classification": "directory" }
+  ],
+  "changelog_note": "One entry per template_version, NEWEST FIRST. `rk upgrade` prints every entry strictly newer than the repo's own .rk/template-version. This exists because the interesting part of a bump is often invisible to the per-file diff `rk upgrade` otherwise prints: a brand-new stamped path does not exist in the old repo to diff against, and a new .rk/config.json key is not a stamped file at all. Each `changes` string must be self-contained and say what to DO.",
+  "changelog": [
+    {
+      "version": "1.4.0",
+      "changes": [
+        "NEW STAMPED FILE argument/thm-north-star.md — the campaign's north-star contract as a real registry shard (kind: theorem, status: conjecture, no deps). No diff of your existing files shows this: the file does not exist in a pre-1.4.0 repo.",
+        "NEW .rk/config.json KEY northStarId = \"thm-north-star\". .rk/config.json is not a stamped template, so no diff reveals this one either. Until it is set, rk check's critical-path provenance check — every node on the path to the north star must carry cross-vendor, non-batch validation provenance — walks an EMPTY path and reports itself satisfied while covering nothing. To adopt: if you already have a registry shard for your target result, just add \"northStarId\": \"<that id>\" to .rk/config.json and stamp nothing. Otherwise create argument/thm-north-star.md per argument/README.md's frontmatter contract, with your north-star statement as its one-line `contract:`, then set the key. A northStarId that resolves to no shard is a hard ERROR, not a silent pass — so set both or neither.",
+        "CLAUDE.md / AGENTS.md section 5 rewritten: it now names every shipped command (rk check, phase, graph, render, refs, verify, doctor, upgrade) and documents the .rk/config.json keys the gates and drivers actually read, northStarId and workers included. The 1.3.0 text hedged rk render as a command that 'may not exist yet' and never mentioned rk verify, rk graph, rk refs or rk doctor at all.",
+        "CLAUDE.md / AGENTS.md L1 now points at `rk refs add` / `rk refs quote` for ground-truth provenance. The 1.3.0 text told the researcher to recompute hashes and grep quotes by hand — work the binary already does.",
+        "CLAUDE.md / AGENTS.md rule 4 and CONVENTIONS.md 'Naming and ids' corrected: registry and definition ids carry NO campaign-wide prefix (def-<slug>; lem-/thm-/prop-/cor-/op-/obs-<slug>; each equal to its filename stem). shardsPrefix is the SHARD-ID namespace for LaTeX report shards only. The 1.3.0 text told you to prefix registry ids with it, contradicting both stamped schema READMEs and every gate that reads them. NOTE: CONVENTIONS.md is authored-append-only, so upgrade will never fix it for you — rewrite that section by hand, and check whether any id you already created carries the prefix."
+      ]
+    }
   ]
 }

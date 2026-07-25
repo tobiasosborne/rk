@@ -22,6 +22,7 @@ import findingsTmpl from "../../templates/FINDINGS.md.tmpl" with { type: "text" 
 import worklogTmpl from "../../templates/docs/worklog.md.tmpl" with { type: "text" };
 import definitionsReadmeTmpl from "../../templates/definitions/README.md.tmpl" with { type: "text" };
 import argumentReadmeTmpl from "../../templates/argument/README.md.tmpl" with { type: "text" };
+import northStarShardTmpl from "../../templates/argument/north-star.md.tmpl" with { type: "text" };
 
 import type { Manifest } from "./manifest-types";
 
@@ -43,4 +44,5 @@ export const TEMPLATE_TEXT: Record<string, string> = {
   "docs/worklog.md.tmpl": worklogTmpl,
   "definitions/README.md.tmpl": definitionsReadmeTmpl,
   "argument/README.md.tmpl": argumentReadmeTmpl,
+  "argument/north-star.md.tmpl": northStarShardTmpl,
 };
