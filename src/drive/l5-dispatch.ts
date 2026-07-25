@@ -6,6 +6,12 @@
 // reject each turn, then an append through src/drive/l5-store-io.ts's writer — never a direct
 // `fs` call in this module beyond that one delegated writer.
 //
+// rk-74o (M3 review follow-up 3, "actual-member provenance"): the two pre-dispatch discard stages
+// (no content supplied, content-hash mismatch) run as a PRE-FLIGHT before the session is created,
+// and the batch id stamped on every verdict is re-derived over the members that actually entered
+// that session. The recorded id is what `af unvalidate --batch <id>` revokes, so it must name the
+// correlated-risk set — the items that shared one verifier session — not the planned set.
+//
 // TESTED VIA INJECTED `WorkerBackend` ONLY (docs/worker-contract.md's own `backend-claude.test.ts`
 // precedent) — no test here spawns a real subprocess or calls a real LLM; a fake `WorkerBackend`
 // implementing `createSession`/`runTurn` in-memory stands in for `ClaudeBackend`/`CodexBackend`.
@@ -19,6 +25,7 @@
 
 import type { DispatchState } from "./bind-verdicts";
 import type { L5DispatchPlan } from "./l5-dispatch-plan";
+import { deriveBatchId } from "./batch-composer";
 import { sha256Bytes } from "../refs/hash";
 import { appendL5Verdicts, type AppendL5Result } from "./l5-store-io";
 import { resolveTurn, type TurnFailureIssue, type TurnFailureStage, type WorkerResult } from "./worker-result";
@@ -74,8 +81,17 @@ export interface L5DispatchRejection {
 }
 
 export interface L5DispatchOutcome {
-  batchId: string;
-  claimId: string;
+  /** The id the plan proposed for this batch. Bookkeeping only — never stamped on a verdict. */
+  plannedBatchId: string;
+  /** rk-74o (M3 review follow-up 3, "actual-member provenance"): the id ACTUALLY stamped on every
+   * verdict this batch produced, derived from the members that actually entered the shared verifier
+   * session. `undefined` iff no member survived pre-dispatch screening, in which case no session was
+   * opened and nothing was recorded — there is no dispatched set to name, and inventing one would be
+   * the same lie in the other direction. */
+  batchId?: string;
+  /** The session's isolation-tuple claim id, following `batchId`. `undefined` when no session was
+   * opened. */
+  claimId?: string;
   applied: AppendL5Result["appended"];
   rejected: L5DispatchRejection[];
 }
@@ -103,39 +119,63 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     const rejected: L5DispatchRejection[] = [];
     const documents: VerdictDocument[] = [];
 
-    const sessionSpec: SessionSpec = {
-      role: "verifier",
-      tier: "l5",
-      claimId: batch.claimId,
-      model: deps.model,
-      sharedContext: deps.sharedContext,
-      timeoutMs,
-    };
-    const { sessionId, usage: sessionUsage } = await deps.backend.createSession(sessionSpec);
-    if (sessionUsage !== undefined) logUsage(batch.claimId, L5_SESSION_OPEN_NODE_ID, sessionId, sessionUsage);
-
+    // rk-74o PRE-FLIGHT (was inside the dispatch loop below). Both discard stages here — no content
+    // supplied, and M3 blocker 1's hash binding — are knowable BEFORE a session exists and spend no
+    // tokens. Running them first is what lets the batch id name the set that actually shared the
+    // session: a member discarded here never entered it, so including it in the recorded id would
+    // make `af unvalidate --batch <id>` claim a coverage the session never had. A turn that fails
+    // AFTER dispatch is a different case and stays a member — it shared the session and could have
+    // biased the others, so bulk revocation must still cover it.
+    //
+    // M3 blocker 1, restated: `member.contentHash` is the plan's declared l5ContentHash-domain hash
+    // (src/drive/l5-dispatch-plan.ts, raw shard-file SHA-256, no normalization); the bytes about to
+    // be sent are `deps.content`. If they disagree, the plan is stale or the wrong bytes were
+    // supplied — dispatching them would judge one payload while recording another's hash. The hash
+    // recorded downstream is the one PROVED from the dispatched bytes, never the caller's claim.
+    const dispatchable: { itemId: string; content: string; dispatchedHash: string }[] = [];
     for (const member of batch.members) {
       const content = deps.content.get(member.itemId);
       if (content === undefined) {
         rejected.push({ itemId: member.itemId, stage: "no-content-supplied", issues: [{ path: "$.content", message: `no shard content supplied for '${member.itemId}'` }] });
         continue;
       }
-      // M3 blocker 1: bind the recorded hash to the EXACT dispatched bytes. `member.contentHash` is
-      // the plan's declared l5ContentHash-domain hash (src/drive/l5-dispatch-plan.ts, raw shard-file
-      // SHA-256, no normalization); the bytes we are about to send are `deps.content`. If they
-      // disagree, the plan is stale or the wrong bytes were supplied — dispatching them would judge
-      // one payload while recording another's hash, validating content no one reviewed. Discard the
-      // member BEFORE dispatch (no tokens spent, never recorded), and record the hash we PROVED from
-      // the dispatched bytes, not the caller-supplied claim.
       const dispatchedHash = sha256Bytes(new TextEncoder().encode(content));
       if (dispatchedHash !== member.contentHash) {
         rejected.push({ itemId: member.itemId, stage: "content-hash-mismatch", issues: [{ path: "$.content", message: `dispatched content hashes to ${dispatchedHash} but the plan recorded ${member.contentHash} — stale plan or wrong bytes; discarded before dispatch` }] });
         continue;
       }
+      dispatchable.push({ itemId: member.itemId, content, dispatchedHash });
+    }
+
+    if (dispatchable.length === 0) {
+      // Nothing to verify: no session is opened (no tokens spent) and no batch id is minted, because
+      // there is no dispatched set for one to describe.
+      outcomes.push({ plannedBatchId: batch.batchId, applied: [], rejected });
+      continue;
+    }
+
+    // The id every verdict below carries, derived through the ONE formula (src/drive/
+    // batch-composer.ts's `deriveBatchId`) over the members actually dispatched. Identical to
+    // `batch.batchId` whenever nothing was discarded.
+    const batchId = deriveBatchId(plan.northStarId, dispatchable.map((m) => m.itemId));
+    const claimId = `l5:${batchId}`;
+
+    const sessionSpec: SessionSpec = {
+      role: "verifier",
+      tier: "l5",
+      claimId,
+      model: deps.model,
+      sharedContext: deps.sharedContext,
+      timeoutMs,
+    };
+    const { sessionId, usage: sessionUsage } = await deps.backend.createSession(sessionSpec);
+    if (sessionUsage !== undefined) logUsage(claimId, L5_SESSION_OPEN_NODE_ID, sessionId, sessionUsage);
+
+    for (const member of dispatchable) {
       const turnItem: TurnItem = {
         itemId: member.itemId,
-        turnId: `${batch.claimId}:${member.itemId}`,
-        content,
+        turnId: `${claimId}:${member.itemId}`,
+        content: member.content,
         outputSchemaRef: "verdict-raw-l5",
         timeoutMs,
         maxOutputTokens,
@@ -145,13 +185,13 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
       // before any discard check" rule: real tokens are spent whether the turn is later applied or
       // rejected (nonzero exit, unparseable body, binding failure) — a rejected turn's cost must
       // not vanish from the report.
-      logUsage(batch.claimId, member.itemId, sessionId, result.usage);
+      logUsage(claimId, member.itemId, sessionId, result.usage);
       const dispatchState: DispatchState = {
         itemId: member.itemId,
-        contentHash: dispatchedHash,
+        contentHash: member.dispatchedHash,
         tier: "l5",
-        claimId: batch.claimId,
-        batchId: batch.batchId,
+        claimId,
+        batchId,
         verifier: { modelFamily: deps.backend.modelFamily, backend: deps.backend.name, model: deps.model, sessionId },
       };
       const turnOutcome = resolveTurn(dispatchState, result);
@@ -163,7 +203,7 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     for (const r of appendResult.rejected) {
       rejected.push({ itemId: r.document.verdicts[0]?.itemId ?? "unknown", stage: "binding", issues: [{ path: "$", message: r.reason }] });
     }
-    outcomes.push({ batchId: batch.batchId, claimId: batch.claimId, applied: appendResult.appended, rejected });
+    outcomes.push({ plannedBatchId: batch.batchId, batchId, claimId, applied: appendResult.appended, rejected });
   }
 
   return outcomes;

@@ -46,25 +46,26 @@ export interface BatchPlanMember {
 
 export interface BatchPlan {
   batchId: string;
-  /** A batch is homogeneous-tier by construction: every member is dispatched under the SAME
-   * tier (mixing l5/hard verdict shapes in one af verdicts-apply file would violate that file's
-   * own schema, which is hard-tier only — see `toVerdictFileSkeleton` below). The composer itself
-   * (src/drive/batch-composer.ts) carries no tier information; `toBatchPlan`'s caller (the M3.6
-   * driver) supplies it, since the driver is the one deciding which tier's candidate pool this
-   * batch was drawn from. */
+  /** A batch is homogeneous-tier by construction: every member is dispatched under the SAME tier
+   * (mixing l5/hard verdict shapes in one af verdicts-apply file would violate that file's own
+   * schema, which is hard-tier only — see `toVerdictFileSkeleton` below). rk-74o: this is now
+   * `batch.tier` — the tier every member was actually SCREENED against by
+   * src/drive/batch-eligibility.ts — not a second, independent value the caller re-declares here.
+   * The old two-argument form let a hard-tier batch be planned as `l5`, which would pin the wrong
+   * content-hash domain (docs/worker-contract.md (f): the two domains are never comparable). */
   tier: Tier;
   members: BatchPlanMember[];
 }
 
 /** Projects a composed batch into its `BatchPlan`, tagging every member with its dependency-order
- * position and the pinned hash domain implied by `tier`. `batch.members` is already sorted
- * ascending (src/drive/batch-composer.ts) — that sort order becomes the dependency-order
- * position 1:1, index by index. */
-export function toBatchPlan(batch: ComposedBatch, tier: Tier): BatchPlan {
-  const contentHashDomain: ContentHashDomain = tier === "l5" ? "l5" : "hard";
+ * position and the pinned hash domain implied by the batch's own screened tier. `batch.members` is
+ * already sorted ascending (src/drive/batch-composer.ts) — that sort order becomes the
+ * dependency-order position 1:1, index by index. */
+export function toBatchPlan(batch: ComposedBatch): BatchPlan {
+  const contentHashDomain: ContentHashDomain = batch.tier === "l5" ? "l5" : "hard";
   return {
     batchId: batch.batchId,
-    tier,
+    tier: batch.tier,
     members: batch.members.map((nodeId, order) => ({ nodeId, order, contentHashDomain })),
   };
 }

@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { composeBatches, deriveBatchId, DEFAULT_BATCH_CAP } from "../../src/drive/batch-composer";
+import { afNodeKey, type BatchCandidate } from "../../src/drive/batch-eligibility";
 import type { GraphDocument, RegistryNode } from "../../src/graph/types";
 import { GRAPH_SCHEMA_VERSION } from "../../src/graph/types";
 
@@ -37,10 +38,18 @@ function allMembers(batches: { members: string[] }[]): string[] {
   return batches.flatMap((b) => b.members);
 }
 
+/** Fully-evidenced l5 candidates — the ONLY shape src/drive/batch-eligibility.ts lets through, so
+ * every pre-rk-74o test below now states the evidence it used to leave implicit. */
+function l5(...ids: string[]): BatchCandidate[] {
+  return ids.map((id) => ({ id, tier: "l5" as const, crux: false }));
+}
+
+const L5 = { tier: "l5" as const };
+
 describe("composeBatches — independence guardrail (a chained pair must be impossible in one batch)", () => {
   test("direct dependency: b depends on a -- never co-batched", () => {
     const d = doc([node("z"), node("a"), node("b", { deps: ["a"] })]);
-    const r = composeBatches(d, ["a", "b"], "z");
+    const r = composeBatches(d, l5("a", "b"), "z", L5);
     expect(r.excluded).toEqual([]);
     for (const b of r.batches) expect(b.members).not.toEqual(expect.arrayContaining(["a", "b"]));
     expect(r.batches.every((b) => b.members.length === 1)).toBe(true);
@@ -48,7 +57,7 @@ describe("composeBatches — independence guardrail (a chained pair must be impo
 
   test("transitive dependency: c -> b -> a -- no two of the chain ever co-batch", () => {
     const d = doc([node("z"), node("a"), node("b", { deps: ["a"] }), node("c", { deps: ["b"] })]);
-    const r = composeBatches(d, ["a", "b", "c"], "z");
+    const r = composeBatches(d, l5("a", "b", "c"), "z", L5);
     expect(r.excluded).toEqual([]);
     expect(r.batches.every((b) => b.members.length === 1)).toBe(true);
   });
@@ -60,14 +69,14 @@ describe("composeBatches — independence guardrail (a chained pair must be impo
       node("other"),
       node("b", { routes: [["a"], ["other"]] }),
     ]);
-    const r = composeBatches(d, ["a", "b"], "z");
+    const r = composeBatches(d, l5("a", "b"), "z", L5);
     expect(r.excluded).toEqual([]);
     expect(r.batches.every((b) => b.members.length === 1)).toBe(true);
   });
 
   test("two independent nodes with no relation DO co-batch", () => {
     const d = doc([node("z"), node("a"), node("b")]);
-    const r = composeBatches(d, ["a", "b"], "z");
+    const r = composeBatches(d, l5("a", "b"), "z", L5);
     expect(r.batches).toHaveLength(1);
     expect(r.batches[0]!.members).toEqual(["a", "b"]);
   });
@@ -76,22 +85,22 @@ describe("composeBatches — independence guardrail (a chained pair must be impo
 describe("composeBatches — critical-path exclusion", () => {
   test("a node on the path to the north star is never batched, and is reported excluded with reason critical-path", () => {
     const d = doc([node("star", { deps: ["crit"] }), node("crit"), node("routine")]);
-    const r = composeBatches(d, ["crit", "routine"], "star");
-    expect(r.excluded).toContainEqual({ id: "crit", reason: "critical-path" });
+    const r = composeBatches(d, l5("crit", "routine"), "star", L5);
+    expect(r.excluded.map((e) => [e.id, e.reason])).toContainEqual(["crit", "critical-path"]);
     expect(allMembers(r.batches)).not.toContain("crit");
     expect(allMembers(r.batches)).toContain("routine");
   });
 
   test("an id naming no real node is reported excluded with reason unknown-node, never silently dropped", () => {
     const d = doc([node("star"), node("routine")]);
-    const r = composeBatches(d, ["routine", "ghost"], "star");
-    expect(r.excluded).toContainEqual({ id: "ghost", reason: "unknown-node" });
+    const r = composeBatches(d, l5("routine", "ghost"), "star", L5);
+    expect(r.excluded.map((e) => [e.id, e.reason])).toContainEqual(["ghost", "unknown-node"]);
     expect(allMembers(r.batches)).toEqual(["routine"]);
   });
 
   test("BLOCKER 5d — an UNRESOLVED north star fails closed: every candidate is treated load-bearing and excluded, NO batch is composed", () => {
     const d = doc([node("a"), node("b"), node("c")]);
-    const r = composeBatches(d, ["a", "b", "c"], "north-star-does-not-exist");
+    const r = composeBatches(d, l5("a", "b", "c"), "north-star-does-not-exist", L5);
     // Pre-fix: computeCriticalPath returns an EMPTY set for an unresolved north star, so nothing is
     // excluded and every candidate co-batches — the exact "permits every batch" hole the review named.
     expect(r.batches).toEqual([]);
@@ -105,7 +114,7 @@ describe("composeBatches — cap", () => {
     const nodes = [node("z"), ...Array.from({ length: DEFAULT_BATCH_CAP + 5 }, (_, i) => node(`n${i}`))];
     const d = doc(nodes);
     const candidates = nodes.filter((n) => n.id !== "z").map((n) => n.id);
-    const r = composeBatches(d, candidates, "z");
+    const r = composeBatches(d, l5(...candidates), "z", L5);
     expect(r.batches.every((b) => b.members.length <= DEFAULT_BATCH_CAP)).toBe(true);
     expect(allMembers(r.batches).sort()).toEqual([...candidates].sort());
   });
@@ -114,7 +123,7 @@ describe("composeBatches — cap", () => {
     const nodes = [node("z"), ...Array.from({ length: 7 }, (_, i) => node(`n${i}`))];
     const d = doc(nodes);
     const candidates = nodes.filter((n) => n.id !== "z").map((n) => n.id);
-    const r = composeBatches(d, candidates, "z", { cap: 2 });
+    const r = composeBatches(d, l5(...candidates), "z", { ...L5, cap: 2 });
     expect(r.batches.every((b) => b.members.length <= 2)).toBe(true);
     expect(r.batches.length).toBeGreaterThanOrEqual(Math.ceil(candidates.length / 2));
   });
@@ -133,7 +142,7 @@ describe("composeBatches — shared-context preference (siblings over scattered 
       node("scatter-y"),
     ]);
     const candidates = ["leaf-a", "leaf-b", "leaf-c", "scatter-x", "scatter-y"];
-    const r = composeBatches(d, candidates, "star", { cap: 3 });
+    const r = composeBatches(d, l5(...candidates), "star", { ...L5, cap: 3 });
     expect(r.excluded).toEqual([]);
     expect(r.batches).toHaveLength(2);
     expect(r.batches[0]!.members).toEqual(["leaf-a", "leaf-b", "leaf-c"]);
@@ -150,7 +159,7 @@ describe("composeBatches — shared-context preference (siblings over scattered 
       node("b", { defs: ["def-x"] }),
       node("c", { defs: ["def-y"] }),
     ]);
-    const r = composeBatches(d, ["a", "b", "c"], "star");
+    const r = composeBatches(d, l5("a", "b", "c"), "star", L5);
     expect(r.batches).toHaveLength(1);
     expect(r.batches[0]!.score).toBeGreaterThan(0);
   });
@@ -171,9 +180,9 @@ describe("composeBatches — determinism", () => {
     const forward = ["leaf-a", "leaf-b", "leaf-c", "scatter-x", "scatter-y"];
     const reversed = [...forward].reverse();
     const shuffled = ["scatter-y", "leaf-c", "leaf-a", "scatter-x", "leaf-b"];
-    const r1 = composeBatches(d, forward, "star", { cap: 3 });
-    const r2 = composeBatches(d, reversed, "star", { cap: 3 });
-    const r3 = composeBatches(d, shuffled, "star", { cap: 3 });
+    const r1 = composeBatches(d, l5(...forward), "star", { ...L5, cap: 3 });
+    const r2 = composeBatches(d, l5(...reversed), "star", { ...L5, cap: 3 });
+    const r3 = composeBatches(d, l5(...shuffled), "star", { ...L5, cap: 3 });
     expect(r2).toEqual(r1);
     expect(r3).toEqual(r1);
   });
@@ -197,6 +206,86 @@ describe("deriveBatchId", () => {
     const id1 = deriveBatchId("star-1", ["a", "b"]);
     const id2 = deriveBatchId("star-2", ["a", "b"]);
     expect(id1).not.toBe(id2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// rk-74o (M3 review follow-up 3): the guardrails are STRUCTURAL, not a caller promise. Each test
+// below is RED without the corresponding check in src/drive/batch-eligibility.ts / this composer.
+// ---------------------------------------------------------------------------------------
+
+describe("composeBatches — rk-74o: eligibility is enforced, never promised", () => {
+  test("a bare candidate carrying NO evidence composes NOTHING (the caller promise no longer works)", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, [{ id: "a" }, { id: "b" }], "z", L5);
+    expect(r.batches).toEqual([]);
+    expect(r.excluded.map((e) => e.reason).sort()).toEqual(["tier-undeclared", "tier-undeclared"]);
+  });
+
+  test("an UNDECLARED dispatch tier composes nothing, even for otherwise-perfect candidates", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, l5("a", "b"), "z", {});
+    expect(r.batches).toEqual([]);
+    expect(r.tier).toBeUndefined();
+    for (const e of r.excluded) expect(e.reason).toBe("dispatch-tier-undeclared");
+  });
+
+  test("a crux candidate is refused even though it is registry-independent and off the critical path", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, [{ id: "a", tier: "l5", crux: true }, { id: "b", tier: "l5", crux: false }], "z", L5);
+    expect(allMembers(r.batches)).toEqual(["b"]);
+    expect(r.excluded.map((e) => [e.id, e.reason])).toContainEqual(["a", "crux"]);
+  });
+
+  test("every composed batch carries the run's dispatch tier — tier is derived, never re-supplied downstream", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, l5("a", "b"), "z", L5);
+    expect(r.tier).toBe("l5");
+    expect(r.batches.every((b) => b.tier === "l5")).toBe(true);
+  });
+
+  test("accounting: every candidate id lands in exactly one of batches/excluded, evidence or not", () => {
+    const d = doc([node("z"), node("a"), node("b"), node("c")]);
+    const r = composeBatches(d, [...l5("a", "b"), { id: "c" }, { id: "ghost" }], "z", L5);
+    const accounted = [...allMembers(r.batches), ...r.excluded.map((e) => e.id)].sort();
+    expect(accounted).toEqual(["a", "b", "c", "ghost"]);
+    expect(new Set(accounted).size).toBe(accounted.length);
+  });
+});
+
+describe("composeBatches — rk-74o: af proof-tree independence (hard tier)", () => {
+  const WS = "proofs/ws";
+  const afParents = new Map<string, readonly string[]>([
+    [afNodeKey(WS, "1"), []],
+    [afNodeKey(WS, "1.1"), [afNodeKey(WS, "1")]],
+    [afNodeKey(WS, "1.1.1"), [afNodeKey(WS, "1.1")]],
+    [afNodeKey(WS, "1.2"), [afNodeKey(WS, "1")]],
+  ]);
+  function hard(id: string, afNodeId: string): BatchCandidate {
+    return { id, tier: "hard", crux: false, afWorkspace: WS, afNodeId };
+  }
+
+  test("an af ANCESTOR/DESCENDANT pair never co-batches, even though the registry sees them as independent", () => {
+    // The registry graph deliberately records NO dependency between "a" and "b": if af ancestry were
+    // ignored, these two would co-batch and accepting the child would bias its own ancestor.
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, [hard("a", "1.1"), hard("b", "1.1.1")], "z", { tier: "hard", afParents });
+    expect(r.excluded).toEqual([]);
+    expect(r.batches.every((x) => x.members.length === 1)).toBe(true);
+  });
+
+  test("af SIBLINGS (a shared ancestor, neither above the other) DO co-batch — the shape C3 wants", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, [hard("a", "1.1"), hard("b", "1.2")], "z", { tier: "hard", afParents });
+    expect(r.batches).toHaveLength(1);
+    expect(r.batches[0]!.members).toEqual(["a", "b"]);
+  });
+
+  test("a hard-tier run with NO af parent edges composes nothing — ancestry is unclosable, so nothing is independent", () => {
+    const d = doc([node("z"), node("a"), node("b")]);
+    const r = composeBatches(d, [hard("a", "1.1"), hard("b", "1.2")], "z", { tier: "hard" });
+    expect(r.batches).toEqual([]);
+    for (const e of r.excluded) expect(e.reason).toBe("af-ancestry-unclosable");
   });
 });
 
@@ -246,7 +335,7 @@ describe("composeBatches — cap property", () => {
         const rand = mulberry32(seed);
         const d = buildRandomDoc(rand, 16);
         const candidates = d.nodes.filter((n) => n.id !== "n0").map((n) => n.id);
-        const r = composeBatches(d, candidates, "n0", { cap });
+        const r = composeBatches(d, l5(...candidates), "n0", { ...L5, cap });
         expect(r.batches.every((b) => b.members.length <= cap)).toBe(true);
 
         const accounted = [...allMembers(r.batches), ...r.excluded.map((e) => e.id)].sort();
@@ -265,10 +354,10 @@ describe("composeBatches — determinism property", () => {
       const rand = mulberry32(seed);
       const d = buildRandomDoc(rand, 14);
       const candidates = d.nodes.filter((n) => n.id !== "n0").map((n) => n.id);
-      const baseline = composeBatches(d, candidates, "n0", { cap: 4 });
+      const baseline = composeBatches(d, l5(...candidates), "n0", { ...L5, cap: 4 });
       for (let trial = 0; trial < 3; trial++) {
         const shuffled = shuffle(candidates, rand);
-        const result = composeBatches(d, shuffled, "n0", { cap: 4 });
+        const result = composeBatches(d, l5(...shuffled), "n0", { ...L5, cap: 4 });
         expect(result).toEqual(baseline);
       }
     });

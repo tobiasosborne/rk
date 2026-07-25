@@ -113,22 +113,33 @@ describe("planDispatch — crux → per-node, eligible pool → composeBatches, 
 
   test("crux nodes are forced per-node even when named in the eligible pool", () => {
     const d = doc([regNode("z"), regNode("a"), regNode("b")]);
-    const plan = planDispatch({ readyNodeIds: ["a", "b"], cruxIds: ["a"], batchEligibleIds: ["a", "b"], graph: { doc: d, northStarId: "z" } });
+    const plan = planDispatch({ readyNodeIds: ["a", "b"], cruxIds: ["a"], batchEligibleIds: ["a", "b"], batchEvidence: [{ id: "a", tier: "l5", crux: true }, { id: "b", tier: "l5", crux: false }], tier: "l5", graph: { doc: d, northStarId: "z" } });
     // a is crux → per-node; b is eligible and independent → a batch of its own
     expect(plan.perNode).toContain("a");
     expect(plan.perNode).not.toContain("b");
   });
 
-  test("an eligible pool of independent siblings composes real batches", () => {
+  test("an EVIDENCED pool of independent siblings composes real batches", () => {
     const d = doc([regNode("z"), regNode("a"), regNode("b")]);
-    const plan = planDispatch({ readyNodeIds: ["a", "b"], batchEligibleIds: ["a", "b"], graph: { doc: d, northStarId: "z" } });
+    const evidence = [{ id: "a", tier: "l5" as const, crux: false }, { id: "b", tier: "l5" as const, crux: false }];
+    const plan = planDispatch({ readyNodeIds: ["a", "b"], batchEligibleIds: ["a", "b"], batchEvidence: evidence, tier: "l5", graph: { doc: d, northStarId: "z" } });
     expect(plan.batches.length).toBeGreaterThan(0);
     expect(plan.batches.flatMap((x) => x.members).sort()).toEqual(["a", "b"]);
   });
 
+  // rk-74o: nominating an id in `batchEligibleIds` is not evidence. Without the recorded facts the
+  // eligibility screen needs, the nomination is refused and the item gets per-node treatment —
+  // pre-rk-74o this composed a real batch on the caller's word alone.
+  test("an UNEVIDENCED pool composes NOTHING and falls back to per-node dispatch", () => {
+    const d = doc([regNode("z"), regNode("a"), regNode("b")]);
+    const plan = planDispatch({ readyNodeIds: ["a", "b"], batchEligibleIds: ["a", "b"], tier: "l5", graph: { doc: d, northStarId: "z" } });
+    expect(plan.batches).toEqual([]);
+    expect(plan.perNode).toEqual(["a", "b"]);
+  });
+
   test("an unknown eligible id is REPORTED, never dropped or dispatched", () => {
     const d = doc([regNode("z"), regNode("a")]);
-    const plan = planDispatch({ readyNodeIds: ["a"], batchEligibleIds: ["a", "ghost"], graph: { doc: d, northStarId: "z" } });
+    const plan = planDispatch({ readyNodeIds: ["a"], batchEligibleIds: ["a", "ghost"], batchEvidence: [{ id: "a", tier: "l5", crux: false }, { id: "ghost", tier: "l5", crux: false }], tier: "l5", graph: { doc: d, northStarId: "z" } });
     expect(plan.unknown).toEqual(["ghost"]);
     expect(plan.perNode).not.toContain("ghost");
   });

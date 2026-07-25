@@ -48,8 +48,8 @@ function extractJsonKeysNearHeading(source: string, headingMarker: string): Set<
 }
 
 function sampleSkeleton() {
-  const batch: ComposedBatch = { batchId: "batch-seamtest", members: ["1.2", "1.3"], score: 0 };
-  const plan = toBatchPlan(batch, "hard");
+  const batch: ComposedBatch = { batchId: "batch-seamtest", tier: "hard", members: ["1.2", "1.3"], score: 0 };
+  const plan = toBatchPlan(batch);
   const result = toVerdictFileSkeleton(plan);
   if (!result.ok) throw new Error("expected a hard-tier plan to produce a skeleton");
   return result.skeleton;

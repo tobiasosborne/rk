@@ -32,11 +32,15 @@
 // treatment, never batched). `batchEligibleIds` is the caller-supplied routine-tier pool; for the
 // hard tier (rk verify --af) that pool is empty by the tier filter — batching is the L5 soft tier's
 // job (M3.7) — so pass-1 hard-tier planning is all per-node. The composeBatches seam is nonetheless
-// wired and exercised (a non-empty eligible pool composes real batches) so it is a live, tested path,
-// not dead scaffolding.
+// wired and exercised (a fully-evidenced eligible pool composes real batches) so it is a live,
+// tested path, not dead scaffolding. rk-74o: nominating an id in `batchEligibleIds` is no longer
+// enough — src/drive/batch-eligibility.ts screens each one against real graph/af state, and an
+// unevidenced or refused nomination falls back to per-node dispatch.
 
 import { composeBatches, type ComposedBatch } from "./batch-composer";
+import type { BatchCandidate } from "./batch-eligibility";
 import type { GraphDocument } from "../graph/types";
+import type { Tier } from "./vocab";
 
 /** The projected view of one af-export node this planner consumes — a narrow slice of
  * ../vibefeld/docs/export-graph-v1.md's node shape, built at the edge (src/drive/driver-af.ts).
@@ -189,12 +193,23 @@ export interface DispatchPlan {
 export interface PlanInput {
   readyNodeIds: readonly string[];
   cruxIds?: readonly string[];
-  /** The routine-tier batch-eligible pool (subset of `readyNodeIds`, already tier-filtered). Empty
-   * for the hard tier. Any crux id here is still forced per-node — crux always outranks batching. */
+  /** The pool this planner OFFERS for batching (subset of `readyNodeIds`). Empty for the hard tier.
+   * Any crux id here is still forced per-node — crux always outranks batching. rk-74o: naming an id
+   * here is only a nomination; src/drive/batch-eligibility.ts refuses it unless `batchEvidence`
+   * carries the recorded facts that justify it, so a pool alone can no longer wave a batch through. */
   batchEligibleIds?: readonly string[];
+  /** rk-74o: per-item recorded evidence (declared tier, af crux flag, af workspace/id) for the ids
+   * in `batchEligibleIds`. A pool id with no record here is screened as a bare `{ id }` — refused as
+   * indeterminate, and therefore dispatched per-node. Entries naming an id outside the pool are
+   * unused. */
+  batchEvidence?: readonly BatchCandidate[];
+  /** The run's dispatch tier, cross-checked against each candidate's own declared tier. Absent
+   * composes nothing (fail closed). */
+  tier?: Tier;
   /** Supplied only when a batch-eligible pool exists: the graph the batch composer computes
-   * independence + critical-path exclusion over, and its north star. */
-  graph?: { doc: GraphDocument; northStarId: string };
+   * independence + critical-path exclusion over, its north star, and (hard tier) the af proof-tree
+   * parent edges the af-ancestry independence check closes over. */
+  graph?: { doc: GraphDocument; northStarId: string; afParents?: ReadonlyMap<string, readonly string[]> };
   cap?: number;
 }
 
@@ -213,11 +228,16 @@ export function planDispatch(input: PlanInput): DispatchPlan {
   const unknown: string[] = [];
 
   if (eligible.length > 0 && input.graph) {
-    const result = composeBatches(input.graph.doc, eligible, input.graph.northStarId, { cap: input.cap });
+    const evidenceById = new Map((input.batchEvidence ?? []).map((c) => [c.id, c] as const));
+    // A nominated id with no recorded evidence is screened as a BARE candidate — which the
+    // eligibility screen refuses. It then falls through to per-node dispatch below, exactly like any
+    // other refusal: fail closed, never batched on the strength of the nomination alone.
+    const candidates: BatchCandidate[] = eligible.map((id) => evidenceById.get(id) ?? { id });
+    const result = composeBatches(input.graph.doc, candidates, input.graph.northStarId, { tier: input.tier, cap: input.cap, afParents: input.graph.afParents });
     batches.push(...result.batches);
     for (const ex of result.excluded) {
       if (ex.reason === "unknown-node") unknown.push(ex.id);
-      else perNode.add(ex.id); // critical-path → per-node dispatch
+      else perNode.add(ex.id); // any other refusal (critical-path, crux, tier, af) → per-node dispatch
     }
   } else {
     // No graph or no eligible pool: everything eligible falls back to per-node.

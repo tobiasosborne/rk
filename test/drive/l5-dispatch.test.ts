@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dispatchL5Plan, type L5DispatchDeps } from "../../src/drive/l5-dispatch";
+import { deriveBatchId } from "../../src/drive/batch-composer";
 import { readL5Store } from "../../src/drive/l5-store-io";
 import { sha256Bytes } from "../../src/refs/hash";
 import type { L5DispatchPlan } from "../../src/drive/l5-dispatch-plan";
@@ -35,11 +36,18 @@ const HASH_A = hashOf(CONTENT_A);
 const HASH_B = hashOf(CONTENT_B);
 const ZERO_USAGE: WorkerUsage = { input: 10, output: 5, cache_read: 0, cache_creation: 0 };
 
+// rk-74o: a plan's batchId is `deriveBatchId(northStar, members)` over its ACTUAL members, so these
+// fixtures derive it rather than using a stand-in constant — otherwise the "re-derivation is a
+// no-op when nothing is dropped" assertion below could not distinguish a real no-op from a rename.
+const BATCH_AB = deriveBatchId("z", ["a", "b"]);
+const BATCH_A = deriveBatchId("z", ["a"]);
+const BATCH_B = deriveBatchId("z", ["b"]);
+
 function plan(overrides: Partial<L5DispatchPlan> = {}): L5DispatchPlan {
   return {
     northStarId: "z",
     cap: 10,
-    batches: [{ batchId: "batch-1", claimId: "l5:batch-1", members: [{ itemId: "a", order: 0, contentHash: HASH_A }, { itemId: "b", order: 1, contentHash: HASH_B }], score: 0 }],
+    batches: [{ batchId: BATCH_AB, composedBatchId: BATCH_AB, claimId: `l5:${BATCH_AB}`, members: [{ itemId: "a", order: 0, contentHash: HASH_A }, { itemId: "b", order: 1, contentHash: HASH_B }], score: 0 }],
     excluded: [],
     ...overrides,
   };
@@ -116,7 +124,7 @@ describe("dispatchL5Plan — success path", () => {
     const root = tmpRoot();
     await dispatchL5Plan(root, plan(), deps(backend));
     const { records } = readL5Store(root);
-    expect(records.every((r) => r.batchId === "batch-1")).toBe(true);
+    expect(records.every((r) => r.batchId === BATCH_AB)).toBe(true);
   });
 });
 
@@ -170,13 +178,13 @@ describe("dispatchL5Plan — multi-batch", () => {
       cap: 10,
       excluded: [],
       batches: [
-        { batchId: "batch-1", claimId: "l5:batch-1", members: [{ itemId: "a", order: 0, contentHash: hashOf("content a") }], score: 0 },
-        { batchId: "batch-2", claimId: "l5:batch-2", members: [{ itemId: "c", order: 0, contentHash: hashOf("content c") }], score: 0 },
+        { batchId: BATCH_A, composedBatchId: BATCH_A, claimId: `l5:${BATCH_A}`, members: [{ itemId: "a", order: 0, contentHash: hashOf("content a") }], score: 0 },
+        { batchId: deriveBatchId("z", ["c"]), composedBatchId: deriveBatchId("z", ["c"]), claimId: `l5:${deriveBatchId("z", ["c"])}`, members: [{ itemId: "c", order: 0, contentHash: hashOf("content c") }], score: 0 },
       ],
     };
     const outcomes = await dispatchL5Plan(root, twoBatchPlan, deps(backend, { a: "content a", c: "content c" }));
-    expect(sessionSpecs.map((s) => s.claimId)).toEqual(["l5:batch-1", "l5:batch-2"]);
-    expect(outcomes.map((o) => o.batchId)).toEqual(["batch-1", "batch-2"]);
+    expect(sessionSpecs.map((s) => s.claimId)).toEqual([`l5:${BATCH_A}`, `l5:${deriveBatchId("z", ["c"])}`]);
+    expect(outcomes.map((o) => o.batchId)).toEqual([BATCH_A, deriveBatchId("z", ["c"])]);
   });
 });
 
@@ -204,7 +212,7 @@ describe("dispatchL5Plan — M3 blocker 8: L5 usage accounting", () => {
     expect(usageRecords.map((r) => r.nodeId).sort()).toEqual(["a", "b"]);
     const recA = usageRecords.find((r) => r.nodeId === "a")!;
     expect(recA.usage).toEqual(usageA);
-    expect(recA.claimId).toBe("l5:batch-1");
+    expect(recA.claimId).toBe(`l5:${BATCH_AB}`);
     const recB = usageRecords.find((r) => r.nodeId === "b")!;
     expect(recB.usage).toEqual(usageB); // rejected turn (exit 13) still spent real tokens
   });
@@ -219,7 +227,7 @@ describe("dispatchL5Plan — M3 blocker 8: L5 usage accounting", () => {
     const sessionRecords = records.filter((r) => r.kind === "usage" && r.nodeId === "(session-open)");
     expect(sessionRecords).toHaveLength(1);
     expect(sessionRecords[0]!.usage).toEqual(sessionUsage);
-    expect(sessionRecords[0]!.claimId).toBe("l5:batch-1");
+    expect(sessionRecords[0]!.claimId).toBe(`l5:${BATCH_AB}`);
     // session-open logged before any member turn (log order feeds report.ts's fair-share pooling).
     const allNodeIds = records.filter((r) => r.kind === "usage").map((r) => r.nodeId);
     expect(allNodeIds[0]).toBe("(session-open)");
@@ -240,6 +248,8 @@ describe("dispatchL5Plan — M3 blocker 8: L5 usage accounting", () => {
     await dispatchL5Plan(root, plan(), deps(backend, { a: "TAMPERED bytes that do not match HASH_A", b: CONTENT_B }, { appendLog }));
     const usageRecords = records.filter((r) => r.kind === "usage" && r.nodeId !== "(session-open)");
     expect(usageRecords.map((r) => r.nodeId)).toEqual(["b"]); // "a" never dispatched, never logged
+    // rk-74o: and the session it WAS logged under is the re-derived, single-member batch's claim.
+    expect(usageRecords[0]!.claimId).toBe(`l5:${BATCH_B}`);
   });
 
   test("dispatch works unchanged when appendLog is not supplied (optional dep, no crash)", async () => {
@@ -247,5 +257,59 @@ describe("dispatchL5Plan — M3 blocker 8: L5 usage accounting", () => {
     const root = tmpRoot();
     const outcomes = await dispatchL5Plan(root, plan(), deps(backend));
     expect(outcomes[0]!.applied).toHaveLength(2);
+  });
+});
+
+// rk-74o (M3 review follow-up 3, "actual-member provenance"): the batch id stamped on a verdict is
+// what `af unvalidate --batch <id>` revokes, so it must name the set that actually shared a verifier
+// session — the correlated-risk set. Members discarded BEFORE dispatch (no content, hash mismatch)
+// never entered that session, so the pre-fix behaviour (screen inside the dispatch loop, keep the
+// plan's id) recorded an id describing items the session never saw.
+describe("dispatchL5Plan — rk-74o: the recorded batch id describes the members actually dispatched", () => {
+  test("a member discarded pre-dispatch is NOT in the recorded batch id, and the survivors' id is re-derived", async () => {
+    const { backend } = fakeBackend({ b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend, { a: "TAMPERED bytes that do not match HASH_A", b: CONTENT_B }));
+    expect(outcomes[0]!.batchId).toBe(BATCH_B);
+    expect(outcomes[0]!.plannedBatchId).toBe(BATCH_AB);
+    const { records } = readL5Store(root);
+    expect(records.map((r) => r.itemId)).toEqual(["b"]);
+    expect(records.every((r) => r.batchId === BATCH_B)).toBe(true);
+  });
+
+  test("the SESSION is opened under the re-derived claim id — session isolation names the dispatched set", async () => {
+    const { backend, sessionSpecs } = fakeBackend({ b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    await dispatchL5Plan(root, plan(), deps(backend, { b: CONTENT_B })); // "a" has no content at all
+    expect(sessionSpecs.map((s) => s.claimId)).toEqual([`l5:${BATCH_B}`]);
+  });
+
+  test("when NOTHING is discarded the re-derivation is a no-op — the plan's own id is recorded", async () => {
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend));
+    expect(outcomes[0]!.batchId).toBe(BATCH_AB);
+    expect(readL5Store(root).records.every((r) => r.batchId === BATCH_AB)).toBe(true);
+  });
+
+  test("a batch whose members are ALL discarded pre-dispatch opens NO session and records NO batch id", async () => {
+    const { backend, sessionSpecs, turns } = fakeBackend({});
+    const root = tmpRoot();
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend, {})); // neither member has content
+    expect(sessionSpecs).toEqual([]);
+    expect(turns).toEqual([]);
+    expect(outcomes[0]!.batchId).toBeUndefined();
+    expect(outcomes[0]!.claimId).toBeUndefined();
+    expect(outcomes[0]!.plannedBatchId).toBe(BATCH_AB);
+    expect(outcomes[0]!.rejected.map((r) => r.itemId).sort()).toEqual(["a", "b"]);
+  });
+
+  test("a turn that FAILS after dispatch stays inside the batch id — it shared the session, so revocation must cover it", async () => {
+    const { backend } = fakeBackend({ a: { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } }, { exitFor: { b: 13 } });
+    const root = tmpRoot();
+    const outcomes = await dispatchL5Plan(root, plan(), deps(backend));
+    // "b" spent real tokens in the shared session and could have biased "a"; it stays a member.
+    expect(outcomes[0]!.batchId).toBe(BATCH_AB);
+    expect(readL5Store(root).records.every((r) => r.batchId === BATCH_AB)).toBe(true);
   });
 });
