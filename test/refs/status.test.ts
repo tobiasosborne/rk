@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeStatus } from "../../src/refs/status";
+import { computeStatus, resolveRenamedEnv } from "../../src/refs/status";
 import { sha256Bytes } from "../../src/refs/hash";
 
 function makeRepo(): string {
@@ -101,5 +101,110 @@ describe("computeStatus — the fetch-refs.py --status dry-run port", () => {
     expect(existsSync(join(root, "refs", "fetchable-src"))).toBe(false);
     expect(existsSync(join(root, "refs", "missing-src"))).toBe(false);
     rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// rk-54a (generality audit 2026-07-25, finding M7): EXTPROP_REFS_CACHE(_URL) was AISM's own
+// acronym sitting in rk's public env-var namespace. Renamed to RK_REFS_CACHE(_URL), reading the
+// old names as a deprecated fallback (someone's shell profile may still export them).
+describe("resolveRenamedEnv — the RK_REFS_CACHE* rename's deprecation fallback (rk-54a)", () => {
+  const NEW = "RK_REFS_CACHE_TEST_VAR";
+  const OLD = "EXTPROP_REFS_CACHE_TEST_VAR";
+
+  afterEach(() => {
+    delete process.env[NEW];
+    delete process.env[OLD];
+  });
+
+  test("neither set -> unset, value undefined", () => {
+    const r = resolveRenamedEnv(NEW, OLD);
+    expect(r.source).toBe("unset");
+    expect(r.value).toBeUndefined();
+  });
+
+  test("new name only -> 'new', its value", () => {
+    process.env[NEW] = "/from/new";
+    const r = resolveRenamedEnv(NEW, OLD);
+    expect(r.source).toBe("new");
+    expect(r.value).toBe("/from/new");
+  });
+
+  test("old (deprecated) name only -> works, reported as 'old' so a caller can warn", () => {
+    process.env[OLD] = "/from/old";
+    const r = resolveRenamedEnv(NEW, OLD);
+    expect(r.source).toBe("old");
+    expect(r.value).toBe("/from/old");
+  });
+
+  test("both set -> the NEW name wins, silently (source 'new', old value never surfaces)", () => {
+    process.env[NEW] = "/from/new";
+    process.env[OLD] = "/from/old";
+    const r = resolveRenamedEnv(NEW, OLD);
+    expect(r.source).toBe("new");
+    expect(r.value).toBe("/from/new");
+  });
+});
+
+describe("computeStatus — RK_REFS_CACHE(_URL) env fallback, real end-to-end (rk-54a)", () => {
+  const CACHE_ENV = "RK_REFS_CACHE";
+  const CACHE_ENV_OLD = "EXTPROP_REFS_CACHE";
+
+  afterEach(() => {
+    delete process.env[CACHE_ENV];
+    delete process.env[CACHE_ENV_OLD];
+  });
+
+  test("a cache-dir hit via the NEW env var name classifies as 'cache' with no explicit opts", async () => {
+    const root = makeRepo();
+    const cacheDir = mkdtempSync(join(tmpdir(), "rk-status-cache-new-"));
+    const content = "payload located via RK_REFS_CACHE";
+    const sha = sha256Bytes(new TextEncoder().encode(content));
+    writeFileSync(join(cacheDir, sha), content);
+    writeFileSync(
+      join(root, "refs", "manifest", "sources.lock.json"),
+      JSON.stringify({ files: [{ path: "missing-src/c.pdf", sha256: sha, source_id: "missing-src", fetch: null }] }),
+    );
+    process.env[CACHE_ENV] = cacheDir;
+    const rows = await computeStatus(root);
+    expect(rows[0]!.status).toBe("cache");
+    rmSync(root, { recursive: true, force: true });
+    rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  test("a cache-dir hit via the OLD (deprecated) env var name still works with no explicit opts", async () => {
+    const root = makeRepo();
+    const cacheDir = mkdtempSync(join(tmpdir(), "rk-status-cache-old-"));
+    const content = "payload located via EXTPROP_REFS_CACHE";
+    const sha = sha256Bytes(new TextEncoder().encode(content));
+    writeFileSync(join(cacheDir, sha), content);
+    writeFileSync(
+      join(root, "refs", "manifest", "sources.lock.json"),
+      JSON.stringify({ files: [{ path: "missing-src/c.pdf", sha256: sha, source_id: "missing-src", fetch: null }] }),
+    );
+    process.env[CACHE_ENV_OLD] = cacheDir;
+    const rows = await computeStatus(root);
+    expect(rows[0]!.status).toBe("cache");
+    rmSync(root, { recursive: true, force: true });
+    rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  test("both env vars set -> the NEW name's directory is used, not the old one's", async () => {
+    const root = makeRepo();
+    const newCacheDir = mkdtempSync(join(tmpdir(), "rk-status-cache-both-new-"));
+    const oldCacheDir = mkdtempSync(join(tmpdir(), "rk-status-cache-both-old-"));
+    const content = "payload only present under the NEW cache dir";
+    const sha = sha256Bytes(new TextEncoder().encode(content));
+    writeFileSync(join(newCacheDir, sha), content); // present only here
+    writeFileSync(
+      join(root, "refs", "manifest", "sources.lock.json"),
+      JSON.stringify({ files: [{ path: "missing-src/c.pdf", sha256: sha, source_id: "missing-src", fetch: null }] }),
+    );
+    process.env[CACHE_ENV] = newCacheDir;
+    process.env[CACHE_ENV_OLD] = oldCacheDir; // old dir does NOT have the payload
+    const rows = await computeStatus(root);
+    expect(rows[0]!.status).toBe("cache"); // proves the NEW dir (which has the file) was consulted
+    rmSync(root, { recursive: true, force: true });
+    rmSync(newCacheDir, { recursive: true, force: true });
+    rmSync(oldCacheDir, { recursive: true, force: true });
   });
 });

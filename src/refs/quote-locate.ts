@@ -47,7 +47,7 @@ export async function locateQuoteInRepo(
     throw new Error(
       `rk refs quote: source-id '${sourceId}' is known but its payload is absent locally ` +
         `(${entries.map((e) => `refs/${e.path}`).join(", ")}). Run 'rk refs status' then ` +
-        `'rk refs add' or set EXTPROP_REFS_CACHE to restore it before quoting.`,
+        `'rk refs add' or set RK_REFS_CACHE to restore it before quoting.`,
     );
   }
   return null;

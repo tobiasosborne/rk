@@ -3,11 +3,28 @@
 // import paths changed (one directory level up to reach src/refs/*, src/types).
 
 import { addSource } from "../refs/add";
-import { computeStatus } from "../refs/status";
+import {
+  computeStatus,
+  resolveRenamedEnv,
+  RK_REFS_CACHE_ENV,
+  RK_REFS_CACHE_ENV_DEPRECATED,
+  RK_REFS_CACHE_URL_ENV,
+  RK_REFS_CACHE_URL_ENV_DEPRECATED,
+} from "../refs/status";
 import { locateQuoteInRepo } from "../refs/quote-locate";
 import { sourceId } from "../types";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
+
+/** rk-54a: warns ONCE, clearly, when a cache env var is being honored only via its deprecated
+ * old name — the one path where that name is actually steering behavior (see
+ * `resolveRenamedEnv`'s doc comment for why the "both set" case stays silent). */
+function warnIfDeprecatedEnv(out: Out, newName: string, oldName: string): void {
+  const resolved = resolveRenamedEnv(newName, oldName);
+  if (resolved.source === "old") {
+    out.log(`  DEPRECATED: '${oldName}' is set but rk now reads '${newName}'. Using '${oldName}' for this run — rename it in your shell profile.`);
+  }
+}
 
 type SubHandler = (args: string[], out: Out) => Promise<number>;
 
@@ -20,6 +37,8 @@ const STATUS_MARK: Record<string, string> = {
 
 async function refsStatus(args: string[], out: Out): Promise<number> {
   const { root } = extractRoot(args);
+  warnIfDeprecatedEnv(out, RK_REFS_CACHE_ENV, RK_REFS_CACHE_ENV_DEPRECATED);
+  warnIfDeprecatedEnv(out, RK_REFS_CACHE_URL_ENV, RK_REFS_CACHE_URL_ENV_DEPRECATED);
   const rows = await computeStatus(root);
   for (const r of rows) {
     out.log(`  [${STATUS_MARK[r.status]}] ${r.path} (${r.sourceId})`);
@@ -36,7 +55,7 @@ async function refsStatus(args: string[], out: Out): Promise<number> {
     out.log(
       `  ${counts.missing} missing with no reproducible route. Seed a content-addressed cache ` +
         `on a machine that has them: 'rk refs add <locator> --id <source-id>' there, then set ` +
-        `EXTPROP_REFS_CACHE=<dir> here.`,
+        `RK_REFS_CACHE=<dir> here.`,
     );
   }
   if ((counts.fetchable ?? 0) > 0) {
