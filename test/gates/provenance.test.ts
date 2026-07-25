@@ -83,7 +83,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run({});
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows" },
+      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows; report/: absent (not adopted)" },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run(baseline());
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows" },
+      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows; report/: present" },
     ]);
   });
 });
@@ -113,7 +113,7 @@ describe("provenanceGate — rk-v18: malformed registry shards are a visible ski
         gate: "provenance",
         checked: 1,
         total: 2,
-        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows",
+        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows; report/: present",
       },
     ]);
   });
@@ -567,6 +567,101 @@ describe("provenanceGate — check 6: anchor", () => {
     expect(e).toHaveLength(1);
     expect(e[0]!.path).toBe("argument/lemmas/lem-real.md");
     expect(warnings(result).filter((f) => f.message.includes("whitelisted in report/UNWIRED.md"))).toHaveLength(1);
+  });
+});
+
+// B1 (docs/memos/2026-07-25-generality-audit.md), bead extends rk-au6. Gate 6 was made
+// presence-conditional on the `report/` ROOT at M1 (src/gates/shards.ts:63, fixture shards-15);
+// Gate 4 never was, and its "fresh repo no-op" was vacuous — it held only while the registry was
+// empty. The moment a campaign has ONE shard, check 6 fires per shard with a remedy
+// (`report/UNWIRED.md`) that lives inside a tree `templates/manifest.json:5` explicitly refuses
+// to stamp. Fixture: provenance-21.
+describe("provenanceGate — check 6 report/-root presence guard (B1: a report-less campaign is a permanent legitimate state)", () => {
+  /** The shape every `rk init`-stamped campaign has the moment it writes its first lemma:
+   * registry shards present, `report/` entirely absent. */
+  function reportlessCampaign(): Record<string, string> {
+    return {
+      "argument/lemmas/lem-a.md": shard({ id: "lem-a", kind: "lemma", status: "stated", af: "none" }),
+      "argument/thm-main.md": shard({ id: "thm-main", kind: "theorem", status: "open", af: "none" }),
+      "definitions/def-widget.md": "---\nid: def-widget\nterm: widget\nkind: object\nstatus: stable\n---\n",
+    };
+  }
+
+  test("registry shards present, report/ ABSENT: check 6 emits NOTHING — no per-shard ERROR, no whitelist WARN", () => {
+    const result = run(reportlessCampaign());
+    expect(errors(result).filter((f) => f.message.includes("maps to NO report label"))).toEqual([]);
+    expect(warnings(result).filter((f) => f.message.includes("report/UNWIRED.md"))).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+
+  test("the skip is VISIBLE on the coverage line, never silent (L2)", () => {
+    const result = run(reportlessCampaign());
+    expect(result.coverage[0]!.unit).toContain("report/: absent (not adopted)");
+    // The registry denominator stays honest: this gate still discovered and parsed both shards.
+    expect(result.coverage[0]!.checked).toBe(2);
+    expect(result.coverage[0]!.total).toBe(2);
+  });
+
+  test("report/ PRESENT is equally visible on the coverage line (the guard is a stated fact on every path)", () => {
+    const result = run(baseline());
+    expect(result.coverage[0]!.unit).toContain("report/: present");
+  });
+
+  test("report/ ROOT adopted but empty: the anchor ERROR still fires per shard (root presence never blurs into deeper-item leniency)", () => {
+    const entries = reportlessCampaign();
+    const result = provenanceGate.run(
+      snapshotFromFiles(entries, { dirs: ["report"] }), // the ROOT exists on disk, nothing under it
+      DEFAULT_GATE_CONFIG,
+    );
+    const e = errors(result).filter((f) => f.message.includes("maps to NO report label"));
+    expect(e).toHaveLength(2);
+    expect(result.coverage[0]!.unit).toContain("report/: present");
+  });
+
+  test("report/ present with an UNWIRED.md whitelist keeps working unchanged (the guard is keyed on the ROOT, not on UNWIRED.md)", () => {
+    const entries = reportlessCampaign();
+    entries["report/UNWIRED.md"] = "# UNWIRED\n```\nlem-a\nthm-main\n```\n";
+    const result = run(entries);
+    expect(errors(result)).toEqual([]);
+    expect(warnings(result).filter((f) => f.message.includes("whitelisted in report/UNWIRED.md"))).toHaveLength(1);
+  });
+
+  // Check 1 (forward labels) is NOT bound by the guard: its trigger is an AUTHORED claim in the
+  // shard's own `provenance:` field, not the report's existence. A shard that names a report
+  // label in a campaign with no report/ tree has declared something unsatisfiable, and that must
+  // stay an ERROR — the guard removes coercion, it does not swallow authored declarations.
+  test("check 1 still ERRORs when a shard names a report label and report/ is absent, naming the absence", () => {
+    const entries = reportlessCampaign();
+    entries["argument/lemmas/lem-a.md"] = shard({
+      id: "lem-a",
+      kind: "lemma",
+      status: "stated",
+      af: "none",
+      provenance: "report lem:a",
+    });
+    const result = run(entries);
+    const e = errors(result).filter((f) => f.message.includes("provenance names report 'lem:a'"));
+    expect(e).toHaveLength(1);
+    expect(e[0]!.message).toContain("report/ is absent");
+    // ...and check 6 is still silent for the OTHER shard.
+    expect(errors(result).filter((f) => f.message.includes("maps to NO report label"))).toEqual([]);
+  });
+
+  // The guard is targeted at check 6, NOT a whole-gate early return (Gate 6's shape): this gate's
+  // registry bookkeeping is about `argument/**`, not about report/, and must stay truthful when
+  // report/ is absent — rk-v18's frontmatter-invalid aggregate WARN and its honest denominator are
+  // coverage duties this gate owes regardless of whether a paper exists.
+  test("rk-v18's frontmatter-invalid WARN and honest denominator survive the guard (report/ absent is not a licence to stop counting the registry)", () => {
+    const entries = reportlessCampaign();
+    entries["argument/lemmas/lem-broken.md"] = "no frontmatter at all\n";
+    const result = run(entries);
+    expect(errors(result)).toEqual([]);
+    const w = warnings(result).filter((f) => f.message.includes("argument/lemmas/lem-broken.md"));
+    expect(w).toHaveLength(1);
+    expect(result.coverage[0]!.checked).toBe(2);
+    expect(result.coverage[0]!.total).toBe(3);
+    expect(result.coverage[0]!.unit).toContain("1 frontmatter-invalid");
+    expect(result.coverage[0]!.unit).toContain("report/: absent (not adopted)");
   });
 });
 

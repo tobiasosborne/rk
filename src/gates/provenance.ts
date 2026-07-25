@@ -26,9 +26,51 @@
 // The old "present in RepoSnapshot" proxy is retired: it could not see a tracked source row OUTSIDE
 // the loader's include set (false WARN) and could not hash binary payloads (UTF-8 round-trip);
 // both were BLOCKERs in the review (findings 1 + Check-4 ruling).
+//
+// CHECK 6 (anchor) IS PRESENCE-CONDITIONAL ON THE report/ ROOT [B1, docs/memos/
+// 2026-07-25-generality-audit.md; extends bead rk-au6 / the 2026-07-18 residue audit's R13].
+// Gate 6 was bound to the `report/` root at M1 (src/gates/shards.ts:63, fixture shards-15); Gate 4
+// never was, and the 2026-07-18 audit's "Gate 4 correctly no-ops on a fresh rk repo" call was
+// VACUOUS — it holds only while the registry is empty. The moment a campaign has one shard,
+// checkAnchor fires per shard, demanding either a `\label{}` in `report/sections/*.tex` or a row in
+// `report/UNWIRED.md`. rk's scaffold stamps NEITHER and, per templates/manifest.json:5, deliberately
+// never will, so consolidation phase — the phase this tool is designed for — was unusable on a repo
+// rk itself produced (PRD SC7's stated bar).
+//
+// WHAT THE ANCHOR CHECK MEANS WITH NO REPORT. Check 6 asks, of every registry result, a question
+// ABOUT THE PAPER: "does the report cite you?" Its precondition is that a report exists. PRD §4 C6
+// / IMPLEMENTATION_PLAN M2 defer LaTeX generation and make the report OPTIONAL — rk's own render
+// target is HTML — so "no report/ tree" is a legitimate, common, PERMANENT campaign state, not a
+// not-yet. In that state every result is "unanchored" forever, and the remedy the finding names
+// (anchor it, or whitelist it in report/UNWIRED.md) is unreachable from inside the campaign: both
+// require hand-creating AISM's paper skeleton. A check whose only remedy is adopting a convention
+// the tool declines to stamp is coercion, not a validity check. So: `report/` ROOT absent ⇒ check 6
+// emits NOTHING (neither the per-shard ERROR nor the whitelist aggregate WARN), and the coverage
+// line says so out loud (`report/: absent (not adopted)` — CLAUDE.md L2, never a silent skip).
+// The reciprocal is preserved exactly: `report/` present ⇒ every check runs unchanged, including
+// the partial-adoption case (report/ present, sections/ or UNWIRED.md missing), which is the
+// incident class this check exists to catch — root-level presence-conditionality never blurs into
+// deeper-item leniency (same rule Gate 6's shards-13 fixture pins).
+//
+// SCOPE OF THE GUARD — deliberately check 6 ONLY, not a whole-gate early return (Gate 6's shape):
+//   - checks 2, 3, 4, 9 read `report/PROVENANCE.md`, check 5 reads the configured tab:status file
+//     and check 7/8 read `report/sections/*.tex` labels: with report/ absent all of those inputs
+//     are empty, so those checks are vacuous BY CONSTRUCTION and need no guard. Guarding them would
+//     be dead code that reads as if it suppressed something real.
+//   - check 1 (forward labels) is deliberately NOT guarded. Its trigger is not the report's
+//     existence but an AUTHORED claim in the shard's own `provenance:` field — a shard naming
+//     `report lem:foo` has adopted the convention for itself and declared something unsatisfiable.
+//     Swallowing that would be the false-green direction. Its message names the absence instead.
+//   - the registry bookkeeping (coverage denominator, rk-v18's frontmatter-invalid aggregate WARN)
+//     is about `argument/**`, not about report/, and stays truthful either way. A whole-gate early
+//     return would have reported a pass-shaped `0/0` and dropped that WARN — a new silent skip
+//     introduced while removing a false ERROR.
+// `aism_behavior: differs` (fixture provenance-21) — check-provenance.py:349-365 runs the anchor
+// check unconditionally; that is the residue this guard removes, a deliberate contract amendment
+// on the same footing as R13/F5, not an rk-stricter/rk-bug/ambiguous triage.
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
-import type { RepoSnapshot } from "./snapshot";
+import { dirExists, type RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";
 import {
   forwardTokens,
@@ -49,6 +91,10 @@ import {
 import { checkSourceHashes, checkStatusDrift } from "./provenance-checks";
 
 const PROVENANCE_PATH = "report/PROVENANCE.md";
+/** The ROOT artifact check 6's presence guard keys on — the SAME key Gate 6 uses
+ * (src/gates/shards.ts's `REPORT_ROOT`), so the two gates can never disagree about whether a repo
+ * has adopted the report/ convention. */
+const REPORT_ROOT = "report";
 const RESULT_KINDS = new Set(["thm", "lem", "prop", "cor", "op", "obs", "ex"]);
 const SOURCE_ALLOW = new Set(["ORIGINAL", "OPEN", "ELEMENTARY", "EXTRACT", "PDF", "CONSENSUS", "MODEL", "V", "I", "O"]);
 const KEY_TOKEN_RE = /^[A-Z0-9][A-Z0-9-]*$/;
@@ -58,15 +104,27 @@ function pyListRepr(items: Iterable<string>): string {
   return `[${[...items].map((i) => `'${i}'`).join(", ")}]`;
 }
 
-// check 1 — forward labels (ERROR): check-provenance.py:242-248.
-function checkForwardLabels(shards: RegistryShard[], tex: TexLabels, findings: Finding[]): void {
+// check 1 — forward labels (ERROR): check-provenance.py:242-248. NOT bound by the report/-root
+// guard (see the file header): the trigger is the shard's OWN authored `report <label>` token, so
+// the finding survives report/'s absence — only the message changes, to name the absence rather
+// than blame an empty sections/ directory the campaign never created.
+function checkForwardLabels(
+  shards: RegistryShard[],
+  tex: TexLabels,
+  findings: Finding[],
+  reportAdopted: boolean,
+): void {
+  const suffix = reportAdopted
+    ? ""
+    : ` (report/ is absent entirely — this shard declares a paper anchor in a campaign that has ` +
+      `not adopted the report/ convention; drop the 'report <label>' token or adopt report/)`;
   for (const s of shards) {
     for (const lab of forwardTokens(s)) {
       if (!tex.labels.has(lab)) {
         findings.push({
           severity: "ERROR",
           path: s.path,
-          message: `provenance names report '${lab}' but no \\label{${lab}} in sections/`,
+          message: `provenance names report '${lab}' but no \\label{${lab}} in sections/${suffix}`,
         });
       }
     }
@@ -113,7 +171,18 @@ function checkClaimSources(
 // (docs/gate-contracts.md "Finding-flood"). This mirrors the ratified frontmatter-invalid aggregate
 // (ruling b, provenance-parse.ts registrySkipReport): ONE WARN naming the count and the ids, the
 // denominator unchanged. Non-whitelisted (real, actionable) unanchored shards stay per-item ERRORs.
-function checkAnchor(shards: RegistryShard[], tex: TexLabels, whitelist: Set<string>, findings: Finding[]): void {
+// PRESENCE-CONDITIONAL on the `report/` ROOT (B1 — see the file header for the full reasoning):
+// with no report/ tree the question this check asks ("does the paper cite you?") has no subject and
+// its remedy is unreachable from inside the campaign, so it emits nothing at all. The coverage line
+// states the non-adoption; it is never a silent skip.
+function checkAnchor(
+  shards: RegistryShard[],
+  tex: TexLabels,
+  whitelist: Set<string>,
+  findings: Finding[],
+  reportAdopted: boolean,
+): void {
+  if (!reportAdopted) return;
   const whitelisted: RegistryShard[] = [];
   for (const s of shards) {
     if (labelsOf(s, tex).size > 0) continue;
@@ -182,13 +251,17 @@ export const provenanceGate: Gate = {
     const prov = parseProvenanceMd(snapshot);
     const whitelist = parseUnwired(snapshot);
     const statusRows = statusTableRows(snapshot, config.provenanceStatusTableFile);
+    // B1: the ONE report/-convention adoption bit this gate reads — the same ROOT-directory fact
+    // Gate 6 keys on (src/gates/shards.ts). Measured at the edge (`dirs`), so an EMPTY report/
+    // directory counts as adopted, exactly like Gate 6's partial-adoption case.
+    const reportAdopted = dirExists(snapshot, REPORT_ROOT);
 
-    checkForwardLabels(shards, tex, findings);
+    checkForwardLabels(shards, tex, findings, reportAdopted);
     checkClaimLabels(prov.claimRows, tex, findings);
     checkClaimSources(prov.claimRows, prov.sourceRegistry, findings);
     checkSourceHashes(prov.sourceRows, snapshot, findings, PROVENANCE_PATH);
     checkStatusDrift(statusRows, shards, tex, findings);
-    checkAnchor(shards, tex, whitelist, findings);
+    checkAnchor(shards, tex, whitelist, findings, reportAdopted);
     checkReverseLabels(shards, tex, findings);
     checkCoverage(shards, prov.claimRows, tex, findings);
     // check 9 — parse integrity (WARN): a recognized-but-unparseable data row, a duplicate source
@@ -211,7 +284,10 @@ export const provenanceGate: Gate = {
         total,
         unit:
           `registry results, ${skipped.length} frontmatter-invalid, ${prov.claimRows.length} ` +
-          `claim rows, ${statusRows.length} tab:status rows`,
+          `claim rows, ${statusRows.length} tab:status rows; ` +
+          // B1: the report/-adoption bit is rendered on EVERY path, present or absent (Gate 6's
+          // own convention, src/gates/shards.ts) — a reader can always tell whether check 6 ran.
+          `report/: ${reportAdopted ? "present" : "absent (not adopted)"}`,
       },
     ];
 

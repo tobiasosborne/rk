@@ -1,0 +1,13 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 2,
+    "total": 2,
+    "unit_patterns": ["registry results", "0 frontmatter-invalid", "report/: absent (not adopted)"]
+  },
+  "aism_behavior": "differs: check-provenance.py:349-365 has no equivalent of a report/-absent no-op -- its anchor check runs over every parsed registry result unconditionally, and with no report/UNWIRED.md to read (parse_unwired returns an empty whitelist for a missing file, check-provenance.py:325-346) every shard in this tree is an 'unwired' failure. rk's contract (B1, docs/memos/2026-07-25-generality-audit.md; extends bead rk-au6 / R13) binds check 6 to the report/ ROOT directory's existence, exactly as Gate 6 was bound at src/gates/shards.ts:63 (fixture shards-15): a campaign with NO LaTeX report is the EXPECTED general case (PRD SC2/SC7 and the C6 LaTeX deferral; templates/manifest.json:5 explicitly refuses to stamp a report/ tree), not a not-yet. This is a deliberate contract amendment, not a strictness triage.",
+  "notes": "Gate 4's sibling of shards-15/linker-25, and the fixture whose ABSENCE let B1 survive the 2026-07-18 residue audit: every other provenance-* fixture assumes a report/ tree, and Gate 4's fresh-repo no-op is vacuous (it holds only while the registry is EMPTY). Shape: two valid registry shards -- one under argument/lemmas/, one at argument/ root (the recursive-discovery layout rk itself stamps) -- and report/ entirely ABSENT. Live-fire repro (docs/memos/2026-07-25-generality-audit.md section 1, item 2): `rk init` + one definition + one lemma + `rk phase consolidation` + `rk check` printed one ERROR per registry shard demanding report/UNWIRED.md, a file rk never stamps and no stamped document mentions -- consolidation phase, the phase the tool is designed for, unusable on a repo rk itself produced (SC7). Proves the guard: zero findings, and the coverage line names the non-adoption visibly (never a silent skip, CLAUDE.md L2) while the registry denominator stays honest at 2/2. Mutation-proven red-first: this fixture fails against pre-fix HEAD with two 'maps to NO report label' ERRORs; inverting the guard in checkAnchor (running it unconditionally, the pre-B1 behavior) turns it red again."
+}
