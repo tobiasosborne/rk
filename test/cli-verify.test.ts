@@ -4,7 +4,7 @@
 // test/cli-graph.test.ts.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verifyCommand } from "../src/cli/verify";
@@ -551,5 +551,143 @@ describe("rk verify --report (M3.9)", () => {
     const code = await verifyCommand(["--report", "--root", root, "--baseline", join(root, "nope.json")], out, { afCommand: ABSENT, frCommand: ABSENT });
     expect(code).toBe(1);
     expect(lines.join("\n")).toContain("does not exist");
+  });
+});
+
+// -------------------------------------------------------------------------------------------------
+// rk-bun / rk-id1: REAL critical-path membership drives the apply-time cross-vendor rule, replacing
+// `isLoadBearing: () => true`. Ground truth: PRD §4 C2 (the critical-path provenance check runs
+// "continuously ... because path membership changes when edges are added") and C9 ("promotion to
+// `proved` requires verifier model family != prover model family for load-bearing claims";
+// "Non-critical-path: same-family allowed, recorded").
+//
+// The OBSERVABLE for the gate's outcome is the M3.9 report line the live run always prints:
+// `discards: cross-vendor-rejected=N`. `af` itself is never reached in these tests (afCommand is a
+// guaranteed-absent binary), so the gate's decision is the only thing being measured.
+
+/** Two verifier-ready leaves, each carrying a PROVER author seam of the CLAUDE family, so the
+ * apply-time check compares two DECODABLE identities against a claude-family verifier — i.e. PRD
+ * C9's `same-family` branch, not `identity-unparseable`. `crux` marks node 1.1 the way af's export
+ * marks a critical-path node inside a proof tree. */
+function sameFamilyAuthoredWorkspace(cruxFirst = false): (a: string, id: string) => AfParseResult<AfWorkspaceView> {
+  const author = "claude|some-prover-cli|some-model|prover-session";
+  return (_a, id) => ({
+    ok: true,
+    value: {
+      workspaceId: id, rootStatement: "P", nodeCount: 2,
+      nodes: [
+        { id: "1.1", epistemicState: "pending", workflowState: "available", crux: cruxFirst, contentHash: "a".repeat(64), verifierReady: true, author, deps: ["1.2"] },
+        { id: "1.2", epistemicState: "pending", workflowState: "available", crux: false, contentHash: "a".repeat(64), verifierReady: true, author, deps: ["1.1"] },
+      ],
+    },
+  });
+}
+
+const CLAUDE_ONLY_WORKERS: WorkersConfig = { assignments: { verifier: { hard: { backend: "claude-fake", fallbacks: [] } }, prover: { hard: { backend: "claude-fake", fallbacks: [] } } } };
+
+function acceptingBackend(name: string, modelFamily: WorkerBackend["modelFamily"]): WorkerBackend {
+  return {
+    name, modelFamily, capabilities: { sessionResume: true },
+    async createSession(_spec: SessionSpec) { return { sessionId: `session-${name}` }; },
+    async runTurn(_sessionId: string, _item: TurnItem) {
+      return { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+    },
+  };
+}
+
+/** Runs the two-node claim `lem-a` live against a single-vendor (claude-only) roster. `northStar` is
+ * what `.rk/config.json` would carry; `onPath` decides whether the north-star shard depends on
+ * `lem-a` (putting it on the critical path) or not (leaving it genuinely off). */
+async function runMembership(opts: { dirs: string[]; northStar?: string; onPath: boolean; cruxFirst?: boolean; flag?: string; verifierFamily?: WorkerBackend["modelFamily"] }) {
+  const root = tmpRoot(); opts.dirs.push(root);
+  writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+  writeShard(root, "star", opts.onPath ? { deps: "lem-a" } : {});
+  // A real (empty) workspace dir plus a deterministic af STUB: an accept that CLEARS the
+  // cross-vendor gate goes on to the af apply, so the run needs an `af verdicts apply` that answers
+  // without recording anything (exit 6, "none applied"). Every other af subcommand exits 1, which is
+  // the same "af unavailable" degradation the ABSENT-binary tests above rely on — so the projection
+  // is built with no af edges, exactly as elsewhere in this file. These tests measure the GATE's
+  // decision (the `cross-vendor-rejected` discard count), never af's.
+  mkdirSync(join(root, "proofs", "lem-a"), { recursive: true });
+  const afStub = join(root, "fake-af");
+  writeFileSync(afStub, '#!/usr/bin/env bash\nif [ "$1" = "verdicts" ]; then echo \'{"items":[]}\'; exit 6; fi\nexit 1\n');
+  chmodSync(afStub, 0o755);
+  const { out, lines } = capture();
+  const backends = opts.verifierFamily === undefined
+    ? [acceptingBackend("claude-fake", "claude")]
+    : [acceptingBackend("claude-fake", "claude"), acceptingBackend("gpt-fake", opts.verifierFamily)];
+  const workers: WorkersConfig = opts.verifierFamily === undefined
+    ? CLAUDE_ONLY_WORKERS
+    : { assignments: { verifier: { hard: { backend: "gpt-fake", fallbacks: [] } }, prover: { hard: { backend: "claude-fake", fallbacks: [] } } } };
+  const args = ["--af", "lem-a", "--root", root, "--live", "--max-turns", "2", "--max-campaign-tokens", "1000000"];
+  if (opts.flag !== undefined) args.push("--north-star", opts.flag);
+  const code = await verifyCommand(args, out, {
+    afCommand: [afStub], frCommand: ABSENT,
+    readWorkspace: sameFamilyAuthoredWorkspace(opts.cruxFirst ?? false),
+    loadWorkersConfig: async () => workers,
+    loadNorthStarId: async () => opts.northStar,
+    backends,
+    preflightAf: () => ({ ok: true }),
+  });
+  return { code, text: lines.join("\n") };
+}
+
+describe("rk verify --af --live: rk-bun — real critical-path membership feeds the cross-vendor rule", () => {
+  const dirs: string[] = [];
+  afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  test("claim ON the critical path, single-vendor roster: every accept is REFUSED same-family, and the preflight said so first", async () => {
+    const { text } = await runMembership({ dirs, northStar: "star", onPath: true });
+    expect(text).toContain("critical-path membership: LOAD-BEARING");
+    expect(text).toContain("SINGLE-VENDOR ROSTER");
+    expect(text).toContain("NO node in this claim can be promoted to proved");
+    expect(text).toContain("discards: cross-vendor-rejected=2");
+  });
+
+  // THE behavior change rk-bun buys: PRD C9's "Non-critical-path: same-family allowed, recorded"
+  // branch becomes reachable at all. Under the old hard-coded `() => true` this was 2 rejections.
+  test("claim genuinely OFF the critical path: same-family accepts are NO LONGER refused", async () => {
+    const { text } = await runMembership({ dirs, northStar: "star", onPath: false });
+    expect(text).toContain("critical-path membership: off the critical path");
+    expect(text).toContain("discards: cross-vendor-rejected=0");
+  });
+
+  test("NO north star configured (today's common case): INDETERMINATE, fails closed, and says which unknown", async () => {
+    const { text } = await runMembership({ dirs, northStar: undefined, onPath: false });
+    expect(text).toContain("critical-path membership: INDETERMINATE (north-star-unconfigured)");
+    expect(text).toContain("every node is treated as load-bearing");
+    expect(text).toContain('set "northStarId" in .rk/config.json or pass --north-star');
+    expect(text).toContain("discards: cross-vendor-rejected=2"); // fails closed, exactly as before rk-bun
+  });
+
+  test("a north star naming NO registry node: INDETERMINATE with a DISTINCT reason, still fails closed", async () => {
+    const { text } = await runMembership({ dirs, northStar: "typo-star", onPath: false });
+    expect(text).toContain("critical-path membership: INDETERMINATE (north-star-unresolved)");
+    expect(text).toContain("typo-star");
+    expect(text).not.toContain("north-star-unconfigured");
+    expect(text).toContain("discards: cross-vendor-rejected=2");
+  });
+
+  // The strictly-stricter af backstop: off the REGISTRY path, but af marked the node critical-path.
+  test("off the registry path but af-CRUX: the crux node is still treated as load-bearing and refused", async () => {
+    const { text } = await runMembership({ dirs, northStar: "star", onPath: false, cruxFirst: true });
+    expect(text).toContain("critical-path membership: off the critical path");
+    expect(text).toContain("Any af-crux node inside this claim is still treated as load-bearing");
+    expect(text).toContain("discards: cross-vendor-rejected=1"); // node 1.1 (crux) refused; 1.2 allowed
+  });
+
+  test("--north-star OVERRIDES .rk/config.json's northStarId (same precedence as rk graph --critical-path)", async () => {
+    // config says the resolvable 'star' (claim off its path); the flag names a typo → indeterminate.
+    const { text } = await runMembership({ dirs, northStar: "star", onPath: false, flag: "typo-star" });
+    expect(text).toContain("critical-path membership: INDETERMINATE (north-star-unresolved)");
+    expect(text).toContain("discards: cross-vendor-rejected=2");
+  });
+
+  test("a genuine CROSS-vendor roster on a load-bearing claim: nothing is refused, and the preflight says the rule is satisfiable", async () => {
+    const { text } = await runMembership({ dirs, northStar: "star", onPath: true, verifierFamily: "gpt" });
+    expect(text).toContain("critical-path membership: LOAD-BEARING");
+    expect(text).toContain("prover family 'claude' != verifier family 'gpt'");
+    expect(text).not.toContain("SINGLE-VENDOR ROSTER");
+    expect(text).toContain("discards: cross-vendor-rejected=0");
   });
 });

@@ -10,7 +10,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { RegistryNode } from "../graph/types";
+import type { GraphDocument, RegistryNode } from "../graph/types";
+import { crossVendorPreflightLines, describeLoadBearing, resolveLoadBearing } from "../drive/cross-vendor";
 import { readAfWorkspace, applyVerdictFile, preflightAfWorkspace, type AfParseResult, type AfWorkspaceView } from "../drive/driver-af";
 import { runVerifyDriver, type DriverDeps, type DispatchedTurn } from "../drive/driver-run";
 import { BackendRegistry, type WorkersConfig } from "../drive/backend-registry";
@@ -62,6 +63,12 @@ class SafetyValveAbort extends Error {
 export interface LiveRunOptions {
   maxTurns: number;
   maxNodes: number;
+  /** rk-bun: the projection src/cli/verify.ts already built and validated as structurally complete
+   * — critical-path membership is computed over the SAME document, never a second projection. */
+  doc: GraphDocument;
+  /** rk-bun: the raw `--north-star` flag value (absent → `.rk/config.json`'s `northStarId`). No
+   * default is ever invented; an unresolvable north star fails CLOSED and says so at preflight. */
+  northStarId?: string;
   /** rk-s9t: the raw `--max-campaign-tokens` flag value (undefined = flag absent). A `--live` run
    * REFUSES to start unless this parses to a positive integer (src/cli/verify-live-budget.ts) --
    * the fail-closed spend guard the M3 milestone review named (a real-token run with no ceiling is
@@ -72,6 +79,12 @@ export interface LiveRunOptions {
 
 async function defaultLoadWorkersConfig(root: string): Promise<WorkersConfig | undefined> {
   return (await loadGateConfig(root)).workers;
+}
+
+/** rk-bun: the same `.rk/config.json` field `rk graph --critical-path` reads (src/cli/graph.ts's
+ * `resolveNorthStar`). Absent is a legitimate state, reported at preflight and failed closed. */
+async function defaultLoadNorthStarId(root: string): Promise<string | undefined> {
+  return (await loadGateConfig(root)).northStarId;
 }
 
 /** `rk verify --af <id> --live`: drives `node`'s workspace to convergence with REAL backend calls
@@ -156,9 +169,20 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     return 1;
   }
 
+  // rk-bun (Tier A): REAL critical-path membership, replacing the hard-coded `isLoadBearing: () =>
+  // true`. Uses the same `computeCriticalPath` query src/drive/batch-eligibility.ts screens with, so
+  // the two enforcement points cannot disagree about what "on the path" means. An unresolvable north
+  // star (today's common case) fails CLOSED and is printed as INDETERMINATE, never silently assumed.
+  const northStarId = opts.northStarId ?? (await (deps.loadNorthStarId ?? defaultLoadNorthStarId)(root));
+  const membership = resolveLoadBearing(opts.doc, northStarId, node.id);
+
   out.log(`rk verify --af ${node.id} --live: preflight`);
   out.log(`  backend resolved: verifier/hard -> '${created.dispatcher.backendName}' (model '${model}', family '${verifierFamily.family}')`);
   out.log(`  backend resolved: prover/hard -> '${proverCreated.dispatcher.backendName}' (model '${proverModel}', family '${proverFamily.family}')`);
+  out.log(`  ${describeLoadBearing(membership)}`);
+  // rk-id1: the single-vendor consequence, stated BEFORE any spend. Weakens nothing — it is the tool
+  // saying what its own rule already implies for this roster.
+  for (const line of crossVendorPreflightLines(proverFamily.family, verifierFamily.family, membership.loadBearing)) out.log(`  ${line}`);
   out.log(`  session plan: ONE shared verifier session for claim '${claimId}' + ONE prover session '${claimId}-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)`);
   out.log(`  workspace: ${node.workspace} (${wsResult.value.nodeCount} node(s) total)`);
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);
@@ -234,11 +258,24 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     return readBalloonCounterFromFields(fm.fields);
   })();
 
+  // rk-bun: af's OWN per-node `crux` flag (../vibefeld/docs/export-graph-v1.md: "True if the node is
+  // marked critical-path") — the ADDITIONAL, strictly-stricter filter over the claim-level
+  // membership above, never a way to relax it. Refreshed on every `queryWorkspace` (the driver
+  // re-queries at the top of each round, before any verify dispatch), so a crux node the prover adds
+  // mid-run is seen in the same round. Accumulating and never cleared is the fail-closed direction:
+  // a node ever reported crux stays load-bearing even if a later export omits the flag.
+  const cruxAfNodes = new Set<string>();
+  const noteCrux = (r: AfParseResult<AfWorkspaceView>): AfParseResult<AfWorkspaceView> => {
+    if (r.ok) for (const n of r.value.nodes) if (n.crux) cruxAfNodes.add(n.id);
+    return r;
+  };
+  noteCrux(wsResult);
+
   const driverDeps: DriverDeps = {
     contractId: node.id,
     claimId,
     identity,
-    queryWorkspace: () => readWorkspace(abs, node.workspace!),
+    queryWorkspace: () => noteCrux(readWorkspace(abs, node.workspace!)),
     // M3 blocker 1: re-read af's authoritative node hashes immediately before an apply — a real
     // fresh `af export`, so a content edit during the model turn cannot validate unreviewed bytes.
     // A failed re-read yields an empty map, discarding every pending verdict (fail closed).
@@ -251,12 +288,16 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     recordProof,
     dispatchClassification,
     applyVerdicts: (file) => applyVerdictFile(abs, file, deps.afCommand),
-    // Merge reconciliation (M3.8 cross-vendor rule + M3.5 live wiring): DriverDeps.isLoadBearing
-    // is required (PRD C9, apply-time cross-vendor half). The live CLI does not yet compute a
-    // critical path here, so use M3.8's documented strict default for a caller with no graph/
-    // north-star available: () => true — treat every node as load-bearing, enforcing cross-vendor
-    // on all accepts. (`() => false` would opt out of the rule, a validity regression.)
-    isLoadBearing: () => true,
+    // rk-bun: REAL membership, replacing the `() => true` merge reconciliation e69efd9 left behind.
+    // Two inputs, ORed so the answer can only get STRICTER than the claim-level determination:
+    // (1) `membership.loadBearing` — is THIS registry claim on the path to the configured north star
+    //     (src/drive/cross-vendor.ts's `resolveLoadBearing`); every indeterminate answer is `true`,
+    //     printed as INDETERMINATE at preflight; (2) `cruxAfNodes` — af's own per-node marking.
+    // The permissive branch is reachable ONLY when: a north star is configured AND resolves, the
+    // claim is in the graph, it is reachable from the north star by no dep/route path at all, and af
+    // did not mark this node crux. That is exactly PRD C9's "Non-critical-path: same-family allowed,
+    // recorded" case, and nothing weaker.
+    isLoadBearing: (afNodeId: string) => membership.loadBearing || cruxAfNodes.has(afNodeId),
     readShard: () => {
       try {
         return readFileSync(join(root, node.path), "utf8");

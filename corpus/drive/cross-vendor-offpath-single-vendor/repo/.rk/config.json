@@ -1,0 +1,9 @@
+{
+  "northStarId": "star",
+  "workers": {
+    "assignments": {
+      "prover": { "hard": { "backend": "corpus-fake", "fallbacks": [] } },
+      "verifier": { "hard": { "backend": "corpus-fake", "fallbacks": [] } }
+    }
+  }
+}

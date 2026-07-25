@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Deterministic af stub for corpus/drive/cross-vendor-offpath-single-vendor. Two behaviours, both
+# chosen so this fixture measures the CROSS-VENDOR GATE's decision and nothing else:
+#   `verdicts apply ...` -> a well-formed, EMPTY report at exit 6 ("none applied"). An accept that
+#      CLEARS the gate reaches this; the stub records nothing, so no af state is ever mutated and the
+#      fixture is re-runnable. An accept that the gate REFUSES never reaches this at all.
+#   anything else (notably `export --graph json`) -> exit 1, the same "af unavailable" degradation
+#      the rest of rk's CLI tests rely on, so the projection carries no af edges.
+if [ "$1" = "verdicts" ]; then
+  echo '{"items":[]}'
+  exit 6
+fi
+exit 1

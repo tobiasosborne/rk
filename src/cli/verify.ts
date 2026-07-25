@@ -48,6 +48,11 @@ export interface VerifyCommandDeps {
    * reader, defaulting to the real `loadGateConfig` fs read — same injectable-edge pattern as
    * `readWorkspace` above, so a live-dispatch test never needs a real config file on disk. */
   loadWorkersConfig?: (root: string) => Promise<import("../drive/backend-registry").WorkersConfig | undefined>;
+  /** rk-bun: injectable `.rk/config.json` `northStarId` reader for the `--live` path (default: the
+   * real `loadGateConfig` fs read) — same injectable-edge pattern as `loadWorkersConfig`, so a test
+   * can drive both the configured and the unconfigured north-star branch without a config file. A
+   * `--north-star` flag outranks whatever this returns. */
+  loadNorthStarId?: (root: string) => Promise<string | undefined>;
   /** M3.5-prep: injectable `WorkerBackend` set for the `--live` path's registry, defaulting to the
    * real `[ClaudeBackend, CodexBackend]` pair — same injectable-edge discipline as every other
    * field here, so a live-dispatch test drives a FAKE backend end-to-end and never a real
@@ -121,7 +126,11 @@ export async function verifyCommand(args: string[], out: Out, deps: VerifyComman
   const { rest, root } = extractRoot(args);
   const { rest: r0, value: baselinePath } = extractFlag(rest, "--baseline");
   const { rest: r1, value: afId } = extractFlag(r0, "--af");
-  const { rest: r2 } = extractFlag(r1, "--north-star");
+  // rk-bun: `--north-star` was extracted and DISCARDED here (parsed only so it would not be
+  // mistaken for a positional). It is now the explicit override for the critical-path membership
+  // the `--live` path computes, outranking `.rk/config.json`'s `northStarId` — the same precedence
+  // `rk graph --critical-path` uses (src/cli/graph.ts's `resolveNorthStar`).
+  const { rest: r2, value: northStarFlag } = extractFlag(r1, "--north-star");
   const { rest: r3, value: maxTurnsRaw } = extractFlag(r2, "--max-turns");
   const { rest: r4, value: maxNodesRaw } = extractFlag(r3, "--max-nodes");
   const { rest: r5, value: model } = extractFlag(r4, "--model");
@@ -164,5 +173,9 @@ export async function verifyCommand(args: string[], out: Out, deps: VerifyComman
     maxNodes: parsePositiveInt(maxNodesRaw, DEFAULT_MAX_NODES),
     maxCampaignTokensRaw,
     model,
+    // rk-bun: the SAME projected document this command already validated as structurally complete —
+    // critical-path membership is never computed over a second, independently-built projection.
+    doc,
+    northStarId: northStarFlag,
   });
 }

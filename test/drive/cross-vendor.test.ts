@@ -121,3 +121,127 @@ describe("crossVendorRejectionMessage", () => {
     expect(() => crossVendorRejectionMessage("1.2", ok)).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// rk-bun: `resolveLoadBearing` — the INPUT resolver for `decideCrossVendor`'s third argument.
+// Ground truth: PRD C2 ("every node on the path to the north-star contract"; the check runs
+// "continuously ... because path membership changes when edges are added, not only at verdict-apply
+// time") and PRD C9's cross-vendor paragraph ("Non-critical-path: same-family allowed, recorded").
+// Before this bead the live driver hard-coded `isLoadBearing: () => true`, so real path membership
+// was never computed at all.
+import { LOAD_BEARING_DETERMINACY, describeLoadBearing, resolveLoadBearing, type LoadBearingReason } from "../../src/drive/cross-vendor";
+import { GRAPH_SCHEMA_VERSION, type GraphDocument, type RegistryNode } from "../../src/graph/types";
+
+function regNode(id: string, overrides: Partial<RegistryNode> = {}): RegistryNode {
+  return { id, kind: "lemma", path: `argument/${id}.md`, contract: `${id} holds.`, af: "none", deps: [], routes: [], defs: [], balloons: { count: 0, classifications: [] }, ...overrides };
+}
+function doc(nodes: RegistryNode[]): GraphDocument {
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+}
+
+// star --dep--> mid --dep--> deep ; star --route--> alt-a | alt-b ; island is reachable from nothing.
+const CAMPAIGN = doc([
+  regNode("star", { deps: ["mid"], routes: [["alt-a"], ["alt-b"]] }),
+  regNode("mid", { deps: ["deep"] }),
+  regNode("deep"),
+  regNode("alt-a"),
+  regNode("alt-b"),
+  regNode("island"),
+]);
+
+describe("resolveLoadBearing — DETERMINED membership (a north star that resolves)", () => {
+  test("the north star itself is on the path: load-bearing, determined", () => {
+    const r = resolveLoadBearing(CAMPAIGN, "star", "star");
+    expect(r).toMatchObject({ loadBearing: true, determinacy: "determined", reason: "on-critical-path" });
+  });
+
+  test("a transitive AND-dep is on the path: load-bearing, determined", () => {
+    expect(resolveLoadBearing(CAMPAIGN, "star", "deep")).toMatchObject({ loadBearing: true, reason: "on-critical-path" });
+  });
+
+  test("an OR-route member is on the path even though its route is not the satisfied one (query-path.ts's over-inclusive reading)", () => {
+    expect(resolveLoadBearing(CAMPAIGN, "star", "alt-b")).toMatchObject({ loadBearing: true, reason: "on-critical-path" });
+  });
+
+  // THE case rk-bun exists to make expressible: a node GENUINELY off the path. This is the only
+  // reason in the whole enum that ever yields loadBearing:false.
+  test("a node reachable from the north star by no dep/route path at all: NOT load-bearing, DETERMINED", () => {
+    const r = resolveLoadBearing(CAMPAIGN, "star", "island");
+    expect(r).toMatchObject({ loadBearing: false, determinacy: "determined", reason: "off-critical-path" });
+    expect(r.detail).toContain("island");
+    expect(r.detail).toContain("star");
+  });
+});
+
+describe("resolveLoadBearing — INDETERMINATE membership always fails CLOSED (load-bearing)", () => {
+  test("no north star configured at all: load-bearing, INDETERMINATE, and the detail SAYS which kind of unknown", () => {
+    const r = resolveLoadBearing(CAMPAIGN, undefined, "island");
+    expect(r).toMatchObject({ loadBearing: true, determinacy: "indeterminate", reason: "north-star-unconfigured" });
+    expect(r.detail).toContain("northStarId");
+    expect(r.detail).toContain("--north-star");
+  });
+
+  test("a blank/whitespace north star is the same as none (never treated as an id)", () => {
+    expect(resolveLoadBearing(CAMPAIGN, "   ", "island").reason).toBe("north-star-unconfigured");
+    expect(resolveLoadBearing(CAMPAIGN, "", "island").reason).toBe("north-star-unconfigured");
+  });
+
+  test("a configured north star naming NO registry node: load-bearing, INDETERMINATE, distinct reason from 'unconfigured'", () => {
+    const r = resolveLoadBearing(CAMPAIGN, "typo-star", "island");
+    expect(r).toMatchObject({ loadBearing: true, determinacy: "indeterminate", reason: "north-star-unresolved" });
+    expect(r.detail).toContain("typo-star");
+    expect(r.reason).not.toBe("north-star-unconfigured");
+  });
+
+  test("the CLAIM itself names no registry node: load-bearing, INDETERMINATE (never silently 'off the path')", () => {
+    const r = resolveLoadBearing(CAMPAIGN, "star", "ghost");
+    expect(r).toMatchObject({ loadBearing: true, determinacy: "indeterminate", reason: "claim-not-in-graph" });
+    expect(r.reason).not.toBe("off-critical-path");
+  });
+
+  test("an EMPTY graph with a north star: unresolved, not 'off the path' (the linker-40 posture)", () => {
+    expect(resolveLoadBearing(doc([]), "star", "star").reason).toBe("north-star-unresolved");
+    expect(resolveLoadBearing(doc([]), "star", "star").loadBearing).toBe(true);
+  });
+});
+
+describe("resolveLoadBearing — the fail-closed invariants, stated as properties", () => {
+  test("coverage: every reason in the enum has a determinacy (checked N/N, no silent skip)", () => {
+    const reasons = Object.keys(LOAD_BEARING_DETERMINACY) as LoadBearingReason[];
+    expect(reasons.length).toBe(5);
+    for (const r of reasons) expect(["determined", "indeterminate"]).toContain(LOAD_BEARING_DETERMINACY[r]);
+  });
+
+  test("INDETERMINATE is never the permissive answer: every indeterminate reason is load-bearing", () => {
+    const indeterminate = (Object.keys(LOAD_BEARING_DETERMINACY) as LoadBearingReason[]).filter((r) => LOAD_BEARING_DETERMINACY[r] === "indeterminate");
+    expect(indeterminate.sort()).toEqual(["claim-not-in-graph", "north-star-unconfigured", "north-star-unresolved"]);
+    // and every resolver path that reports one actually carries loadBearing:true
+    expect(resolveLoadBearing(CAMPAIGN, undefined, "island").loadBearing).toBe(true);
+    expect(resolveLoadBearing(CAMPAIGN, "typo-star", "island").loadBearing).toBe(true);
+    expect(resolveLoadBearing(CAMPAIGN, "star", "ghost").loadBearing).toBe(true);
+  });
+
+  test("`off-critical-path` is the ONLY reason that ever yields loadBearing:false", () => {
+    const inputs: [string | undefined, string][] = [[undefined, "island"], ["typo-star", "island"], ["star", "ghost"], ["star", "island"], ["star", "deep"], ["star", "star"]];
+    for (const [ns, claim] of inputs) {
+      const r = resolveLoadBearing(CAMPAIGN, ns, claim);
+      if (!r.loadBearing) expect(r.reason).toBe("off-critical-path");
+      if (r.determinacy === "indeterminate") expect(r.loadBearing).toBe(true);
+    }
+  });
+
+  test("describeLoadBearing distinguishes all five reasons in its text (an unknown is never worded as a known)", () => {
+    const texts = new Set([
+      describeLoadBearing(resolveLoadBearing(CAMPAIGN, "star", "star")),
+      describeLoadBearing(resolveLoadBearing(CAMPAIGN, "star", "island")),
+      describeLoadBearing(resolveLoadBearing(CAMPAIGN, undefined, "island")),
+      describeLoadBearing(resolveLoadBearing(CAMPAIGN, "typo-star", "island")),
+      describeLoadBearing(resolveLoadBearing(CAMPAIGN, "star", "ghost")),
+    ]);
+    expect(texts.size).toBe(5);
+    // the two DETERMINED answers say so; the three unknowns say they are unknown and fail closed.
+    expect(describeLoadBearing(resolveLoadBearing(CAMPAIGN, "star", "island"))).toContain("off the critical path");
+    expect(describeLoadBearing(resolveLoadBearing(CAMPAIGN, undefined, "island"))).toContain("INDETERMINATE");
+    expect(describeLoadBearing(resolveLoadBearing(CAMPAIGN, undefined, "island"))).toContain("every node is treated as load-bearing");
+  });
+});
