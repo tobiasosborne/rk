@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionSpec, TurnItem, WorkerBackend } from "./backend-types";
 import { defaultSpawn, type SpawnFn } from "./backend-spawn";
+import { CODEX_ACCOUNT_DEFAULT_MODEL } from "./driver-live-model";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 
 const CODEX_BIN = "codex";
@@ -139,6 +140,11 @@ export class CodexBackend implements WorkerBackend {
     const dir = this.tmpDirFactory();
     mkdirSync(dir, { recursive: true });
     const outFile = join(dir, "last-message.txt");
+    // rk-le9: the sentinel CODEX_ACCOUNT_DEFAULT_MODEL means "no explicit model was configured" --
+    // `-m` is OMITTED entirely (never passed with the sentinel string itself as a literal model
+    // id), so `codex exec` falls through to whatever model its own config/auth mode already
+    // resolves. A ChatGPT-account codex login 400-rejects an explicit `-m gpt-5*-codex`; omitting
+    // the flag is the only way such a login can ever be reached by rk at all.
     const args = [
       "exec",
       prompt,
@@ -148,7 +154,7 @@ export class CodexBackend implements WorkerBackend {
       "read-only",
       "-o",
       outFile,
-      ...(session.model ? ["-m", session.model] : []),
+      ...(session.model && session.model !== CODEX_ACCOUNT_DEFAULT_MODEL ? ["-m", session.model] : []),
     ];
     try {
       // stdin MUST be closed (`input: ""`): `codex exec` otherwise waits on interactive stdin even

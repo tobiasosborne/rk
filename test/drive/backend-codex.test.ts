@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { CodexBackend } from "../../src/drive/backend-codex";
 import type { SpawnFn } from "../../src/drive/backend-spawn";
 import type { SessionSpec, TurnItem } from "../../src/drive/backend-types";
+import { CODEX_ACCOUNT_DEFAULT_MODEL } from "../../src/drive/driver-live-model";
 
 function spec(overrides: Partial<SessionSpec> = {}): SessionSpec {
   return { role: "verifier", tier: "l5", claimId: "claim-1", model: "gpt-5.6-sol", sharedContext: "shared corpus text", timeoutMs: 5000, ...overrides };
@@ -120,6 +121,29 @@ describe("CodexBackend.runTurn", () => {
     rmSync(dir, { recursive: true, force: true });
     expect(seenArgs).toContain("-m");
     expect(seenArgs).toContain("gpt-5.6-sol");
+  });
+
+  // rk-le9: a ChatGPT-account codex login 400-rejects explicit `-m gpt-5*-codex` ids -- the OLD
+  // hard-coded DEFAULT_MODEL_BY_BACKEND.codex value that used to flow straight into `-m` here made
+  // `rk verify --live` unusable for anyone whose codex auth differs from the machine that default
+  // was picked on. Fix: the sentinel CODEX_ACCOUNT_DEFAULT_MODEL (src/drive/driver-live-model.ts)
+  // means "no explicit model was configured" -- this adapter must OMIT `-m` entirely so `codex exec`
+  // falls through to whatever model its OWN config/auth mode already resolves, never a guessed id.
+  test("rk-le9: the CODEX_ACCOUNT_DEFAULT_MODEL sentinel omits -m entirely, never passes it as a literal model id", async () => {
+    let seenArgs: string[] = [];
+    const backend = new CodexBackend({
+      tmpDirFactory: freshTmpDir(),
+      spawn: async (_bin, args) => {
+        seenArgs = args;
+        writeFileSync(outFileArg(args), "OK");
+        return { exitCode: 0, stdout: turnCompletedLine(), stderr: "", timedOut: false };
+      },
+    });
+    const { sessionId } = await backend.createSession(spec({ model: CODEX_ACCOUNT_DEFAULT_MODEL }));
+    await backend.runTurn(sessionId, item());
+    rmSync(dir, { recursive: true, force: true });
+    expect(seenArgs).not.toContain("-m");
+    expect(seenArgs).not.toContain(CODEX_ACCOUNT_DEFAULT_MODEL);
   });
 
   test("usage is mapped from codex's turn.completed event: cached_input_tokens -> cache_read, output+reasoning -> output, cache_creation always 0", async () => {
