@@ -151,10 +151,17 @@ export function classifyAll(manifest: CompatManifest, outcomes: Record<BinaryNam
   return { binaries, ok: binaries.every((v) => v.verdict === "ok") };
 }
 
+// Sources a stranger (no sibling checkouts on this machine) can actually act on — clone URLs,
+// not relative paths (`../vibefeld`, `../knowledge-frontier`) that only resolve on the original
+// developer's disk. Names verified against the real remotes, not assumed: af's repo is
+// `vibefeld` (github.com/tobiasosborne/vibefeld); fr's is `frontier`
+// (github.com/tobiasosborne/frontier) — NOT "knowledge-frontier", a name that appears nowhere in
+// that repo's own remote and that a stranger following the old hint could not have found. See
+// README.md's Install section for the same URLs plus version requirements.
 const REBUILD_HINT: Record<BinaryName, string> = {
-  af: "rebuild ../vibefeld (./scripts/build.sh install — stamps a real version) and reinstall",
-  fr: "rebuild ../knowledge-frontier (bun run install:global — stamps a real version) and reinstall",
-  bd: "reinstall bd from its release channel",
+  af: "clone https://github.com/tobiasosborne/vibefeld and run ./scripts/build.sh install (stamps a real version), then reinstall",
+  fr: "clone https://github.com/tobiasosborne/frontier and run 'bun install && bun run install:global' (stamps a real version), then reinstall",
+  bd: "install via 'brew install beads', 'npm install -g @beads/bd', or see https://github.com/steveyegge/beads#installation",
 };
 
 /** Renders one binary's verdict as a self-teaching output line: what's wrong (if anything) and

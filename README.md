@@ -45,20 +45,60 @@ re-proved from scratch, verdict parity with the original validations, both
 worker pairings). The SC4 cost baseline (M3.5) is 4/6 runs banked; see
 `HANDOFF.md` for exact current state and `docs/worklog.md` for the narrative.
 
-## Build and test
+## Install
 
-Requires [Bun](https://bun.sh). Zero runtime dependencies (`package.json`
-dependencies is `{}` by law).
+Requires [Bun](https://bun.sh) 1.3+ to build. Zero runtime dependencies
+(`package.json` `dependencies` is `{}` by law; `dagre` is a *build-time-only*
+devDependency, vendored into the compiled binary).
+
+```
+git clone https://github.com/tobiasosborne/rk.git && cd rk
+make install              # bun install && bun run build, then copies dist/rk onto PATH
+rk doctor                 # check which of af/fr/bd are present and what each one gates
+```
+
+`make install` installs **rk only**. It picks `/usr/local/bin` if writable, else
+`~/.local/bin` (override with `RK_INSTALL_DIR=<dir> make install`; see
+`scripts/install.sh`). If neither is on your `PATH`, the script says so.
+
+Without `make`, the equivalent by hand is:
+
+```
+bun install && bun run build     # -> dist/rk
+cp dist/rk ~/.local/bin/rk       # or anywhere on PATH
+```
+
+### The three sibling binaries
+
+rk orchestrates a campaign but does not implement proof verification, the
+explore/exploit controller, or issue tracking itself — those are separate
+tools, each its own repo. `rk init`'s stamped hooks and `rk verify` expect all
+three; **none of them is required to build rk or run `rk init` / `rk check` /
+`rk render`** on their own, and `rk init` degrades gracefully (warns and skips)
+when `fr` or `bd` is missing. What's missing costs you:
+
+| binary | what it's for | repo | required for |
+|---|---|---|---|
+| **af** (min 0.1.6) | the proof-ledger / validity kernel — adversarial prove/verify over a proof tree | [github.com/tobiasosborne/vibefeld](https://github.com/tobiasosborne/vibefeld) — `./scripts/build.sh install` | `rk verify` (the hard-tier driver); without it, `rk verify --af <id>` reports "declares no workspace: — nothing to verify" and the `rk graph` critical-path/taint views see no proof state |
+| **fr** (min 0.2.1) | the explore/exploit controller — a stop-loss on tunnel-visioning subagents | [github.com/tobiasosborne/frontier](https://github.com/tobiasosborne/frontier) — `bun install && bun run install:global` | the stamped `.claude/settings.json` hooks (`fr board`, `fr turn-begin`, `fr check` fire on every SessionStart/prompt/Stop); without it every turn of an orchestrator session hits a "command not found" from the hook, though `rk init` itself only warns and continues |
+| **bd** (min 1.0.0) | issue tracking (beads) — cross-session task state | [github.com/steveyegge/beads](https://github.com/steveyegge/beads) — `brew install beads` or `npm install -g @beads/bd` | the stamped `bd prime` hooks (SessionStart, PreCompact); same "command not found" cost as `fr` if absent |
+
+`rk doctor` probes all three against `rk.compat.json`'s pinned `{min, tested}`
+versions and tells you exactly which is missing, stale, or untested — run it
+right after `make install` to see your real starting state; do not assume the
+table above is still current.
+
+For real (non-`--dry-run`) `rk verify` dispatch, the `claude` and/or `codex`
+CLIs must also be on PATH (cross-vendor: prover and verifier need different
+model families).
+
+## Build and test
 
 ```
 bun test                 # unit + property tests
 bun run selftest         # red corpus + purity grep + compat checks
-bun build --compile src/cli.ts --outfile dist/rk
+bun run build             # -> dist/rk (same as `bun build --compile src/cli.ts --outfile dist/rk`)
 ```
-
-The live driver additionally expects the `af` proof-ledger binary (from the
-vibefeld repo) and, for real dispatch, the `claude` and/or `codex` CLIs on
-PATH.
 
 ## Layout
 

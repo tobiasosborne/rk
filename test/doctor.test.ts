@@ -205,7 +205,10 @@ describe("describeVerdict — self-teaching output", () => {
     const v = classifyBinary("fr", entry, { found: true, raw: null });
     const line = describeVerdict(v);
     expect(line).toContain("fr");
-    expect(line).toContain("knowledge-frontier");
+    // The real remote is `frontier` (github.com/tobiasosborne/frontier), not the guessed
+    // "knowledge-frontier" — a stranger following this hint must land on a repo that exists.
+    expect(line).toContain("github.com/tobiasosborne/frontier");
+    expect(line).not.toContain("knowledge-frontier");
   });
 
   test(
