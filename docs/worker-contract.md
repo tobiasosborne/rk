@@ -350,8 +350,26 @@ here cryptographically binds a backend process to its claimed identity; the trus
 the driver's own process discipline and the role-isolation enforcement in section (a).
 
 **`modelFamily` is a closed, driver-registry vocabulary of REAL vendor lineages: `claude` |
-`gpt` | `gemini` — as of today** (`src/drive/vocab.ts`'s `MODEL_FAMILIES`). Review blocker 5's
-two removals, both deliberate:
+`gpt` | `gemini` — as of today** (`src/drive/vocab.ts`'s `MODEL_FAMILIES`).
+
+**Validated at run start, fails closed (rk-9zd, 2026-07-25).** A backend's `modelFamily` is read
+off the RESOLVED BACKEND INSTANCE and checked against `MODEL_FAMILIES` before the af preflight and
+before any session is created — an absent, non-string or out-of-vocabulary family aborts the run
+with exit 1 and zero spend. It is never inferred from the backend's NAME: the previous derivation
+(`backendName === "codex" ? "gpt" : "claude"`) silently mapped every unrecognized name to the
+`claude` family, which is fail-OPEN in a function feeding the cross-vendor inequality. **A third
+backend must therefore DECLARE its family**; the contract will not guess one for it. No model
+string is a parameter of the resolution, so a `--model` flag or a per-assignment `model` override
+cannot reach it.
+
+**Two vendors are a precondition of promotion, not a surprise (rk-id1).** PRD C9 requires the
+verifier's family to differ from the prover's on every load-bearing claim. A roster whose prover
+and verifier resolve to the SAME family can still run — prover turns and challenges do real work —
+but no node on the critical path will ever be promoted to `proved`. The driver states this at
+preflight, before any spend, naming the config key to change. Configure a second vendor, or work
+the claim at the l5 soft tier.
+
+Review blocker 5's two removals, both deliberate:
 - **`codex` is removed.** It is a backend/product name, not a model lineage — codex fronts
   OpenAI models, whose family is `gpt`. The pre-review enum conflated the two, so "the same
   OpenAI model can be recorded as family `codex` in one verdict and `gpt` in another" (the

@@ -651,6 +651,19 @@ is stale against the code and must not be treated as ground truth).
       agree on a decomposed root instead of the linker re-flagging a node the apply gate just
       cleared. A node never decomposed (every AISM ledger predates the field) has no `proof_author`
       and falls back to `author` — identical legacy behavior, all 43 linker fixtures unchanged.
+    - **Both halves now derive membership from the same query** (rk-bun, 2026-07-25). Until now the
+      apply-time half in the live driver did not compute path membership at all: `isLoadBearing`
+      was hard-coded `true`. That was the SAFE direction (everything treated as load-bearing ⇒
+      cross-vendor always required), never a false green, but it meant PRD C9's "non-critical-path:
+      same-family allowed, recorded" branch was unreachable, and a single-vendor researcher could
+      promote nothing anywhere. The apply-time half now resolves membership through
+      `computeCriticalPath` — the SAME query this continuous check and `src/drive/batch-eligibility.ts`
+      use — and reports an explicit `determinacy` per PRD C9. **Every indeterminate answer
+      (`north-star-unconfigured`, `north-star-unresolved`, `claim-not-in-graph`) is load-bearing**;
+      `off-critical-path` is the only reason that ever yields not-load-bearing, and af's own
+      per-node `crux` flag is a strictly-stricter backstop on top, refreshed every round. So the
+      permissive branch requires all of: a north star configured, resolving to a real node, the
+      claim present in the graph, no dep/route path reaching it, and af not marking it crux.
     - **Cutover semantics** (decided here, normative; HARDENED by the 2026-07-19 M3 review,
       blocker 5a/5b): the prover-of-record identity (above) and `validatedBy` are run through
       `src/drive/identity.ts`'s
