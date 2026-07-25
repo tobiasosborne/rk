@@ -180,6 +180,37 @@ describe("freshnessGate: render-site-v1 (edge-supplied bytes, M2 boundary review
     expect(result.findings[0]!.message).toContain("structurally incomplete build (2 registrySkipped)");
   });
 
+  // rk-xbsx (2026-07-25): B2 routed `rk check`'s regeneration through `renderSiteFromRepo`, which
+  // reads af/fr through live subprocesses. When one of those readers can only reach a
+  // REDUCED-FIDELITY fallback, the "expected" bytes are a function of the verifier's environment
+  // as much as of the repo — so a byte difference is no longer evidence of artifact drift. It is
+  // still never fresh (fail closed, ERROR either way), but it must not be reported as STALE.
+  test("ok:true + degraded + matching bytes -> still clean (a degraded read that agrees is no defect)", () => {
+    const bytes = "<html>fresh render</html>";
+    const snapshot = repoWithSite(bytes);
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: true, bytes, degraded: "fr: log fallback (reduced fidelity)" }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings).toEqual([]);
+  });
+
+  test("ok:true + degraded + MISMATCHED bytes -> ERROR, but explicitly NOT a STALE verdict", () => {
+    const snapshot = repoWithSite("<html>hand-edited nonsense</html>");
+    const externalRegen = new Map<string, ExternalRegenResult>([
+      ["build/site/index.html", { ok: true, bytes: "<html>fresh render</html>", degraded: "fr: log fallback (reduced fidelity)" }],
+    ]);
+    const result = runFreshnessGate(snapshot, DEFAULT_GATE_CONFIG, externalRegen);
+    expect(result.findings.length).toBe(1);
+    const f = result.findings[0]!;
+    expect(f.severity).toBe("ERROR"); // fail closed: never reported as fresh
+    expect(f.path).toBe("build/site/index.html");
+    expect(f.message).toContain("NOT attributable to artifact drift");
+    expect(f.message).toContain("fr: log fallback (reduced fidelity)");
+    // the whole point: the drift verdict is withheld, not renamed
+    expect(f.message).not.toContain("is STALE");
+  });
+
   test("declared but missing from disk, even with ok:true supplied bytes -> the ordinary declared-but-missing ERROR", () => {
     const snapshot = repoWithSite(undefined);
     const externalRegen = new Map<string, ExternalRegenResult>([

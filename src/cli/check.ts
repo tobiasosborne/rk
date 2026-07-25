@@ -18,164 +18,37 @@
 // a repo-hygiene check over rk's OWN source tree, orthogonal to "does rk's gate logic pass its
 // own red-test corpus" (the thing a consumer of the `rk` binary can actually run against their
 // own checkout of rk, without rk's dev-only `scripts/` directory).
+//
+// rk-xbsx (2026-07-25): Gate 7's `render-site-v1` edge — the af/fr/bd-reading regeneration that
+// produces the gate's "expected bytes", plus `augmentSnapshotForRenderSite` — now lives in the
+// sibling shard src/cli/check-regen.ts (this file was 390 lines, past CLAUDE.md Rule 4's 280 cap,
+// before the reproducibility probe was added). This file keeps only the composition loop.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadSnapshot } from "../store/snapshot-load";
 import { loadGateConfig } from "../store/config-load";
-import { buildGraphDocument } from "../store/build-graph";
-import { renderSiteFromRepo } from "./render";
 import { GATES } from "../gates/index";
 import { formatFinding } from "../gates/framework";
 import type { Gate, GateResult } from "../gates/framework";
 import type { RepoSnapshot } from "../gates/snapshot";
 import type { GateConfig } from "../gates/config";
 import { applyPhase } from "../gates/phase";
+import { declaredGeneratorPaths, RENDER_SITE_GENERATOR, runFreshnessGate } from "../gates/freshness";
 import {
-  declaredGeneratorPaths,
-  RENDER_SITE_GENERATOR,
-  runFreshnessGate,
-  type ExternalRegenResult,
-} from "../gates/freshness";
+  augmentSnapshotForRenderSite,
+  prepareRenderSiteExternalRegen,
+  type CheckCommandDeps,
+} from "./check-regen";
 import { runAllFixtures } from "../corpus/run";
 import { formatCorpusRunReport } from "../corpus/report";
 import { discoverAllFixtures, EXPECTED_FIXTURE_COUNT, GATE_DIRS } from "../corpus/discovery";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
 
-/** Injectable af/fr command overrides for `rk check`'s render-site-v1 edge-regeneration path
- * (`prepareRenderSiteExternalRegen` below) — same seam `src/cli/render.ts`'s `RenderCommandDeps`
- * already uses, so a test can force the af/fr-absent fallback deterministically without touching
- * `$PATH`. */
-export interface CheckCommandDeps {
-  afCommand?: readonly string[];
-  frCommand?: readonly string[];
-}
-
-/** M2 boundary review blocker #3: Gate 7's `render-site-v1` generator is recognized but stays
- * unverifiable by the PURE gate itself (src/gates/freshness.ts's header explains why) — this is
- * the edge that actually regenerates the site and hands the gate the resulting bytes, or a loud,
- * structured failure reason, via `runFreshnessGate`'s `externalRegen` parameter. Never throws:
- * every failure mode (a structurally incomplete build, an unexpected exception from
- * `buildGraphDocument`/`renderSite`) becomes an `ExternalRegenResult` of `{ok: false, reason}` for
- * every affected path — `runFreshnessGate` then turns that into a loud per-path ERROR, never a
- * silent pass or skip. Only invoked when the manifest actually declares at least one
- * `render-site-v1` path (`paths.length === 0` short-circuits before touching af/fr/fs at all). */
-function prepareRenderSiteExternalRegen(
-  root: string,
-  paths: readonly string[],
-  config: GateConfig,
-  deps: CheckCommandDeps,
-): ReadonlyMap<string, ExternalRegenResult> {
-  const map = new Map<string, ExternalRegenResult>();
-  if (paths.length === 0) return map;
-
-  const fail = (reason: string): ReadonlyMap<string, ExternalRegenResult> => {
-    for (const p of paths) map.set(p, { ok: false, reason });
-    return map;
-  };
-
-  try {
-    const buildResult = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
-
-    // M2 boundary review blocker #2 (join lane, landed src/store/build-graph.ts's `diagnostics`
-    // field): `isStructurallyComplete` is the single source of truth for "was anything rejected
-    // rather than projected" -- true iff every `structuralLoss` array (registry skips, malformed
-    // fr log lines) is empty. A build this incomplete must never be the "expected" side of a
-    // freshness diff -- named via the SAME concrete path/reason entries `rk render`/`rk graph`
-    // themselves refuse output over (src/render/diagnostics-view.ts's structuralLossLines).
-    const { diagnostics } = buildResult;
-    if (!diagnostics.isStructurallyComplete) {
-      const lossCount =
-        diagnostics.structuralLoss.registrySkips.length + diagnostics.structuralLoss.frMalformedLines.length;
-      const skipDetail = diagnostics.structuralLoss.registrySkips.map((s) => `${s.path} (${s.reason})`).join("; ");
-      const frDetail = diagnostics.structuralLoss.frMalformedLines
-        .map((l) => `fr log line ${l.lineNo} (${l.snippet})`)
-        .join("; ");
-      const detail = [skipDetail, frDetail].filter((s) => s.length > 0).join("; ");
-      return fail(
-        `the GraphDocument build is structurally incomplete (${lossCount} structural-loss ` +
-          `entr${lossCount === 1 ? "y" : "ies"}: ${detail || "see rk render/rk graph for detail"}) -- a build ` +
-          `this incomplete must never be used as the "expected" side of a freshness diff`,
-      );
-    }
-
-    // B2 (docs/memos/2026-07-25-generality-audit.md), THE fix for permanent false STALE. This used
-    // to call `renderSite(doc, { northStarId })` directly — ONE of the SIX options `rk render`
-    // passes. The four repo-derived ones (`sources`, `runGallery`, `defsData`, `frResiduals`) were
-    // dropped, so the "expected" bytes differed from the real artifact on EVERY repo: a pristine
-    // scaffold reported `build/site/index.html` STALE and re-rendering never cleared it, blocking
-    // the stamped pre-commit hook in consolidation. Now both commands go through the SINGLE
-    // option-assembly seam `src/cli/render.ts`'s `renderSiteFromRepo` — the generator's own module,
-    // an edge calling edges, with `src/gates/**` still pure (L3) and Gate 7's `externalRegen`
-    // contract unchanged. `renderSite` is now called for the site artifact from exactly one place
-    // in the codebase, so generator and verifier cannot silently disagree about what a render is.
-    //
-    // ONE residual divergence remains, named and narrowed rather than accepted silently: `rk
-    // render`'s `--title`/`--north-star` are CLI-only overrides `rk check` has no equivalent of, so
-    // this regeneration reads `.rk/config.json` alone (exactly as a flagless `rk render` does).
-    // `rk render` itself now DETECTS that case exactly — it re-renders the same data the way this
-    // function will and byte-compares — and warns at render time, naming the flag and the remedy
-    // (src/cli/render.ts's `checkDivergenceWarning`; docs/gate-contracts.md Gate 7 "Known
-    // limitations"). Removing the residual entirely needs the options recorded per manifest entry,
-    // a schema/compat event (CLAUDE.md Rule 10) out of this repair's scope.
-    const { site } = renderSiteFromRepo(root, buildResult.doc, buildResult.diagnostics.sources, {
-      northStarId: config.northStarId,
-      frCommand: deps.frCommand,
-    });
-    const indexFile = site.files.find((f) => f.path === "index.html");
-    if (!indexFile) {
-      return fail(
-        `renderSite's pure API did not produce an "index.html" file (produced: ` +
-          `${site.files.map((f) => f.path).join(", ") || "none"})`,
-      );
-    }
-    for (const p of paths) map.set(p, { ok: true, bytes: indexFile.contents });
-    return map;
-  } catch (e) {
-    const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    return fail(`building the GraphDocument / rendering the site threw: ${message}`);
-  }
-}
-
-/** `src/store/snapshot-load.ts`'s `RepoSnapshot` text map is deliberately bounded to the six
- * gates' declared Inputs (definitions/, argument/, proofs/, refs/, runs/, report/, .rk/ —
- * "explicit include globs from the contract, no kitchen-sink") — it does NOT include `rk
- * render`'s own output directory (`build/site/` by default), which is not any pre-M2.6 gate's
- * Input. Gate 7 still needs the ACTUAL on-disk bytes of a declared `render-site-v1` path to diff
- * against (the "have" side — `runFreshnessGate`'s ordinary declared-but-missing/STALE logic).
- * Rather than widen `src/store/snapshot-load.ts`'s include rules (join-lane territory this WP
- * does not touch — src/store/** is out of scope), this reads the handful of declared
- * render-site-v1 paths directly, at the edge, and hands freshness's own gate invocation an
- * augmented snapshot carrying just those extra entries — every OTHER gate keeps seeing the
- * original, untouched snapshot. A path genuinely absent from disk is left unaugmented; Gate 7's
- * own declared-but-missing check reports that, unchanged. */
-function augmentSnapshotForRenderSite(
-  snapshot: RepoSnapshot,
-  root: string,
-  paths: readonly string[],
-): RepoSnapshot {
-  let extra: Map<string, string> | undefined;
-  for (const p of paths) {
-    if (snapshot.has(p)) continue; // already visible under an existing include rule
-    let text: string;
-    try {
-      text = readFileSync(join(root, ...p.split("/")), "utf8");
-    } catch {
-      continue; // genuinely absent from disk -- Gate 7's own declared-but-missing ERROR handles this
-    }
-    if (!extra) extra = new Map<string, string>();
-    extra.set(p, text);
-  }
-  if (!extra) return snapshot;
-  const merged = new Map<string, string>(snapshot);
-  for (const [k, v] of extra) merged.set(k, v);
-  return Object.assign(merged, {
-    sha256: snapshot.sha256,
-    tracked: snapshot.tracked,
-    dirs: snapshot.dirs,
-  }) as RepoSnapshot;
-}
+/** Re-exported from its new home (src/cli/check-regen.ts): it is part of `checkCommand`'s own
+ * signature, so a consumer importing it from here must keep working across the shard split. */
+export type { CheckCommandDeps };
 
 /** rk-6r3 / M0.3 review finding 7: gate-contracts.md:85's "unconditional composition" promise
  * ("all six gates run unconditionally ... every coverage line prints regardless of earlier

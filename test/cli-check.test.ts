@@ -710,7 +710,15 @@ describe("rk check", () => {
     dirs.push(root);
     writeGoldenScaffold(root);
 
-    const realOtherGates = GATES.filter((g) => g.name !== "defs");
+    // rk-xbsx (2026-07-25): captured BEFORE the mock, and restored in the `finally` below. This
+    // test's original note called `mock.module`'s effect "file-wide" and mitigated it only by
+    // ordering this test last within this file — but the effect is PROCESS-wide, so under a full
+    // `bun test` run every later test FILE that invoked `checkCommand` inherited a permanently
+    // crashing `defs` gate and a composed exit code of 1. That was invisible while no other file
+    // asserted `rk check`'s exit code; test/cli-check-regen.test.ts's clean-repo round trip is the
+    // first that does, and it failed only in the full suite. Ordering is not isolation.
+    const realGates = [...GATES];
+    const realOtherGates = realGates.filter((g) => g.name !== "defs");
     mock.module("../src/gates/index", () => ({
       GATES: [
         {
@@ -723,6 +731,7 @@ describe("rk check", () => {
       ],
     }));
 
+    try {
     const { out, lines } = capture();
     const code = await run(["check", "--root", root], { out });
     const text = lines.join("\n");
@@ -753,5 +762,9 @@ describe("rk check", () => {
     // A crashed gate's synthetic ERROR still fails the composed exit code, same as any real one.
     expect(code).toBe(1);
     expect(text).toContain("rk check: FAILED (>=1 ERROR above).");
+    } finally {
+      // Undo the process-wide fault injection, whatever happened above.
+      mock.module("../src/gates/index", () => ({ GATES: realGates }));
+    }
   });
 });

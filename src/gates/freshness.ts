@@ -58,11 +58,23 @@ export interface ManifestEntry {
 }
 
 /** The edge's answer to "what would a fresh `render-site-v1` regenerate produce for this path,
- * right now" (src/cli/check.ts's `prepareRenderSiteExternalRegen`) — supplied to
+ * right now" (src/cli/check-regen.ts's `prepareRenderSiteExternalRegen`) — supplied to
  * `runFreshnessGate`'s `externalRegen` map. `ok:false` covers every reason the edge could not
- * produce trustworthy expected bytes (structurally incomplete build, a thrown exception) — this
- * gate turns EITHER outcome into a loud, per-path finding, never a silent pass. */
-export type ExternalRegenResult = { readonly ok: true; readonly bytes: string } | { readonly ok: false; readonly reason: string };
+ * produce trustworthy expected bytes (structurally incomplete build, a regeneration that is not
+ * reproducible within the run, a thrown exception) — this gate turns EITHER outcome into a loud,
+ * per-path finding, never a silent pass.
+ *
+ * `degraded` (rk-xbsx, 2026-07-25) is the third state. It is set when the edge DID produce bytes,
+ * reproducibly, but at least one live-external reader the render depends on could only reach a
+ * REDUCED-FIDELITY fallback (`af: ledger-fallback`, `fr: log-fallback` — the states
+ * src/render/diagnostics-view.ts already names). The expected bytes are then a function of the
+ * verifier's environment as much as of the repo, so a byte difference is NOT evidence of artifact
+ * drift and must not be reported as STALE. It is not evidence of freshness either: this gate
+ * ERRORs on it, under its own distinct message. Matching bytes stay clean — a degraded read that
+ * AGREES with the artifact has revealed no defect to attribute. */
+export type ExternalRegenResult =
+  | { readonly ok: true; readonly bytes: string; readonly degraded?: string }
+  | { readonly ok: false; readonly reason: string };
 
 /** The one extension point. Each function takes the snapshot and returns the exact bytes a fresh
  * regenerate of its declared artifact would produce — byte-for-byte, no trailing-newline
@@ -280,6 +292,31 @@ function staleFinding(path: string, generatorId: string, have: string, want: str
   };
 }
 
+/** rk-xbsx: the artifact differs from the regeneration, but the regeneration was not authoritative
+ * — so the difference is unattributable, and this gate refuses to call it drift. ERROR (never
+ * fresh, never silently passed), deliberately NOT the word STALE and deliberately not sharing
+ * `staleFinding`'s "regenerate via" remedy, which would be wrong advice here: re-rendering under
+ * the same degraded reader re-pins the artifact to the degraded output. Same discipline
+ * src/drive/cross-vendor.ts applies to `identity-unparseable` vs `same-family` — an unknown is
+ * never reported as a confirmed violation, and never as a pass. */
+function unattributableFinding(path: string, generatorId: string, have: string, want: string, degraded: string): Finding {
+  const line = firstDiffLine(have, want);
+  const haveLines = have.split("\n");
+  const wantLines = want.split("\n");
+  return {
+    severity: "ERROR",
+    path,
+    line,
+    message:
+      `${path} DIFFERS from a fresh '${generatorId}' regeneration, but that regeneration's live-external ` +
+      `inputs were NOT authoritative (${degraded}) — the difference is NOT attributable to artifact ` +
+      `drift, since the degraded read is an equally consistent explanation. First difference at line ` +
+      `${line}: have "${snippet(haveLines[line - 1])}", want "${snippet(wantLines[line - 1])}". ` +
+      `next: restore the degraded source and re-run 'rk check' — a real drift is then reported as ` +
+      `STALE; re-rendering NOW would only re-pin the artifact to the degraded output`,
+  };
+}
+
 /** The pure core of Gate 7 (M2 boundary review blockers #3/#4). `externalRegen` carries the
  * edge-prepared "expected bytes" (or a structured failure reason) for every `render-site-v1`
  * entry the manifest declares — see this file's header and `ExternalRegenResult`'s own doc
@@ -357,7 +394,15 @@ export function runFreshnessGate(
         findings.push(missingFinding(entry.path, entry.generator));
         continue;
       }
-      if (have !== regen.bytes) findings.push(staleFinding(entry.path, entry.generator, have, regen.bytes));
+      if (have !== regen.bytes) {
+        // rk-xbsx: a difference is only DRIFT when the regeneration it was measured against was
+        // authoritative. Otherwise it is named as unattributable — still an ERROR, never a STALE.
+        findings.push(
+          regen.degraded === undefined
+            ? staleFinding(entry.path, entry.generator, have, regen.bytes)
+            : unattributableFinding(entry.path, entry.generator, have, regen.bytes, regen.degraded),
+        );
+      }
       continue;
     }
 
