@@ -252,8 +252,8 @@ post-hoc classification of why a call didn't apply:
 Any other nonzero code the backend's own process naturally returns (crash, killed) is treated as
 13 by the driver's wrapper, never surfaced as a silent success.
 
-**Bounded schema repair (rk-xxp, GAP 11).** Before a code-12 turn becomes terminal, the driver
-dispatches AT MOST ONE repair reprompt on the SAME session, echoing the concrete `RawIssue[]`
+**Bounded schema repair (rk-xxp, GAP 11).** Before a code-12 **verifier** turn becomes terminal,
+the driver dispatches AT MOST ONE repair reprompt on the SAME session, echoing the concrete `RawIssue[]`
 (path + message) and asking for the corrected object only, with the assessment unchanged. Exactly
 one attempt, ever — structurally, not by a counter: the repair path dispatches directly and never
 re-enters itself. A repair that also fails is a normal terminal 12, and the ORIGINAL failure
@@ -264,6 +264,40 @@ becomes `justification`). The repair turn is a real backend turn: its usage is l
 `usage` record (flagged `repair: true`) and accrues to the campaign budget. Codes 10/11/13 are
 never repaired — 11 in particular must never provoke more spend. The incident this rule exists for
 burned 96,066 tokens across three identical rejected turns and applied zero nodes.
+
+**Bounded schema repair, prover role (rk-i19, 2026-07-25).** The same rule governs
+`liveDispatchProve`, which had the identical exit-12 death mode with no correction — one malformed
+prover reply burned a full context-heavy turn and stalled the claim. Every clause above holds
+verbatim for the prover: at most ONE repair on the SAME session, structurally
+(`src/drive/driver-live.ts`'s `repairProverTurnOnce` dispatches directly and never re-enters
+itself); NO extra trust (the repaired body faces the identical validation and then the unchanged
+`extractProofContent`, prover-overreach guard, `buildRecordProofChildren` dependency translation,
+and af's own `record-proof` role + `--expect-hash` CAS — no bypass, and no field is ever copied to
+satisfy another); a repair that also fails is terminal with the ORIGINAL failure representation
+preserved verbatim; the repair turn's usage is logged as its own `usage` record (flagged
+`repair: true`) and accrues to the campaign budget (`src/drive/driver-prove-node.ts`); codes
+10/11/13 are never repaired. The concrete `RawIssue[]` come from `src/drive/prover-raw.ts`, this
+role's shape (a) — `{children:[{statement, justification?, depends?}]}` with `checkNoExtraKeys` at
+the top level and per child, so a worker can no more smuggle a driver-owned field into a prover
+body than into a verdict. It fires on BOTH the raw-shape failure and the exit-12 single-object
+extraction failure, for the same reason the verifier side does: the banked records are
+`parse-failed`, so shape-only gating would not have fired on the incident at all.
+
+**Two rules are specific to this role and are validity fences, not tuning.** (1) A body that trips
+`detectProverOverreach` (a `verdict`/`outcome` field, or a bare acceptance string) is NEVER
+repaired — it is already discarded and logged, and asking the worker to "fix the shape" would
+delete that evidence and record the proof as if the overreach had never happened. (2) No prover
+prompt may contain verdict vocabulary, and a repair prompt echoes validator messages verbatim, so
+**every message `prover-raw.ts` can emit is prover-prompt bytes** and is held to the same word ban
+as `buildProverTurnPrompt` — mechanically enforced, since the overreach guard's whole premise is
+that a prover is never ASKED to judge. The prover repair turn also carries NO tight output cap:
+`REPAIR_MAX_OUTPUT_TOKENS` (1,500) fits one small verdict object, whereas a prover repair must
+restate the entire decomposition, and capping it there would truncate the reply mid-object —
+manufacturing the second failure the repair exists to prevent. The driver-log evidence record
+keeps the `verdict-repair` kind for both roles (its `role` field is what distinguishes them;
+`src/drive/report-parse.ts`'s `VerdictRepairLogRecord` already admits every role in the vocabulary,
+so this is not a compat event) — the kind names the SCHEMA-REPAIR event, never a claim that a
+prover produced a verdict.
 
 Reality note (M3.2 live-fire, docs/memos/2026-07-19-m3.2-backend-livefire.md): codes 10-13 are
 ADAPTER-COMPUTED classifications of raw process/timeout/API-error behavior — no real CLI emits

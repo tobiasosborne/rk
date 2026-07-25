@@ -1394,8 +1394,12 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   Fixture: `provenance-20`.
 - **[message-only] Coverage line** (amended 2026-07-18, rk-v18; extended 2026-07-25, B1).
   `checked provenance: <N>/<M>
-  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows; report/:
+  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<J> joined);
+  report/:
   <present|absent (not adopted)> (<E> errors, <W> warnings)`. The trailing `report/:` clause (B1)
+  `J` (2026-07-25, rk-lkeh) is likewise rendered on every path, exactly as `S` already was — a
+  reader can always tell how many of the parsed rows check 5 actually COMPARED, rather than
+  inferring enforcement from a nonzero `S` that may join nothing.
   is rendered on **every** path, present or absent — Gate 6's own convention
   (`src/gates/shards.ts`) — so a reader can always tell whether check 6 ran at all rather than
   inferring it from the absence of findings.
@@ -1410,6 +1414,21 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   mandatory coverage reporting, applied twice over to this gate's two independent silent-skip
   surfaces (registry parse, tab:status parse) — AISM's script counts neither. Pass/fail is
   unchanged both times; only visibility improves.
+- **[rk-stricter-intended] Check 5's JOIN coverage, and the unreadable-status-table ERROR**
+  (rk-lkeh, 2026-07-25). `provenanceStatusTableFile`'s parameterisation re-points the status
+  table's ROWS only; the LABELS they join against are still scanned from `report/sections/*.tex`,
+  and the file itself is only readable if it falls inside `src/store/snapshot-load.ts`'s text
+  include rules. The parameter's guaranteed domain is therefore **a status table whose labels are
+  still scanned from `report/sections/*.tex`, at a path the loader text-loads** — it is not a
+  general "relocate the report" mechanism, and the claim is narrowed to that here. Two states
+  that were previously silent are now reported: (a) a configured file **present on disk but not
+  text-loaded** ⇒ ERROR (distinguished from a genuinely absent file via `snapshot.sha256`, which
+  spans the whole tree while the text map does not; a genuinely absent file remains a
+  non-finding, the ordinary day-1/no-report state); (b) `S > 0` rows parsed of which **zero
+  joined** ⇒ WARN naming which of two causes applies, `no-join-universe` vs `labels-disjoint`,
+  never conflated. Note the file's LOCATION is deliberately **not** the predicate: a table
+  outside `report/` joins correctly whenever `report/sections/*.tex` still defines its labels.
+  Fixtures: `provenance-22`, `provenance-23`.
 - **[contract amendment, not a strictness triage] Check 6 is presence-conditional on the `report/` root** (B1, `docs/memos/2026-07-25-generality-audit.md`; extends rk-au6/R13). `check-provenance.py:349-365` runs the anchor check over every parsed registry result unconditionally, with `parse_unwired` returning an empty whitelist for a missing file — so on any repo with no `report/` tree every shard is an "unwired" failure. That is AISM private-layout residue, removed here on the same footing as R13's Gate 6 amendment and F5's reversal, not an rk-stricter/rk-bug/ambiguous call. Fixture: `provenance-21`.
 - **[message-only]** Standard cross-gate finding-format change; the `--build` step remains
   opt-in, matching AISM's own `--build` flag exactly (not a divergence, confirmed here for
@@ -1444,6 +1463,8 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-19` | **check 4: stale source payload shadowed by a coincidental VCS-named parent** [round-3 landing-blocker 1] — the loader's skip-set is anchored to the repo root and narrowed to `.git` alone, so a `notes/.svn/`-shadowed payload is hashed and its staleness ⇒ ERROR, never a false absent-WARN (row restored 2026-07-19 — the fixture landed in the round-3 wave but this table was never updated; see corpus/README.md's own `provenance-19` row for the full incident) |
 | `provenance-20` | **OVERCLAIM on a root-level (non-`lemmas/`) shard** [rk-2t8, M1 review B2] — recursive `argument/**/*.md` discovery mirrors Gate 2 exactly; `argument/thm-main.md` with `status: open` framed as proved by a `tab:status` row ⇒ OVERCLAIM ERROR, coverage `1/1` (pre-fix: a vacuous `0/0` and no finding) |
 | `provenance-21` | **check 6: registry shards present, `report/` ABSENT** [B1, SC7 blocker] — the state of every stamped campaign; check 6 emits nothing, coverage names `report/: absent (not adopted)`, registry denominator honest at 2/2 |
+| `provenance-22` | **check 5: configured `provenanceStatusTableFile` PRESENT on disk but outside the loader's text include rules** [rk-lkeh] — `paper/status.tex` yielded `[]` rows indistinguishable from "no table"; now an ERROR, distinguished from genuinely-absent via `snapshot.sha256` |
+| `provenance-23` | **check 5: status table parsed (`S=1`) but ZERO rows joined** [rk-lkeh] — WARN naming `labels-disjoint` vs `no-join-universe`, never conflated; coverage reads `1 tab:status rows (0 joined)` |
 
 ---
 
@@ -1989,9 +2010,29 @@ it).
   (`src/cli/render.ts`'s `checkDivergenceWarning`). Proven by `test/cli-check.test.ts`'s
   render-site-v1 suite: five real `renderCommand` → `checkCommand` round trips plus both warning
   polarities.
-- `rk check`'s regeneration now makes a second `fr export` subprocess call (via `loadFrResiduals`),
-  matching `rk render`'s own cost profile — see the new-defect note on external-state
-  non-determinism as a freshness input (bead filed 2026-07-25).
+- **What a STALE is allowed to mean** (rk-xbsx, 2026-07-25; closes the external-state limitation
+  the B2 landing recorded here). The edge regenerates through live af/fr/bd subprocesses, so a byte
+  difference has three possible causes and this gate reports only the first as drift.
+  **(1) DRIFT** — the repo's own ground truth moved on (af/fr/bd state is IN-REPO per PRD D1:
+  `.af/`, `.frontier/`, `.beads/` — not remote state, so "fr's log changed since render" *is*
+  drift). Convergent: `rk render` clears it. The only cause that produces STALE.
+  **(2) NON-REPRODUCIBILITY** — the generator does not produce the same bytes twice on an
+  unchanged repo. Detected, not assumed away: `src/cli/check-regen.ts` regenerates TWICE and
+  byte-compares; a disagreement ⇒ `ok:false` "not reproducible within a single `rk check` run",
+  and no verdict is drawn.
+  **(3) DEGRADED FIDELITY** — a reader reached only its reduced-fidelity fallback
+  (`af: ledger-fallback`, `fr: log-fallback`), so the expected bytes describe the verifier's
+  environment as much as the repo ⇒ `ok:true` with `degraded`, which this gate turns into its own
+  ERROR that explicitly withholds the drift verdict and does NOT advise re-rendering (that would
+  re-pin the artifact to degraded output). Matching bytes stay clean in all three cases.
+  A source that was never *engaged* (`absent`) is **not** degradation — a campaign that does not
+  use fr must stay verifiable. The asymmetry is deliberate: degradation matters only at
+  verification time; a render made under a degraded reader and verified under an authoritative one
+  is a real, convergent STALE. All three fail closed; none is ever silently fresh.
+  Cost: two regenerations per `rk check`, only when a `render-site-v1` entry is declared (L6).
+  No corpus fixture is possible: the harness drives the plain 2-arg `Gate` interface with an empty
+  `externalRegen`, so every `render-site-v1` entry reports "cannot be regenerated" — the same
+  reason `freshness-07` exists. The pipeline is proven in `test/cli-check*.test.ts`.
 - The `RepoSnapshot` text-map / `build/` gap this session's edge-side `augmentSnapshotForRenderSite`
   works around (see "Edge-supplied generators" above) is a workaround, not a fix — the proper fix
   (widening `src/store/snapshot-load.ts`'s include rules) is join-lane territory this WP does not

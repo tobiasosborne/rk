@@ -117,5 +117,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * docs/memos/2026-07-25-generality-audit.md): Gate 4's anchor check bound to the `report/` ROOT,
  * the sibling of `shards-15`/`linker-25` that was never written — and whose absence is exactly why
  * B1 survived the 2026-07-18 residue audit. Gate 4's "fresh repo no-op" was vacuous: it held only
- * while the registry was EMPTY, so no fixture ever exercised shards-present + report-absent. */
-export const EXPECTED_FIXTURE_COUNT = 125;
+ * while the registry was EMPTY, so no fixture ever exercised shards-present + report-absent.
+ * 127 (+2 over the then-pinned 125): rk-lkeh — `provenance-22` and `provenance-23`, the two
+ * halves of Gate 4 check 5's half-parameterisation false-green. `provenance-11` parameterised the
+ * status-table FILE but left the label scan and the loader's text include rules hardcoded, so a
+ * relocated table made check 5 verify nothing at exit 0. `provenance-22`: a configured file
+ * PRESENT on disk but outside the include rules is now an ERROR (distinguished from genuinely
+ * absent via `snapshot.sha256`, which spans the whole tree while the text map does not).
+ * `provenance-23`: rows parsed but ZERO joined is a WARN naming which of two causes applies. */
+export const EXPECTED_FIXTURE_COUNT = 127;
