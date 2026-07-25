@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildProverTurnPrompt,
+  buildRepairTurnPrompt,
   buildSharedContext,
   buildVerifierTurnPrompt,
   OUTPUT_SCHEMA_REF,
@@ -241,6 +242,91 @@ describe("buildVerifierTurnPrompt — proofless-node HARD RULE (rk-jit / STOP-4)
     const proofless = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "l5", proofless: true });
     expect(proofless).toContain("NOTHING TO VERIFY");
     expect(proofless).toContain('"INVALID"');
+  });
+});
+
+// rk-xxp (GAP 11): the attempt-11 incident. The hard-tier verifier emitted a semantically complete
+// challenge and simply omitted the SIBLING `justification` key, folding its reasoning into
+// `verdict.reason` — 96,066 tokens, 0 nodes applied. The fix is prompt-side (an exact literal
+// skeleton the worker copies, `justification` shown as a required sibling) plus ONE bounded repair
+// reprompt; the schema is NOT loosened and `verdict.reason` is NEVER coerced (PRD C3).
+describe("buildVerifierTurnPrompt — mandatory top-level justification (rk-xxp / GAP 11)", () => {
+  test("BOTH tiers print a literal, copyable JSON skeleton with 'justification' as a top-level sibling of 'verdict'", () => {
+    for (const tier of ["hard", "l5"] as const) {
+      const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier });
+      expect(turn).toContain("REQUIRED OUTPUT SHAPE");
+      // The literal skeleton line a model can copy verbatim — `"justification"` at top level, on its
+      // own line, indented as a sibling of `"verdict"`.
+      expect(turn).toContain('  "justification":');
+      expect(turn).toContain('  "verdict":');
+      expect(turn).toContain("REQUIRED TOP-LEVEL key");
+      expect(turn).toContain("SIBLING");
+    }
+  });
+
+  test("the hard tier states explicitly that verdict.reason does NOT substitute for justification", () => {
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard" });
+    expect(turn).toContain('"verdict.reason" does NOT substitute');
+    expect(turn).toContain("BOTH");
+  });
+
+  test("both tiers say an object without a top-level justification is REJECTED", () => {
+    for (const tier of ["hard", "l5"] as const) {
+      const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier });
+      expect(turn).toContain("REJECTED");
+    }
+  });
+
+  test("the rk-d1n verbosity cap (commit 891afcd) survives the hardening, on BOTH tiers", () => {
+    for (const tier of ["hard", "l5"] as const) {
+      const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier });
+      expect(turn).toContain("CONCISE");
+      expect(turn).toContain("3 sentences");
+      expect(turn).toContain("FAILS");
+    }
+  });
+
+  test("the hard-tier skeleton still uses no VALID/INVALID vocabulary (tier separation preserved)", () => {
+    const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [], tier: "hard" });
+    expect(turn).not.toContain("VALID");
+  });
+});
+
+describe("buildRepairTurnPrompt — the ONE bounded schema-repair reprompt (rk-xxp / GAP 11)", () => {
+  const bankedIssues = [
+    { path: "$.justification", message: "missing required property 'justification' — it is a REQUIRED TOP-LEVEL key, a sibling of 'verdict'; 'verdict.reason' does NOT substitute for it" },
+  ];
+
+  test("echoes every CONCRETE issue verbatim (path AND message), so the worker is told exactly what to fix", () => {
+    const p = buildRepairTurnPrompt("hard", bankedIssues);
+    expect(p).toContain("$.justification");
+    expect(p).toContain("missing required property 'justification'");
+    expect(p).toContain("verdict.reason");
+  });
+
+  test("asks for the corrected object ONLY — no commentary, no re-analysis, verdict unchanged", () => {
+    const p = buildRepairTurnPrompt("hard", bankedIssues);
+    expect(p).toContain("REJECTED");
+    expect(p.toLowerCase()).toContain("no commentary");
+    expect(p).toContain("fix ONLY the shape");
+  });
+
+  test("re-states the tier's full output instructions, so the skeleton is present in the repair turn too", () => {
+    const hard = buildRepairTurnPrompt("hard", bankedIssues);
+    expect(hard).toContain("REQUIRED OUTPUT SHAPE");
+    expect(hard).toContain('"outcome": "accept"');
+    const l5 = buildRepairTurnPrompt("l5", bankedIssues);
+    expect(l5).toContain("REQUIRED OUTPUT SHAPE");
+    expect(l5).toContain("VALID-WITH-CORRECTION");
+  });
+
+  test("states that this is the ONLY correction — a second malformed reply ends the item (no loops)", () => {
+    const p = buildRepairTurnPrompt("l5", bankedIssues);
+    expect(p).toContain("ONLY correction");
+  });
+
+  test("byte-stable for the same issues", () => {
+    expect(buildRepairTurnPrompt("hard", bankedIssues)).toBe(buildRepairTurnPrompt("hard", bankedIssues));
   });
 });
 

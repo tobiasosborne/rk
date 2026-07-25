@@ -37,7 +37,8 @@ import type { SessionRecord } from "./session";
 import type { DispatchModel, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
-import { buildProverTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
+import { buildProverTurnPrompt, buildRepairTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
+import { diagnoseRepairableTurn, mergeRepairTurn } from "./verdict-repair";
 import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { classifyExtractionFailure, extractSingleJsonObject } from "./parse-diag";
 import { recordProofRefine } from "./driver-af";
@@ -252,8 +253,39 @@ export function verifierItemFor(node: AfNodeView, tier: Tier, allNodes: readonly
  * export view) is threaded so `verifierItemFor` can resolve `node`'s declared dependencies to their
  * content — the driver hands its per-round node set at the call site (src/drive/driver-run.ts). */
 export function liveDispatchVerify(dispatcher: LiveRoleTierDispatcher, tier: Tier) {
-  return (node: AfNodeView, allNodes: readonly AfNodeView[]): Promise<DispatchedTurn> =>
-    dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier, allNodes)));
+  return async (node: AfNodeView, allNodes: readonly AfNodeView[]): Promise<DispatchedTurn> => {
+    const first = await dispatcher.dispatch(node.id, buildVerifierTurnPrompt(verifierItemFor(node, tier, allNodes)));
+    return repairVerifierTurnOnce(dispatcher, tier, node.id, first);
+  };
+}
+
+/** rk-xxp (GAP 11): the output budget for a repair turn. A repair reply re-emits ONE small verdict
+ * object with the assessment unchanged — it needs a fraction of a first-pass turn's room, and a tight
+ * cap is itself a mitigation for the runaway free-text field that co-occurs with these failures. */
+export const REPAIR_MAX_OUTPUT_TOKENS = 1_500;
+
+/** Dispatches AT MOST ONE schema-repair reprompt on the SAME session for a verifier turn whose output
+ * failed raw-shape validation or single-object extraction (src/drive/verdict-repair.ts's
+ * `diagnoseRepairableTurn` decides; `buildRepairTurnPrompt` echoes the concrete issues).
+ *
+ * "At most one, ever" is STRUCTURAL, not a counter this function could get wrong: it calls
+ * `dispatcher.dispatch` directly — never `liveDispatchVerify` and never itself — so there is no code
+ * path from a repair turn back into another repair. A repair reply that also fails is folded by
+ * `mergeRepairTurn` into the ORIGINAL failure representation, which is a normal terminal outcome
+ * (`parse-failed` / bind failure, exactly as before this feature existed).
+ *
+ * The repair reuses the claim's existing session by construction (the dispatcher owns exactly one),
+ * so the worker still has its own rejected reply in context — which is what makes "fix only the
+ * shape, keep your assessment" a meaningful instruction. The item id is suffixed so the turn is
+ * distinguishable in a backend's own logs; `turnId` is separately unique per turn already.
+ *
+ * NO extra trust anywhere: the repaired body re-enters the identical downstream pipeline
+ * (bindVerdicts, hash re-confirmation, cross-vendor gate) with nothing relaxed. */
+export async function repairVerifierTurnOnce(dispatcher: LiveRoleTierDispatcher, tier: Tier, itemId: string, first: DispatchedTurn): Promise<DispatchedTurn> {
+  const need = diagnoseRepairableTurn(tier, first);
+  if (!need.needed) return first;
+  const repair = await dispatcher.dispatch(`${itemId}#repair`, buildRepairTurnPrompt(tier, need.issues), { maxOutputTokens: REPAIR_MAX_OUTPUT_TOKENS });
+  return mergeRepairTurn(tier, first, repair, need.issues);
 }
 
 /** Builds the prover item input for one af node — the node's RECORDED dependencies (`node.deps`, rk

@@ -61,12 +61,31 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
   // edge can resolve the node's declared dependencies to their content for the verifier's context.
   const turn = await deps.dispatchVerify(node, allNodes);
   if (turn === undefined) return { spentTokens: 0, skip: "no worker available" };
-  const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
+  // rk-xxp (GAP 11): a schema-repair reprompt (src/drive/verdict-repair.ts, dispatched at most once
+  // by src/drive/driver-live.ts) is a SECOND REAL BACKEND TURN. Its tokens are spent whether or not
+  // the repair worked, so they accrue to the same campaign total the caller guards against — a repair
+  // the budget could not see would be an unbounded hole in the exact guard rk-s9t exists to provide.
+  const spentTokens = (turn.usage !== undefined ? usageTokens(turn.usage) : 0) + (turn.repair?.usage !== undefined ? usageTokens(turn.repair.usage) : 0);
   // M3.9: log the turn's usage BEFORE any discard check below — tokens are spent on dispatch,
   // independent of whether the resulting verdict is ever applied (src/drive/report.ts reads this
   // "usage" kind; every other kind this loop appends is untouched by this addition).
   if (turn.usage !== undefined) {
     deps.appendLog(JSON.stringify({ kind: "usage", at: deps.now(), contractId: deps.contractId, claimId: deps.claimId, nodeId: node.id, role: turn.role, sessionId: deps.identity.sessionId, usage: turn.usage }));
+  }
+  if (turn.repair !== undefined) {
+    // ONE honest `usage` record per REAL backend turn (never a merged total that would understate the
+    // turn count and distort the report's cache-fraction arithmetic), flagged `repair: true` so a
+    // reader can attribute it. The `verdict-repair` record is the countable EVENT: what was wrong,
+    // whether the correction landed, and what it cost.
+    if (turn.repair.usage !== undefined) {
+      deps.appendLog(JSON.stringify({ kind: "usage", at: deps.now(), contractId: deps.contractId, claimId: deps.claimId, nodeId: node.id, role: turn.role, sessionId: deps.identity.sessionId, usage: turn.repair.usage, repair: true }));
+    }
+    deps.appendLog(JSON.stringify({
+      kind: "verdict-repair", at: deps.now(), node: node.id, role: turn.role,
+      outcome: turn.repair.ok ? "repaired" : "failed",
+      issues: turn.repair.issues.map((i) => ({ path: i.path, message: i.message })),
+      ...(turn.repair.repairIssues !== undefined ? { repairIssues: turn.repair.repairIssues.map((i) => ({ path: i.path, message: i.message })) } : {}),
+    }));
   }
   const overreach = detectProverOverreach(turn.role, turn.raw);
   if (overreach.discard) {

@@ -21,6 +21,7 @@
 // that one ad hoc, inline, and says so.
 
 import type { Tier } from "./vocab";
+import type { RawIssue } from "./verdict-raw";
 
 /** `outputSchemaRef` values (src/drive/backend-types.ts's `TurnItem`) — descriptive names a
  * backend MAY use to constrain generation; not a loaded/enforced schema file at this layer
@@ -124,10 +125,43 @@ function prooflessVerdictRule(tier: Tier): string {
   ].join("\n");
 }
 
+// rk-xxp (GAP 11, attempt-11 incident): the hard-tier verifier emitted a semantically COMPLETE
+// challenge — correct outcome, correct target, a long well-argued `verdict.reason` — and simply
+// omitted the SIBLING top-level `justification`, six times across two lemmas, costing 96,066 tokens
+// and applying zero nodes. Root cause was output variance, not a parser bug: the same verifier got
+// it right on lem-weighted-min. The mitigation is to make the required shape UNMISSABLE rather than
+// inferable from a one-line grammar — a literal skeleton the worker copies, with `justification`
+// rendered on its own indented line as a visible sibling of `verdict`, plus an explicit statement
+// that `verdict.reason` is not a substitute. Vendor-neutral: no backend/model is named, and nothing
+// here depends on a particular CLI's behavior. The schema is NOT loosened to accommodate the failure
+// (mandatory per-item justification is PRD C3's no-blanket-accepts guarantee).
+const HARD_OUTPUT_SKELETON = [
+  "REQUIRED OUTPUT SHAPE — copy one of these two skeletons exactly and fill in the values:",
+  "",
+  "  {",
+  '    "verdict": {"outcome": "accept"},',
+  '    "justification": "<why you reached this verdict, 1-3 sentences>"',
+  "  }",
+  "",
+  "  {",
+  '    "verdict": {"outcome": "challenge", "target": "<node id, quoted>", "severity": "critical", "category": "missing", "reason": "<what is wrong with the target, 1-3 sentences>"},',
+  '    "justification": "<why you reached this verdict, 1-3 sentences>"',
+  "  }",
+  "",
+  '"justification" is a REQUIRED TOP-LEVEL key and a SIBLING of "verdict" — never nested inside it.',
+  'It is mandatory on EVERY reply, an accept and a challenge alike. A reply with no top-level',
+  '"justification" is REJECTED outright, however complete its reasoning is.',
+  '"verdict.reason" does NOT substitute for "justification": "reason" states what is wrong with the',
+  'target; "justification" states why you reached this verdict. On a challenge you must write BOTH.',
+].join("\n");
+
 const HARD_VERDICT_INSTRUCTIONS = [
   "Respond with EXACTLY one bare JSON object and NOTHING else — no markdown code fences (no ```),",
   "no surrounding prose or commentary, just the raw JSON object. It must match:",
   '{"verdict": {"outcome": "accept"} | {"outcome": "challenge", "target": <node id as a JSON string>, "severity": "critical" | "major" | "minor" | "note", "reason": <string>, "category"?: "gap" | "missing" | "dependency" | "incorrect" | "unclear" | "other"}, "justification": <string>}',
+  "",
+  HARD_OUTPUT_SKELETON,
+  "",
   '"accept" means this node\'s claim is validly established given its dependencies below.',
   '"challenge" means it is not; it MUST name a "target" (the node or dependency at fault), a "severity", and a non-blank "reason". There is no third outcome.',
   // rk-qxp: node ids look numeric, so a model tends to emit "target": 1 (a bare number). It MUST be a
@@ -141,10 +175,29 @@ const HARD_VERDICT_INSTRUCTIONS = [
   'Keep the "reason" and "justification" strings CONCISE: at most 3 sentences (~400 characters each). State only the essential finding — do NOT restate the node, re-derive the proof, or enumerate every detail. A long explanation risks being truncated mid-string, which produces invalid JSON and FAILS.',
 ].join("\n");
 
+/** rk-xxp (GAP 11): the l5 half of the same hardening. The l5 shape has no `verdict.reason` sibling
+ * to confuse with `justification`, but the mandatory-per-item-justification rule is identical (PRD
+ * C3), so the same literal-skeleton treatment applies. */
+const L5_OUTPUT_SKELETON = [
+  "REQUIRED OUTPUT SHAPE — copy this skeleton exactly and fill in the values:",
+  "",
+  "  {",
+  '    "verdict": "VALID",',
+  '    "justification": "<why you reached this verdict, 1-3 sentences>"',
+  "  }",
+  "",
+  '"justification" is a REQUIRED TOP-LEVEL key and a SIBLING of "verdict" — never nested inside it.',
+  "It is mandatory on EVERY verdict, positive or negative. A reply with no top-level",
+  '"justification" is REJECTED outright, however complete its reasoning is.',
+].join("\n");
+
 const L5_VERDICT_INSTRUCTIONS = [
   "Respond with EXACTLY one bare JSON object and NOTHING else — no markdown code fences (no ```),",
   "no surrounding prose or commentary, just the raw JSON object. It must match:",
   '{"verdict": "VALID" | "VALID-WITH-CORRECTION" | "INVALID", "justification": <string>, "correction"?: {"description": <string>, "correctedContentHash": <64-hex-char lowercase SHA-256>}}',
+  "",
+  L5_OUTPUT_SKELETON,
+  "",
   '"correction" is required on, and only on, a "VALID-WITH-CORRECTION" verdict.',
   // rk-d1n (M3.5 live debug): same conciseness cap as the hard tier — a runaway "justification" is the
   // failure mode behind the exit-12 parse deaths (truncated mid-string → unterminated JSON).
@@ -196,6 +249,44 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
   }
   lines.push("");
   lines.push(item.tier === "hard" ? HARD_VERDICT_INSTRUCTIONS : L5_VERDICT_INSTRUCTIONS);
+  return lines.join("\n");
+}
+
+// --- Schema-repair turn prompt (rk-xxp / GAP 11) --------------------------------------------------
+
+/** Builds the ONE bounded schema-repair reprompt sent on the SAME session when a verifier turn's
+ * output failed raw-shape validation or single-object extraction (src/drive/verdict-repair.ts's
+ * `diagnoseRepairableTurn` decides; src/drive/driver-live.ts dispatches it exactly once).
+ *
+ * Three properties this prompt must have, all of them load-bearing:
+ * 1. It echoes the CONCRETE issues (`verdict-raw.ts`'s own `RawIssue[]` path+message list), never a
+ *    generic "that was invalid" — the attempt-11 worker believed it HAD justified its verdict, so a
+ *    vague retry would very likely have reproduced the same object.
+ * 2. It asks for the corrected object ONLY, with the assessment unchanged. A repair turn is a
+ *    SHAPE correction, not a second opinion: inviting re-analysis would let a rejected challenge
+ *    quietly become an accept, which is a validity change smuggled in through an encoding fix.
+ * 3. It says this is the only correction. There is exactly one repair attempt per dispatch by
+ *    construction (driver-live.ts never recurses), and telling the worker so removes any incentive
+ *    to hedge or ask a clarifying question instead of answering.
+ *
+ * The repaired reply gets NO extra trust: it re-enters the identical pipeline (raw-shape validation,
+ * `bindVerdicts`, hash re-confirmation, cross-vendor gate). Nothing here relaxes any of that. */
+export function buildRepairTurnPrompt(tier: Tier, issues: readonly RawIssue[]): string {
+  const lines: string[] = [];
+  lines.push("## Your previous reply was REJECTED — it did not match the required output shape");
+  lines.push("");
+  lines.push("This is a MECHANICAL schema rejection, not a disagreement with your assessment.");
+  lines.push(`Problem${issues.length === 1 ? "" : "s"} found (${issues.length}):`);
+  for (const issue of issues) lines.push(`  - ${issue.path}: ${issue.message}`);
+  lines.push("");
+  lines.push("Reply NOW with the CORRECTED JSON object and nothing else — no commentary, no apology,");
+  lines.push("no restatement of your analysis, no code fences. Keep your assessment exactly as it was:");
+  lines.push("fix ONLY the shape. Every required key below must be present, spelled exactly as shown.");
+  lines.push("");
+  lines.push(tier === "hard" ? HARD_VERDICT_INSTRUCTIONS : L5_VERDICT_INSTRUCTIONS);
+  lines.push("");
+  lines.push("This is the ONLY correction you will be asked for. A second malformed reply ends this");
+  lines.push("item with no verdict recorded.");
   return lines.join("\n");
 }
 

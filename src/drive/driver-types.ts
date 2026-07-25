@@ -16,6 +16,7 @@ import type { BalloonClassification } from "../graph/types";
 import type { Role } from "./vocab";
 import type { WorkerUsage } from "./worker-result";
 import type { ParseFailureClass } from "./parse-diag";
+import type { RepairRecord } from "./verdict-repair";
 
 import { DEFAULT_BALLOON_NODE_CAP } from "./driver-balloon";
 import { DEFAULT_MAX_STUCK_ROUNDS, DEFAULT_NODE_RETRY_CAP, DEFAULT_NODE_CHURN_CAP, DEFAULT_MAX_CHURN_ROUNDS } from "./driver-guardrails";
@@ -71,6 +72,15 @@ export interface DispatchedTurn {
    * "no-object" | "multiple-objects" | "other". Recorded in the `parse-failed` evidence record only;
    * acceptance semantics never read it. Undefined except on a parse failure. */
   parseClass?: ParseFailureClass;
+  /** rk-xxp (GAP 11): the record of the ONE bounded schema-repair reprompt, when one was dispatched
+   * (src/drive/verdict-repair.ts decides + folds, src/drive/driver-live.ts sends it on the SAME
+   * session). Present ONLY when a repair actually happened — its ABSENCE means the first reply
+   * needed none, never that a repair silently succeeded. `repair.ok` says whether the repaired body
+   * is what `raw` now carries; `repair.usage` is the repair turn's OWN cost, kept separate from this
+   * turn's `usage` so both are logged and both accrue to the campaign budget
+   * (src/drive/driver-verify-node.ts). EVIDENCE ONLY at this layer: no acceptance rule reads it — a
+   * repaired verdict re-enters the identical bind/hash/cross-vendor pipeline with no extra trust. */
+  repair?: RepairRecord;
 }
 
 export interface DriverDeps {

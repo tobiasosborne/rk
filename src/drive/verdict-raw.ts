@@ -44,6 +44,19 @@ export interface RawIssue {
   message: string;
 }
 
+/** rk-xxp (GAP 11): the missing-`justification` messages are SELF-TEACHING, because they are echoed
+ * verbatim to the worker by the one bounded schema-repair reprompt (src/drive/driver-prompts.ts's
+ * `buildRepairTurnPrompt`). The attempt-11 incident was NOT a worker that forgot the field exists —
+ * it folded its reasoning into `verdict.reason` and believed it had justified the verdict. Naming
+ * the field alone therefore does not tell it what to change; naming the SIBLING relationship and the
+ * non-substitution rule does. This is message text only: `validateRawWorkerOutput` rejects exactly
+ * the same set of inputs as before (PRD C3's mandatory per-item justification is NOT loosened, and
+ * `verdict.reason` is never coerced into `justification` anywhere). */
+const MISSING_JUSTIFICATION_HARD =
+  "missing required property 'justification' — it is a REQUIRED TOP-LEVEL key, a SIBLING of 'verdict' (not nested inside it), required on an accept and on a challenge alike; 'verdict.reason' does NOT substitute for it ('reason' states what is wrong with the target, 'justification' states why you reached this verdict)";
+const MISSING_JUSTIFICATION_L5 =
+  "missing required property 'justification' — it is a REQUIRED TOP-LEVEL key, a SIBLING of 'verdict' (not nested inside it), required on every verdict";
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -86,7 +99,7 @@ function validateRawL5(v: Record<string, unknown>, path: string, issues: RawIssu
     checkNoExtraKeys(v, ["verdict", "justification", "correction"], path, issues);
     issues.push({ path: `${path}.verdict`, message: `must be one of ${[...L5_VERDICTS].join(", ")}` });
   }
-  if (!("justification" in v)) issues.push({ path: `${path}.justification`, message: "missing required property 'justification'" });
+  if (!("justification" in v)) issues.push({ path: `${path}.justification`, message: MISSING_JUSTIFICATION_L5 });
   else if (!isNonBlankString(v.justification)) issues.push({ path: `${path}.justification`, message: "must not be blank or whitespace-only" });
 }
 
@@ -143,7 +156,7 @@ export function validateRawWorkerOutput(tier: Tier, raw: unknown): RawIssue[] {
     checkNoExtraKeys(raw, ["verdict", "justification"], "$", issues);
     if (!("verdict" in raw)) issues.push({ path: "$.verdict", message: "missing required property 'verdict'" });
     else validateRawHardOutcome(raw.verdict, "$.verdict", issues);
-    if (!("justification" in raw)) issues.push({ path: "$.justification", message: "missing required property 'justification'" });
+    if (!("justification" in raw)) issues.push({ path: "$.justification", message: MISSING_JUSTIFICATION_HARD });
     else if (!isNonBlankString(raw.justification)) issues.push({ path: "$.justification", message: "must not be blank or whitespace-only" });
   }
   return issues;

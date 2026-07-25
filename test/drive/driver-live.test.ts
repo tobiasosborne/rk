@@ -440,3 +440,204 @@ describe("END-TO-END: 3 nodes through runVerifyDriver with a live-shaped dispatc
     expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(3);
   });
 });
+
+// rk-xxp (GAP 11): THE banked attempt-11 failure and its ONE bounded schema-repair reprompt.
+// Evidence: ../rk-m3.5-baseline/_logs/lem-{mass-split,starvation-completion-obstruction}.run-B
+// .attempt11.driver-log.jsonl — six `parse-failed` records, every one a semantically complete
+// hard-tier challenge with NO top-level `justification` (the model folded its reasoning into
+// `verdict.reason`). 96,066 tokens, 0 nodes applied, prover never dispatched.
+describe("liveDispatchVerify — ONE bounded schema-repair reprompt (rk-xxp / GAP 11)", () => {
+  /** The banked payload, verbatim from the parse-failed record's snippet (its `reason` sentence
+   * closed so the fixture is well-formed JSON — the defect under test is the MISSING SIBLING). */
+  const BANKED = {
+    verdict: {
+      outcome: "challenge", target: "1", severity: "critical", category: "missing",
+      reason: "No proof or derivation has been recorded for this statement. Node 1 carries the mass-split claim with inference 'assumption', has no sub-steps or children, and cites no dependencies (0 established deps).",
+    },
+  };
+  const CORRECTED = { verdict: BANKED.verdict, justification: "No derivation is recorded for node 1; a prover must produce one first." };
+
+  function dispatcherOver(turnFor: (item: TurnItem) => WorkerResult) {
+    const { backend, calls } = fakeBackend({ turnFor });
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "fake"), [backend]);
+    const result = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c-xxp", model: "m", sharedContext: "SHARED" });
+    if (!result.ok) throw new Error(result.reason);
+    return { dispatcher: result.dispatcher, calls };
+  }
+
+  const n1 = node("1", { statement: "S", deps: [] });
+
+  test("the banked payload gets exactly ONE repair turn and the corrected reply is accepted", async () => {
+    const seen: string[] = [];
+    const { dispatcher, calls } = dispatcherOver((item) => {
+      seen.push(item.content);
+      const body = seen.length === 1 ? BANKED : CORRECTED;
+      return { exit: 0, usage: { input: 1, output: 10, cache_read: 5, cache_creation: 0 }, rawText: JSON.stringify(body) };
+    });
+    const turn = await liveDispatchVerify(dispatcher, "hard")(n1, [n1]);
+    // Exactly two backend turns: the original and ONE repair. Never three.
+    expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(2);
+    // The repair turn echoed the CONCRETE validation issue.
+    expect(seen[1]).toContain("$.justification");
+    expect(seen[1]).toContain("REJECTED");
+    // ...and the corrected body is what flows on, at exit 0, with the repair recorded.
+    expect(turn.exit).toBe(0);
+    expect(turn.raw).toEqual(CORRECTED);
+    expect(turn.repair!.ok).toBe(true);
+    expect(turn.repair!.issues.map((i) => i.path)).toContain("$.justification");
+  });
+
+  test("a repair turn that ALSO fails is terminal: no second repair, original failure preserved", async () => {
+    const { dispatcher, calls } = dispatcherOver(() => ({ exit: 0, usage: { input: 1, output: 10, cache_read: 5, cache_creation: 0 }, rawText: JSON.stringify(BANKED) }));
+    const turn = await liveDispatchVerify(dispatcher, "hard")(n1, [n1]);
+    expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(2); // NOT 3+
+    expect(turn.raw).toEqual(BANKED);
+    expect(turn.repair!.ok).toBe(false);
+    expect(turn.repair!.repairIssues!.map((i) => i.path)).toContain("$.justification");
+  });
+
+  test("an exit-12 parse failure is repaired too, and a corrected reply clears the failure fields", async () => {
+    let n = 0;
+    const { dispatcher } = dispatcherOver(() => {
+      n++;
+      return n === 1
+        ? { exit: 0, usage: { input: 1, output: 10, cache_read: 0, cache_creation: 0 }, rawText: '{"verdict":{"outcome":"accept"}, "justification":"ok"} Hope that helps!' }
+        : { exit: 0, usage: { input: 1, output: 4, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+    });
+    const turn = await liveDispatchVerify(dispatcher, "hard")(n1, [n1]);
+    expect(turn.exit).toBe(0);
+    expect(turn.rawText).toBeUndefined();
+    expect(turn.parseClass).toBeUndefined();
+    expect(turn.repair!.ok).toBe(true);
+  });
+
+  test("a valid first reply is never repaired (no wasted turn)", async () => {
+    const { dispatcher, calls } = dispatcherOver(() => ({ exit: 0, usage: { input: 1, output: 4, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) }));
+    const turn = await liveDispatchVerify(dispatcher, "hard")(n1, [n1]);
+    expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(1);
+    expect(turn.repair).toBeUndefined();
+  });
+
+  test("a backend-level failure (exit 13) is never repaired — a repair turn cannot fix an unavailable backend", async () => {
+    const { dispatcher, calls } = dispatcherOver(() => ({ exit: 13, usage: { input: 0, output: 0, cache_read: 0, cache_creation: 0 } }));
+    const turn = await liveDispatchVerify(dispatcher, "hard")(n1, [n1]);
+    expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(1);
+    expect(turn.repair).toBeUndefined();
+    expect(turn.exit).toBe(13);
+  });
+});
+
+// rk-xxp (GAP 11): the repair turn spends REAL tokens, so it must be visible to the campaign budget
+// and to `rk verify`'s report — and it must be countable as a distinct event, not hidden inside the
+// first turn's accounting. End-to-end through the REAL runVerifyDriver loop.
+describe("END-TO-END: a schema-repaired verdict is applied, logged, and fully accounted (rk-xxp)", () => {
+  test("banked-shape first reply -> one repair -> af apply; TWO usage records + one verdict-repair record", async () => {
+    const BANKED = { verdict: { outcome: "challenge", target: "1.1", severity: "critical", category: "missing", reason: "no derivation recorded" } };
+    const FIRST_USAGE = { input: 2, output: 630, cache_read: 28187, cache_creation: 1813 };
+    const REPAIR_USAGE = { input: 1, output: 40, cache_read: 30000, cache_creation: 0 };
+    let turnNo = 0;
+    const { backend, calls } = fakeBackend({
+      turnFor: () => {
+        turnNo++;
+        return turnNo === 1
+          ? { exit: 0, usage: FIRST_USAGE, rawText: JSON.stringify(BANKED) }
+          : { exit: 0, usage: REPAIR_USAGE, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "step follows from 1.1.1" }) };
+      },
+    });
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "fake"), [backend]);
+    const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "claim-xxp", model: "m", sharedContext: "SHARED" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const logs: string[] = [];
+    const applied: FilledVerdictFile[] = [];
+    const ws: AfWorkspaceView = { workspaceId: "proofs/x", rootStatement: "P", nodeCount: 1, nodes: [node("1.1", { inference: "arithmetic" })] };
+    const deps: DriverDeps = {
+      contractId: "lem-xxp",
+      claimId: "claim-xxp",
+      identity: { modelFamily: "claude", backend: "fake", model: "m", sessionId: "pending" } as VerifierIdentity,
+      queryWorkspace: () => ({ ok: true, value: ws }),
+      reReadContentHashes: () => new Map(ws.nodes.map((n) => [n.id, n.contentHash] as const)),
+      dispatchVerify: liveDispatchVerify(created.dispatcher, "hard"),
+      dispatchProve: () => undefined,
+      recordProof: () => ({ ok: true }),
+      dispatchClassification: liveDispatchClassification(created.dispatcher),
+      applyVerdicts: (file): ApplyReport => {
+        applied.push(file);
+        for (const item of file.items) {
+          const n = ws.nodes.find((x) => x.id === item.node);
+          if (n) { n.epistemicState = "validated"; n.verifierReady = false; n.closed = true; }
+        }
+        return { exit: 0, batchId: file.batch_id, items: file.items.map((i) => ({ node: i.node, verdict: i.verdict, status: "applied" })), applied: file.items.length, blocked: 0, rejected: 0, aborted: false };
+      },
+      readShard: () => "---\nid: lem-xxp\n---\nbody\n",
+      writeShard: () => {},
+      createBdTask: () => true,
+      appendLog: (l) => logs.push(l),
+      now: () => "2026-07-25T00:00:00Z",
+      priorBalloonCount: 0,
+      priorClassifications: [],
+      isLoadBearing: () => false,
+    };
+
+    const r = await runVerifyDriver(deps);
+    // The repaired verdict went through the NORMAL pipeline and was applied — no bypass anywhere.
+    expect(r.status).toBe("converged");
+    expect(r.appliedNodeIds).toEqual(["1.1"]);
+    expect(applied.length).toBe(1);
+    // Two REAL backend turns happened, so two honest `usage` records exist — the repair's cost is
+    // never folded into the first turn's, and never lost.
+    const usageRecs = logs.filter((l) => l.includes('"kind":"usage"')).map((l) => JSON.parse(l));
+    expect(usageRecs.length).toBe(2);
+    expect(usageRecs[0].usage).toEqual(FIRST_USAGE);
+    expect(usageRecs[1].usage).toEqual(REPAIR_USAGE);
+    expect(usageRecs[1].repair).toBe(true);
+    // ...and the repair is countable as its own driver-log kind.
+    const repairRecs = logs.filter((l) => l.includes('"kind":"verdict-repair"')).map((l) => JSON.parse(l));
+    expect(repairRecs.length).toBe(1);
+    expect(repairRecs[0].node).toBe("1.1");
+    expect(repairRecs[0].role).toBe("verifier");
+    expect(repairRecs[0].outcome).toBe("repaired");
+    expect(JSON.stringify(repairRecs[0].issues)).toContain("$.justification");
+    expect(calls.filter((c) => c.includes("start:runTurn")).length).toBe(2);
+  });
+
+  test("the repair turn's tokens are charged to the campaign budget (both turns counted)", async () => {
+    const BANKED = { verdict: { outcome: "challenge", target: "1.1", severity: "critical", category: "missing", reason: "no derivation recorded" } };
+    // DISCRIMINATING by construction: the first turn costs 10 and the repair costs 90, against a cap
+    // of 95. If (and only if) the repair's 90 is accrued, round 0 ends at 100 spent and the run aborts
+    // "budget-exhausted". If the repair were free, spend would creep 10 per round and the STUCK guard
+    // would abort first with a different stopReason — so this test cannot pass by accident.
+    const { backend } = fakeBackend({
+      turnFor: (item) => (item.itemId.endsWith("#repair")
+        ? { exit: 0, usage: { input: 90, output: 0, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify(BANKED) }
+        : { exit: 0, usage: { input: 10, output: 0, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify(BANKED) }),
+    });
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "fake"), [backend]);
+    const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "claim-b", model: "m", sharedContext: "S" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const ws: AfWorkspaceView = { workspaceId: "proofs/x", rootStatement: "P", nodeCount: 1, nodes: [node("1.1", { inference: "arithmetic" })] };
+    const deps: DriverDeps = {
+      contractId: "lem-b", claimId: "claim-b",
+      identity: { modelFamily: "claude", backend: "fake", model: "m", sessionId: "pending" } as VerifierIdentity,
+      queryWorkspace: () => ({ ok: true, value: ws }),
+      reReadContentHashes: () => new Map(ws.nodes.map((n) => [n.id, n.contentHash] as const)),
+      dispatchVerify: liveDispatchVerify(created.dispatcher, "hard"),
+      dispatchProve: () => undefined,
+      recordProof: () => ({ ok: true }),
+      dispatchClassification: liveDispatchClassification(created.dispatcher),
+      applyVerdicts: (file): ApplyReport => ({ exit: 0, batchId: file.batch_id, items: [], applied: 0, blocked: 0, rejected: 0, aborted: false }),
+      readShard: () => undefined, writeShard: () => {}, createBdTask: () => true,
+      appendLog: () => {}, now: () => "2026-07-25T00:00:00Z",
+      priorBalloonCount: 0, priorClassifications: [], isLoadBearing: () => false,
+      budget: { maxCampaignTokens: 95, perCallReserve: 1 },
+    };
+    const r = await runVerifyDriver(deps);
+    expect(r.stopReason).toBe("budget-exhausted");
+    // 100 spent (10 + the repair's 90), not 10 — the repair turn is charged, not free.
+    expect(r.message).toContain("100 spent");
+    // Aborted at the SECOND round's pre-dispatch check: one dispatch (turn + repair) blew the cap.
+    expect(r.rounds).toBe(2);
+  });
+});
