@@ -37,8 +37,8 @@ import type { SessionRecord } from "./session";
 import type { DispatchModel, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
 import type { DispatchedTurn } from "./driver-run";
-import { buildProverTurnPrompt, buildRepairTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
-import { diagnoseRepairableTurn, mergeRepairTurn } from "./verdict-repair";
+import { buildProverRepairTurnPrompt, buildProverTurnPrompt, buildRepairTurnPrompt, buildVerifierTurnPrompt, OUTPUT_SCHEMA_REF, type ProverItemInput, type VerifierDep, type VerifierItemInput } from "./driver-prompts";
+import { diagnoseRepairableProverTurn, diagnoseRepairableTurn, mergeProverRepairTurn, mergeRepairTurn } from "./verdict-repair";
 import { isProoflessNode, type AfNodeView } from "./driver-plan";
 import { classifyExtractionFailure, extractSingleJsonObject } from "./parse-diag";
 import { recordProofRefine } from "./driver-af";
@@ -314,8 +314,41 @@ export function proverItemFor(node: AfNodeView): ProverItemInput {
  * dispatcher's `role` is "prover", so `DispatchedTurn.role` is "prover" and driver-prove-node.ts's
  * role guard passes; a verifier dispatcher handed here would be refused there (never records). */
 export function liveDispatchProve(dispatcher: LiveRoleTierDispatcher) {
-  return (node: AfNodeView): Promise<DispatchedTurn> =>
-    dispatcher.dispatch(node.id, buildProverTurnPrompt(proverItemFor(node)));
+  return async (node: AfNodeView): Promise<DispatchedTurn> => {
+    const first = await dispatcher.dispatch(node.id, buildProverTurnPrompt(proverItemFor(node)));
+    return repairProverTurnOnce(dispatcher, node.id, first);
+  };
+}
+
+/** rk-i19: the prover's `repairVerifierTurnOnce`. Dispatches AT MOST ONE schema-repair reprompt on the
+ * SAME session when a prover turn's output failed prover-body validation (src/drive/prover-raw.ts) or
+ * single-object extraction — the same two failure modes the verifier side covers, because gating on
+ * shape alone would not have fired on the incident this whole mechanism exists for (its banked records
+ * are `parse-failed`, not shape failures).
+ *
+ * "At most one, ever" is STRUCTURAL, identically to the verifier path: this function calls
+ * `dispatcher.dispatch` directly — never `liveDispatchProve`, never itself — so no code path leads from
+ * a repair turn into another repair. A repair reply that also fails is folded by `mergeProverRepairTurn`
+ * into the ORIGINAL failure representation, which is a normal terminal outcome.
+ *
+ * TWO deliberate differences from the verifier path, both named in `diagnoseRepairableProverTurn`'s and
+ * the tests' own comments:
+ * 1. An OVERREACHING body is never repaired — `detectProverOverreach`'s discard-and-log must survive
+ *    intact rather than be silently reshaped into a recordable proof.
+ * 2. NO tight `maxOutputTokens` override. `REPAIR_MAX_OUTPUT_TOKENS` (1,500) fits one small verdict
+ *    object; a prover repair must restate the WHOLE decomposition, and capping it there would truncate
+ *    the reply mid-object — manufacturing exactly the second failure the repair exists to prevent. The
+ *    repair turn therefore gets the same per-turn room the first prover turn had.
+ *
+ * NO extra trust anywhere: a repaired decomposition re-enters the identical downstream pipeline —
+ * `driver-prove-node.ts`'s role guard, `detectProverOverreach`, `extractProofContent`,
+ * `buildRecordProofChildren`'s fail-closed dependency translation, and af's own `record-proof`
+ * role/`--expect-hash` CAS — with nothing relaxed and no field ever copied to satisfy another. */
+export async function repairProverTurnOnce(dispatcher: LiveRoleTierDispatcher, itemId: string, first: DispatchedTurn): Promise<DispatchedTurn> {
+  const need = diagnoseRepairableProverTurn(first);
+  if (!need.needed) return first;
+  const repair = await dispatcher.dispatch(`${itemId}#repair`, buildProverRepairTurnPrompt(need.issues));
+  return mergeProverRepairTurn(first, repair, need.issues);
 }
 
 /** The one live `recordProof` a `DriverDeps` needs (rk-gn4 + B1 + FU3): records the prover's

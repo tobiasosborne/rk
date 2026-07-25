@@ -4,12 +4,14 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  buildProverRepairTurnPrompt,
   buildProverTurnPrompt,
   buildRepairTurnPrompt,
   buildSharedContext,
   buildVerifierTurnPrompt,
   OUTPUT_SCHEMA_REF,
 } from "../../src/drive/driver-prompts";
+import { validateRawProverOutput } from "../../src/drive/prover-raw";
 
 const SHARED_INPUT = {
   conjecture: "sqrt(2) is irrational.",
@@ -327,6 +329,71 @@ describe("buildRepairTurnPrompt — the ONE bounded schema-repair reprompt (rk-x
 
   test("byte-stable for the same issues", () => {
     expect(buildRepairTurnPrompt("hard", bankedIssues)).toBe(buildRepairTurnPrompt("hard", bankedIssues));
+  });
+});
+
+// rk-i19: the PROVER's bounded schema-repair reprompt. Same three load-bearing properties as the
+// verifier's (concrete issues echoed, shape-only correction, stated as the only one) plus a fourth
+// that is unique to this role and is a validity precondition, not a style rule: a prover prompt —
+// INCLUDING this one, and including every validator message it echoes — must never contain verdict
+// vocabulary, because src/drive/driver-guardrails.ts's `detectProverOverreach` depends on a prover
+// never being ASKED to judge anything.
+describe("buildProverRepairTurnPrompt — the ONE bounded schema-repair reprompt for a prover (rk-i19)", () => {
+  const PROVER_FORBIDDEN_WORDS = ["verdict", "accept", "challenge", "VALID", "INVALID", "outcome"];
+  const issues = [
+    { path: "$.children[1].statement", message: "missing required property 'statement' — every child MUST carry its own sub-claim as a non-blank string" },
+  ];
+
+  test("echoes every CONCRETE issue verbatim (path AND message)", () => {
+    const p = buildProverRepairTurnPrompt(issues);
+    expect(p).toContain("$.children[1].statement");
+    expect(p).toContain("missing required property 'statement'");
+  });
+
+  test("asks for the corrected object ONLY — no commentary, and the proof content unchanged", () => {
+    const p = buildProverRepairTurnPrompt(issues);
+    expect(p).toContain("REJECTED");
+    expect(p.toLowerCase()).toContain("no commentary");
+    expect(p).toContain("fix ONLY the shape");
+  });
+
+  test("re-states the prover's FULL output instructions, so the children[] schema + #N convention are present", () => {
+    const p = buildProverRepairTurnPrompt(issues);
+    expect(p).toContain('"children"');
+    expect(p).toContain('"statement"');
+    expect(p).toContain("#0");
+    expect(p).toContain("0-based");
+  });
+
+  test("states that this is the ONLY correction — a second malformed reply ends the item (no loops)", () => {
+    expect(buildProverRepairTurnPrompt(issues)).toContain("ONLY correction");
+  });
+
+  // The guard's precondition, checked against REAL validator output rather than a hand-picked issue:
+  // every message src/drive/prover-raw.ts can emit ends up in these bytes.
+  test("uses NO verdict vocabulary anywhere, even when echoing every issue the real validator can emit", () => {
+    const real = validateRawProverOutput({
+      children: [{ justification: "", depends: [1, "  "] }, { statement: "  ", inference: "x" }, "not an object"],
+      itemId: "smuggled",
+    });
+    expect(real.length).toBeGreaterThan(5);
+    const p = buildProverRepairTurnPrompt(real).toLowerCase();
+    for (const word of PROVER_FORBIDDEN_WORDS) expect(p).not.toContain(word.toLowerCase());
+    // ...and the same for the empty-children and non-object bodies, whose messages differ again.
+    for (const body of [{ children: [] }, "prose", {}]) {
+      const q = buildProverRepairTurnPrompt(validateRawProverOutput(body)).toLowerCase();
+      for (const word of PROVER_FORBIDDEN_WORDS) expect(q).not.toContain(word.toLowerCase());
+    }
+  });
+
+  test("never re-embeds the shared context (contract rule 6 holds for a repair turn too)", () => {
+    const p = buildProverRepairTurnPrompt(issues);
+    expect(p.includes(buildSharedContext(SHARED_INPUT))).toBe(false);
+    expect(p).not.toContain("Shared context");
+  });
+
+  test("byte-stable for the same issues", () => {
+    expect(buildProverRepairTurnPrompt(issues)).toBe(buildProverRepairTurnPrompt(issues));
   });
 });
 

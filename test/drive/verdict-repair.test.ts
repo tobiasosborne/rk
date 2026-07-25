@@ -11,7 +11,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   addUsage,
+  diagnoseRepairableProverTurn,
   diagnoseRepairableTurn,
+  mergeProverRepairTurn,
   mergeRepairTurn,
   type RepairRecord,
 } from "../../src/drive/verdict-repair";
@@ -148,6 +150,101 @@ describe("mergeRepairTurn — the repaired verdict carries NO extra trust", () =
     expect((out.repair as RepairRecord).ok).toBe(false);
     expect(out.raw).toEqual(BANKED_ATTEMPT11_PAYLOAD);
     expect((out.raw as Record<string, unknown>).justification).toBeUndefined();
+  });
+});
+
+// rk-i19: the PROVER half. `liveDispatchProve` had the identical exit-12 death mode with no
+// correction — one malformed prover reply burned a full context-heavy turn and stalled the claim.
+// The bounded path is the SAME core (one attempt ever, no extra trust, original failure preserved,
+// usage accounted); only the body validator differs (src/drive/prover-raw.ts, not verdict-raw.ts).
+describe("diagnoseRepairableProverTurn — WHEN a prover turn earns its ONE repair reprompt", () => {
+  const pturn = (o: Partial<DispatchedTurn> = {}): DispatchedTurn => ({ raw: undefined, role: "prover", exit: 0, usage: USAGE_A, ...o });
+
+  test("a decomposition whose child has no 'statement' is repairable, with the CONCRETE indexed path", () => {
+    const need = diagnoseRepairableProverTurn(pturn({ raw: { children: [{ statement: "A" }, { justification: "modus_ponens" }] } }));
+    expect(need.needed).toBe(true);
+    if (!need.needed) return;
+    expect(need.issues.map((i) => i.path)).toContain("$.children[1].statement");
+  });
+
+  test("a valid decomposition is NOT repairable (no wasted turn on a good proof step)", () => {
+    expect(diagnoseRepairableProverTurn(pturn({ raw: { children: [{ statement: "A", depends: ["#0"] }] } })).needed).toBe(false);
+  });
+
+  test("an exit-12 parse/extraction failure carrying rawText is repairable, echoing the parse class + error", () => {
+    const need = diagnoseRepairableProverTurn(pturn({ exit: 12, rawText: '{"children":[{"statement":"A"', parseError: "Unterminated string", parseClass: "unterminated" }));
+    expect(need.needed).toBe(true);
+    if (!need.needed) return;
+    expect(need.issues).toHaveLength(1);
+    expect(need.issues[0]!.message).toContain("unterminated");
+    expect(need.issues[0]!.message).toContain("Unterminated string");
+  });
+
+  test("exit 12 with NO rawText is NOT repairable — nothing was produced, so there is no shape to correct", () => {
+    expect(diagnoseRepairableProverTurn(pturn({ exit: 12 })).needed).toBe(false);
+  });
+
+  test("process-level failures (10 timeout / 11 budget-exceeded / 13 unavailable) are NEVER repaired", () => {
+    for (const exit of [10, 11, 13]) {
+      expect(diagnoseRepairableProverTurn(pturn({ exit, rawText: "whatever" })).needed).toBe(false);
+    }
+  });
+
+  // THE no-laundering rule. src/drive/driver-guardrails.ts's `detectProverOverreach` DISCARDS (and
+  // logs) a prover body carrying a verdict/outcome field. A repair reprompt that quietly asked the
+  // worker to drop that field would turn a recorded overreach into a silently recorded proof — an
+  // existing validity guard defeated by an encoding fix. The repair path must refuse it outright.
+  test("an OVERREACHING prover body is never repaired — the overreach guard keeps it, discard and all", () => {
+    expect(diagnoseRepairableProverTurn(pturn({ raw: { verdict: { outcome: "accept" }, children: [{ statement: "A" }] } })).needed).toBe(false);
+    expect(diagnoseRepairableProverTurn(pturn({ raw: { outcome: "accept" } })).needed).toBe(false);
+    expect(diagnoseRepairableProverTurn(pturn({ raw: "VALID" })).needed).toBe(false);
+  });
+});
+
+describe("mergeProverRepairTurn — the repaired decomposition carries NO extra trust", () => {
+  const pturn = (o: Partial<DispatchedTurn> = {}): DispatchedTurn => ({ raw: undefined, role: "prover", exit: 0, usage: USAGE_A, ...o });
+  const issues = [{ path: "$.children[0].statement", message: "missing required property 'statement'" }];
+  const GOOD = { children: [{ statement: "Step A", justification: "by_definition" }] };
+
+  test("a corrected reply replaces `raw`, clears the parse-failure fields, keeps role 'prover', records repair.ok", () => {
+    const first = pturn({ exit: 12, rawText: "garbage", parseError: "boom", parseClass: "unterminated" });
+    const out = mergeProverRepairTurn(first, pturn({ raw: GOOD, usage: USAGE_B }), issues);
+    expect(out.exit).toBe(0);
+    expect(out.role).toBe("prover");
+    expect(out.raw).toEqual(GOOD);
+    expect(out.rawText).toBeUndefined();
+    expect(out.parseError).toBeUndefined();
+    expect(out.parseClass).toBeUndefined();
+    expect(out.usage).toEqual(USAGE_A);
+    expect((out.repair as RepairRecord).ok).toBe(true);
+    expect((out.repair as RepairRecord).usage).toEqual(USAGE_B);
+  });
+
+  test("a repair reply that is ALSO malformed is terminal: the ORIGINAL failure representation survives verbatim", () => {
+    const first = pturn({ exit: 12, rawText: "garbage", parseError: "boom", parseClass: "unterminated" });
+    const out = mergeProverRepairTurn(first, pturn({ raw: { children: [] } }), issues);
+    expect(out.exit).toBe(12);
+    expect(out.rawText).toBe("garbage");
+    expect(out.parseClass).toBe("unterminated");
+    expect(out.raw).toBeUndefined();
+    const r = out.repair as RepairRecord;
+    expect(r.ok).toBe(false);
+    expect(r.repairIssues!.map((i) => i.path)).toContain("$.children");
+  });
+
+  test("a repair reply that smuggles a verdict field is REFUSED — a repair can never launder an overreach in", () => {
+    const out = mergeProverRepairTurn(pturn({ raw: { children: [{}] } }), pturn({ raw: { children: [{ statement: "A" }], verdict: "VALID" } }), issues);
+    expect((out.repair as RepairRecord).ok).toBe(false);
+    expect(out.raw).toEqual({ children: [{}] });
+  });
+
+  test("a repair turn that fails at the PROCESS level is recorded as a failed repair, never applied", () => {
+    const out = mergeProverRepairTurn(pturn({ raw: { children: [{}] } }), pturn({ exit: 13, raw: undefined, usage: USAGE_B }), issues);
+    const r = out.repair as RepairRecord;
+    expect(r.ok).toBe(false);
+    expect(r.repairIssues!.map((i) => i.message).join(" ")).toContain("exit 13");
+    expect(r.usage).toEqual(USAGE_B);
+    expect(out.raw).toEqual({ children: [{}] });
   });
 });
 

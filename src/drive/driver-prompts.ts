@@ -272,21 +272,29 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
  * The repaired reply gets NO extra trust: it re-enters the identical pipeline (raw-shape validation,
  * `bindVerdicts`, hash re-confirmation, cross-vendor gate). Nothing here relaxes any of that. */
 export function buildRepairTurnPrompt(tier: Tier, issues: readonly RawIssue[]): string {
+  return renderRepairPrompt(issues, tier === "hard" ? HARD_VERDICT_INSTRUCTIONS : L5_VERDICT_INSTRUCTIONS, "assessment", "verdict");
+}
+
+/** The role-neutral repair-prompt body. `keepNoun` names what the worker must NOT change (the whole
+ * point: a repair turn is a SHAPE correction, never a second opinion) and `recordNoun` names what is
+ * lost if the second reply is also malformed. Everything else — the three load-bearing properties
+ * documented above `buildRepairTurnPrompt` — is identical for every role, so it lives here once. */
+function renderRepairPrompt(issues: readonly RawIssue[], outputInstructions: string, keepNoun: string, recordNoun: string): string {
   const lines: string[] = [];
   lines.push("## Your previous reply was REJECTED — it did not match the required output shape");
   lines.push("");
-  lines.push("This is a MECHANICAL schema rejection, not a disagreement with your assessment.");
+  lines.push(`This is a MECHANICAL schema rejection, not a disagreement with your ${keepNoun}.`);
   lines.push(`Problem${issues.length === 1 ? "" : "s"} found (${issues.length}):`);
   for (const issue of issues) lines.push(`  - ${issue.path}: ${issue.message}`);
   lines.push("");
   lines.push("Reply NOW with the CORRECTED JSON object and nothing else — no commentary, no apology,");
-  lines.push("no restatement of your analysis, no code fences. Keep your assessment exactly as it was:");
+  lines.push(`no restatement of your analysis, no code fences. Keep your ${keepNoun} exactly as it was:`);
   lines.push("fix ONLY the shape. Every required key below must be present, spelled exactly as shown.");
   lines.push("");
-  lines.push(tier === "hard" ? HARD_VERDICT_INSTRUCTIONS : L5_VERDICT_INSTRUCTIONS);
+  lines.push(outputInstructions);
   lines.push("");
   lines.push("This is the ONLY correction you will be asked for. A second malformed reply ends this");
-  lines.push("item with no verdict recorded.");
+  lines.push(`item with no ${recordNoun} recorded.`);
   return lines.join("\n");
 }
 
@@ -328,6 +336,26 @@ const PROVER_OUTPUT_INSTRUCTIONS = [
 /** Builds the prover's per-turn content: a request for a `children[]` decomposition that
  * src/drive/driver-af.ts's `af refine` seam records verbatim. NO verdict vocabulary anywhere in this
  * function's output (see file header) — a prover PRODUCES the next proof step, never judges one. */
+/** rk-i19: the prover's half of the ONE bounded schema-repair reprompt (src/drive/verdict-repair.ts's
+ * `diagnoseRepairableProverTurn` decides; src/drive/driver-live.ts dispatches it exactly once). The
+ * three properties `buildRepairTurnPrompt` documents hold here unchanged; ONE more is specific to
+ * this role and is a validity precondition rather than a style rule:
+ *
+ * NO VERDICT VOCABULARY, ANYWHERE — not in this scaffold, not in the re-stated output instructions,
+ * and not in the `RawIssue` messages it echoes. `detectProverOverreach`
+ * (src/drive/driver-guardrails.ts) discards a prover body carrying a verdict/outcome field precisely
+ * BECAUSE a prover is never asked for one; a repair prompt that used that vocabulary would be the
+ * one prover-facing prompt that invited the overreach the guard exists to catch. The word ban is
+ * enforced mechanically on this function's output AND on every message src/drive/prover-raw.ts can
+ * produce (test/drive/driver-prompts.test.ts, test/drive/prover-raw.test.ts).
+ *
+ * The repaired decomposition gets NO extra trust: it re-enters the identical pipeline
+ * (`extractProofContent`, the overreach guard, `buildRecordProofChildren`'s dependency translation,
+ * and af's own `record-proof` role/hash CAS), with nothing relaxed. */
+export function buildProverRepairTurnPrompt(issues: readonly RawIssue[]): string {
+  return renderRepairPrompt(issues, PROVER_OUTPUT_INSTRUCTIONS, "reasoning", "proof step");
+}
+
 export function buildProverTurnPrompt(item: ProverItemInput): string {
   const lines: string[] = [];
   lines.push(`## Produce the proof step for node ${item.nodeId}`);

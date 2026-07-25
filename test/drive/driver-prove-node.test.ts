@@ -114,3 +114,87 @@ describe("proveOneNode — role guard, overreach discard, record, usage logging"
     expect(u?.usage).toEqual(usage);
   });
 });
+
+// rk-i19: the prover's bounded schema-repair reprompt (src/drive/driver-live.ts's
+// `repairProverTurnOnce`) is a SECOND REAL BACKEND TURN. Its tokens are spent whether or not the
+// repair worked, so `proveOneNode` must charge them to the campaign total and log them honestly —
+// a repair the budget could not see would be an unbounded hole in the exact guard rk-s9t provides.
+// The evidence record is the countable EVENT: what was wrong, whether the correction landed.
+describe("proveOneNode — repair accounting + evidence (rk-i19)", () => {
+  const USAGE = { input: 7, output: 3, cache_read: 0, cache_creation: 0 };      // 10
+  const REPAIR_USAGE = { input: 40, output: 5, cache_read: 45, cache_creation: 0 }; // 90
+  const ISSUES = [{ path: "$.children[1].statement", message: "missing required property 'statement'" }];
+
+  test("a repair turn's tokens are charged to spentTokens, on TOP of the first turn's", async () => {
+    // mutation: drop the `turn.repair?.usage` term in proveOneNode's spentTokens → 10, RED.
+    const h = rec({
+      dispatchProve: () => proverTurn({ children: [{ statement: "x" }] }, { usage: USAGE, repair: { ok: true, issues: ISSUES, usage: REPAIR_USAGE } }),
+    });
+    const r = await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    expect(r.spentTokens).toBe(100);
+  });
+
+  test("TWO honest usage records are logged — one per real backend turn, the repair's flagged repair:true", async () => {
+    const h = rec({
+      dispatchProve: () => proverTurn({ children: [{ statement: "x" }] }, { usage: USAGE, repair: { ok: true, issues: ISSUES, usage: REPAIR_USAGE } }),
+    });
+    await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    const us = h.logs.map((l) => JSON.parse(l)).filter((o) => o.kind === "usage");
+    expect(us.length).toBe(2);
+    expect(us[0].usage).toEqual(USAGE);
+    expect(us[0].repair).toBeUndefined();
+    expect(us[1].usage).toEqual(REPAIR_USAGE);
+    expect(us[1].repair).toBe(true);
+    expect(us[1].role).toBe("prover");
+  });
+
+  test("a succeeded repair banks a verdict-repair evidence record with role 'prover' and the echoed issues", async () => {
+    const h = rec({
+      dispatchProve: () => proverTurn({ children: [{ statement: "x" }] }, { usage: USAGE, repair: { ok: true, issues: ISSUES, usage: REPAIR_USAGE } }),
+    });
+    const r = await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    expect(r).toMatchObject({ recorded: true });          // the repaired body went through the NORMAL path
+    const ev = h.logs.map((l) => JSON.parse(l)).find((o) => o.kind === "verdict-repair");
+    expect(ev).toBeDefined();
+    expect(ev.node).toBe("1");
+    expect(ev.role).toBe("prover");
+    expect(ev.outcome).toBe("repaired");
+    expect(JSON.stringify(ev.issues)).toContain("$.children[1].statement");
+    expect(ev.repairIssues).toBeUndefined();              // absent iff repaired (report-parse.ts enforces it)
+  });
+
+  test("a FAILED repair banks outcome 'failed' WITH repairIssues, and the turn stays terminal", async () => {
+    const REPAIR_ISSUES = [{ path: "$.children", message: "must contain AT LEAST ONE child" }];
+    const h = rec({
+      dispatchProve: () => proverTurn(undefined, { exit: 12, rawText: "garbage", usage: USAGE, repair: { ok: false, issues: ISSUES, repairIssues: REPAIR_ISSUES, usage: REPAIR_USAGE } }),
+    });
+    const r = await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    expect("skip" in r && r.skip.includes("exit 12")).toBe(true);
+    expect(r.spentTokens).toBe(100);                      // both turns still charged
+    expect(h.recorded).toEqual([]);
+    const ev = h.logs.map((l) => JSON.parse(l)).find((o) => o.kind === "verdict-repair");
+    expect(ev.outcome).toBe("failed");
+    expect(JSON.stringify(ev.repairIssues)).toContain("AT LEAST ONE child");
+    // the ORIGINAL failure representation survives alongside it
+    expect(h.logs.some((l) => l.includes('"kind":"parse-failed"'))).toBe(true);
+  });
+
+  test("a turn with NO repair logs no verdict-repair record and exactly one usage record", async () => {
+    const h = rec({ dispatchProve: () => proverTurn({ children: [{ statement: "x" }] }, { usage: USAGE }) });
+    await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    const kinds = h.logs.map((l) => JSON.parse(l).kind);
+    expect(kinds.filter((k) => k === "usage").length).toBe(1);
+    expect(kinds).not.toContain("verdict-repair");
+  });
+
+  test("a repair turn that reported NO usage is never credited with a zero-cost record", async () => {
+    const h = rec({
+      dispatchProve: () => proverTurn({ children: [{ statement: "x" }] }, { usage: USAGE, repair: { ok: true, issues: ISSUES } }),
+    });
+    const r = await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    expect(r.spentTokens).toBe(10);
+    expect(h.logs.map((l) => JSON.parse(l)).filter((o) => o.kind === "usage").length).toBe(1);
+    // the EVENT is still recorded — a repair happened, it just reported no usage
+    expect(h.logs.some((l) => l.includes('"kind":"verdict-repair"'))).toBe(true);
+  });
+});

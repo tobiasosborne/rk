@@ -70,11 +70,37 @@ export type ProveNodeOutcome = { spentTokens: number } & ({ recorded: true; node
 export async function proveOneNode(deps: DriverDeps, node: AfNodeView, knownIds: ReadonlySet<string>): Promise<ProveNodeOutcome> {
   const turn = await deps.dispatchProve(node);
   if (turn === undefined) return { spentTokens: 0, skip: "no prover worker available" };
-  const spentTokens = turn.usage !== undefined ? usageTokens(turn.usage) : 0;
+  // rk-i19: the ONE bounded schema-repair reprompt (src/drive/verdict-repair.ts, dispatched at most
+  // once by src/drive/driver-live.ts's `repairProverTurnOnce`) is a SECOND REAL BACKEND TURN. Its
+  // tokens are spent whether or not the repair worked, so they accrue to the same campaign total the
+  // caller guards against — a repair the budget could not see would be an unbounded hole in the exact
+  // guard rk-s9t exists to provide. Exactly the accounting driver-verify-node.ts does for the verifier.
+  const spentTokens = (turn.usage !== undefined ? usageTokens(turn.usage) : 0) + (turn.repair?.usage !== undefined ? usageTokens(turn.repair.usage) : 0);
   // Log usage BEFORE any discard — tokens are spent on dispatch regardless of outcome (src/drive/
   // report.ts reads this "usage" kind; it already parses `role`, so prover turns report the same way).
   if (turn.usage !== undefined) {
     deps.appendLog(JSON.stringify({ kind: "usage", at: deps.now(), contractId: deps.contractId, claimId: deps.claimId, nodeId: node.id, role: turn.role, sessionId: deps.identity.sessionId, usage: turn.usage }));
+  }
+  if (turn.repair !== undefined) {
+    // ONE honest `usage` record per REAL backend turn (never a merged total, which would understate
+    // the turn count and distort the report's cache-fraction arithmetic), flagged `repair: true` so a
+    // reader can attribute it. A repair that reported NO usage gets NO record — a dispatcher that
+    // reports nothing is never silently credited with a zero-cost turn.
+    if (turn.repair.usage !== undefined) {
+      deps.appendLog(JSON.stringify({ kind: "usage", at: deps.now(), contractId: deps.contractId, claimId: deps.claimId, nodeId: node.id, role: turn.role, sessionId: deps.identity.sessionId, usage: turn.repair.usage, repair: true }));
+    }
+    // The countable EVENT, in the SAME 'verdict-repair' shape the verifier path writes
+    // (src/drive/report-parse.ts's `VerdictRepairLogRecord`, whose `role` field already admits every
+    // role in the vocabulary): what was wrong, whether the correction landed, and — only on a failure
+    // — why the repair reply was itself refused. The kind name is the SCHEMA-REPAIR event, not a claim
+    // that a prover produced a verdict; `role` is what distinguishes the two, and a new kind would be
+    // an unrecognized record to every existing reader (a compat event for no gain).
+    deps.appendLog(JSON.stringify({
+      kind: "verdict-repair", at: deps.now(), node: node.id, role: turn.role,
+      outcome: turn.repair.ok ? "repaired" : "failed",
+      issues: turn.repair.issues.map((i) => ({ path: i.path, message: i.message })),
+      ...(turn.repair.repairIssues !== undefined ? { repairIssues: turn.repair.repairIssues.map((i) => ({ path: i.path, message: i.message })) } : {}),
+    }));
   }
   // Role guard: only a prover authors proof content here (mirror of the verifier-only apply guard).
   if (turn.role !== "prover") {
