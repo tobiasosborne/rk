@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { loadSnapshot } from "../store/snapshot-load";
 import { loadGateConfig } from "../store/config-load";
 import { buildGraphDocument } from "../store/build-graph";
-import { renderSite } from "../render/site";
+import { renderSiteFromRepo } from "./render";
 import { GATES } from "../gates/index";
 import { formatFinding } from "../gates/framework";
 import type { Gate, GateResult } from "../gates/framework";
@@ -100,12 +100,29 @@ function prepareRenderSiteExternalRegen(
       );
     }
 
-    // Same northStarId source rk render itself uses when no explicit `--north-star` overrides it
-    // (src/cli/render.ts's resolveNorthStar) -- `rk check` has no CLI equivalent of `rk render`'s
-    // own `--title`/`--north-star` flags, so a render invoked with either flag explicitly set will
-    // legitimately diff against this config-only regeneration (a known, documented limitation --
-    // docs/gate-contracts.md's Gate 7 section).
-    const site = renderSite(buildResult.doc, { northStarId: config.northStarId });
+    // B2 (docs/memos/2026-07-25-generality-audit.md), THE fix for permanent false STALE. This used
+    // to call `renderSite(doc, { northStarId })` directly — ONE of the SIX options `rk render`
+    // passes. The four repo-derived ones (`sources`, `runGallery`, `defsData`, `frResiduals`) were
+    // dropped, so the "expected" bytes differed from the real artifact on EVERY repo: a pristine
+    // scaffold reported `build/site/index.html` STALE and re-rendering never cleared it, blocking
+    // the stamped pre-commit hook in consolidation. Now both commands go through the SINGLE
+    // option-assembly seam `src/cli/render.ts`'s `renderSiteFromRepo` — the generator's own module,
+    // an edge calling edges, with `src/gates/**` still pure (L3) and Gate 7's `externalRegen`
+    // contract unchanged. `renderSite` is now called for the site artifact from exactly one place
+    // in the codebase, so generator and verifier cannot silently disagree about what a render is.
+    //
+    // ONE residual divergence remains, named and narrowed rather than accepted silently: `rk
+    // render`'s `--title`/`--north-star` are CLI-only overrides `rk check` has no equivalent of, so
+    // this regeneration reads `.rk/config.json` alone (exactly as a flagless `rk render` does).
+    // `rk render` itself now DETECTS that case exactly — it re-renders the same data the way this
+    // function will and byte-compares — and warns at render time, naming the flag and the remedy
+    // (src/cli/render.ts's `checkDivergenceWarning`; docs/gate-contracts.md Gate 7 "Known
+    // limitations"). Removing the residual entirely needs the options recorded per manifest entry,
+    // a schema/compat event (CLAUDE.md Rule 10) out of this repair's scope.
+    const { site } = renderSiteFromRepo(root, buildResult.doc, buildResult.diagnostics.sources, {
+      northStarId: config.northStarId,
+      frCommand: deps.frCommand,
+    });
     const indexFile = site.files.find((f) => f.path === "index.html");
     if (!indexFile) {
       return fail(

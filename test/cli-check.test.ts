@@ -6,9 +6,9 @@ import { run } from "../src/cli";
 import { checkCommand } from "../src/cli/check";
 import { GATES } from "../src/gates/index";
 import { renderDag, renderIndex } from "../src/gates/linker-render";
+import { parseRegistry } from "../src/gates/linker-parse";
+import { renderCommand } from "../src/cli/render";
 import { loadSnapshot } from "../src/store/snapshot-load";
-import { buildGraphDocument } from "../src/store/build-graph";
-import { renderSite } from "../src/render/site";
 
 const RK_REPO_ROOT = join(import.meta.dir, "..");
 
@@ -178,29 +178,106 @@ describe("rk check", () => {
       writeFileSync(join(root, ".rk", "generated.json"), JSON.stringify({ schema_version: "1", entries: [{ path, generator }] }));
     }
 
-    function goldenSiteBytes(root: string): string {
-      const { doc } = buildGraphDocument(root, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
-      const site = renderSite(doc, {});
-      return site.files.find((f) => f.path === "index.html")!.contents;
+    /** B2 (docs/memos/2026-07-25-generality-audit.md): the ONLY honest way to build the "clean"
+     * side of a freshness test is to run the REAL generator — `renderCommand` — and let it write
+     * the file and adopt its own manifest entry. The pre-B2 helper built the golden with
+     * `renderSite(doc, {})`, the same impoverished call shape the GATE used, so the assertion
+     * compared the gate against itself and the real generator was never in the loop: exactly the
+     * L1 "runs without errors is never a passing test" trap. With `renderSite(doc, {})` the
+     * `sources`/`runGallery`/`defsData`/`frResiduals` options `rk render` actually passes were
+     * dropped on BOTH sides, so the divergence was invisible by construction. */
+    /** Adds a registry shard and re-settles the two gates that are NOT under test but would
+     * otherwise fail this suite for unrelated reasons: Gate 2's INDEX.md/DAG.md mirrors, and
+     * Gate 4's anchor check (`writeGoldenScaffold` adopts report/, so every shard must be
+     * anchored or whitelisted — whitelisting keeps it a WARN, never an ERROR). */
+    function addShard(root: string, id: string): void {
+      writeFileSync(
+        join(root, "argument", `${id}.md`),
+        `---\nid: ${id}\nkind: lemma\nstatus: stated\naf: none\ncontract: the ${id} bound holds\n---\n\nBody.\n`,
+      );
+      const { lemmas } = parseRegistry(loadSnapshot(root));
+      writeFileSync(join(root, "argument", "INDEX.md"), renderIndex(lemmas));
+      writeFileSync(join(root, "argument", "DAG.md"), renderDag(lemmas));
+      writeFileSync(join(root, "report", "UNWIRED.md"), `# UNWIRED\n\n\`\`\`\n${lemmas.map((l) => l.id).sort().join("\n")}\n\`\`\`\n`);
     }
 
-    test("a clean, byte-identical build/site/index.html declared under 'render-site-v1' -> Gate 7 reports zero errors", async () => {
-      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-clean-"));
+    async function realRender(root: string, extraArgs: string[] = []): Promise<string[]> {
+      const { out, lines } = capture();
+      const code = await renderCommand(["--root", root, ...extraArgs], out, {
+        frCommand: FAKE_CMD,
+        afCommand: FAKE_CMD,
+      });
+      expect(code).toBe(0);
+      return lines;
+    }
+
+    test("ROUND TRIP (B2): a flagless `rk render` followed by `rk check` reports FRESH — the gate regenerates through the SAME option-assembly path the generator used", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-roundtrip-"));
       dirs.push(root);
       writeGoldenScaffold(root);
 
-      const bytes = goldenSiteBytes(root);
-      mkdirSync(join(root, "build", "site"), { recursive: true });
-      writeFileSync(join(root, "build", "site", "index.html"), bytes);
-      writeManifest(root, "build/site/index.html", "render-site-v1");
+      // The real generator: writes build/site/index.html AND adopts its own .rk/generated.json
+      // entry (src/cli/render.ts) — no hand-written manifest, no hand-built golden bytes.
+      await realRender(root);
 
       const { out, lines } = capture();
       const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
       const text = lines.join("\n");
 
-      expect(errorCountFor(text, "freshness")).toBe(0);
-      expect(text).not.toContain("cannot be regenerated for verification");
       expect(text).not.toContain("build/site/index.html is STALE");
+      expect(text).not.toContain("cannot be regenerated for verification");
+      expect(errorCountFor(text, "freshness")).toBe(0);
+      expect(code).toBe(0);
+    });
+
+    test("ROUND TRIP (B2): the same holds on a repo with real content in every option the generator loads (runs/, definitions/, CONVENTIONS.md, registry shards)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-roundtrip-content-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      // definitions/ + CONVENTIONS.md -> `defsData`; runs/ -> `runGallery`; a registry shard ->
+      // graph nodes. Each of these feeds one of the four options `rk check` used to drop.
+      mkdirSync(join(root, "definitions"), { recursive: true });
+      writeFileSync(
+        join(root, "definitions", "def-widget.md"),
+        "---\nid: def-widget\nterm: widget\nkind: original\nstatus: draft\nconsensus: pending\n---\n\nA widget.\n",
+      );
+      writeFileSync(join(root, "CONVENTIONS.md"), "# Conventions\n\nNotation lives here.\n");
+      mkdirSync(join(root, "runs", "2026-07-25-first-numerics"), { recursive: true });
+      writeFileSync(
+        join(root, "runs", "2026-07-25-first-numerics", "README.md"),
+        "# first numerics\n\nhypothesis: the bound holds\ncommand: `bun run x.ts`\nfinding: it holds\nnext: widen the sweep\ninvariant: residual < 1e-9\n",
+      );
+      writeFileSync(join(root, "INDEX.md"), "# INDEX\n\n- 2026-07-25-first-numerics\n");
+      addShard(root, "lem-widget-bound");
+
+      await realRender(root);
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).not.toContain("build/site/index.html is STALE");
+      expect(errorCountFor(text, "freshness")).toBe(0);
+      expect(code).toBe(0);
+    });
+
+    test("ROUND TRIP (B2): re-running `rk render` after a content change clears a STALE — the freshness signal is actionable, not permanent", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-reclear-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      await realRender(root);
+
+      addShard(root, "lem-new"); // the repo content changes, so the rendered site is now stale
+
+      const stale = capture();
+      await checkCommand(["--root", root], stale.out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      expect(stale.lines.join("\n")).toContain("build/site/index.html is STALE");
+
+      await realRender(root); // the documented remedy
+      const fresh = capture();
+      const code = await checkCommand(["--root", root], fresh.out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      expect(fresh.lines.join("\n")).not.toContain("build/site/index.html is STALE");
+      expect(errorCountFor(fresh.lines.join("\n"), "freshness")).toBe(0);
       expect(code).toBe(0);
     });
 
@@ -220,6 +297,68 @@ describe("rk check", () => {
       expect(text).toContain("build/site/index.html is STALE");
       expect(errorCountFor(text, "freshness")).toBeGreaterThan(0);
       expect(code).toBe(1);
+    });
+
+    test("a REAL render hand-edited afterwards is still caught (the round-trip fix must not weaken the mechanism it repairs)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-realstale-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      await realRender(root);
+
+      const p = join(root, "build", "site", "index.html");
+      writeFileSync(p, `${readFileSync(p, "utf8")}<!-- hand-edited -->\n`);
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      const text = lines.join("\n");
+
+      expect(text).toContain("build/site/index.html is STALE");
+      expect(errorCountFor(text, "freshness")).toBeGreaterThan(0);
+      expect(code).toBe(1);
+    });
+
+    // The one divergence this seam cannot remove: `rk render --title`/`--north-star` are CLI-only
+    // overrides `rk check` has no equivalent of, so a render invoked with either legitimately
+    // diffs against the config-only regeneration. It must never be a SILENT permanent STALE:
+    // `rk render` itself detects the exact case (by regenerating the way `rk check` will and
+    // byte-comparing) and says so, with the remedy, at the moment the divergence is created.
+    test("an override render that `rk check` cannot reproduce is NAMED by `rk render` itself, at render time", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-override-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+
+      const lines = await realRender(root, ["--title", "My Campaign"]);
+      const text = lines.join("\n");
+      expect(text).toContain("rk check");
+      expect(text).toContain("STALE");
+      expect(text).toContain("--title");
+    });
+
+    test("a flagless render prints NO override warning (the warning is exact, not a blanket disclaimer)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-nooverride-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+
+      const text = (await realRender(root)).join("\n");
+      expect(text).not.toContain("will report");
+    });
+
+    test("an override whose value matches what `rk check` regenerates is NOT warned about (the divergence is narrowed to real byte differences)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "rk-check-rendersite-benign-override-"));
+      dirs.push(root);
+      writeGoldenScaffold(root);
+      addShard(root, "lem-ns");
+      mkdirSync(join(root, ".rk"), { recursive: true });
+      writeFileSync(join(root, ".rk", "config.json"), JSON.stringify({ northStarId: "lem-ns" }));
+
+      // --north-star repeats the configured value: byte-identical to the config-only regeneration.
+      const text = (await realRender(root, ["--north-star", "lem-ns"])).join("\n");
+      expect(text).not.toContain("will report");
+
+      const { out, lines } = capture();
+      const code = await checkCommand(["--root", root], out, loadSnapshot, { frCommand: FAKE_CMD, afCommand: FAKE_CMD });
+      expect(lines.join("\n")).not.toContain("build/site/index.html is STALE");
+      expect(code).toBe(0);
     });
 
     test("declared under 'render-site-v1' but never actually written to disk -> Gate 7 ERRORs declared-but-missing (edge regeneration still succeeds; the diff target is simply absent)", async () => {
