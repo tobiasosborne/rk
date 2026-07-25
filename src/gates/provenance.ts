@@ -88,7 +88,7 @@ import {
   statusTableRows,
   type ClaimRow,
 } from "./provenance-md";
-import { checkSourceHashes, checkStatusDrift } from "./provenance-checks";
+import { checkSourceHashes, checkStatusTable } from "./provenance-checks";
 
 const PROVENANCE_PATH = "report/PROVENANCE.md";
 /** The ROOT artifact check 6's presence guard keys on — the SAME key Gate 6 uses
@@ -260,7 +260,11 @@ export const provenanceGate: Gate = {
     checkClaimLabels(prov.claimRows, tex, findings);
     checkClaimSources(prov.claimRows, prov.sourceRegistry, findings);
     checkSourceHashes(prov.sourceRows, snapshot, findings, PROVENANCE_PATH);
-    checkStatusDrift(statusRows, shards, tex, findings);
+    // check 5 + its own two coverage duties (rk-lkeh, 2026-07-25): the OVERCLAIM/underclaim drift
+    // check, the "configured table exists but was never loaded" ERROR, and the JOIN count that
+    // says how many of the `S` parsed rows check 5 could actually compare. All three live in
+    // provenance-checks.ts — see `checkStatusTable` there.
+    const join = checkStatusTable(snapshot, config.provenanceStatusTableFile, statusRows, shards, tex, findings);
     checkAnchor(shards, tex, whitelist, findings, reportAdopted);
     checkReverseLabels(shards, tex, findings);
     checkCoverage(shards, prov.claimRows, tex, findings);
@@ -284,7 +288,10 @@ export const provenanceGate: Gate = {
         total,
         unit:
           `registry results, ${skipped.length} frontmatter-invalid, ${prov.claimRows.length} ` +
-          `claim rows, ${statusRows.length} tab:status rows; ` +
+          // rk-lkeh: `(<J> joined)` is rendered on EVERY path, exactly like `S` itself — a reader
+          // can always tell how many of the parsed rows check 5 was able to compare, rather than
+          // inferring enforcement from a nonzero `S` that may join nothing.
+          `claim rows, ${statusRows.length} tab:status rows (${join.joinedRows} joined); ` +
           // B1: the report/-adoption bit is rendered on EVERY path, present or absent (Gate 6's
           // own convention, src/gates/shards.ts) — a reader can always tell whether check 6 ran.
           `report/: ${reportAdopted ? "present" : "absent (not adopted)"}`,

@@ -1,0 +1,20 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "paper/status.tex",
+      "message_pattern": "present on disk but its text was NOT loaded"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["0 tab:status rows (0 joined)", "report/: absent (not adopted)"]
+  },
+  "config_override": { "provenanceStatusTableFile": "paper/status.tex" },
+  "aism_behavior": "differs: check-provenance.py:206 has no configurable status-table file at all -- it reads the hardcoded ROOT/'report/sections/13_discussion.tex' and, finding nothing, status_table_rows() returns [] silently (check-provenance.py:207-211), exit 0. AISM cannot reach this state, so there is no script behavior to match; the divergence is rk's own config parameter (provenance-11) acquiring a failure mode AISM never had.",
+  "notes": "rk-lkeh (2026-07-25), the half-parameterisation false-green. `provenanceStatusTableFile` was made a config parameter specifically to close incident (a)'s hardcoded-filename false-green (provenance-11), but the parameter accepts ANY repo-relative path while src/store/snapshot-load.ts text-loads only the six gates' declared Inputs (report/**/*.{tex,md}, argument/**, ...). A campaign that keeps its write-up in paper/ therefore configured a status table that EXISTS, watched statusTableRows() return [], and got `0 tab:status rows` on the coverage line -- indistinguishable from `this campaign has no status table`. Check 5 (OVERCLAIM/underclaim, the gate's #1 guarded failure mode) verified nothing: this fixture's thm-main is `status: open` while paper/status.tex frames it `proved`, and pre-fix that OVERCLAIM was unreachable, exit 0. The pure gate can tell the two apart with NO new edge fact: snapshot.sha256 spans the whole tree (walkTree, review N1) while the text map is bounded to the include rules, so a hash fact with no text means present-but-unloaded -- the same three-way present/absent discipline check 4 already applies to source payloads, and the same `declared but unverifiable never exits green` rule Gate 7's unrecognized-generator ERROR ratifies. Mutation-proven: reverting statusTableSource() to `return snapshot.get(f) === undefined ? 'absent' : 'read'` turns this fixture green again (verdict pass, exit 0), which is exactly the bug."
+}

@@ -4,7 +4,7 @@
 // (check-provenance.py:204-225). Sibling to provenance-parse.ts (registry + `\label{}` scanning),
 // split out to stay under the ~200-line shard target (CLAUDE.md Rule 4).
 
-import type { RepoSnapshot } from "./snapshot";
+import { dirExists, fileSha256, type RepoSnapshot } from "./snapshot";
 import { LABEL_FULL_RE, stripTexComment } from "./provenance-parse";
 
 function stripBackticks(s: string): string {
@@ -140,6 +140,31 @@ export function parseUnwired(snapshot: RepoSnapshot): Set<string> {
 export interface StatusRow {
   statusCell: string;
   labels: string[];
+}
+
+/** Where the configured `provenanceStatusTableFile` actually came from (rk-lkeh, 2026-07-25).
+ * `statusTableRows` returns `[]` for BOTH a genuinely-absent file and a file the snapshot loader
+ * never text-loaded, and the coverage line renders both as `0 tab:status rows` — so a campaign
+ * that points `provenanceStatusTableFile` at a path outside `src/store/snapshot-load.ts`'s include
+ * rules (which text-load `report/**\/*.{tex,md}`, `argument/**`, ... — NOT an arbitrary `paper/`)
+ * gets a check 5 that silently verifies nothing, on a table that demonstrably exists.
+ *
+ * The pure gate can tell the two apart without any new edge fact: `snapshot.sha256` spans the
+ * WHOLE tree (`walkTree`, review N1) while the text map is bounded to the include rules, so a hash
+ * (or directory) fact with no text means present-but-unloaded. Same three-way present/absent
+ * discipline check 4 already applies to source payloads.
+ *   - `read`                 — text available; the parser saw the real file.
+ *   - `present-but-unloaded` — on disk, but outside the loader's include rules (or a directory):
+ *                              a CONFIGURED check that cannot run. Never green (caller ERRORs).
+ *   - `absent`               — not on disk at all: the legitimate day-1/no-report state. */
+export type StatusTableSource = "read" | "present-but-unloaded" | "absent";
+
+export function statusTableSource(snapshot: RepoSnapshot, tabStatusFile: string): StatusTableSource {
+  if (snapshot.get(tabStatusFile) !== undefined) return "read";
+  if (fileSha256(snapshot, tabStatusFile) !== undefined || dirExists(snapshot, tabStatusFile)) {
+    return "present-but-unloaded";
+  }
+  return "absent";
 }
 
 /** Parses the `tab:status` table in the CONFIGURED status-table file (docs/gate-contracts.md

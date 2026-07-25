@@ -1,0 +1,19 @@
+{
+  "gate": "provenance",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "report/sections/13_discussion.tex",
+      "message_pattern": "compared 0 of 1"
+    }
+  ],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1 tab:status rows (0 joined)"]
+  },
+  "aism_behavior": "differs: check-provenance.py:293-321 iterates only rows whose \\Cref labels resolve through the registry join and has no notion of a join denominator, so a table every one of whose rows resolves to nothing produces zero output and zero counters -- the script reports clean and says nothing about having compared nothing. rk renders the JOIN count on every coverage line and WARNs at zero. Verdict is unchanged (both green); this is a visibility divergence of the same family as the `S` count (F3/provenance-13), one join further in.",
+  "notes": "rk-lkeh (2026-07-25), the READABLE half of the same defect. The status table is where the default config expects it and parses cleanly (S=1), but its only row cites \\Cref{thm:legacy} -- a label no registry result maps to -- so check 5 compared 0 of 1 rows while the gate reported clean. `S` alone can never expose that: the pre-fix coverage line said `1 tab:status rows`, which reads as enforcement. The two causes of a zero join are named separately and never conflated (src/gates/provenance-checks.ts's StatusJoinCause, the discipline src/drive/cross-vendor.ts applies to identity-unparseable vs same-family): here the universe is NON-empty (lem:x maps to lem-x), so the cause is `labels-disjoint` -- a stale table or one written ahead of the registry -- NOT the `no-join-universe` shape a relocated table produces. WARN, not ERROR, deliberately: a zero-join table is unverified coverage, not a proven validity defect, and drafting a table ahead of the registry is legitimate; the defect closed here is the SILENCE. Mutation-proven: counting every parsed row as joined (dropping the per-row `joined` flag in checkStatusDrift) turns this fixture green and restores `1 tab:status rows (1 joined)`, the lie."
+}

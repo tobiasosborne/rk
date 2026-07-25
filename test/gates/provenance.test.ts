@@ -83,7 +83,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run({});
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows; report/: absent (not adopted)" },
+      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows (0 joined); report/: absent (not adopted)" },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run(baseline());
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows; report/: present" },
+      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined); report/: present" },
     ]);
   });
 });
@@ -113,7 +113,7 @@ describe("provenanceGate — rk-v18: malformed registry shards are a visible ski
         gate: "provenance",
         checked: 1,
         total: 2,
-        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows; report/: present",
+        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined); report/: present",
       },
     ]);
   });
@@ -789,6 +789,97 @@ describe("provenanceGate — coverage line", () => {
       "Foo \\Cref{lem:x} & open \\\\\n\\bottomrule\n\\end{tabular}\n\\label{tab:status}\n";
     const result = run(entries);
     expect(result.coverage[0]!.unit).toContain("1 tab:status rows");
+  });
+});
+
+describe("rk-lkeh: check 5's JOIN coverage — a parsed status table that compares nothing is never silent", () => {
+  // The provenance-11 divergence parameterized the status-table FILE but NOT the label universe
+  // it joins against (`texLabels`, still `report/sections/*.tex`). A campaign that relocates its
+  // table outside report/ therefore parsed S>0 rows whose labels resolved to NOTHING: check 5
+  // (OVERCLAIM/underclaim — this gate's #1 guarded failure mode) compared zero rows and the gate
+  // reported clean. `S` alone could never expose that; only the JOIN count can.
+  test("relocated table, no report/ tree at all (B1 shape): 1 row parsed, 0 joined, loud WARN", () => {
+    const entries = {
+      "argument/lem-open-claim.md": shard({ id: "lem-open-claim", kind: "lemma", status: "open", af: "none" }),
+      "paper/status.tex":
+        "\\begin{tabular}{ll}\n\\toprule\nResult & Status \\\\\n\\midrule\n" +
+        "Main \\Cref{lem:open-claim} & proved \\\\\n\\bottomrule\n\\end{tabular}\n\\label{tab:status}\n",
+    };
+    const result = provenanceGate.run(
+      snapshot(entries),
+      mergeGateConfig({ provenanceStatusTableFile: "paper/status.tex" }),
+    );
+    // The pre-fix false green: no OVERCLAIM ERROR is reachable here (the join is empty), so the
+    // ONLY honest signal is that check 5 verified nothing — and it must be present.
+    expect(result.coverage[0]!.unit).toContain("1 tab:status rows (0 joined)");
+    const w = warnings(result).find((f) => f.message.includes("compared 0 of 1"));
+    expect(w).toBeDefined();
+    expect(w!.path).toBe("paper/status.tex");
+    expect(w!.message).toContain("no registry result maps to ANY report label");
+    expect(w!.message).toContain("report/sections/*.tex");
+  });
+
+  test("cause is DISTINGUISHED, never conflated: labels exist but the table cites none of them", () => {
+    const entries = baseline();
+    entries["report/sections/13_discussion.tex"] =
+      "\\begin{tabular}{ll}\n\\toprule\nResult & Status \\\\\n\\midrule\n" +
+      "Other \\Cref{lem:not-in-registry} & open \\\\\n\\bottomrule\n\\end{tabular}\n\\label{tab:status}\n";
+    const result = run(entries);
+    const w = warnings(result).find((f) => f.message.includes("compared 0 of 1"));
+    expect(w).toBeDefined();
+    expect(w!.message).toContain("1 registry-mapped report label(s) exist");
+    // the two causes must never be reported as one another (cross-vendor.ts discipline)
+    expect(w!.message).not.toContain("no registry result maps to ANY report label");
+  });
+
+  test("a table that DOES join reports its joined count and emits no WARN", () => {
+    const entries = baseline();
+    entries["argument/lemmas/lem-x.md"] = shard({
+      id: "lem-x",
+      kind: "lemma",
+      status: "stated",
+      af: "none",
+      provenance: "report lem:x",
+    });
+    entries["report/sections/13_discussion.tex"] =
+      "\\begin{tabular}{ll}\n\\toprule\nResult & Status \\\\\n\\midrule\n" +
+      "Foo \\Cref{lem:x} & open \\\\\n\\bottomrule\n\\end{tabular}\n\\label{tab:status}\n";
+    const result = run(entries);
+    expect(result.coverage[0]!.unit).toContain("1 tab:status rows (1 joined)");
+    expect(warnings(result).some((f) => f.message.includes("compared 0 of"))).toBe(false);
+  });
+
+  // The SHARPEST form of the same defect. `provenanceStatusTableFile` can name a path
+  // `src/store/snapshot-load.ts`'s include rules never text-load (they cover `report/**\/*.{tex,md}`,
+  // not `paper/`). `statusTableRows` then returns [] for a table that DEMONSTRABLY EXISTS —
+  // indistinguishable, on the coverage line, from "this campaign has no status table". The pure
+  // gate CAN tell the two apart: `snapshot.sha256` spans the whole tree (walkTree), so a hash fact
+  // with no text means present-but-unloaded. Same three-way discipline check 4 already applies to
+  // source payloads, and the same "declared but unverifiable must never exit green" rule Gate 7's
+  // unrecognized-generator ERROR ratifies.
+  test("configured table present on disk but outside the include rules: ERROR, never a quiet 0 rows", () => {
+    const snap = snapshotFromFiles(
+      { "argument/thm-main.md": shard({ id: "thm-main", kind: "theorem", status: "open", af: "none" }) },
+      { sha256: { "paper/status.tex": "a".repeat(64) } },
+    );
+    const result = provenanceGate.run(snap, mergeGateConfig({ provenanceStatusTableFile: "paper/status.tex" }));
+    const e = result.findings.find((f) => f.severity === "ERROR" && f.message.includes("paper/status.tex"));
+    expect(e).toBeDefined();
+    expect(e!.message).toContain("present on disk but its text was NOT loaded");
+    expect(e!.message).toContain("check 5 read ZERO rows from a table that exists");
+  });
+
+  test("configured table genuinely absent from disk: no ERROR (the default-config day-1 state)", () => {
+    const result = run(baseline());
+    expect(errors(result)).toEqual([]);
+  });
+
+  test("S=0 (provenance-13 shape) stays a pure coverage statement — no new WARN invented", () => {
+    const entries = baseline();
+    entries["report/sections/13_discussion.tex"] = "This section discusses results informally.\n";
+    const result = run(entries);
+    expect(result.coverage[0]!.unit).toContain("0 tab:status rows (0 joined)");
+    expect(result.findings).toEqual([]);
   });
 });
 
