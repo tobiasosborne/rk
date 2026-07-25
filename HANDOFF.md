@@ -3,100 +3,112 @@
 
 # HANDOFF
 
-## State (2026-07-20, session close — M3 repair DONE, prover dispatch LIVE, M3.5 4/6 banked)
+## State (2026-07-25, session close — generality wave: rk is usable by a stranger)
 
-**M3 repair wave COMPLETE** (all 8 boundary-review blockers, rk-e3g closed, one wave,
-mechanically verified, no re-review). **Render wave landed** (rk-scy/38f/50v/d2v).
-**Prover dispatch landed and Tier-A reviewed** (rk-gn4 closed): af authoritative
-readiness flags, atomic `af record-proof` (refine + challenge disposition + release),
-per-node prove→verify, kernel CAS enforcement of hash/role/availability at
-record-proof and verdicts apply, per-child depends end-to-end, closure flag,
-capability preflight. **The M3.5 live-debug loop (11 attempts) fixed ten further
-gaps** — see docs/worklog.md 2026-07-20 entry — each with red-green tests, landed
-WITHOUT per-fix review per TJO directive (bd memory
-m3-5-fix-loop-no-per-fix-reviews-tjo-2026-07-20); all loop validity changes are
-QUEUED for ONE batched Tier A review at M3 close (list below).
+**Twelve parallel lanes landed, 18 commits.** The session's theme was TJO's directive:
+make rk genuinely useful as a research + proof orchestrator for *any* academic, not a
+tool shaped around this campaign. A read-only generality audit
+(`docs/memos/2026-07-25-generality-audit.md`) stamped real scaffolds, ran the binary
+against them, and traced where a mathematician cloning rk would first get stuck. The
+answer was: **ten seconds** (`bun build` failed on an undocumented `bun install`), then
+a permanent false STALE on a pristine scaffold, then every registry shard ERRORing in
+consolidation phase. All three are fixed.
 
-**M3.5 baseline: 3 of 6 runs converged, 4/6 produced denominators.**
-lem-weighted-min A+B CONVERGED, FULL parity (identical challenge dynamics);
-mass-split A CONVERGED 7/7; starvation A 36/39 validated then a genuine cross-vendor
-'incorrect' dispute on 1.9/1.10; mass-split B + starvation B stuck on GAP 11.
-Campaign: 2.31M tokens, 58 validated nodes, **clean whole-lemma SC4 denominator
-33,004 tok/validated-node** (wm-A + wm-B + ms-A pooled); cache ~0.50 codex-verifier
-vs ~0.93 claude-verifier (M3.9 lever). All banked in ../rk-m3.5-baseline
-(RUN-REPORT-11 = campaign table; memos/ has 4 baseline memos, 2 FULL + 2 partial).
+**Day-one blockers closed.** `git clone && make install` works (verified by cloning HEAD
+into scratch and running it). Gate 4's anchor check is presence-conditional on the
+`report/` ROOT — a campaign with no LaTeX report is a legitimate permanent state, and a
+check whose only remedy is adopting a convention the tool refuses to stamp is coercion,
+not validity. `rk check`'s freshness regeneration goes through `rk render`'s own
+option-assembly path, so `renderSite` is called for the site artifact from exactly ONE
+place and generator/verifier cannot silently disagree. Template 1.4.0 seeds
+`argument/thm-north-star.md` from `rk init`'s own contract argument and binds
+`northStarId` — so PRD C2's critical-path provenance guarantee has a real path from day
+one instead of passing vacuously.
 
-Gates at close: bun test 1967/0 (134 files), selftest OK (corpus 123/123, purity
-101/101). rk tip pushed to the NEW public GitHub remote (created this close).
-vibefeld pushed through 8c32a2c. AISM untouched (read-only) throughout.
+**GAP 11 solved without a live re-run.** The banked attempt-11 logs already carried the
+answer: the claude-opus verifier omitted the required top-level `justification`.
+Diagnosis corrected mid-fix — the *proximate* failure was extraction (exit 12), not
+shape validation, so a repair gated on shape alone would not have fired. Landed: prompt
+hardening plus ONE bounded schema-repair reprompt, structurally one-shot, no extra trust,
+usage accounted. 17 mutation proofs. **Live confirmation is outstanding** (rk-k8dq).
+
+**Validity inputs that were faked or fail-open are now real.** `isLoadBearing` was
+hardcoded `true` (safe direction, never a false green, but it made PRD C9's
+non-critical-path branch unreachable); it now resolves through `computeCriticalPath` with
+af's crux flag as a stricter backstop, every indeterminate answer load-bearing. Verified
+**zero behavior change for every campaign on disk**. `familyForBackend` no longer infers
+family from a backend *name* (which mapped any unknown name to `claude`); it reads the
+resolved instance's declared `modelFamily`, validated against the closed vocabulary,
+failing closed before any spend. Batch eligibility is structural, not a caller promise —
+five constraints against real graph/af state, determined-vs-indeterminate never
+conflated, 24 mutation proofs; batching still OFF.
+
+**Cross-repo version hygiene.** af's `const Version` had not moved in sixteen
+behavior-changing commits — HANDOFF's "0.1.5" was recording a number that had stopped
+tracking behavior. af re-cut **0.1.6** and stamped at build time; fr **0.2.1** with a
+COMMIT line; `rk.compat.json` pinned to both, `rk doctor` verified ok on the real
+binaries and blocking on a constructed unstamped one.
+
+Gates at close: `bun test` **2182 pass / 1 skip / 0 fail** (142 files), `bun run
+selftest` **OK** (corpus 125/125, purity 108/108, gates-dir 27/27).
 
 ## Next steps (in order)
 
-1. **GAP 11** (P1 bead): claude-verifier turns on mass-split/starvation rejected at
-   extraction (worker exit 12 ×3, 0 applied) while weighted-min's claude verifier
-   converged — output-variance dependent. Diagnosability NOW IN PLACE (4c07540/
-   891afcd: parse-error classification, 2000-char snippets, full raw to
-   .rk/parse-failures/, prompt conciseness cap). First move: re-run mass-split B —
-   the banked evidence will name the exact malformation; fix accordingly (parser
-   robustness vs prompt vs bounded reprompt — validity side into the batched review).
-2. **Re-run starvation** after GAP 11 (its run A dispute is protocol signal, not a
-   bug — see the P2 challenge-loop bead: disputed parent re-decomposes forever).
-3. **M3 close**: (a) ONE batched Tier A codex review (gpt-5.6-sol, high) of the
-   loop's validity-adjacent changes — vacuous-root guard + prompts, category→aspect
-   map, af batch_id contract, free-text justification, #N depends bridge,
-   proof_author provenance + prover-of-record precedence, GAP 10 context assembly,
-   extraction acceptance rule, DriverDeps signature changes; (b) M3.9 SC4 comparison
-   vs the baseline memos; (c) auto-prove.sh disposition in vibefeld (D6 stale-tooling
-   trap); (d) acceptance report + close beads.
-4. **Then M4** (fr upgrades + bandit experiment, pre-registration doc M4.0 first).
-   Backlog highlights: rk-74o (structural batch eligibility, P1), shard-cap split
-   wave (P2), scheduler stagger relax, graph-v2 batch (rk-mnp crux, rk-rgp),
-   glossary cross-linking (rk-iup), Claude-adapter terminal-event audit.
+1. **rk-k8dq (P1) — live-confirm the GAP 11 repair**: re-run mass-split B + starvation B
+   from `_pristine/`. Confirm the repair fires at most once, the repaired verdict binds
+   through the unchanged pipeline, repair tokens appear in the report's new repair line
+   and the budget, and the prover is finally dispatched. Within the standing M3.5
+   authorization (runbook §14, 1.5M/run).
+2. **rk-i19 (P1) — prover dispatch has no bounded repair**: same exit-12 death mode,
+   uncorrected. Blocker: the prover body has no validator producing `RawIssue[]` to echo
+   back. Build the validator, then reuse `verdict-repair.ts`'s bounded path verbatim.
+3. **M3 close**: (a) ONE batched Tier A codex review (gpt-5.6-sol, high) — scope is now
+   the M3.5 loop's validity changes PLUS this session's: bounded schema repair, Gate 4
+   presence-conditionality, Gate 7's single-assembly-path repair, structural batch
+   eligibility, load-bearing membership resolution, family fail-closed; (b) M3.9 SC4
+   comparison; (c) auto-prove.sh disposition in vibefeld (D6 stale-tooling trap);
+   (d) acceptance report.
+4. **Then M4** (fr upgrades + bandit experiment, pre-registration M4.0 first).
 
 ## Governance (standing, in bd memory)
 
 - Reviews: codex gpt-5.6-sol HIGH; Fable only with explicit TJO permission.
-- Anti-Zeno: ONE review round + ONE repair wave per milestone; mechanical
-  verification; residuals → beads → next milestone's single review.
-- M3.5 loop amendment (TJO 2026-07-20): live-debug fixes land with tests, NO
-  per-fix review; batched Tier A at M3 close (bd memory ...no-per-fix-reviews...).
-- Worker models (TJO 2026-07-20, bd memory m3-5-model-policy...): claude side
-  opus/sonnet ONLY (never Fable) — staging pins claude-opus-4-8; codex side
-  gpt-5.6-sol (only model runnable under this machine's ChatGPT-account codex).
-- Spend: M3.5 authorization stands; runbook §14 cap 1.5M/run; lemmas 2-3 dispatch
-  was TJO-approved 2026-07-20 and is now spent/banked.
+- Anti-Zeno: ONE review round + ONE repair wave per milestone; mechanical verification;
+  residuals → beads → next milestone's single review.
+- Worker models: claude side opus/sonnet ONLY (never Fable); codex side gpt-5.6-sol.
 - AISM: read-only crash-test corpus + incident seed ONLY (SC7 generality lens).
 
 ## Key facts for the next session
 
-- Live invocation shape: `dist/rk verify --af <id> --live --max-campaign-tokens
-  1500000` from a lemma dir in ../rk-m3.5-baseline; models pinned per-assignment in
-  .rk/config.json (run A) / workers.reverse.json (swap in for run B); NO --model
-  flag. Rebuild dist/rk + reinstall af before any run; af features[] must include
-  readiness-flags, closure-flag, node-dependencies, proof-author.
-- Restore workspaces byte-identical from _pristine/ before every run; per-lemma
-  memos (af node ids collide across dirs — never one combined array).
-- Driver logs are self-diagnosing: bind-failed / parse-failed (with classification
-  + rawFailurePath) / record-proof-failed / stall dominant-cause lines.
-- The af binary at ~/go/bin/af is 0.1.5 built from vibefeld 8c32a2c.
-- Runbook: docs/memos/2026-07-19-m3.5-baseline-runbook.md §§10-14 (append-only;
-  §11 model pin, §12 per-assignment config, §13 codex sol, §14 cap + sequencing).
+- **Parallel lanes work well** at this scale (12 concurrent, one shared tree) IF: file
+  scopes are disjoint and stated exhaustively in the brief; shared files are
+  orchestrator-single-writer with lanes reporting deltas; commits are always
+  `git commit -m "..." -- <paths>`. Zero collisions this session.
+- **Shared-writer files are FOUR, not three**: `corpus/README.md`,
+  `src/corpus/discovery.ts`, `docs/gate-contracts.md`/`worker-contract.md`, and
+  **`test/corpus.test.ts`** — which holds a SECOND hardcoded fixture total independent of
+  `EXPECTED_FIXTURE_COUNT`. Bump both together.
+- Corpus is **125** gate fixtures. Three non-gate fixture trees exist outside
+  `GATE_DIRS` and outside that count: `corpus/graph/`, `corpus/render/`, and the new
+  `corpus/drive/` (rk-b09 / rk-x573 track surfacing them in selftest).
+- Template version is **1.4.0**; `rk upgrade`'s manifest now carries a per-version
+  changelog printed ahead of the diff plan, because the two most important 1.4.0 changes
+  are invisible to a file diff.
+- af **0.1.6** (`vibefeld` e7d6da7, `scripts/build.sh`), fr **0.2.1** (`frontier`
+  fe7e081), bd 1.0.0. `af version --json` now reports the real number.
+- Live invocation shape unchanged: `dist/rk verify --af <id> --live
+  --max-campaign-tokens 1500000` from a lemma dir in `../rk-m3.5-baseline`; models pinned
+  per-assignment in `.rk/config.json`; NO `--model` flag. Rebuild `dist/rk` and reinstall
+  af before any run.
 
 ## Standing cautions
 
-- Parallel agents, shared tree: disjoint file scopes; `git commit -m "..." --
-  <paths>` ALWAYS. Shared files (corpus/README.md, gate-contracts.md, discovery.ts
-  counts, selftest, contract docs) are orchestrator-single-writer; lanes report
-  deltas. Pin cross-lane type contracts in BOTH briefs before dispatch.
-- M3.5 operator agents: instruct them to STAY with live runs (tail logs, minutes
-  per turn is normal) — two yielded mid-run and needed a resume nudge; monitors
-  firing "completed" notifications repeatedly is normal harness behavior.
-- codex exec reviews: -s read-only, -C needs --skip-git-repo-check outside a repo;
-  17-60 min at high for milestone scope, ~15 min for focused diffs; -o <file>; the
-  sandbox cannot run bun (EROFS) — repairs run the gates.
-- bd close with multiple ids applies ONE --reason to all (fix notes after).
-  bd is per-repo (cd matters); fr has no tracker.
+- Do NOT take a subagent's finding at face value: this session, one lane corrected the
+  orchestrator's own GAP 11 root cause, another corrected the audit's af-0.1.5 figure,
+  and a third found a fixture that hardcoded the wrong `modelFamily`. Verify P0 claims
+  against source before filing them.
+- Live runs write `.rk/parse-failures/` in workspaces — no rotation; clean when restoring
+  pristine.
 - Purity grep false-triggers on `node:` param names — rename, never touch the guard.
-- Scratchpad is EPHEMERAL: bank into docs/reviews/ and ../rk-m3.5-baseline (durable).
-- Live runs write .rk/parse-failures/ in workspaces — no rotation; clean when
-  restoring pristine.
+- `bd close` with multiple ids applies ONE `--reason` to all (fix notes after).
+- Scratchpad is EPHEMERAL: bank into `docs/reviews/` and `../rk-m3.5-baseline`.
