@@ -155,6 +155,18 @@ harness-agnostic throughout. Record the policy above in prose AND in `workers`: 
 reader checks, `workers` is what the driver obeys, and L5's cross-vendor rule only binds if the
 verifier's assignment actually names a different family from the prover's.
 
+**Two vendors are a precondition of promotion, decide this now, not mid-run.** L5's cross-vendor
+rule requires the verifier's model family to differ from the prover's on every load-bearing claim.
+A `workers` roster whose prover and verifier resolve to the same family can still run — prover
+turns still record real proof structure and verifier challenges still land — but no node on the
+critical path will ever be promoted to `proved`; `rk verify --live` states this at preflight,
+before any spend, naming the exact key to change. If every account available to this campaign is
+the same vendor, arrange access to a second, different-family backend before the hard tier is
+needed, or plan to work every load-bearing claim at the L5 soft tier instead, where same-family
+accepts are permitted and recorded as such (PRD C9). This file does not pick a vendor for you — the
+choice is `workers.assignments.verifier.hard.backend` in § 5, and every value it could hold names
+one; nothing here defaults it.
+
 ## 5. The tool: commands and configuration
 
 ```

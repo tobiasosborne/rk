@@ -92,6 +92,37 @@ describe("rk init: basic stamp", () => {
     const config = JSON.parse(readFileSync(join(root, ".rk", "config.json"), "utf8"));
     expect(config.shardsPrefix).toBe("XYZ");
   });
+
+  // rk-zva (generality audit 2026-07-25, finding m6): a fresh repo used to have NO .gitignore from
+  // rk at all, so the first commit swept in generated build/ output by accident.
+  test("stamps a .gitignore that ignores build/, explicitly", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    await initCommand(["North star", "--root", root], capture().out, noSpawnDeps());
+    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+    expect(gitignore.split("\n").map((l) => l.trim())).toContain("build/");
+    expect(gitignore).not.toContain("{{RK_SLOT_");
+  });
+
+  // rk-id1 part (c): the two-vendor precondition of promotion must be readable at setup time, in
+  // the stamped constitution itself, without naming any actual vendor (Lane 11's ruling: every
+  // `workers` value names a vendor, so the constitution must never stamp one).
+  test("the stamped constitution states the two-vendor precondition without naming a vendor", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    await initCommand(["North star", "--root", root], capture().out, noSpawnDeps());
+    const claude = readFileSync(join(root, "CLAUDE.md"), "utf8");
+    const marker = "Two vendors are a precondition of promotion";
+    expect(claude).toContain(marker);
+    expect(claude).toContain("workers.assignments.verifier.hard.backend");
+    // Scope the "no vendor named" check to the new paragraph itself (up to the next blank line):
+    // the file's own pre-existing ROLE header separately names harnesses like "Claude, codex" in
+    // an unrelated sentence about which AGENT can run this file, which is not a vendor DEFAULT.
+    const paraStart = claude.indexOf(marker);
+    const paraEnd = claude.indexOf("\n\n", paraStart);
+    const paragraph = claude.slice(paraStart, paraEnd === -1 ? undefined : paraEnd);
+    expect(paragraph.toLowerCase()).not.toMatch(/\b(claude|codex|gpt|gemini|anthropic|openai)\b/);
+  });
 });
 
 describe("rk init: required argument", () => {

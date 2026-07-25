@@ -1,0 +1,17 @@
+# campaign-seed (stamped ONCE by `rk init`, then campaign-owned): `rk upgrade` never re-stamps or
+# rewrites this file, so add your own entries below freely — editor swap files, OS cruft, a local
+# venv, whatever this campaign needs. This is not an HTML-header template (a leading `<!-- -->`
+# comment would be a literal, nonsense ignore PATTERN in .gitignore syntax, not a comment) — this
+# `#`-prefixed block is the self-description instead.
+#
+# The one default rk stamps: build/ is IGNORED, not committed. PRD section 3 leaves that choice
+# "gitignored or committed per config" — no config key drives it today, so this file makes rk's
+# own default explicit rather than accidental. Rationale: `rk render` regenerates
+# build/site/index.html byte-for-byte from tracked sources, and `rk check`'s freshness gate proves
+# that on every run (see CLAUDE.md rule 8) — committing a file that is mechanically reproducible
+# from what is already tracked doubles the source of truth for no benefit, and it is exactly the
+# generated output a first commit should not sweep in by accident.
+#
+# Prefer a committed, browsable build/ instead (e.g. serving build/site/ from GitHub Pages)?
+# Delete the line below and commit the tree — nothing else in rk depends on build/ being ignored.
+build/

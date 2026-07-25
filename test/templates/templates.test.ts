@@ -33,13 +33,18 @@ const read = (rel: string) => readFileSync(join(TEMPLATES_ROOT, rel), "utf8");
 
 const VALID_CLASSIFICATIONS = ["authored-append-only", "rewritten-whole", "generated", "campaign-seed"];
 
-// Templates whose stamped output is a REGISTRY SHARD, not a document: Gate 2's frontmatter must be
-// the first non-blank content of the file (src/gates/snapshot.ts's `parseFrontmatter` returns
-// `present: false` for anything else), so these physically cannot carry a leading HTML ROLE
-// header. They are NOT skipped silently — describe-block (a2) below asserts the equivalent
-// contract for them (the manifest declares the class; the body states it in prose), and (g)
-// parses each one with the linker's own parser.
-const SHARD_TMPL_FILES = new Set(["argument/north-star.md.tmpl"]);
+// Templates that physically cannot carry a leading `<!-- ROLE: ... -->` HTML-comment header, for
+// two DIFFERENT reasons:
+//  - argument/north-star.md.tmpl stamps a REGISTRY SHARD, not a document: Gate 2's frontmatter
+//    must be the first non-blank content of the file (src/gates/snapshot.ts's `parseFrontmatter`
+//    returns `present: false` for anything else).
+//  - .gitignore.tmpl stamps a .gitignore: an HTML comment is not a comment in gitignore syntax —
+//    a line reading `<!-- ROLE: ... -->` would be a literal, nonsense ignore PATTERN, not
+//    documentation (rk-zva).
+// Neither is skipped silently — describe-block (a2) below asserts the equivalent contract for
+// both (the manifest declares the class; the body states it in prose using its OWN comment
+// syntax), and (g) additionally parses the shard template with the linker's own parser.
+const NO_HTML_HEADER_TMPL_FILES = new Set(["argument/north-star.md.tmpl", ".gitignore.tmpl"]);
 
 // Constitution slots that must appear EXACTLY ONCE (uniqueness matters — a duplicated north-star
 // or phase declaration is an authoring error). PROJECT_NAME is deliberately excluded: it recurs
@@ -72,6 +77,7 @@ describe("templates / sanity", () => {
   test("the expected .tmpl set is present", () => {
     expect(TMPL_FILES.sort()).toEqual(
       [
+        ".gitignore.tmpl",
         "CLAUDE.md.tmpl",
         "CONVENTIONS.md.tmpl",
         "FINDINGS.md.tmpl",
@@ -87,7 +93,7 @@ describe("templates / sanity", () => {
 });
 
 describe("templates / (a) ROLE-UPDATE-POLICY-TRIGGER headers", () => {
-  for (const rel of TMPL_FILES.filter((r) => !SHARD_TMPL_FILES.has(r))) {
+  for (const rel of TMPL_FILES.filter((r) => !NO_HTML_HEADER_TMPL_FILES.has(r))) {
     test(`${rel} carries a header with a valid classification`, () => {
       const body = read(rel);
       // The header is the leading HTML comment; it must carry all three fields in order.
@@ -107,14 +113,14 @@ describe("templates / (a) ROLE-UPDATE-POLICY-TRIGGER headers", () => {
   }
 });
 
-// The header exemption above is a NAMED exemption, never a silent skip (CLAUDE.md L2): a shard
-// template still has to declare what happens to it after stamping, it just cannot do so in a
+// The header exemption above is a NAMED exemption, never a silent skip (CLAUDE.md L2): a template
+// in this set still has to declare what happens to it after stamping, it just cannot do so in a
 // leading HTML comment. It declares it twice — mechanically in the manifest, and in prose in the
-// body a researcher actually reads.
-describe("templates / (a2) shard templates declare their post-stamp class without a header", () => {
+// body a researcher actually reads (in whatever comment syntax that file's own format uses).
+describe("templates / (a2) header-exempt templates declare their post-stamp class in prose instead", () => {
   const manifest = JSON.parse(readFileSync(join(TEMPLATES_ROOT, "manifest.json"), "utf8"));
 
-  for (const rel of TMPL_FILES.filter((r) => SHARD_TMPL_FILES.has(r))) {
+  for (const rel of TMPL_FILES.filter((r) => NO_HTML_HEADER_TMPL_FILES.has(r))) {
     test(`${rel} is manifest-classified campaign-seed and says so in its body`, () => {
       const entries = manifest.stamped.filter((e: { template: string | null }) => e.template === rel);
       expect(entries).toHaveLength(1);
@@ -219,9 +225,23 @@ describe("templates / (d) manifest.json", () => {
       "HANDOFF.md",
       "CONVENTIONS.md",
       "FINDINGS.md",
+      ".gitignore",
     ]) {
       expect(paths).toContain(required);
     }
+  });
+
+  // rk-zva (generality audit 2026-07-25, finding m6): PRD section 3 leaves build/ "gitignored or
+  // committed per config" but nothing was ever stamped either way, so a first commit swept in
+  // generated site output by accident. rk's own default is explicit and self-documenting.
+  test(".gitignore is stamped campaign-seed and ignores build/, explicitly and self-documented", () => {
+    const entry = manifest.stamped.find((e: { path: string }) => e.path === ".gitignore");
+    expect(entry).toBeDefined();
+    expect(entry.template).toBe(".gitignore.tmpl");
+    expect(entry.classification).toBe("campaign-seed");
+    const body = read(".gitignore.tmpl");
+    expect(body.split("\n").map((l: string) => l.trim())).toContain("build/");
+    expect(body.toLowerCase()).toContain("ignored");
   });
 
   test("CLAUDE.md and AGENTS.md stamp from the same template (byte-identical constitution)", () => {
@@ -233,8 +253,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.4.0 for the M2/M3 command refresh + north-star seed", () => {
-    expect(manifest.template_version).toBe("1.4.0");
+  test("template_version was bumped to 1.5.0 for the .gitignore stamp + two-vendor precondition prose", () => {
+    expect(manifest.template_version).toBe("1.5.0");
   });
 
   // A version bump whose changes are INVISIBLE to a per-file diff (a brand-new stamped path, a new

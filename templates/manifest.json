@@ -1,5 +1,5 @@
 {
-  "template_version": "1.4.0",
+  "template_version": "1.5.0",
   "slot_syntax": "{{RK_SLOT_<NAME>}}",
   "unfilled_slot_grep": "\\{\\{RK_SLOT_",
   "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure). The ONE addition to that layout is argument/thm-north-star.md: PRD.md:79-85 fixes the DIRECTORIES, and this is content, not structure — the single registry result whose contract is already known at stamp time (it is `rk init`'s own argument), seeded so PRD C2's critical-path provenance guarantee has a resolvable root from day one instead of an empty path it reports as satisfied (generality audit 2026-07-25, finding M3).",
@@ -41,10 +41,18 @@
     { "path": "build/", "template": null, "classification": "directory" },
     { "path": ".rk/", "template": null, "classification": "directory" },
     { "path": ".frontier/", "template": null, "classification": "directory" },
-    { "path": ".beads/", "template": null, "classification": "directory" }
+    { "path": ".beads/", "template": null, "classification": "directory" },
+    { "path": ".gitignore", "template": ".gitignore.tmpl", "classification": "campaign-seed" }
   ],
   "changelog_note": "One entry per template_version, NEWEST FIRST. `rk upgrade` prints every entry strictly newer than the repo's own .rk/template-version. This exists because the interesting part of a bump is often invisible to the per-file diff `rk upgrade` otherwise prints: a brand-new stamped path does not exist in the old repo to diff against, and a new .rk/config.json key is not a stamped file at all. Each `changes` string must be self-contained and say what to DO.",
   "changelog": [
+    {
+      "version": "1.5.0",
+      "changes": [
+        "NEW STAMPED FILE .gitignore — ignores build/ (generality audit 2026-07-25, finding m6/rk-zva). PRD section 3 left build/'s committed-vs-ignored status 'per config' with no config key ever built to drive it and no file stamped either way, so a first commit swept in generated site output by accident. rk's explicit default is IGNORED, because `rk render` regenerates build/site/index.html byte-for-byte and `rk check`'s freshness gate proves that every run — committing a mechanically reproducible file doubles the source of truth for nothing. A pre-1.5.0 repo has no .gitignore from rk (only bd's own, dolt-files-only one, if bd init ran) — create one by hand from templates/.gitignore.tmpl, or just add a `build/` line, if you want this default; campaign-seed means `rk upgrade` will never stamp or touch it for you once you have one.",
+        "CLAUDE.md / AGENTS.md section 4 gets one new paragraph: the two-vendor precondition of promotion (rk-id1 part c). L5's cross-vendor rule already required this; the constitution now says so at setup time, naming the config key (`workers.assignments.verifier.hard.backend`) and the L5-soft-tier alternative for a single-vendor roster, WITHOUT stamping any vendor choice — every value that key could hold names one, and a general tool does not choose it for a stranger's campaign. No diff of an existing CLAUDE.md/AGENTS.md shows this paragraph as anything but new text in the middle of section 4; read it directly."
+      ]
+    },
     {
       "version": "1.4.0",
       "changes": [

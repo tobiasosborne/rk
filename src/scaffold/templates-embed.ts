@@ -14,6 +14,7 @@
 // is no logic here to check.
 
 import manifestJson from "../../templates/manifest.json";
+import gitignoreTmpl from "../../templates/.gitignore.tmpl" with { type: "text" };
 import claudeMdTmpl from "../../templates/CLAUDE.md.tmpl" with { type: "text" };
 import prdTmpl from "../../templates/PRD.md.tmpl" with { type: "text" };
 import handoffTmpl from "../../templates/HANDOFF.md.tmpl" with { type: "text" };
@@ -36,6 +37,7 @@ export const TEMPLATE_MANIFEST: Manifest = manifestJson as Manifest;
  * whose template name has no match here surfaces as `planStamp`'s `<template-missing>` marker,
  * never a silent skip). */
 export const TEMPLATE_TEXT: Record<string, string> = {
+  ".gitignore.tmpl": gitignoreTmpl,
   "CLAUDE.md.tmpl": claudeMdTmpl,
   "PRD.md.tmpl": prdTmpl,
   "HANDOFF.md.tmpl": handoffTmpl,
