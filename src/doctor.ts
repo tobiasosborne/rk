@@ -36,6 +36,14 @@ export interface BinaryVerdict {
   version: string | null;
   min: string;
   tested: string[];
+  /** First line of the raw probe output when a command *responded* but its text wasn't a
+   * parseable version (e.g. an unstamped build's placeholder "af version dev") — null when no
+   * probed command variant produced any output at all (missing binary, or a command variant that
+   * genuinely isn't recognized/predates support). Only ever non-null for "no-version-support";
+   * describeVerdict uses it to tell "understood the command, wasn't built with real version info"
+   * apart from "doesn't understand the command at all" — collapsing those two into one message
+   * is the confusing-message defect found 2026-07-25 (this WP's brief). */
+  rawSample: string | null;
 }
 
 export interface DoctorReport {
@@ -119,20 +127,21 @@ export interface ProbeOutcome {
  * full stop — its major is irrelevant to that verdict). */
 export function classifyBinary(binary: BinaryName, entry: CompatEntry, outcome: ProbeOutcome): BinaryVerdict {
   if (!outcome.found) {
-    return { binary, verdict: "missing", version: null, min: entry.min, tested: entry.tested };
+    return { binary, verdict: "missing", version: null, min: entry.min, tested: entry.tested, rawSample: null };
   }
   const version = outcome.raw !== null ? parseVersion(outcome.raw) : null;
   if (version === null) {
-    return { binary, verdict: "no-version-support", version: null, min: entry.min, tested: entry.tested };
+    const rawSample = outcome.raw !== null ? (outcome.raw.split("\n")[0] ?? null) : null;
+    return { binary, verdict: "no-version-support", version: null, min: entry.min, tested: entry.tested, rawSample };
   }
   if (!gte(version, entry.min)) {
-    return { binary, verdict: "below-min", version, min: entry.min, tested: entry.tested };
+    return { binary, verdict: "below-min", version, min: entry.min, tested: entry.tested, rawSample: null };
   }
   const testedMajors = new Set(entry.tested.map(majorOf));
   if (!testedMajors.has(majorOf(version))) {
-    return { binary, verdict: "untested-major", version, min: entry.min, tested: entry.tested };
+    return { binary, verdict: "untested-major", version, min: entry.min, tested: entry.tested, rawSample: null };
   }
-  return { binary, verdict: "ok", version, min: entry.min, tested: entry.tested };
+  return { binary, verdict: "ok", version, min: entry.min, tested: entry.tested, rawSample: null };
 }
 
 /** Classifies all three binaries and folds to one report. `outcomes` is keyed by binary name so
@@ -143,8 +152,8 @@ export function classifyAll(manifest: CompatManifest, outcomes: Record<BinaryNam
 }
 
 const REBUILD_HINT: Record<BinaryName, string> = {
-  af: "rebuild ../vibefeld (go build ./cmd/af) and reinstall",
-  fr: "rebuild ../knowledge-frontier (bun run build) and reinstall",
+  af: "rebuild ../vibefeld (./scripts/build.sh install — stamps a real version) and reinstall",
+  fr: "rebuild ../knowledge-frontier (bun run install:global — stamps a real version) and reinstall",
   bd: "reinstall bd from its release channel",
 };
 
@@ -166,9 +175,18 @@ export function describeVerdict(v: BinaryVerdict): string {
     case "missing":
       return `${v.binary}: not found on PATH — install it (${REBUILD_HINT[v.binary]} if building from source) and ensure it's on PATH.`;
     case "no-version-support":
+      if (v.rawSample !== null) {
+        // The command DID respond — it just isn't a parseable version. The overwhelmingly likely
+        // cause is an unstamped/local build reporting a placeholder ("af version dev", ldflags
+        // unset); say that plainly instead of the misleading "doesn't understand the command".
+        return (
+          `${v.binary}: reported '${v.rawSample}', which isn't a parseable version — looks like ` +
+          `an unstamped/local build (a placeholder string, not a real release); ${REBUILD_HINT[v.binary]}.`
+        );
+      }
       return (
         `${v.binary}: no version support — installed binary doesn't understand the version ` +
-        `command (predates it, or is broken); ${REBUILD_HINT[v.binary]}.`
+        `command at all (predates it, or is broken); ${REBUILD_HINT[v.binary]}.`
       );
   }
 }

@@ -15,6 +15,10 @@ import {
 import type { CompatEntry, CompatManifest, ProbeOutcome } from "../src/doctor";
 import { doctorCommand, probeBinary } from "../src/cli/doctor";
 import type { Runner } from "../src/cli/doctor";
+// Read-only: REQUIRED_AF_FEATURES is driver-af.ts's fixed capability list (owned by a different
+// lane in this session) — see the "af.min vs REQUIRED_AF_FEATURES" describe block below.
+import { REQUIRED_AF_FEATURES } from "../src/drive/driver-af";
+import compatManifestJson from "../rk.compat.json";
 
 function capture() {
   const lines: string[] = [];
@@ -204,6 +208,33 @@ describe("describeVerdict — self-teaching output", () => {
     expect(line).toContain("knowledge-frontier");
   });
 
+  test(
+    "no-version-support with NO raw output at all: message says the command isn't understood " +
+      "(the binary predates the version command, or is broken) — not a placeholder-version claim",
+    () => {
+      const v = classifyBinary("fr", entry, { found: true, raw: null });
+      const line = describeVerdict(v);
+      expect(line).toContain("doesn't understand the version command");
+    },
+  );
+
+  test(
+    "no-version-support with an unstamped build's raw output (e.g. af's ldflags-unset " +
+      "'af version dev'): message must say it looks like an unstamped/local build, not falsely " +
+      "claim the binary 'doesn't understand the version command' — it understood it fine, it just " +
+      "wasn't built with real version info (the exact confusing-message defect found 2026-07-25)",
+    () => {
+      const v = classifyBinary("af", entry, { found: true, raw: "af version dev\n  Go: go1.25.5" });
+      const line = describeVerdict(v);
+      expect(line).toContain("unstamped");
+      expect(line).not.toContain("doesn't understand the version command");
+      // Echoes back what it actually saw, for diagnosability.
+      expect(line).toContain("af version dev");
+      // Still points at the concrete fix.
+      expect(line).toContain("vibefeld");
+    },
+  );
+
   test("missing names PATH", () => {
     const v = classifyBinary("af", entry, { found: false, raw: null });
     expect(describeVerdict(v)).toContain("PATH");
@@ -257,6 +288,18 @@ describe("probeBinary", () => {
     const outcome = await probeBinary("fr", fakeWhich(new Set(["fr"])), runner);
     expect(outcome).toEqual({ found: true, raw: null });
   });
+
+  test(
+    "the real-world unstamped-build case: EVERY variant exits 0 but none parses (e.g. af's " +
+      "actual unstamped 'af version dev' / 'af --version' output) — raw preserves the sample so " +
+      "describeVerdict can give the 'unstamped build' message instead of 'doesn't understand the " +
+      "command', which the (found:true, raw:null) fallback alone cannot distinguish",
+    async () => {
+      const runner = async () => ({ stdout: "af version dev\n  Go: go1.25.5", exitCode: 0 });
+      const outcome = await probeBinary("af", fakeWhich(new Set(["af"])), runner);
+      expect(outcome).toEqual({ found: true, raw: "af version dev\n  Go: go1.25.5" });
+    },
+  );
 });
 
 describe("doctorCommand — fake-runner acceptance (M0.4 plan bar)", () => {
@@ -347,6 +390,58 @@ describe("doctorCommand — fake-runner acceptance (M0.4 plan bar)", () => {
     expect(text).toContain("no version support"); // the original mismatch is still shown
     expect(text).toContain("WARNING");
     expect(text).not.toContain("rk doctor: OK");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// rk.compat.json's af.min vs src/drive/driver-af.ts's REQUIRED_AF_FEATURES (rk P1, 2026-07-25
+// generality audit, docs/memos/2026-07-25-generality-audit.md finding M6): rk doctor pinned af
+// min "0.1.3" while the live driver's preflight (driver-af.ts's `preflightAfExport`) actually
+// requires an af export carrying the `readiness-flags`/`closure-flag`/`node-dependencies`
+// capabilities — so doctor could pass a binary that `rk verify` then refused at preflight,
+// reinstating exactly the stale-binary bug class D6 exists to prevent.
+//
+// This cross-checks REQUIRED_AF_FEATURES against rk.compat.json so the two files cannot drift
+// apart silently again. The capability->version map is hand-maintained (capability names aren't
+// semver-derivable) and cited by vibefeld commit; if driver-af.ts ever adds a capability this map
+// doesn't know, the first test below fails loudly rather than silently under-checking.
+// ---------------------------------------------------------------------------------------------
+
+/** Each REQUIRED_AF_FEATURES capability -> the af release that first shipped it. All three
+ * currently in REQUIRED_AF_FEATURES were introduced together in vibefeld commit 109d048 ("export:
+ * per-node `closed` closure flag + always-present `features` capability list", rk B3+FU5), which
+ * landed AFTER af 0.1.5 was cut (verified via `git log --oneline --follow -- internal/export/graph_closure.go`
+ * in ../vibefeld, 2026-07-25) — so no af <=0.1.5 has this capability list at all; the true minimum
+ * is af 0.1.6 (the version cut in this same session to close the af version-stamping gap). */
+const AF_FEATURE_MIN_VERSION: Record<string, string> = {
+  "readiness-flags": "0.1.6", // vibefeld 109d048
+  "closure-flag": "0.1.6", // vibefeld 109d048
+  "node-dependencies": "0.1.6", // vibefeld 109d048
+};
+
+describe("rk.compat.json af.min vs REQUIRED_AF_FEATURES (rk P1 2026-07-25)", () => {
+  test("every capability driver-af.ts requires has a known minimum af version in this test's map", () => {
+    for (const f of REQUIRED_AF_FEATURES) {
+      expect(
+        AF_FEATURE_MIN_VERSION[f],
+        `no known minimum af version for capability '${f}' — driver-af.ts added a capability ` +
+          `this test doesn't know about yet; add it to AF_FEATURE_MIN_VERSION above (with a ` +
+          `vibefeld commit citation) and confirm rk.compat.json's af.min still covers it`,
+      ).toBeDefined();
+    }
+  });
+
+  test("rk.compat.json's af.min is not below what REQUIRED_AF_FEATURES actually needs", () => {
+    const requiredMin = REQUIRED_AF_FEATURES.map((f) => AF_FEATURE_MIN_VERSION[f]!).reduce((a, b) =>
+      gte(a, b) ? a : b,
+    );
+    const pinnedMin = (compatManifestJson as CompatManifest).af.min;
+    expect(
+      gte(pinnedMin, requiredMin),
+      `rk.compat.json af.min (${pinnedMin}) is below the version REQUIRED_AF_FEATURES actually ` +
+        `needs (${requiredMin}) — rk doctor would greenlight an af binary that rk verify's driver ` +
+        `preflight then refuses. Bump rk.compat.json's af.min/tested to at least ${requiredMin}.`,
+    ).toBe(true);
   });
 });
 

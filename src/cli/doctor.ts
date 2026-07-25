@@ -40,18 +40,29 @@ const PROBE_COMMANDS: Record<BinaryName, string[][]> = {
 };
 
 /** Probes one binary: absent from PATH -> {found:false}; present but no command variant yields a
- * parseable version -> {found:true, raw:null} (the "no-version-support" case, e.g. the installed
- * fr predating F0); otherwise the first working variant's raw stdout is returned as-is (parsing
- * happens in the pure module, not here). */
+ * parseable version -> {found:true, raw:<sample or null>}; otherwise the first working variant's
+ * raw stdout is returned as-is (parsing happens in the pure module, not here).
+ *
+ * The no-parse fallback still tries to return a real sample rather than always `null`: if some
+ * variant exited 0 with non-empty stdout that just wasn't a parseable version (the real-world
+ * unstamped-build shape — e.g. af's actual "af version dev" — ran fine, printed something, wasn't
+ * a semver), that text is preserved so src/doctor.ts's classifyBinary/describeVerdict can tell "the
+ * binary understood the command but wasn't built with real version info" apart from "the binary
+ * doesn't understand the command at all" (every variant either errored or printed nothing) — that
+ * distinction is the whole point of ProbeOutcome carrying `raw` instead of a bare boolean. */
 export async function probeBinary(binary: BinaryName, which: Which, runner: Runner): Promise<ProbeOutcome> {
   if (which(binary) === null) return { found: false, raw: null };
+  let sample: string | null = null;
   for (const args of PROBE_COMMANDS[binary]) {
     const { stdout, exitCode } = await runner(binary, args);
     if (exitCode === 0 && parseVersion(stdout) !== null) {
       return { found: true, raw: stdout };
     }
+    if (sample === null && exitCode === 0 && stdout.trim() !== "") {
+      sample = stdout;
+    }
   }
-  return { found: true, raw: null };
+  return { found: true, raw: sample };
 }
 
 export interface DoctorCommandDeps {
