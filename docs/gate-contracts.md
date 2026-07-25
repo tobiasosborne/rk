@@ -819,7 +819,15 @@ features layered on the same pure functions, not gate verdicts.
   real user, bead rk-9pk) wrote three result shards — including the campaign's north-star theorem
   — directly at `argument/*.md`, and `rk check` reported `checked linker: 0/0 lemma shards` with
   zero findings and exit 0: a green run over an entirely unvalidated registry, the exact
-  silent-skip failure class CLAUDE.md L2 forbids. This IS a verdict-changing divergence — a repo
+  silent-skip failure class CLAUDE.md L2 forbids.
+  *(Amended 2026-07-25, template 1.4.0: a freshly stamped scaffold is no longer an empty registry.
+  `rk init` now seeds `argument/thm-north-star.md` — `kind: theorem`, `status: conjecture`, no deps
+  — carrying the north-star contract given as `rk init`'s own argument, and binds
+  `.rk/config.json`'s `northStarId` to it. So Gate 2 coverage on a brand-new repo reads `1/1`, not
+  `0/0`, and the critical-path provenance check has a real path to check from day one instead of
+  passing vacuously. That seeding is only safe in consolidation phase because Gate 4 check 6 became
+  presence-conditional on `report/` the same day — see Gate 4 check 6's B1 amendment; before it,
+  the seeded shard would itself have ERRORed on every stamped repo.)* This IS a verdict-changing divergence — a repo
   with shards at `argument/` root, or nested anywhere else under `argument/`, is now discovered
   and validated where AISM's script would silently see zero shards — but it is **not** triaged
   into the usual rk-stricter-intended / rk-bug / ambiguous triad: that triad exists to default an
