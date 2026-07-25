@@ -210,7 +210,7 @@ function run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
           mkErr(
             ".rk/config.json",
             1,
-            "shardsPrefix is not configured (required to validate SHARD-ID headers, e.g. 'AISM-01-INTRO') " +
+            "shardsPrefix is not configured (required to validate SHARD-ID headers, e.g. 'PROJ-01-INTRO') " +
               "-- set \"shardsPrefix\" in .rk/config.json (docs/gate-contracts.md Gate 6)",
           ),
         );

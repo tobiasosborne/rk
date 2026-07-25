@@ -244,6 +244,16 @@ describe("shardsGate — R12: shardsPrefix required-when-consumed (no silent AIS
     expect(result.coverage[0]!.total).toBe(1);
   });
 
+  // rk-enu (generality audit 2026-07-25, finding m1): the config-missing message's own example
+  // used to name AISM, a prior campaign's identifier, in text a new academic reads while debugging
+  // their own repo. It must now show a self-evidently generic example instead.
+  test("the config-missing message's example SHARD-ID is a generic placeholder, not the AISM identifier", () => {
+    const result = shardsGate.run(goldenTree(), DEFAULT_GATE_CONFIG);
+    const cfgErrors = errors(result).filter((f) => f.path === ".rk/config.json");
+    expect(cfgErrors[0]!.message).toContain("PROJ-01-INTRO");
+    expect(cfgErrors[0]!.message).not.toContain("AISM");
+  });
+
   test("no shardsPrefix configured, but nothing to check (empty scaffold): NOT reported — required-when-CONSUMED, not required-always", () => {
     const result = shardsGate.run(
       snap({ ...SCAFFOLD_FILES }, ["report", "report/sections"]),
