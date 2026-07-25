@@ -20,88 +20,30 @@
 // task brief for this WP does not name alongside verifier/prover; src/drive/driver-live.ts builds
 // that one ad hoc, inline, and says so.
 //
-// rk-tbg (shard-cap split, 370 -> two files): this file keeps the SHARED, role-neutral pieces
-// (`buildSharedContext`, `OUTPUT_SCHEMA_REF`, the role-neutral `renderRepairPrompt`) and the PROVER
-// role's own prompt assembly; the VERIFIER role's two-tier verdict instructions, per-item turn
-// builder, and repair-prompt wrapper moved to driver-prompts-verifier.ts, which this file
-// re-exports unchanged so every existing import site needed zero edits — see that file's own header
-// for why "verifier" and "prover" are the genuine seam.
+// rk-tbg (shard-cap split, 370 -> three files, cycle removed 2026-07-25 per Tier A review): this
+// file is the STABLE PUBLIC re-export hub plus the PROVER role's own prompt assembly. The
+// ROLE-NEUTRAL pieces (`buildSharedContext`, `OUTPUT_SCHEMA_REF`, `renderRepairPrompt`) live in
+// driver-prompts-shared.ts — belonging to NEITHER role's module, exactly because both need them.
+// The VERIFIER role's two-tier verdict instructions, per-item turn builder, and repair-prompt
+// wrapper live in driver-prompts-verifier.ts. This file imports FROM both and re-exports their
+// public names unchanged, so every existing import site needed zero edits — but it does NOT import
+// anything back FROM driver-prompts-verifier.ts's own internals, and driver-prompts-verifier.ts
+// does not import from this file either: both import driver-prompts-shared.ts instead. That is what
+// makes the three-file graph acyclic BY CONSTRUCTION rather than merely "safe today because nothing
+// happens to hoist a call to module-evaluation time" (the prior two-file cycle's actual guarantee).
 
-import type { Tier } from "./vocab";
 import type { RawIssue } from "./verdict-raw";
-// rk-tbg: the VERIFIER role's prompt assembly now lives in its own module (280-line shard cap) —
+// rk-tbg: the ROLE-NEUTRAL pieces now live in their own module (280-line shard cap, and the thing
+// that breaks the driver-prompts.ts <-> driver-prompts-verifier.ts cycle) — re-exported here
+// unchanged so every existing import site (src/cli/verify-live.ts, verify-live-io.ts,
+// src/drive/driver-live.ts, tests) is unaffected.
+export { OUTPUT_SCHEMA_REF, buildSharedContext, type DefinitionText, type SharedContextInput } from "./driver-prompts-shared";
+import { renderRepairPrompt } from "./driver-prompts-shared";
+// rk-tbg: the VERIFIER role's prompt assembly lives in its own module (280-line shard cap) —
 // re-exported here unchanged so every existing import site (src/drive/driver-live-dispatch.ts,
-// tests) is unaffected by the split.
+// tests) is unaffected by the split. driver-prompts-verifier.ts does NOT import from this file (it
+// imports driver-prompts-shared.ts instead), so this re-export is one-way: no cycle.
 export { buildVerifierTurnPrompt, buildRepairTurnPrompt, type VerifierDep, type VerifierItemInput } from "./driver-prompts-verifier";
-
-/** `outputSchemaRef` values (src/drive/backend-types.ts's `TurnItem`) — descriptive names a
- * backend MAY use to constrain generation; not a loaded/enforced schema file at this layer
- * (docs/worker-contract.md section (b): "a second JSON Schema is unnecessary while requests stay
- * internal"). One per tier, matching src/drive/verdict-raw.ts's two raw shapes exactly. */
-export const OUTPUT_SCHEMA_REF: Record<Tier, string> = {
-  l5: "rk.verdict-raw.l5.v1",
-  hard: "rk.verdict-raw.hard.v1",
-};
-
-export interface DefinitionText {
-  id: string;
-  text: string;
-}
-
-export interface SharedContextInput {
-  /** The claim's conjecture/root statement (AfWorkspaceView.rootStatement for the hard tier). */
-  conjecture: string;
-  /** Layer-0 definitions/*.md content this claim's nodes cite (RegistryNode.defs, already read
-   * off disk by the edge — this module never touches fs itself). */
-  definitions: readonly DefinitionText[];
-  /** The tier's fixed checklist/rubric boilerplate (docs/worker-contract.md section (a): "the
-   * tier's checklist/rubric, outputSchema" is part of what a session's shared context carries). */
-  contractGuidance: string;
-}
-
-/** Assembles the ONE shared-context block sent exactly once, on turn 1 of a claim's session
- * (docs/worker-contract.md section (a)). Deterministic: same input, same bytes, always — sorted by
- * definition id so a caller supplying `definitions` in a different order (e.g. Set iteration
- * order, fs readdir order) never perturbs the cache key. */
-export function buildSharedContext(input: SharedContextInput): string {
-  const defs = [...input.definitions].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const lines: string[] = [];
-  lines.push("# Shared context (sent once per claim session; never repeated on a resumed turn)");
-  lines.push("");
-  lines.push("## Conjecture");
-  lines.push(input.conjecture.trim());
-  lines.push("");
-  lines.push(`## Definitions (${defs.length})`);
-  if (defs.length === 0) lines.push("(none cited)");
-  else for (const d of defs) { lines.push(`### ${d.id}`); lines.push(d.text.trim()); }
-  lines.push("");
-  lines.push("## Guidance");
-  lines.push(input.contractGuidance.trim());
-  return lines.join("\n");
-}
-
-/** The role-neutral repair-prompt body. `keepNoun` names what the worker must NOT change (the whole
- * point: a repair turn is a SHAPE correction, never a second opinion) and `recordNoun` names what is
- * lost if the second reply is also malformed. Everything else — the three load-bearing properties
- * documented above `buildRepairTurnPrompt` — is identical for every role, so it lives here once. */
-export function renderRepairPrompt(issues: readonly RawIssue[], outputInstructions: string, keepNoun: string, recordNoun: string): string {
-  const lines: string[] = [];
-  lines.push("## Your previous reply was REJECTED — it did not match the required output shape");
-  lines.push("");
-  lines.push(`This is a MECHANICAL schema rejection, not a disagreement with your ${keepNoun}.`);
-  lines.push(`Problem${issues.length === 1 ? "" : "s"} found (${issues.length}):`);
-  for (const issue of issues) lines.push(`  - ${issue.path}: ${issue.message}`);
-  lines.push("");
-  lines.push("Reply NOW with the CORRECTED JSON object and nothing else — no commentary, no apology,");
-  lines.push(`no restatement of your analysis, no code fences. Keep your ${keepNoun} exactly as it was:`);
-  lines.push("fix ONLY the shape. Every required key below must be present, spelled exactly as shown.");
-  lines.push("");
-  lines.push(outputInstructions);
-  lines.push("");
-  lines.push("This is the ONLY correction you will be asked for. A second malformed reply ends this");
-  lines.push(`item with no ${recordNoun} recorded.`);
-  return lines.join("\n");
-}
 
 // --- Prover turn prompt (item 2..N content only) --------------------------------------------------
 

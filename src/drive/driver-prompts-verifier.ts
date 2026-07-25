@@ -1,19 +1,24 @@
-// PURITY: pure — no fs/network/clock (L3). rk-tbg (shard-cap split, 370 -> two files): the VERIFIER
-// role's half of src/drive/driver-prompts.ts's original prompt assembly — the two-tier (hard/l5)
-// verdict-instruction blocks, the per-item turn builder, and that role's schema-repair reprompt.
-// src/drive/driver-prompts.ts keeps the shared, role-neutral pieces (buildSharedContext,
-// OUTPUT_SCHEMA_REF, `renderRepairPrompt` — the repair-prompt renderer BOTH roles call) and the
-// PROVER role's half, and re-exports every name below unchanged, so src/drive/driver-live.ts and
-// every existing test needed zero edits.
+// PURITY: pure — no fs/network/clock (L3). rk-tbg (shard-cap split, 370 -> three files): the
+// VERIFIER role's half of src/drive/driver-prompts.ts's original prompt assembly — the two-tier
+// (hard/l5) verdict-instruction blocks, the per-item turn builder, and that role's schema-repair
+// reprompt. src/drive/driver-prompts.ts re-exports every name below unchanged, so
+// src/drive/driver-live.ts and every existing test needed zero edits — but this module does NOT
+// import anything from driver-prompts.ts (a prior version did, for `renderRepairPrompt`, which made
+// driver-prompts.ts <-> driver-prompts-verifier.ts a real ESM circular import; a Tier A review
+// flagged it as validity-adjacent since prompt bytes are what the overreach guard and the prover
+// word ban police). The role-neutral `renderRepairPrompt` (and `buildSharedContext`/
+// `OUTPUT_SCHEMA_REF`) now live in driver-prompts-shared.ts, which BOTH this file and
+// driver-prompts.ts import from — so the three-file graph is acyclic by construction: this file and
+// driver-prompts.ts each depend on driver-prompts-shared.ts, and neither depends on the other.
 //
 // Same cache-stability contract as before the split (docs/worker-contract.md section (d)):
 // `buildVerifierTurnPrompt` builds ONLY the per-item content sent on turn 2..N — it never re-embeds
-// driver-prompts.ts's shared block (contract rule 6: never build a turn as shared_prefix+item
-// concatenated, even inside one resumed turn).
+// driver-prompts-shared.ts's shared block (contract rule 6: never build a turn as
+// shared_prefix+item concatenated, even inside one resumed turn).
 
 import type { Tier } from "./vocab";
 import type { RawIssue } from "./verdict-raw";
-import { renderRepairPrompt } from "./driver-prompts";
+import { renderRepairPrompt } from "./driver-prompts-shared";
 
 // --- Verifier turn prompt (item 2..N content only) ------------------------------------------------
 
