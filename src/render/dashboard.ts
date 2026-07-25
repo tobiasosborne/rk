@@ -8,9 +8,13 @@
 import { computeWhatBlocks, type BlockerEntry } from "../graph/query-blocks";
 import { computeTaintTrace, type TaintEntry } from "../graph/query-taint";
 import { RIGOUR_STATUSES, type GraphDocument, type RigourStatus } from "../graph/types";
+import type { DefRecord } from "./defs-edge";
+import { glossaryLink } from "./defs-view";
 import { esc } from "./html";
 import { nodePanelId } from "./node-view";
 import { effectivePresentation, renderLegend, statusStyle } from "./styling";
+
+type DefsById = ReadonlyMap<string, DefRecord>;
 
 export interface StatusCounts {
   /** DECLARED status counts, verbatim — a conflicted/tainted `proved` node still counts under
@@ -103,14 +107,14 @@ function countsBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>)
  * presentation is a defect (a conflict names it, or its computed taint is non-clean), regardless
  * of its declared status. This is what makes "excluded from the rigorous count" mechanically
  * checkable on the page itself, not just true in the count arithmetic. */
-function defectBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>): string {
+function defectBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>, defsById?: DefsById): string {
   const conflicted = conflictedIds(doc);
   const rows = doc.nodes
     .map((nd) => ({ nd, pres: effectivePresentation(nd.status, conflicted.has(nd.id), nodeTaint(nd.id, taint)) }))
     .filter((x) => x.pres.isDefect)
     .map(
       (x) =>
-        `<li><a href="#${esc(nodePanelId(x.nd.id))}">${esc(x.nd.id)}</a>: ${esc(x.pres.label)}</li>`,
+        `<li><a href="#${esc(nodePanelId(x.nd.id))}">${esc(x.nd.id)}</a>${glossaryLink(x.nd.id, defsById)}: ${esc(x.pres.label)}</li>`,
     )
     .join("");
   if (rows.length === 0) {
@@ -122,12 +126,14 @@ function defectBlock(doc: GraphDocument, taint: ReadonlyMap<string, TaintEntry>)
   );
 }
 
-function conflictsBlock(doc: GraphDocument): string {
+function conflictsBlock(doc: GraphDocument, defsById?: DefsById): string {
   if (doc.conflicts.length === 0) {
     return `<section class="rk-conflicts"><h2>conflicts</h2><p class="rk-ok">none</p></section>`;
   }
   const rows = doc.conflicts.map((c) => {
-    const where = c.nodeId ? `<a href="#${esc(nodePanelId(c.nodeId))}">${esc(c.nodeId)}</a>` : "-";
+    const where = c.nodeId
+      ? `<a href="#${esc(nodePanelId(c.nodeId))}">${esc(c.nodeId)}</a>${glossaryLink(c.nodeId, defsById)}`
+      : "-";
     return `<li><strong>${esc(c.kind)}</strong> (${esc(c.edge)}, ${where}): ${esc(c.message)}</li>`;
   }).join("");
   return (
@@ -136,12 +142,14 @@ function conflictsBlock(doc: GraphDocument): string {
   );
 }
 
-function unresolvedBlock(doc: GraphDocument): string {
+function unresolvedBlock(doc: GraphDocument, defsById?: DefsById): string {
   if (doc.unresolved.length === 0) {
     return `<section class="rk-unresolved"><h2>unresolved references</h2><p class="rk-ok">none</p></section>`;
   }
   const rows = doc.unresolved.map((u) => {
-    const from = u.nodeId ? ` from <a href="#${esc(nodePanelId(u.nodeId))}">${esc(u.nodeId)}</a>` : "";
+    const from = u.nodeId
+      ? ` from <a href="#${esc(nodePanelId(u.nodeId))}">${esc(u.nodeId)}</a>${glossaryLink(u.nodeId, defsById)}`
+      : "";
     const cyc = u.edge === "fr" ? ` (cycle ${u.sourceCycle})` : "";
     return `<li><code>${esc(u.edge)}</code>${cyc}: <code>${esc(u.ref)}</code>${from} — ${esc(u.reason)}</li>`;
   }).join("");
@@ -152,14 +160,14 @@ function unresolvedBlock(doc: GraphDocument): string {
   );
 }
 
-function blockerLi(e: BlockerEntry): string {
+function blockerLi(e: BlockerEntry, defsById?: DefsById): string {
   return (
-    `<li><a href="#${esc(nodePanelId(e.id))}">${esc(e.id)}</a> ` +
+    `<li><a href="#${esc(nodePanelId(e.id))}">${esc(e.id)}</a>${glossaryLink(e.id, defsById)} ` +
     `(status=${esc(e.status ?? "unset")}, af=${esc(e.af)}) — ${esc(e.reasons.join("; "))}</li>`
   );
 }
 
-function whatBlocksBlock(doc: GraphDocument, northStarId?: string): string {
+function whatBlocksBlock(doc: GraphDocument, northStarId?: string, defsById?: DefsById): string {
   if (!northStarId) {
     return (
       `<section class="rk-blocks"><h2>what blocks the north star</h2>` +
@@ -173,8 +181,12 @@ function whatBlocksBlock(doc: GraphDocument, northStarId?: string): string {
       `<p class="rk-defect">north star '${esc(northStarId)}' names no node.</p></section>`
     );
   }
-  const frontier = r.frontier.length === 0 ? `<p class="rk-none">none</p>` : `<ul>${r.frontier.map(blockerLi).join("")}</ul>`;
-  const blocked = r.blocked.length === 0 ? `<p class="rk-none">none</p>` : `<ul>${r.blocked.map(blockerLi).join("")}</ul>`;
+  const frontier = r.frontier.length === 0
+    ? `<p class="rk-none">none</p>`
+    : `<ul>${r.frontier.map((e) => blockerLi(e, defsById)).join("")}</ul>`;
+  const blocked = r.blocked.length === 0
+    ? `<p class="rk-none">none</p>`
+    : `<ul>${r.blocked.map((e) => blockerLi(e, defsById)).join("")}</ul>`;
   return (
     `<section class="rk-blocks"><h2>what blocks the north star (${esc(northStarId)})</h2>` +
     `<p>${r.satisfiedCount}/${r.pathSize} critical-path nodes already available.</p>` +
@@ -204,6 +216,7 @@ export function renderDashboard(
   doc: GraphDocument,
   northStarId?: string,
   taint?: ReadonlyMap<string, TaintEntry>,
+  defsById?: DefsById,
 ): string {
   const t = taint ?? computeTaintTrace(doc);
   const c = statusCounts(doc, t);
@@ -211,10 +224,10 @@ export function renderDashboard(
     `<div class="rk-dashboard">` +
     countsBlock(doc, t) +
     `<section class="rk-legend-section"><h2>rigour ladder legend</h2>${renderLegend()}</section>` +
-    whatBlocksBlock(doc, northStarId) +
-    collapsedSection(`conflicts (${doc.conflicts.length})`, conflictsBlock(doc)) +
-    collapsedSection(`declared status contradicted by evidence (${c.defect})`, defectBlock(doc, t)) +
-    collapsedSection(`unresolved references (${doc.unresolved.length})`, unresolvedBlock(doc)) +
+    whatBlocksBlock(doc, northStarId, defsById) +
+    collapsedSection(`conflicts (${doc.conflicts.length})`, conflictsBlock(doc, defsById)) +
+    collapsedSection(`declared status contradicted by evidence (${c.defect})`, defectBlock(doc, t, defsById)) +
+    collapsedSection(`unresolved references (${doc.unresolved.length})`, unresolvedBlock(doc, defsById)) +
     `</div>`
   );
 }

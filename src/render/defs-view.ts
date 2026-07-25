@@ -15,6 +15,33 @@ import type { DefRecord, DefsData } from "./defs-edge";
 const KIND_ORDER = ["cited", "consensus", "original"] as const;
 const STATUS_ORDER = ["locked", "draft"] as const;
 
+/** Stable anchor id for one definition's own entry on the defs-index page — the analogue of
+ * node-view.ts's `nodePanelId`. Lets any other surface (dashboard/DAG/node panel — rk-iup) link
+ * directly at a term's own definition instead of only the page-level `#defs` route. `id` values
+ * are frontmatter-declared filename stems (safe), but escape defensively at every call site
+ * anyway, same discipline `nodePanelId` documents. */
+export function defAnchorId(id: string): string {
+  return `def-${id}`;
+}
+
+/** rk-iup: an inline decoration linking a bare node/term id to its definitions-index entry, for
+ * use from the dashboard/DAG/node-panel (SC5: a stranger meeting an unfamiliar id must reach its
+ * definition in ONE click, not a scroll through the index). Exact id match ONLY — deliberately no
+ * prefix/fuzzy matching: a wrong match is a worse failure than no match (L6's "default to the
+ * stricter validity semantics"), and node-id-prefix conventions are campaign-specific prose
+ * (CONVENTIONS.md), not machine-checkable data this view can safely generalise from. Renders
+ * NOTHING — not even a disabled-looking placeholder — when `defsById` is absent (definitions data
+ * not loaded for this render) or `id` has no matching record: the id's own existing text/link
+ * elsewhere on the page is left exactly as it already renders. Never a dead anchor, never a
+ * decoration implying a definition that does not exist. */
+export function glossaryLink(id: string, defsById: ReadonlyMap<string, DefRecord> | undefined): string {
+  if (!defsById) return "";
+  const rec = defsById.get(id);
+  if (!rec) return "";
+  const label = rec.term ?? rec.id;
+  return ` <a class="rk-glossary-link" href="#${esc(defAnchorId(rec.id))}" title="glossary: ${esc(label)}">[def]</a>`;
+}
+
 function defRow(d: DefRecord): string {
   const term = d.term !== undefined ? esc(d.term) : `<span class="rk-none">(no term declared)</span>`;
   const aliases = d.aliases.length > 0
@@ -25,7 +52,7 @@ function defRow(d: DefRecord): string {
     ? `<span class="rk-tier">source=${esc(d.source ?? "(none declared)")}, sha256=${esc(d.sha256 ?? "(none declared)")}</span>`
     : "";
   return (
-    `<li><code>${esc(d.id)}</code> ${term}${aliases} ` +
+    `<li id="${esc(defAnchorId(d.id))}"><code>${esc(d.id)}</code> ${term}${aliases} ` +
     `<span class="rk-tier">[status: ${esc(status)}]</span> ${provenance} ` +
     `<span class="rk-muted">(${esc(d.path)})</span></li>`
   );

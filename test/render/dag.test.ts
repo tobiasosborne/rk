@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { AfEdge, ConflictRecord, GraphDocument, RegistryNode } from "../../src/graph/types";
+import type { DefRecord } from "../../src/render/defs-edge";
 import { computeLayers, renderDag } from "../../src/render/dag";
 import { DEFECT_COLOUR, statusStyle } from "../../src/render/styling";
 import { nodePanelId } from "../../src/render/node-view";
@@ -151,6 +152,37 @@ describe("render/dag", () => {
       };
       expect(renderDag(shuffled)).toBe(canonical);
     }
+  });
+
+  // rk-iup: cross-link node ids on the DAG to their definitions-index entry — a small corner
+  // marker with its own href, drawn as a sibling `<a>` next to the node's own drill-down link (SVG
+  // has no reliable nested-anchor support), so the panel click-through stays exactly as it was.
+  describe("rk-iup: glossary cross-links", () => {
+    function defsWith(id: string, term: string): ReadonlyMap<string, DefRecord> {
+      return new Map([[id, { id, path: `definitions/${id}.md`, term, kind: "cited", status: "locked", aliases: [] }]]);
+    }
+
+    test("a node id with an exact-matching def gets a one-click glossary marker linking to the defs-index entry", () => {
+      const svg = renderDag(doc, undefined, defsWith("mid", "Middle Node"));
+      expect(svg).toContain('href="#def-mid"');
+      expect(svg).toContain("Middle Node");
+      expect(svg).toContain("rk-dag-glossary");
+    });
+
+    test("the node's own drill-down link is untouched by the glossary addition", () => {
+      const svg = renderDag(doc, undefined, defsWith("mid", "Middle Node"));
+      expect(svg).toContain(`href="#${nodePanelId("mid")}"`);
+    });
+
+    test("RED CASE: a node id with NO matching def draws no glossary marker at all — never a dead marker", () => {
+      const svg = renderDag(doc, undefined, defsWith("no-such-node", "Unrelated"));
+      expect(svg).not.toContain("rk-dag-glossary");
+    });
+
+    test("no defsById supplied: the DAG renders exactly as before, no glossary markup at all", () => {
+      const svg = renderDag(doc);
+      expect(svg).not.toContain("rk-dag-glossary");
+    });
   });
 
   test("crossing-count improvement: dagre's layout has fewer straight-line crossings than the pre-dagre layered layout on a reversal fixture (rk-fhd)", () => {

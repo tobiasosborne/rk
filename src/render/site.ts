@@ -89,15 +89,32 @@ code{background:rgba(127,127,127,.14);padding:0 .2rem;border-radius:3px}
 #dashboard{display:block}
 .rk-dag-node{cursor:pointer}
 .rk-dag text{font:11px sans-serif;fill:var(--rk-fg)}
+.rk-glossary-link{font-size:.72rem;color:#0ea5e9;text-decoration:none;border:1px solid currentColor;border-radius:3px;padding:0 .2rem;margin-left:.15rem}
+.rk-dag-glossary{cursor:pointer}
 `;
 
 // The hash router. Kept tiny and dependency-free — see this file's header. `\\n` avoided; single
 // line to stay clear of any template-literal escaping surprises.
+//
+// rk-iup: the glossary links added to the dashboard/DAG/node-panel point at an id NESTED inside
+// the `#defs` route-target section (one definitions-index entry), not at a route-target's own top-
+// level id — a case that didn't exist before this WP (every prior internal link pointed straight
+// at a route-target's own id). The router therefore walks UP from the hash's element to the
+// nearest enclosing `.rk-route-target` before deciding what to show, instead of falling back to
+// `#dashboard` whenever the hash element isn't itself a route target (that fallback used to be
+// silently wrong for a nested id: the link would resolve to nothing — the dashboard — while the
+// section actually containing the entry stayed hidden, exactly the "link that resolves to nothing"
+// failure this WP's brief calls out). A direct route-target hash (`#dashboard`, `#node-x`, ...)
+// still resolves to itself unchanged, so pre-existing links keep their old scroll-to-top behaviour;
+// only a genuinely nested target gets `scrollIntoView` so the reader lands on the exact entry.
 const ROUTER_JS =
   "function rkRoute(){var h=(location.hash||'').replace(/^#/,'')||'dashboard';" +
+  "var el=document.getElementById(h);var target=el;" +
+  "while(target&&!target.classList.contains('rk-route-target'))target=target.parentElement;" +
+  "if(!target)target=document.getElementById('dashboard');" +
   "var t=document.querySelectorAll('.rk-route-target');for(var i=0;i<t.length;i++)t[i].style.display='none';" +
-  "var el=document.getElementById(h);if(!el||!el.classList.contains('rk-route-target'))el=document.getElementById('dashboard');" +
-  "if(el)el.style.display='';window.scrollTo(0,0);}" +
+  "if(target)target.style.display='';" +
+  "if(el&&el!==target&&el.scrollIntoView)el.scrollIntoView();else window.scrollTo(0,0);}" +
   "window.addEventListener('hashchange',rkRoute);rkRoute();";
 
 function nav(doc: GraphDocument, title: string): string {
@@ -118,10 +135,17 @@ function nav(doc: GraphDocument, title: string): string {
 export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}): RenderedSite {
   const title = options.title ?? "rk campaign report";
   const taint = computeTaintTrace(doc);
-  const panels = doc.nodes.map((nd) => renderNodePanel(doc, nd.id, taint.get(nd.id))).join("\n");
+  // rk-iup: computed once, up front, so the dashboard/DAG/node-panel views can all cross-link a
+  // node id to its definitions-index entry (src/render/defs-view.ts's `glossaryLink`) the same way
+  // the provenance-chains view already does below. Absent `defsData` -> `undefined` here too, so
+  // every consumer degrades the same honest way (no data loaded -> no glossary link drawn).
+  const defsById: ReadonlyMap<string, DefRecord> | undefined = options.defsData
+    ? new Map(options.defsData.defs.map((d) => [d.id, d]))
+    : undefined;
+  const panels = doc.nodes.map((nd) => renderNodePanel(doc, nd.id, taint.get(nd.id), defsById)).join("\n");
   const sourcesBlock = options.sources ? renderSourcesBlock(options.sources) : "";
-  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint)}${sourcesBlock}</div>`;
-  const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint)}</section>`;
+  const dashboard = `<div id="dashboard" class="rk-route-target">${renderDashboard(doc, options.northStarId, taint, defsById)}${sourcesBlock}</div>`;
+  const dag = `<section id="dag" class="rk-route-target"><h2>AND/OR dependency graph</h2>${renderDag(doc, taint, defsById)}</section>`;
   const graveyard = `<section id="graveyard" class="rk-route-target">${renderGraveyard(doc, options.frResiduals?.byCycle)}</section>`;
 
   // M2.4 pass 2 (rk-c2q): run gallery / definitions+conventions / provenance chains. `runGallery`/
@@ -132,9 +156,6 @@ export function renderSite(doc: GraphDocument, options: RenderSiteOptions = {}):
     : `<div class="rk-run-gallery"><h2>run-bundle gallery</h2><p class="rk-none">run-bundle data not loaded for this render.</p></div>`;
   const runs = `<section id="runs" class="rk-route-target">${runsSection}</section>`;
 
-  const defsById: ReadonlyMap<string, DefRecord> | undefined = options.defsData
-    ? new Map(options.defsData.defs.map((d) => [d.id, d]))
-    : undefined;
   const defsSection = options.defsData
     ? renderDefsIndex(options.defsData)
     : `<div class="rk-defs"><h2>definitions index</h2><p class="rk-none">definitions data not loaded for this render.</p></div>`;

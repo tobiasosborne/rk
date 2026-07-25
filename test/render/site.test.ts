@@ -168,4 +168,143 @@ describe("render/site", () => {
     expect(html).toContain("evidence sources");
     expect(html).toContain("af: absent");
   });
+
+  // rk-iup: cross-link node ids on the dashboard/DAG/node-panel to their definitions-index entry,
+  // wired end to end through renderSite (the same `defsById` map already fed to the provenance
+  // view). "n-conflict" is a real node id in the rigour-ladder fixture and appears on the
+  // dashboard (conflicts + contradicted-status sections), the DAG, and its own node panel.
+  describe("rk-iup: definitions-index cross-links wired through the whole site", () => {
+    const defsData: DefsData = {
+      defs: [{ id: "n-conflict", path: "definitions/n-conflict.md", term: "Conflict Node", kind: "cited", status: "locked", aliases: [] }],
+    };
+
+    test("the dashboard, the DAG, and the node's own panel all carry a one-click link to the defs entry", () => {
+      const html = indexHtml(renderSite(doc, { defsData }));
+      const linkCount = (html.match(/href="#def-n-conflict"/g) ?? []).length;
+      // at least: dashboard's conflicts row, dashboard's contradicted-status row, the DAG marker,
+      // and the node panel's own heading — never zero, never a dead anchor.
+      expect(linkCount).toBeGreaterThanOrEqual(3);
+      expect(html).toContain('id="def-n-conflict"'); // the actual anchor target exists on the page
+    });
+
+    test("a node id with no matching def gets no glossary decoration anywhere on the site", () => {
+      const html = indexHtml(renderSite(doc)); // no defsData at all
+      // NOTE: the page's static <style> block always DECLARES the `.rk-glossary-link`/
+      // `.rk-dag-glossary` CSS rules (they're part of BASE_CSS regardless of content) — the
+      // honesty claim under test is that no element ever USES either class, so this asserts
+      // absence of the class ATTRIBUTE value, not absence of the bare substring.
+      expect(html).not.toContain('class="rk-glossary-link"');
+      expect(html).not.toContain('class="rk-dag-glossary"');
+    });
+
+    test("deterministic with a matching defsData too (no non-determinism sneaks in through the new cross-links)", () => {
+      const a = indexHtml(renderSite(doc, { defsData }));
+      const b = indexHtml(renderSite(doc, { defsData }));
+      expect(a).toBe(b);
+    });
+  });
+
+  // rk-iup: the hash router previously assumed every internal link points straight at a
+  // route-target's OWN id (true of every link before this WP). The new glossary links point at an
+  // id NESTED inside the `#defs` section (one definitions-index entry) — a case that used to fall
+  // back to `#dashboard` silently (the link would resolve to nothing, exactly the failure mode
+  // this WP's brief calls out). This test runs the ACTUAL emitted router script (not a
+  // reimplementation) against a small fake DOM to prove the fix, and that pre-existing direct
+  // route-target links keep their old behaviour unchanged.
+  describe("rk-iup: router fix — nested-anchor hashes resolve to their enclosing route-target section", () => {
+    function extractRouterJs(html: string): string {
+      const m = html.match(/<script>([\s\S]*)<\/script>/);
+      if (!m) throw new Error("no inline <script> found in rendered site");
+      return m[1]!;
+    }
+
+    interface FakeEl {
+      id: string;
+      classes: Set<string>;
+      parentId?: string;
+      style: { display: string };
+      classList: { contains(c: string): boolean };
+      parentElement: FakeEl | null;
+      scrollIntoView?: () => void;
+    }
+
+    function runRouter(js: string, hash: string, defs: Record<string, { classes?: string[]; parent?: string }>) {
+      const calls = { scrollIntoView: [] as string[], scrollTo: false };
+      const nodes = new Map<string, FakeEl>();
+      for (const [id, def] of Object.entries(defs)) {
+        const classes = new Set(def.classes ?? []);
+        const el: FakeEl = {
+          id,
+          classes,
+          parentId: def.parent,
+          style: { display: "none" },
+          classList: { contains: (c: string) => classes.has(c) },
+          parentElement: null,
+          scrollIntoView: () => calls.scrollIntoView.push(id),
+        };
+        nodes.set(id, el);
+      }
+      for (const el of nodes.values()) {
+        Object.defineProperty(el, "parentElement", {
+          get: () => (el.parentId ? nodes.get(el.parentId) ?? null : null),
+        });
+      }
+      const fakeDocument = {
+        getElementById: (id: string) => nodes.get(id) ?? null,
+        querySelectorAll: (sel: string) => {
+          if (sel !== ".rk-route-target") throw new Error(`unexpected selector ${sel}`);
+          return [...nodes.values()].filter((el) => el.classes.has("rk-route-target"));
+        },
+      };
+      const fakeWindow = {
+        addEventListener: () => {},
+        scrollTo: () => {
+          calls.scrollTo = true;
+        },
+      };
+      // eslint-disable-next-line no-new-func -- deliberately executing the REAL shipped router text
+      const fn = new Function("document", "window", "location", js);
+      fn(fakeDocument, fakeWindow, { hash: `#${hash}` });
+      return { nodes, calls };
+    }
+
+    test("a hash pointing at a nested glossary anchor shows the enclosing route-target section, not the dashboard fallback", () => {
+      const html = indexHtml(renderSite(doc, { defsData: { defs: [] } }));
+      const js = extractRouterJs(html);
+      const { nodes, calls } = runRouter(js, "def-n-conflict", {
+        dashboard: { classes: ["rk-route-target"] },
+        defs: { classes: ["rk-route-target"] },
+        "def-n-conflict": { parent: "defs" },
+      });
+      expect(nodes.get("defs")!.style.display).toBe("");
+      expect(nodes.get("dashboard")!.style.display).toBe("none");
+      // it scrolls to the specific entry, not just to the top of the page.
+      expect(calls.scrollIntoView).toContain("def-n-conflict");
+      expect(calls.scrollTo).toBe(false);
+    });
+
+    test("RED CASE (pre-fix behaviour): a direct route-target hash still resolves to itself, scrolling to top as before", () => {
+      const html = indexHtml(renderSite(doc));
+      const js = extractRouterJs(html);
+      const { nodes, calls } = runRouter(js, "dashboard", {
+        dashboard: { classes: ["rk-route-target"] },
+        dag: { classes: ["rk-route-target"] },
+      });
+      expect(nodes.get("dashboard")!.style.display).toBe("");
+      expect(nodes.get("dag")!.style.display).toBe("none");
+      expect(calls.scrollTo).toBe(true);
+      expect(calls.scrollIntoView).toEqual([]);
+    });
+
+    test("an unknown hash (no matching element at all) still falls back to the dashboard", () => {
+      const html = indexHtml(renderSite(doc));
+      const js = extractRouterJs(html);
+      const { nodes } = runRouter(js, "no-such-anchor-anywhere", {
+        dashboard: { classes: ["rk-route-target"] },
+        dag: { classes: ["rk-route-target"] },
+      });
+      expect(nodes.get("dashboard")!.style.display).toBe("");
+      expect(nodes.get("dag")!.style.display).toBe("none");
+    });
+  });
 });

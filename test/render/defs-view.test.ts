@@ -3,8 +3,8 @@
 // (src/render/defs-edge.ts's EDGE shape) — no fs here (L3).
 
 import { describe, expect, test } from "bun:test";
-import type { DefsData } from "../../src/render/defs-edge";
-import { renderDefsIndex } from "../../src/render/defs-view";
+import type { DefRecord, DefsData } from "../../src/render/defs-edge";
+import { defAnchorId, glossaryLink, renderDefsIndex } from "../../src/render/defs-view";
 
 describe("render/defs-view", () => {
   test("groups definitions by kind, then status, and lists every alias", () => {
@@ -75,5 +75,59 @@ describe("render/defs-view", () => {
   test("day-1 vacuity: no definitions means no glossary framing note either (nothing to gloss)", () => {
     const html = renderDefsIndex({ defs: [] });
     expect(html.toLowerCase()).not.toContain("false-cognate");
+  });
+
+  // rk-iup: every definitions-index entry gets its own stable, addressable anchor id so other
+  // surfaces (dashboard/DAG/node panel) can link straight at it, not just at the `#defs` route.
+  test("each entry renders with its own stable anchor id", () => {
+    const html = renderDefsIndex({
+      defs: [{ id: "conj-rh", path: "definitions/conj-rh.md", term: "Riemann Hypothesis", kind: "cited", status: "locked", aliases: [] }],
+    });
+    expect(defAnchorId("conj-rh")).toBe("def-conj-rh");
+    expect(html).toContain('id="def-conj-rh"');
+  });
+
+  test("an id containing markup-significant characters gets an escaped anchor id, never raw", () => {
+    const html = renderDefsIndex({
+      defs: [{ id: '"><script>', path: "definitions/x.md", aliases: [] }],
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("render/defs-view — glossaryLink (rk-iup cross-link helper)", () => {
+  function rec(id: string, term?: string): DefRecord {
+    return { id, path: `definitions/${id}.md`, term, kind: "cited", status: "locked", aliases: [] };
+  }
+
+  test("an id with an exact-matching def renders a working in-page anchor to its definitions-index entry", () => {
+    const defsById = new Map([["conj-rh", rec("conj-rh", "Riemann Hypothesis")]]);
+    const html = glossaryLink("conj-rh", defsById);
+    expect(html).toContain('href="#def-conj-rh"');
+    expect(html).toContain("Riemann Hypothesis");
+  });
+
+  test("RED CASE: an id with NO matching def renders nothing — never a dead anchor", () => {
+    const defsById = new Map([["conj-rh", rec("conj-rh")]]);
+    expect(glossaryLink("no-such-id", defsById)).toBe("");
+  });
+
+  test("defsById not supplied at all (data not loaded for this render) renders nothing, not a guess", () => {
+    expect(glossaryLink("conj-rh", undefined)).toBe("");
+  });
+
+  test("a matched def's term containing markup-significant characters is escaped in the link, never raw", () => {
+    const defsById = new Map([["x", rec("x", '<script>alert(1)</script>')]]);
+    const html = glossaryLink("x", defsById);
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  test("a def id containing markup-significant characters is escaped in the href, never raw", () => {
+    const defsById = new Map([['"><script>', rec('"><script>')]]);
+    const html = glossaryLink('"><script>', defsById);
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });

@@ -9,8 +9,12 @@
 import { computeFocusView, type DepStatus } from "../graph/query-focus";
 import type { TaintEntry } from "../graph/query-taint";
 import type { AfEdge, FrEdge, GraphDocument } from "../graph/types";
+import type { DefRecord } from "./defs-edge";
+import { glossaryLink } from "./defs-view";
 import { esc } from "./html";
 import { effectivePresentation } from "./styling";
+
+type DefsById = ReadonlyMap<string, DefRecord>;
 
 /** Stable DOM id for a node's pre-rendered panel — the hash router (src/render/site.ts) shows the
  * `#node-<id>` section. `id` values are filename stems (safe), but escape defensively anyway. */
@@ -18,11 +22,11 @@ export function nodePanelId(id: string): string {
   return `node-${id}`;
 }
 
-function depItem(d: DepStatus): string {
+function depItem(d: DepStatus, defsById?: DefsById): string {
   const state = d.unresolved ? "unresolved" : d.available ? "available" : "not available";
   const cls = d.unresolved ? "rk-dep-unresolved" : d.available ? "rk-dep-available" : "rk-dep-blocked";
   const link = d.unresolved ? esc(d.id) : `<a href="#${esc(nodePanelId(d.id))}">${esc(d.id)}</a>`;
-  return `<li class="${cls}">${link} <span class="rk-dep-state">[${state}]</span></li>`;
+  return `<li class="${cls}">${link}${glossaryLink(d.id, defsById)} <span class="rk-dep-state">[${state}]</span></li>`;
 }
 
 function afBlock(af: AfEdge | undefined): string {
@@ -59,8 +63,16 @@ function frItem(e: FrEdge): string {
 /** Renders the full drill-down panel for `id`. Returns a `<section>` the site pre-renders once per
  * node; the hash router toggles visibility. `taintEntry` is this node's precomputed taint (from the
  * doc-wide `computeTaintTrace`) — passed in so the whole trace is computed once per render, not
- * once per node. */
-export function renderNodePanel(doc: GraphDocument, id: string, taintEntry: TaintEntry | undefined): string {
+ * once per node. `defsById` (optional, rk-iup) is definitions data keyed by id
+ * (src/render/defs-edge.ts's EDGE output) — every node id shown on this panel (this node's own
+ * heading, its deps, its route members, its dependents) gets a one-click glossary link when an
+ * exact id match exists; omitted, or no match, leaves the id exactly as it already renders. */
+export function renderNodePanel(
+  doc: GraphDocument,
+  id: string,
+  taintEntry: TaintEntry | undefined,
+  defsById?: DefsById,
+): string {
   const view = computeFocusView(doc, id);
   if (!view.found || !view.node) {
     return `<section id="${esc(nodePanelId(id))}" class="rk-node"><p class="rk-defect">no node '${esc(id)}'.</p></section>`;
@@ -80,16 +92,16 @@ export function renderNodePanel(doc: GraphDocument, id: string, taintEntry: Tain
     ? `<p class="rk-none">no routes (deps-only shard)</p>`
     : `<ol class="rk-routes">` + view.routes.map((r) =>
         `<li class="${r.satisfied ? "rk-route-sat" : "rk-route-unsat"}">` +
-        `${r.satisfied ? "satisfied" : "not satisfied"}: <ul class="rk-deps">${r.members.map(depItem).join("")}</ul></li>`,
+        `${r.satisfied ? "satisfied" : "not satisfied"}: <ul class="rk-deps">${r.members.map((d) => depItem(d, defsById)).join("")}</ul></li>`,
       ).join("") + `</ol>`;
 
   const deps = view.deps.length === 0
     ? `<p class="rk-none">none</p>`
-    : `<ul class="rk-deps">${view.deps.map(depItem).join("")}</ul>`;
+    : `<ul class="rk-deps">${view.deps.map((d) => depItem(d, defsById)).join("")}</ul>`;
 
   const dependents = view.dependents.length === 0
     ? `<p class="rk-none">none</p>`
-    : `<ul class="rk-dependents">${view.dependents.map((d) => `<li><a href="#${esc(nodePanelId(d))}">${esc(d)}</a></li>`).join("")}</ul>`;
+    : `<ul class="rk-dependents">${view.dependents.map((d) => `<li><a href="#${esc(nodePanelId(d))}">${esc(d)}</a>${glossaryLink(d, defsById)}</li>`).join("")}</ul>`;
 
   const conflicts = view.conflicts.length === 0
     ? ``
@@ -122,7 +134,7 @@ export function renderNodePanel(doc: GraphDocument, id: string, taintEntry: Tain
 
   return (
     `<section id="${esc(nodePanelId(id))}" class="rk-node ${st.tierClass}">` +
-    `<h2>${esc(id)} <span class="rk-kind">(${esc(n.kind)})</span></h2>` +
+    `<h2>${esc(id)}${glossaryLink(id, defsById)} <span class="rk-kind">(${esc(n.kind)})</span></h2>` +
     `<p class="rk-status-line">status: ${badge}</p>` +
     `<blockquote class="rk-contract">${esc(n.contract)}</blockquote>` +
     conflicts + taint +

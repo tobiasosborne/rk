@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GraphDocument } from "../../src/graph/types";
+import type { DefRecord } from "../../src/render/defs-edge";
 import { renderDashboard, statusCounts } from "../../src/render/dashboard";
 
 const FIXTURE = join(import.meta.dir, "..", "..", "corpus", "render", "rigour-ladder", "graph.json");
@@ -114,5 +115,40 @@ describe("render/dashboard", () => {
     expect(html).toContain("4 declared, 3 conflicted, 1 rigorous");
     // cited/consensus are declared on 1 node each, no defects -> fully reconciled trivially.
     expect(html).toContain("1 declared, 0 conflicted, 1 rigorous");
+  });
+
+  // rk-iup: cross-link node ids on the dashboard to their definitions-index entry (SC5 — a
+  // stranger reaching a node id in the conflicts/contradicted-status/unresolved lists must reach
+  // its definition in one click). Exact id match only.
+  describe("rk-iup: glossary cross-links", () => {
+    function defsWith(id: string, term: string): ReadonlyMap<string, DefRecord> {
+      return new Map([[id, { id, path: `definitions/${id}.md`, term, kind: "cited", status: "locked", aliases: [] }]]);
+    }
+
+    test("a node id with a matching def gets a one-click link to its definitions-index entry (conflicts + contradicted-status sections)", () => {
+      const html = renderDashboard(doc, undefined, undefined, defsWith("n-conflict", "Conflict Node"));
+      expect(html).toContain('href="#def-n-conflict"');
+      expect(html).toContain("Conflict Node");
+    });
+
+    test("a node id with a matching def gets a one-click link in the unresolved-references section", () => {
+      const html = renderDashboard(doc, undefined, undefined, defsWith("n-orphan", "Orphan Node"));
+      expect(html).toContain('href="#def-n-orphan"');
+    });
+
+    test("RED CASE: a node id with NO matching def renders no glossary link at all — never a dead anchor", () => {
+      const html = renderDashboard(doc, undefined, undefined, defsWith("some-other-id", "Unrelated"));
+      expect(html).not.toContain("rk-glossary-link");
+    });
+
+    test("no defsById supplied: dashboard renders exactly as before, no glossary markup anywhere", () => {
+      const withDefs = renderDashboard(doc);
+      expect(withDefs).not.toContain("rk-glossary-link");
+    });
+
+    test("existing node-panel-anchor links (nodePanelId) are untouched by the glossary addition", () => {
+      const html = renderDashboard(doc, undefined, undefined, defsWith("n-conflict", "Conflict Node"));
+      expect(html).toContain('href="#node-n-conflict"');
+    });
   });
 });
