@@ -199,11 +199,17 @@ function proverAndVerifierReadyWorkspace(): (a: string, id: string) => AfParseRe
 
 /** A fake backend whose NAME matches one of DEFAULT_MODEL_BY_BACKEND's real keys ("claude"/"codex")
  * so the default-model fallback path is exercised honestly, while never spawning a real subprocess.
- * Records the `spec.model` every `createSession` call actually received, keyed by backend name. */
-function fakeNamedBackend(name: string, seenModels: Record<string, string>): WorkerBackend {
+ * Records the `spec.model` every `createSession` call actually received, keyed by backend name.
+ *
+ * rk-9zd: `modelFamily` is now an EXPLICIT parameter with no default. It used to be hard-coded
+ * `"claude"` on every fake regardless of name — harmless while the CLI re-derived the family from
+ * the name string, and actively misleading now that the CLI reads the field: these fixtures were
+ * declaring a codex-named backend as family "claude". Each call site now states the family it
+ * means, which is also what makes the name-vs-declaration test below meaningful. */
+function fakeNamedBackend(name: string, seenModels: Record<string, string>, modelFamily: WorkerBackend["modelFamily"]): WorkerBackend {
   return {
     name,
-    modelFamily: "claude",
+    modelFamily,
     capabilities: { sessionResume: true },
     async createSession(spec: SessionSpec) {
       seenModels[name] = spec.model;
@@ -239,13 +245,13 @@ describe("rk verify --af --live (rk-7hi): per-assignment model reaches EACH back
       frCommand: ABSENT,
       readWorkspace: proverAndVerifierReadyWorkspace(),
       loadWorkersConfig: async () => workers,
-      backends: [fakeNamedBackend("claude", seenModels), fakeNamedBackend("codex", seenModels)],
+      backends: [fakeNamedBackend("claude", seenModels, "claude"), fakeNamedBackend("codex", seenModels, "gpt")],
       preflightAf: () => ({ ok: true }),
     });
     void code;
     const text = lines.join("\n");
-    expect(text).toContain("backend resolved: prover/hard -> 'claude' (model 'claude-opus-4-8')");
-    expect(text).toContain(`backend resolved: verifier/hard -> 'codex' (model '${DEFAULT_MODEL_BY_BACKEND.codex}')`);
+    expect(text).toContain("backend resolved: prover/hard -> 'claude' (model 'claude-opus-4-8', family 'claude')");
+    expect(text).toContain(`backend resolved: verifier/hard -> 'codex' (model '${DEFAULT_MODEL_BY_BACKEND.codex}', family 'gpt')`);
     // the ACTUAL createSession call each backend received -- not merely the preflight log line.
     expect(seenModels.claude).toBe("claude-opus-4-8");
     expect(seenModels.codex).toBe(DEFAULT_MODEL_BY_BACKEND.codex);
@@ -268,14 +274,14 @@ describe("rk verify --af --live (rk-7hi): per-assignment model reaches EACH back
       frCommand: ABSENT,
       readWorkspace: proverAndVerifierReadyWorkspace(),
       loadWorkersConfig: async () => workers,
-      backends: [fakeNamedBackend("claude", seenModels), fakeNamedBackend("codex", seenModels)],
+      backends: [fakeNamedBackend("claude", seenModels, "claude"), fakeNamedBackend("codex", seenModels, "gpt")],
       preflightAf: () => ({ ok: true }),
     });
     // per-assignment model still wins for the prover, unaffected by the global flag...
     expect(seenModels.claude).toBe("claude-opus-4-8");
     // ...while the verifier (no per-assignment model) falls back to the global --model flag.
     expect(seenModels.codex).toBe("gpt-5.1-codex-explicit");
-    expect(lines.join("\n")).toContain("backend resolved: verifier/hard -> 'codex' (model 'gpt-5.1-codex-explicit')");
+    expect(lines.join("\n")).toContain("backend resolved: verifier/hard -> 'codex' (model 'gpt-5.1-codex-explicit', family 'gpt')");
   });
 });
 
@@ -378,6 +384,83 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     });
     expect(code).toBe(1);
     expect(lines.join("\n")).toContain("must be a positive integer");
+  });
+
+  // rk-9zd (BUG, Tier A — cross-vendor input): a backend whose registry-declared `modelFamily` is
+  // absent or outside vocab.ts's closed MODEL_FAMILIES set must abort the run at PREFLIGHT, before
+  // any spend. The OLD `familyForBackend` ternary silently filed it as family "claude", which is
+  // fail-OPEN in an input to PRD C9's cross-vendor gate.
+  test("--live with a backend declaring NO model family: refuses at preflight, exit 1, no worker EVER called", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const called: string[] = [];
+    // Deliberately hand-rolled WITHOUT `modelFamily` — the exact shape a third backend author would
+    // produce by following the two existing adapters' constructor shape but forgetting the field.
+    const familylessBackend = {
+      name: "fake", capabilities: { sessionResume: true },
+      async createSession() { called.push("createSession"); return { sessionId: "s1" }; },
+      async runTurn() { called.push("runTurn"); return { exit: 0, usage: { input: 0, output: 0, cache_read: 0, cache_creation: 0 }, rawText: "{}" }; },
+    } as unknown as WorkerBackend;
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [familylessBackend],
+      preflightAf: () => ({ ok: true }),
+    });
+    expect(code).toBe(1);
+    const text = lines.join("\n");
+    expect(text).toContain("model family");
+    expect(text).toContain("refuses to guess");
+    // the specific fail-OPEN that must never happen again: silently filed as the claude family
+    expect(text).not.toContain("family 'claude'");
+    expect(called).toEqual([]); // fail closed: no session ever created, no turn ever run
+  });
+
+  test("--live with a backend declaring a family OUTSIDE the closed set: same refusal, exit 1, no worker called", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const called: string[] = [];
+    const bogusFamilyBackend = {
+      name: "fake", modelFamily: "openai", capabilities: { sessionResume: true },
+      async createSession() { called.push("createSession"); return { sessionId: "s1" }; },
+      async runTurn() { called.push("runTurn"); return { exit: 0, usage: { input: 0, output: 0, cache_read: 0, cache_creation: 0 }, rawText: "{}" }; },
+    } as unknown as WorkerBackend;
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, backends: [bogusFamilyBackend],
+      preflightAf: () => ({ ok: true }),
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("openai");
+    expect(called).toEqual([]);
+  });
+
+  // rk-9zd: the CLI reads the family off the resolved backend INSTANCE, never off its name. A
+  // backend NAMED "codex" that declares family "claude" is family "claude" — under the old ternary
+  // it would have read "gpt" purely from its name, i.e. the identity seam recorded into af (and
+  // therefore the cross-vendor comparison) could disagree with the registry's own declaration.
+  test("--live: the family printed/recorded comes from the backend's declaration, NOT its name", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seenModels: Record<string, string> = {};
+    const workers: WorkersConfig = {
+      assignments: {
+        prover: { hard: { backend: "codex", fallbacks: [] } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } },
+      },
+    };
+    const { out, lines } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeNamedBackend("codex", seenModels, "claude")],
+      preflightAf: () => ({ ok: true }),
+    });
+    const text = lines.join("\n");
+    expect(text).toContain("backend resolved: verifier/hard -> 'codex'");
+    expect(text).toContain("family 'claude'");
+    expect(text).not.toContain("family 'gpt'");
   });
 
   test("--live with a tiny cap the FIRST turn cannot afford: budget-exhausted abort, exit 4, no apply", async () => {

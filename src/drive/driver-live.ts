@@ -124,6 +124,15 @@ export interface LiveDispatcherOptions {
 
 export interface LiveRoleTierDispatcher {
   readonly backendName: string;
+  /** rk-9zd: the RESOLVED backend instance's OWN registry-declared `modelFamily`
+   * (src/drive/backend-types.ts), carried through so a caller building this session's identity seam
+   * reads the family off the SAME instance the turns actually dispatch through — instead of
+   * re-deriving it from `backendName`, which is what fail-OPEN'd on an unrecognized name. Typed
+   * `unknown` deliberately: this is an UNVALIDATED passthrough of whatever the backend declared, and
+   * the ONE validator is `familyForBackend` (src/drive/driver-live-model.ts), which fails closed on
+   * anything outside vocab.ts's closed `MODEL_FAMILIES`. Typing it `ModelFamily` here would let a
+   * hand-rolled/JSON-sourced backend record launder an unchecked string past the compiler. */
+  readonly declaredModelFamily: unknown;
   /** Creates (or returns the already-created) session for this dispatcher's (role, tier, claimId)
    * — the ONE real "turn 1" call, sending `sharedContext`. Idempotent: a second call returns the
    * same sessionId without a second backend call. */
@@ -185,6 +194,7 @@ export function createLiveDispatcher(opts: LiveDispatcherOptions): CreateLiveDis
     ok: true,
     dispatcher: {
       backendName: backend.name,
+      declaredModelFamily: backend.modelFamily,
       ensureSession,
       async dispatch(itemId, turnPrompt, itemOpts) {
         const ensured = await ensureSession();

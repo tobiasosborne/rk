@@ -139,9 +139,26 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // sharedContext rather than an empty one.
   const classCreated = createLiveDispatcher({ registry, role: "verifier", tier: "l5", claimId: `${claimId}-balloon`, model, sharedContext });
 
+  // rk-9zd (Tier A, cross-vendor input): resolve BOTH sides' model families from the RESOLVED
+  // BACKEND INSTANCES' own registry-declared `modelFamily` — never re-derived from a backend name
+  // string, which is what used to fail OPEN (any name != "codex" silently became family "claude").
+  // Done HERE, before the af preflight and before `ensureSession`, so an unresolvable family aborts
+  // the run with ZERO spend: a run that cannot establish both families cannot honestly apply PRD
+  // C9's cross-vendor check to any accept it would produce, so it must not start.
+  const verifierFamily = familyForBackend(created.dispatcher.backendName, created.dispatcher.declaredModelFamily);
+  if (!verifierFamily.ok) {
+    out.log(`rk verify --af ${node.id} --live: verifier backend family unresolvable -- ${verifierFamily.reason}`);
+    return 1;
+  }
+  const proverFamily = familyForBackend(proverCreated.dispatcher.backendName, proverCreated.dispatcher.declaredModelFamily);
+  if (!proverFamily.ok) {
+    out.log(`rk verify --af ${node.id} --live: prover backend family unresolvable -- ${proverFamily.reason}`);
+    return 1;
+  }
+
   out.log(`rk verify --af ${node.id} --live: preflight`);
-  out.log(`  backend resolved: verifier/hard -> '${created.dispatcher.backendName}' (model '${model}')`);
-  out.log(`  backend resolved: prover/hard -> '${proverCreated.dispatcher.backendName}' (model '${proverModel}')`);
+  out.log(`  backend resolved: verifier/hard -> '${created.dispatcher.backendName}' (model '${model}', family '${verifierFamily.family}')`);
+  out.log(`  backend resolved: prover/hard -> '${proverCreated.dispatcher.backendName}' (model '${proverModel}', family '${proverFamily.family}')`);
   out.log(`  session plan: ONE shared verifier session for claim '${claimId}' + ONE prover session '${claimId}-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)`);
   out.log(`  workspace: ${node.workspace} (${wsResult.value.nodeCount} node(s) total)`);
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);
@@ -188,9 +205,10 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
     return rawDispatchProve(n);
   };
   // The prover's identity seam, recorded as the af node author on refine (so the apply-time
-  // cross-vendor rule can parse it against the verifier's seam). Built from the resolved prover
-  // backend; a codex-fronted prover is family 'gpt' (vocab.ts), else 'claude'.
-  const proverIdentity: VerifierIdentity = { modelFamily: familyForBackend(proverCreated.dispatcher.backendName), backend: proverCreated.dispatcher.backendName, model: proverModel, sessionId: `${claimId}-prover` };
+  // cross-vendor rule can parse it against the verifier's seam). rk-9zd: the family comes from the
+  // resolved prover BACKEND INSTANCE's own declared `modelFamily`, already validated against the
+  // closed vocabulary above — never re-derived from its name.
+  const proverIdentity: VerifierIdentity = { modelFamily: proverFamily.family, backend: proverCreated.dispatcher.backendName, model: proverModel, sessionId: `${claimId}-prover` };
   const proverSeam = encodeVerifierSeam(proverIdentity);
   if (!proverSeam.ok) {
     out.log(`rk verify --af ${node.id} --live: prover identity is not encodable -- ${proverSeam.reason}`);
@@ -199,7 +217,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   const recordProof = liveRecordProof(abs, proverSeam.value, deps.afCommand);
   const dispatchClassification = classCreated.ok ? liveDispatchClassification(classCreated.dispatcher) : async () => undefined;
 
-  const identity: VerifierIdentity = { modelFamily: familyForBackend(created.dispatcher.backendName), backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
+  const identity: VerifierIdentity = { modelFamily: verifierFamily.family, backend: created.dispatcher.backendName, model, sessionId: ensured.sessionId };
 
   // M3 blocker 7: the DURABLE balloon counter lives in the shard frontmatter the driver itself
   // writes (src/drive/driver-frontmatter.ts's applyBalloonMark), NOT in `node.balloons` — the graph

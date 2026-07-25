@@ -142,21 +142,38 @@ describe("resolveModel — per-assignment model > global --model > DEFAULT_MODEL
 // rk-7hi: family identity is backend-derived and MUST stay completely independent of whatever
 // resolveModel picks -- an arbitrary per-assignment model string can never perturb the cross-vendor
 // gate (src/drive/identity.ts, untouched by this WP).
+// rk-9zd: the family is now read off the backend's OWN registry-declared `modelFamily` and returned
+// as a RESOLUTION (fail closed on an undeclared/out-of-vocabulary family) rather than re-derived
+// from the backend NAME, which mapped every unrecognized name to "claude" (fail OPEN). The
+// model-independence invariant these tests lock in is unchanged -- and now structural, since no
+// model string is a parameter of `familyForBackend` at all.
 describe("familyForBackend — family identity stays backend-derived, independent of any model string", () => {
-  test("the codex backend is always family 'gpt', regardless of its resolved model", () => {
-    expect(familyForBackend("codex")).toBe("gpt");
+  test("a codex-fronted backend declaring 'gpt' is family 'gpt', regardless of its resolved model", () => {
+    expect(familyForBackend("codex", "gpt")).toEqual({ ok: true, family: "gpt" });
   });
-  test("the claude backend is always family 'claude', even carrying an unrelated-looking model id", () => {
-    expect(familyForBackend("claude")).toBe("claude");
+  test("a claude backend declaring 'claude' is family 'claude', even carrying an unrelated-looking model id", () => {
+    expect(familyForBackend("claude", "claude")).toEqual({ ok: true, family: "claude" });
   });
   test("a claude-backend assignment pinned to an explicit opus model still records family 'claude' -- rk-7hi's core invariant", () => {
     const registry = new BackendRegistry<WorkerBackend>(
       { assignments: { prover: { hard: { backend: "claude", model: "claude-opus-4-8", fallbacks: [] } } } },
-      [{ name: "claude" } as WorkerBackend],
+      [{ name: "claude", modelFamily: "claude" } as WorkerBackend],
     );
     const resolvedModel = resolveModel(registry, "prover", "hard", undefined);
     expect(resolvedModel).toBe("claude-opus-4-8");
-    expect(familyForBackend("claude")).toBe("claude"); // NOT derived from resolvedModel at all
+    const backend = registry.resolve("prover", "hard")!;
+    // NOT derived from resolvedModel at all -- and not from the backend's NAME either (rk-9zd).
+    expect(familyForBackend(backend.name, backend.modelFamily)).toEqual({ ok: true, family: "claude" });
+  });
+  test("rk-9zd: a backend with no declared family is REFUSED, never silently filed as 'claude'", () => {
+    const registry = new BackendRegistry<WorkerBackend>(
+      { assignments: { prover: { hard: { backend: "third-party-cli", fallbacks: [] } } } },
+      [{ name: "third-party-cli" } as WorkerBackend],
+    );
+    const backend = registry.resolve("prover", "hard")!;
+    const r = familyForBackend(backend.name, backend.modelFamily);
+    expect(r.ok).toBe(false);
+    expect(r).not.toEqual({ ok: true, family: "claude" });
   });
 });
 

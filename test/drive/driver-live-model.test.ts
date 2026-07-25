@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { BackendRegistry, type WorkersConfig } from "../../src/drive/backend-registry";
 import type { WorkerBackend } from "../../src/drive/backend-types";
 import { CODEX_ACCOUNT_DEFAULT_MODEL, DEFAULT_MODEL_BY_BACKEND, familyForBackend, resolveModel } from "../../src/drive/driver-live-model";
+import { MODEL_FAMILIES } from "../../src/drive/vocab";
 
 function registryWith(config: WorkersConfig, names: string[]): BackendRegistry<WorkerBackend> {
   return new BackendRegistry<WorkerBackend>(config, names.map((name) => ({ name }) as WorkerBackend));
@@ -62,17 +63,72 @@ describe("familyForBackend — model-independence lock-in (rk-le9 review require
     const registry = registryWith({ assignments: { verifier: { hard: { backend: "codex", model: "some-arbitrary-user-model-string", fallbacks: [] } } } }, ["codex"]);
     const resolvedModel = resolveModel(registry, "verifier", "hard", undefined);
     expect(resolvedModel).toBe("some-arbitrary-user-model-string");
-    expect(familyForBackend("codex")).toBe("gpt"); // unaffected by resolvedModel entirely
+    expect(familyForBackend("codex", "gpt")).toEqual({ ok: true, family: "gpt" }); // unaffected by resolvedModel entirely
   });
 
   test("the account-default sentinel itself cannot perturb family either", () => {
     const registry = registryWith({ assignments: { verifier: { hard: { backend: "codex", fallbacks: [] } } } }, ["codex"]);
     const resolvedModel = resolveModel(registry, "verifier", "hard", undefined);
     expect(resolvedModel).toBe(CODEX_ACCOUNT_DEFAULT_MODEL);
-    expect(familyForBackend("codex")).toBe("gpt");
+    expect(familyForBackend("codex", "gpt")).toEqual({ ok: true, family: "gpt" });
   });
 
   test("claude is always family 'claude'", () => {
-    expect(familyForBackend("claude")).toBe("claude");
+    expect(familyForBackend("claude", "claude")).toEqual({ ok: true, family: "claude" });
+  });
+
+  // rk-9zd: the model string is not even a PARAMETER of this function any more — the family comes
+  // from the backend's own registry-declared `modelFamily`. Structurally, no user-supplied model id
+  // can reach it. This test states that property in the only way it can still be observed: the SAME
+  // declared family survives every model resolveModel could possibly have picked.
+  test("a user-supplied model id naming a DIFFERENT vendor cannot flip the declared family", () => {
+    const registry = registryWith({ assignments: { verifier: { hard: { backend: "codex", model: "claude-opus-4-8", fallbacks: [] } } } }, ["codex"]);
+    expect(resolveModel(registry, "verifier", "hard", undefined)).toBe("claude-opus-4-8");
+    expect(familyForBackend("codex", "gpt")).toEqual({ ok: true, family: "gpt" });
+    expect(familyForBackend("codex", "gpt")).not.toEqual({ ok: true, family: "claude" });
+  });
+});
+
+// rk-9zd (BUG, Tier A — cross-vendor input): the OLD implementation was
+// `backendName === "codex" ? "gpt" : "claude"`, so ANY unrecognized backend name silently claimed
+// the `claude` family — fail-OPEN in a function feeding the cross-vendor rule, whose whole
+// discipline in src/drive/cross-vendor.ts is to keep an UNKNOWN distinguishable from a KNOWN
+// (`identity-unparseable` is never reported as `same-family`). PRD D8 anticipates "any future CLI
+// that satisfies the worker contract", so a third backend WILL reach this.
+describe("familyForBackend — rk-9zd: fails CLOSED on an undeclared/unrecognized family", () => {
+  test("a backend that declares NO family is refused — and specifically does NOT become 'claude'", () => {
+    const r = familyForBackend("mystery-cli", undefined);
+    expect(r.ok).toBe(false);
+    expect(r).not.toEqual({ ok: true, family: "claude" });
+    if (!r.ok) expect(r.reason).toContain("mystery-cli");
+  });
+
+  test("a backend declaring a family OUTSIDE the closed MODEL_FAMILIES set is refused, never coerced", () => {
+    const r = familyForBackend("mystery-cli", "openai");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toContain("openai");
+      expect(r.reason).toContain("claude, gpt, gemini");
+    }
+  });
+
+  test("the backend NAME never decides the family: a backend NAMED 'claude' that declares 'gpt' is 'gpt'", () => {
+    expect(familyForBackend("claude", "gpt")).toEqual({ ok: true, family: "gpt" });
+  });
+
+  test("the backend NAME never rescues a missing family either: a backend NAMED 'claude' with no declared family is refused", () => {
+    expect(familyForBackend("claude", undefined).ok).toBe(false);
+  });
+
+  test("a non-string declared family (a hand-rolled/JSON-sourced backend record) is refused", () => {
+    expect(familyForBackend("weird", 7).ok).toBe(false);
+    expect(familyForBackend("weird", null).ok).toBe(false);
+    expect(familyForBackend("weird", { family: "claude" }).ok).toBe(false);
+  });
+
+  test("every member of the closed MODEL_FAMILIES set resolves (coverage: checked 3/3, no silent skip)", () => {
+    const families = [...MODEL_FAMILIES];
+    expect(families.length).toBe(3);
+    for (const f of families) expect(familyForBackend("any-backend", f)).toEqual({ ok: true, family: f });
   });
 });

@@ -8,7 +8,7 @@
 
 import { BackendRegistry } from "./backend-registry";
 import type { WorkerBackend } from "./backend-types";
-import type { ModelFamily, Role, Tier } from "./vocab";
+import { MODEL_FAMILIES, type ModelFamily, type Role, type Tier } from "./vocab";
 
 /** rk-le9 (M3.5 STOP-3): the OLD codex default here was a real, hard-coded model id
  * (`gpt-5.1-codex`) that a ChatGPT-account codex login 400-rejects outright — only that account's
@@ -46,8 +46,9 @@ export const DEFAULT_MODEL_BY_BACKEND: Record<string, string> = {
  * default), since the CLI's `--model` flag is a single global value applied to both roles; (2) that
  * global `--model` flag (`globalModel`); (3) `DEFAULT_MODEL_BY_BACKEND[backend]` for whichever
  * backend `resolve(role, tier)` actually picks, or the backend's own name if undeclared there.
- * Family identity (src/drive/identity.ts) is derived from the BACKEND name, never from this
- * string, so the cross-vendor gate is completely unaffected by which model wins here. */
+ * Family identity (src/drive/identity.ts) is read off the resolved BACKEND's own declared
+ * `modelFamily` (`familyForBackend` below, rk-9zd), never from this string, so the cross-vendor
+ * gate is completely unaffected by which model wins here. */
 export function resolveModel(registry: BackendRegistry<WorkerBackend>, role: Role, tier: Tier, globalModel: string | undefined): string {
   const perAssignment = registry.modelFor(role, tier);
   if (perAssignment) return perAssignment;
@@ -56,30 +57,52 @@ export function resolveModel(registry: BackendRegistry<WorkerBackend>, role: Rol
   return backend ? DEFAULT_MODEL_BY_BACKEND[backend.name] ?? backend.name : "unknown";
 }
 
-/** rk-7hi: family identity is ALWAYS derived from the resolved BACKEND name, never from the model
- * string `resolveModel` above picks — the two are deliberately independent axes (src/drive/
- * vocab.ts's header: "a backend ... is a DIFFERENT axis from family"). Pulled out of
- * src/cli/verify-live.ts's two inline call sites (prover identity, verifier identity) into one
- * named function so both stay in lockstep and this invariant is directly unit-testable: an
- * arbitrary per-assignment `model` override (rk-7hi) can never perturb which of the two closed
- * families a session's identity records, and so can never perturb the cross-vendor gate
- * (src/drive/identity.ts's `decodeVerifierSeam`, UNCHANGED by this WP) that compares them.
- * `test/drive/driver-live-model.test.ts` locks this model-independence property in directly, per
- * rk-le9's review requirement that no user-supplied model string can weaken the cross-vendor check.
+/** The answer to "what model family does this backend belong to?" — a RESOLUTION, never a bare
+ * `ModelFamily`, so an UNKNOWN is structurally distinguishable from a KNOWN at every call site. Same
+ * discipline as src/drive/cross-vendor.ts's `identity-unparseable` vs `same-family` split: an answer
+ * we could not establish must never be returned in the same shape as one we did. */
+export type BackendFamilyResolution = { ok: true; family: ModelFamily } | { ok: false; reason: string };
+
+/** rk-9zd (BUG, Tier A — this feeds the cross-vendor rule). WHAT THIS USED TO BE, and why it was
+ * wrong: `backendName === "codex" ? "gpt" : "claude"` — a ternary that re-derived the family from
+ * the backend's bare NAME STRING and mapped every name it did not recognize to `claude`. That is
+ * fail-OPEN in an input to PRD C9's cross-vendor gate: a future third backend (PRD D8 explicitly
+ * anticipates "any future CLI that satisfies the worker contract") would have been silently
+ * misfiled as the claude family, and a claude-prover/third-backend-verifier pair would then have
+ * read as SAME-family (blocking a legitimate promotion) or, worse, a gpt-prover/third-backend
+ * verifier pair as CROSS-family on a family nobody established. Dormant — the production registry
+ * in src/cli/verify-live.ts only ever constructs backends literally named `claude`/`codex` — but
+ * dormancy is not a guard.
  *
- * rk-le9 TRIAGE NOTE (found, NOT fixed here — see that bead's fix report for the reasoning): this
- * ternary silently maps ANY backend name other than "codex" to "claude" — correct for the two real
- * adapters that exist today (`ClaudeBackend`/`CodexBackend`, `src/drive/backend-{claude,codex}.ts`,
- * whose `name` fields are exactly "claude"/"codex" and are the ONLY names the production registry
- * in `src/cli/verify-live.ts` ever constructs), so this is NOT reachable through any real,
- * non-test-injected `rk verify --live` run today — but it is a dormant fail-OPEN hazard for a
- * future third backend: adding one without updating this function would silently misfile its
- * family as "claude" rather than failing loudly. The stricter fix (fail closed on an unrecognized
- * name, or better, read the ALREADY-correct `WorkerBackend.modelFamily` field off the resolved
- * backend instance instead of re-deriving from its bare name string) needs `src/cli/verify-live.ts`
- * call-site changes outside this WP's file scope, and would break `test/cli-verify.test.ts`'s
- * `name: "fake"` backend fixtures (outside this WP's scope to update) if done as a hard throw. Left
- * unchanged; flagged for the next milestone review / a follow-up bead. */
-export function familyForBackend(backendName: string): ModelFamily {
-  return backendName === "codex" ? "gpt" : "claude";
+ * THE FIX: stop re-deriving anything. `WorkerBackend.modelFamily` (src/drive/backend-types.ts) is
+ * ALREADY the authoritative, driver-registry-set family for a backend — "set once, at construction,
+ * from the backend/model pairing the registry knows about, NEVER read from anything the backend
+ * process itself prints". This function's whole job is now to VALIDATE that declared value against
+ * the closed `MODEL_FAMILIES` vocabulary (src/drive/vocab.ts, extensible only by a schema_version
+ * bump) and hand back a resolution. `backendName` is carried for the REFUSAL MESSAGE only — it can
+ * never decide the answer, which is precisely the fail-open path being removed.
+ *
+ * FAIL CLOSED: an absent, non-string, or out-of-vocabulary `modelFamily` yields `{ok:false}`. The
+ * caller (src/cli/verify-live.ts) aborts the run before any backend call rather than proceeding
+ * with a guessed family — a run that cannot establish both sides' families cannot honestly run the
+ * cross-vendor check on any accept it would produce.
+ *
+ * MODEL-INDEPENDENCE (rk-le9's review requirement, strengthened rather than merely preserved): the
+ * model string is no longer even a PARAMETER here. There is no expression in this function a
+ * user-supplied `--model` flag or per-assignment `model` override can reach, so it is structurally
+ * impossible for a model id to perturb the family the cross-vendor gate compares. */
+export function familyForBackend(backendName: string, declaredFamily: unknown): BackendFamilyResolution {
+  if (typeof declaredFamily === "string" && MODEL_FAMILIES.has(declaredFamily as ModelFamily)) {
+    return { ok: true, family: declaredFamily as ModelFamily };
+  }
+  const shown = typeof declaredFamily === "string" ? `'${declaredFamily}'` : declaredFamily === undefined ? "nothing" : JSON.stringify(declaredFamily) ?? String(declaredFamily);
+  return {
+    ok: false,
+    reason:
+      `backend '${backendName}' declares ${shown} as its model family, which is not one of the closed set ` +
+      `[${[...MODEL_FAMILIES].join(", ")}] (src/drive/vocab.ts). rk refuses to guess a family for it: the family is an ` +
+      `INPUT to the cross-vendor rule (PRD C9), and an unknown family must never pass for a known one ` +
+      `(src/drive/cross-vendor.ts's identity-unparseable vs same-family discipline). Set 'modelFamily' on the ` +
+      `WorkerBackend implementation to a member of that set, or extend the set with a schema_version bump + fixture.`,
+  };
 }
