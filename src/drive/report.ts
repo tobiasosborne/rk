@@ -46,6 +46,7 @@ export {
   type BindFailedLogRecord,
   type ParseFailedLogRecord,
   type RecordProofFailedLogRecord,
+  type VerdictRepairLogRecord,
 } from "./report-parse";
 
 // --- Aggregation ---------------------------------------------------------------------------------
@@ -80,6 +81,21 @@ export interface CampaignReport {
    * A non-zero value on an otherwise unmeasured campaign is the signature of a live stop where the
    * prover ran but no proof was ever recorded; the children snippet is in the driver-log for diagnosis. */
   recordProofFailures: number;
+  /** rk-xxp (GAP 11): count of 'verdict-repair' records whose `outcome` is `"repaired"` — a turn
+   * that failed raw-shape validation or single-object extraction on its first reply but was
+   * recovered by the ONE bounded schema-repair reprompt (docs/worker-contract.md's "Bounded schema
+   * repair" section). A repaired turn is NOT free: it cost a second real backend turn, logged as
+   * its own `usage` record flagged `repair: true` and already folded into `totals`/`cacheFraction`
+   * above — this counter exists so a reader can see how many turns needed the extra spend, distinct
+   * from `verdicts.applied` (the af-side outcome) and from the terminal-failure counters below. */
+  repairSucceeded: number;
+  /** rk-xxp (GAP 11): count of 'verdict-repair' records whose `outcome` is `"failed"` — the repair
+   * reprompt was dispatched (its tokens were spent) but its reply also failed raw-shape validation
+   * or the process itself failed; the ORIGINAL failure representation is preserved verbatim
+   * elsewhere (a parse-failed stays parse-failed, a bind-shape failure stays a bind failure), so
+   * this counter does not double-count `parseFailures`/`bindFailures` — it is the "and the one
+   * extra attempt we spent on it also didn't help" number. */
+  repairFailures: number;
   nodeRows: NodeReportRow[];
   claimRows: ClaimReportRow[];
   parseIssues: DriverLogIssue[];
@@ -181,12 +197,15 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
   let bindFailures = 0;
   let parseFailures = 0;
   let recordProofFailures = 0;
+  let repairSucceeded = 0;
+  let repairFailures = 0;
   for (const r of records) {
     if (r.kind === "cross-vendor-rejected") discards.crossVendorRejected++;
     else if (r.kind === "vacuous-accept-discarded") discards.vacuousAcceptDiscarded++;
     else if (r.kind === "bind-failed") bindFailures++;
     else if (r.kind === "parse-failed") parseFailures++;
     else if (r.kind === "record-proof-failed") recordProofFailures++;
+    else if (r.kind === "verdict-repair") { if (r.outcome === "repaired") repairSucceeded++; else repairFailures++; }
   }
 
   const nodeRows: NodeReportRow[] = allKeys(state).map((k) => {
@@ -208,5 +227,5 @@ export function buildReport(records: readonly DriverLogRecord[], campaignId: str
 
   const grand = grandTotal(state);
   const attributionIssues = computeAttributionIssues(usageRecords);
-  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, parseFailures, recordProofFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
+  return { campaignId, measured: usageRecords.length > 0, totals: grand, cacheFraction: cacheFraction(grand), verdicts, balloons, discards, bindFailures, parseFailures, recordProofFailures, repairSucceeded, repairFailures, nodeRows, claimRows, parseIssues: [...issues], attributionIssues };
 }

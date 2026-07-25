@@ -15,7 +15,11 @@ import type { WorkerUsage } from "./worker-result";
 
 // --- Driver-log record shapes (read-only view; driver-run.ts/driver-balloon.ts construct them) --
 
-export interface UsageLogRecord { kind: "usage"; at: string; contractId: string; claimId: string; nodeId: string; role: Role; sessionId: string; usage: WorkerUsage; }
+// rk-xxp (GAP 11): `repair` is OPTIONAL — set `true` only on the usage record for a repair turn's
+// OWN spend (src/drive/driver-verify-node.ts logs this as a second, separate "usage" record, never
+// merged into the first turn's), absent on every ordinary turn. Older/ordinary records without it
+// stay recognized (lenient-optional, same pattern as ParseFailedLogRecord's diagnosability fields).
+export interface UsageLogRecord { kind: "usage"; at: string; contractId: string; claimId: string; nodeId: string; role: Role; sessionId: string; usage: WorkerUsage; repair?: boolean; }
 // Field spelled with a space before its colon on purpose: scripts/selftest.ts's purity grep forbids
 // a Node built-in import's exact spelling anywhere in a PURITY-marked file — same false-positive
 // src/drive/accounting.ts's header already documents (see there for the full explanation). The
@@ -74,8 +78,22 @@ export interface ParseFailedLogRecord { kind: "parse-failed"; at: string; node :
  * `unrecognized 'kind'`). The `node` field is spelled with a space before its colon — same purity-grep
  * false-positive the records above document. */
 export interface RecordProofFailedLogRecord { kind: "record-proof-failed"; at: string; node : string; reason: string; rawSnippet: string; }
+/** rk-xxp (GAP 11): the driver's bounded-schema-repair EVIDENCE record (src/drive/driver-verify-
+ * node.ts, src/drive/verdict-repair.ts's `RepairRecord`). Written once per turn a repair was
+ * dispatched for — never more than one per turn (the "at most one repair" invariant is enforced
+ * structurally upstream in verdict-repair.ts, not by this reader). `issues` are the concrete
+ * `RawIssue[]` echoed to the worker in the reprompt; `repairIssues` is present iff `outcome ===
+ * "failed"` (the repair reply was itself refused) and absent iff `outcome === "repaired"` — this
+ * report enforces that invariant rather than trusting the writer, since a record that claims
+ * "repaired" while also carrying `repairIssues` (or vice versa) is contradictory evidence, not a
+ * shape a reader should silently accept. A repair is a RECOVERED turn, not a free one: it cost a
+ * real second backend turn (see the "usage" record with `repair: true` above) — this report counts
+ * repairs separately from both `parseFailures`/`bindFailures` (which count TERMINAL failures) and
+ * from `verdicts.applied` (which is the af-side outcome), so a reader can see "N turns needed a
+ * repair" as its own honest number, docs/worker-contract.md's "Bounded schema repair" section. */
+export interface VerdictRepairLogRecord { kind: "verdict-repair"; at: string; node : string; role: Role; outcome: "repaired" | "failed"; issues: { path: string; message: string }[]; repairIssues?: { path: string; message: string }[]; }
 
-export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | OtherDriverLogRecord;
+export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | VerdictRepairLogRecord | OtherDriverLogRecord;
 const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap"]);
 
 export interface DriverLogIssue { line: number; message: string; }
@@ -85,6 +103,13 @@ function isPlainObject(v: unknown): v is Record<string, unknown> { return typeof
 function isNumber(v: unknown): v is number { return typeof v === "number" && Number.isFinite(v); }
 function isUsage(v: unknown): v is WorkerUsage {
   return isPlainObject(v) && isNumber(v.input) && isNumber(v.output) && isNumber(v.cache_read) && isNumber(v.cache_creation);
+}
+/** rk-xxp: each `{path, message}` pair inside a 'verdict-repair' record's `issues`/`repairIssues`
+ * (mirrors src/drive/verdict-raw.ts's `RawIssue`) — every element checked, not just array-ness, so
+ * a malformed element (a bare string, a missing `message`) is a loud issue rather than silently
+ * accepted the way `bind-failed`'s shallower `Array.isArray` check would let it through. */
+function isIssueList(v: unknown): v is { path: string; message: string }[] {
+  return Array.isArray(v) && v.every((i) => isPlainObject(i) && isNonBlankString(i.path) && typeof i.message === "string");
 }
 
 /** Parses and validates one raw JSONL line. Mirrors src/drive/l5-record.ts's
@@ -106,6 +131,10 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (!isNonBlankString(parsed.contractId) || !isNonBlankString(parsed.claimId) || !isNonBlankString(parsed.nodeId) || !isNonBlankString(parsed.sessionId)) return fail("usage record: missing/mistyped id field(s)");
       if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`usage record: 'role' must be one of ${[...ROLES].join(", ")}`);
       if (!isUsage(parsed.usage)) return fail("usage record: 'usage' must have finite numeric input/output/cache_read/cache_creation");
+      // rk-xxp: 'repair', when present, flags a repair turn's OWN spend (see UsageLogRecord's doc
+      // comment) — OPTIONAL and lenient like ParseFailedLogRecord's diagnosability fields, so an
+      // ordinary usage record (no 'repair' key at all) stays recognized unchanged.
+      if (parsed.repair !== undefined && typeof parsed.repair !== "boolean") return fail("usage record: 'repair', when present, must be a boolean");
       return { ok: true, record: parsed as unknown as UsageLogRecord };
     case "verdict-outcome":
       if (!isNonBlankString(parsed.node) || !isNonBlankString(parsed.verdict) || !isNonBlankString(parsed.status) || !isNumber(parsed.exit)) return fail("verdict-outcome record: missing/mistyped field(s)");
@@ -141,6 +170,18 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (!isNonBlankString(parsed.reason)) return fail("record-proof-failed record: missing/mistyped 'reason'");
       if (typeof parsed.rawSnippet !== "string") return fail("record-proof-failed record: 'rawSnippet' must be a string");
       return { ok: true, record: parsed as unknown as RecordProofFailedLogRecord };
+    case "verdict-repair":
+      if (!isNonBlankString(parsed.node)) return fail("verdict-repair record: missing/mistyped 'node'");
+      if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`verdict-repair record: 'role' must be one of ${[...ROLES].join(", ")}`);
+      if (parsed.outcome !== "repaired" && parsed.outcome !== "failed") return fail("verdict-repair record: 'outcome' must be 'repaired' or 'failed'");
+      if (!isIssueList(parsed.issues)) return fail("verdict-repair record: 'issues' must be an array of {path, message}");
+      if (parsed.repairIssues !== undefined && !isIssueList(parsed.repairIssues)) return fail("verdict-repair record: 'repairIssues', when present, must be an array of {path, message}");
+      // rk-xxp invariant (src/drive/verdict-repair.ts's RepairRecord doc comment): 'repairIssues' is
+      // present IFF the repair itself failed, never on a 'repaired' outcome, never absent on a
+      // 'failed' one — a record violating this is contradictory evidence, not a shape to trust.
+      if (parsed.outcome === "repaired" && parsed.repairIssues !== undefined) return fail("verdict-repair record: outcome 'repaired' must not carry 'repairIssues'");
+      if (parsed.outcome === "failed" && parsed.repairIssues === undefined) return fail("verdict-repair record: outcome 'failed' must carry 'repairIssues'");
+      return { ok: true, record: parsed as unknown as VerdictRepairLogRecord };
     default:
       if (typeof parsed.kind === "string" && OTHER_KINDS.has(parsed.kind)) return { ok: true, record: parsed as unknown as OtherDriverLogRecord };
       return fail(`unrecognized 'kind': ${JSON.stringify(parsed.kind)}`);

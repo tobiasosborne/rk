@@ -31,6 +31,16 @@ function discardsLine(r: CampaignReport): string {
   return `  discards: cross-vendor-rejected=${r.discards.crossVendorRejected} vacuous-accept-discarded=${r.discards.vacuousAcceptDiscarded} bind-failed=${r.bindFailures} parse-failed=${r.parseFailures} record-proof-failed=${r.recordProofFailures}`;
 }
 
+// rk-xxp (GAP 11): a repair is NOT a discard — nothing was thrown away, a turn was recovered — so it
+// gets its own line rather than being folded into `discardsLine` above, and it is worded as a
+// recovery that still cost real spend, never as an unqualified success. Omitted entirely (never a
+// spurious "repaired=0 failed=0" line) when the log carries zero 'verdict-repair' records, so a
+// campaign that never needed a repair renders exactly as it did before this feature existed.
+function repairsLine(r: CampaignReport): string | undefined {
+  if (r.repairSucceeded === 0 && r.repairFailures === 0) return undefined;
+  return `  repairs (bounded schema reprompt, docs/worker-contract.md): repaired=${r.repairSucceeded} failed=${r.repairFailures} -- each repaired turn cost one extra backend turn and its tokens, already counted in totals above`;
+}
+
 export function reportLines(r: CampaignReport): string[] {
   const lines: string[] = [];
   if (!r.measured) {
@@ -40,6 +50,7 @@ export function reportLines(r: CampaignReport): string[] {
     // early return, never gate them behind `measured` (previously they printed only on the measured
     // path, so a pure-deadlock log showed zero diagnostics).
     lines.push(discardsLine(r));
+    { const rl = repairsLine(r); if (rl !== undefined) lines.push(rl); }
     lines.push("  next: run a live 'rk verify --af <id>' (or an L5 dispatch) to record usage, then re-run --report.");
     return lines;
   }
@@ -49,6 +60,7 @@ export function reportLines(r: CampaignReport): string[] {
   lines.push(`  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=${r.verdicts.total} applied=${r.verdicts.applied} blocked=${r.verdicts.blocked} rejected=${r.verdicts.rejected} other=${r.verdicts.other}`);
   lines.push(`  balloons: total=${r.balloons.total} unclassified=${r.balloons.unclassified} by-classification=${JSON.stringify(r.balloons.byClassification)}`);
   lines.push(discardsLine(r));
+  { const rl = repairsLine(r); if (rl !== undefined) lines.push(rl); }
   // M3 repair-wave blocker 8: a session whose usage records span more than one claimId poisons that
   // session's cache_creation attribution -- surfaced loudly here (never folded silently into the
   // totals above, which still sum every record exactly; only the PER-NODE split is untrustworthy).

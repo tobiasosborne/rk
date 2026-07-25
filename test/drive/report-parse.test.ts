@@ -153,6 +153,83 @@ describe("parseDriverLogLine", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "record-proof-failed", at: "t", node: "1", reason: "boom", rawSnippet: 42 }), 1);
     expect(r.ok).toBe(false);
   });
+
+  // rk-xxp (GAP 11): the driver's new 'verdict-repair' evidence record — persisted once per turn a
+  // bounded schema-repair reprompt was dispatched for (docs/worker-contract.md's "Bounded schema
+  // repair" section). Must be RECOGNIZED (never "unrecognized 'kind'") and its shape validated,
+  // including the outcome<->repairIssues invariant.
+  test("a well-formed 'verdict-repair' record with outcome 'repaired' (no repairIssues) is recognized", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: [{ path: "$.justification", message: "required" }] }), 1);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a well-formed 'verdict-repair' record with outcome 'failed' (carrying repairIssues) is recognized", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "failed", issues: [{ path: "$.justification", message: "required" }], repairIssues: [{ path: "$", message: "still not one bare JSON object" }] }), 1);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a 'verdict-repair' record missing its 'node' is a loud issue, never silently accepted", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", role: "verifier", outcome: "repaired", issues: [] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record with an unknown 'role' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "wizard", outcome: "repaired", issues: [] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record with an unknown 'outcome' is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "sort-of", issues: [] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record whose 'issues' is not an array is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: "not an array" }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record whose 'issues' array has a malformed element (missing 'message') is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: [{ path: "$" }] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record whose 'issues' array has a bare-string element is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: ["oops"] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("outcome 'repaired' carrying 'repairIssues' anyway is contradictory evidence -- a loud issue, not a silent accept", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: [], repairIssues: [{ path: "$", message: "x" }] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("outcome 'failed' with no 'repairIssues' at all is contradictory evidence -- a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "failed", issues: [] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'verdict-repair' record whose 'repairIssues' array has a malformed element is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "failed", issues: [], repairIssues: [{ message: "no path" }] }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  // rk-xxp: the ordinary "usage" record's extra `repair: true` field (the repair turn's OWN spend,
+  // logged separately from its associated 'verdict-repair' evidence record) must parse cleanly.
+  test("a 'usage' record flagged 'repair: true' round-trips (the repair turn's own spend)", () => {
+    const r = parseDriverLogLine(usageLine({ usage: { input: 1, output: 2, cache_read: 0, cache_creation: 0 }, repair: true }), 1);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r.record as UsageLogRecord).repair).toBe(true);
+  });
+
+  test("an ordinary 'usage' record with no 'repair' key at all still parses (unchanged)", () => {
+    const r = parseDriverLogLine(usageLine({ usage: { input: 1, output: 2, cache_read: 0, cache_creation: 0 } }), 1);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a 'usage' record whose 'repair' field is present but not boolean is a loud issue", () => {
+    const r = parseDriverLogLine(usageLine({ usage: { input: 1, output: 2, cache_read: 0, cache_creation: 0 }, repair: "yes" as unknown as boolean }), 1);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("parseDriverLog — corrupted-tail precedent (mirrors l5-store's parseL5Log)", () => {

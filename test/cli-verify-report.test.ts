@@ -78,3 +78,70 @@ describe("reportLines — FU4: discard diagnostics render even with zero usage r
     expect(lines.some((l) => l.includes("discards:") && l.includes("vacuous-accept-discarded=1"))).toBe(true);
   });
 });
+
+// rk-xxp (GAP 11): a repair is a RECOVERED turn, not a discard -- it gets its own line, worded as a
+// recovery that still cost real extra spend, never folded into `discardsLine` and never presented as
+// an unqualified success.
+describe("reportLines — rk-xxp: bounded schema-repair counters render on their own line", () => {
+  test("a measured report with a successful repair prints a 'repairs' line, separate from 'discards:'", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,
+      { kind: "usage", at: "t2", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 2, output: 3, cache_read: 0, cache_creation: 0 }, repair: true } as DriverLogRecord,
+      { kind: "verdict-repair", at: "t2", node: "1", role: "verifier", outcome: "repaired", issues: [{ path: "$.justification", message: "required" }] } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-repair");
+    const lines = reportLines(report);
+    const repairs = lines.find((l) => l.includes("repairs"));
+    expect(repairs).toBeDefined();
+    expect(repairs!).toContain("repaired=1");
+    expect(repairs!).toContain("failed=0");
+    // never merged into the discards line
+    const discards = lines.find((l) => l.includes("discards:"));
+    expect(discards!).not.toContain("repair");
+  });
+
+  test("a report with a failed repair attempt counts it on the 'failed' side", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,
+      { kind: "verdict-repair", at: "t1", node: "1", role: "verifier", outcome: "failed", issues: [{ path: "$.justification", message: "required" }], repairIssues: [{ path: "$", message: "still bad" }] } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-repair-fail");
+    const lines = reportLines(report);
+    const repairs = lines.find((l) => l.includes("repairs"));
+    expect(repairs).toBeDefined();
+    expect(repairs!).toContain("repaired=0");
+    expect(repairs!).toContain("failed=1");
+  });
+
+  test("verdict-repair diagnostics render even with zero usage records (same FU4 convention as discards)", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "verdict-repair", at: "t1", node: "1", role: "verifier", outcome: "failed", issues: [], repairIssues: [{ path: "$", message: "still bad" }] } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-repair-unmeasured");
+    expect(report.measured).toBe(false);
+    const lines = reportLines(report);
+    expect(lines.some((l) => l.includes("repairs") && l.includes("failed=1"))).toBe(true);
+  });
+
+  // The required regression: a log with NO verdict-repair records at all must render byte-identical
+  // to the pre-GAP-11 output -- no spurious "repaired=0 failed=0" line ever appears.
+  test("a log with no verdict-repair records renders with NO 'repairs' line at all (no spurious line)", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "usage", at: "t1", contractId: "c1", claimId: "cl1", nodeId: "1", role: "verifier", sessionId: "s1", usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 } } as DriverLogRecord,
+      { kind: "vacuous-accept-discarded", at: "t2", node: "1", reason: "nothing to verify" } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-no-repair");
+    const lines = reportLines(report);
+    expect(lines.some((l) => l.includes("repairs"))).toBe(false);
+  });
+
+  test("the honestly-unmeasured banner path also carries no spurious 'repairs' line when there were no repairs", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "vacuous-accept-discarded", at: "t2", node: "1", reason: "nothing to verify" } as DriverLogRecord,
+    ];
+    const report = buildReport(records, "camp-no-repair-unmeasured");
+    expect(report.measured).toBe(false);
+    const lines = reportLines(report);
+    expect(lines.some((l) => l.includes("repairs"))).toBe(false);
+  });
+});

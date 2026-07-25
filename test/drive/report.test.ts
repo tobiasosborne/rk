@@ -60,6 +60,33 @@ describe("buildReport — honest empty states", () => {
     const r = buildReport(records, "camp");
     expect(r.recordProofFailures).toBe(2);
   });
+
+  // rk-xxp (GAP 11): 'verdict-repair' records are counted per outcome -- 'repaired' and 'failed' are
+  // separate counters (never merged), and never confused with parseFailures/bindFailures (which
+  // count the FIRST turn's terminal failure representation, preserved verbatim regardless of the
+  // repair's own outcome).
+  test("verdict-repair records are counted per outcome, never silently dropped", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "verdict-repair", at: "t", node: "1", role: "verifier", outcome: "repaired", issues: [{ path: "$.justification", message: "required" }] } as DriverLogRecord,
+      { kind: "verdict-repair", at: "t", node: "2", role: "verifier", outcome: "repaired", issues: [] } as DriverLogRecord,
+      { kind: "verdict-repair", at: "t", node: "3", role: "prover", outcome: "failed", issues: [], repairIssues: [{ path: "$", message: "still bad" }] } as DriverLogRecord,
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.repairSucceeded).toBe(2);
+    expect(r.repairFailures).toBe(1);
+  });
+
+  test("zero verdict-repair records: both counters are honestly zero, not merged into other counters", () => {
+    const records: DriverLogRecord[] = [
+      { kind: "parse-failed", at: "t", node: "1", role: "verifier", rawSnippet: "x" } as DriverLogRecord,
+      { kind: "bind-failed", at: "t", node: "2", issues: [], rawSnippet: "{}" } as DriverLogRecord,
+    ];
+    const r = buildReport(records, "camp");
+    expect(r.repairSucceeded).toBe(0);
+    expect(r.repairFailures).toBe(0);
+    expect(r.parseFailures).toBe(1);
+    expect(r.bindFailures).toBe(1);
+  });
 });
 
 describe("buildReport — node/claim/campaign rollups", () => {
