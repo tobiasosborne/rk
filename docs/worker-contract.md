@@ -105,6 +105,13 @@ A **worker session** is created per **(role, tier, node-or-batch claim)** — ne
 never shared across an unrelated claim. Items belonging to that claim are delivered as **turns**
 on the session, not as separate flat-prompt processes.
 
+For a batch, `claimId` is `l5:<batchId>` where `batchId` is re-derived over the members that
+actually entered the session (rk-74o): members discarded pre-dispatch (no content, hash mismatch)
+are NOT in it, because they never shared the session and cannot have correlated its errors; a turn
+that fails AFTER dispatch remains a member, because it did share the session and could have biased
+the others — and `af unvalidate --batch <id>` must therefore be able to revoke it. Zero surviving
+members means no session is opened and no id is minted at all.
+
 - **Session creation** (turn 1): the driver opens a new backend session and sends the shared
   context once — conjecture, common ancestors, definitions relevant to the claim's subtree, the
   tier's checklist/rubric, `outputSchema`. For the claude backend this is a plain `claude -p`
@@ -244,6 +251,19 @@ post-hoc classification of why a call didn't apply:
 
 Any other nonzero code the backend's own process naturally returns (crash, killed) is treated as
 13 by the driver's wrapper, never surfaced as a silent success.
+
+**Bounded schema repair (rk-xxp, GAP 11).** Before a code-12 turn becomes terminal, the driver
+dispatches AT MOST ONE repair reprompt on the SAME session, echoing the concrete `RawIssue[]`
+(path + message) and asking for the corrected object only, with the assessment unchanged. Exactly
+one attempt, ever — structurally, not by a counter: the repair path dispatches directly and never
+re-enters itself. A repair that also fails is a normal terminal 12, and the ORIGINAL failure
+representation is preserved verbatim (a parse-failed stays parse-failed). A repaired reply carries
+NO extra trust: identical raw-shape validation, identical `bindVerdicts`, identical hash and
+cross-vendor checks, and no field is ever copied to satisfy a missing one (`verdict.reason` never
+becomes `justification`). The repair turn is a real backend turn: its usage is logged as its own
+`usage` record (flagged `repair: true`) and accrues to the campaign budget. Codes 10/11/13 are
+never repaired — 11 in particular must never provoke more spend. The incident this rule exists for
+burned 96,066 tokens across three identical rejected turns and applied zero nodes.
 
 Reality note (M3.2 live-fire, docs/memos/2026-07-19-m3.2-backend-livefire.md): codes 10-13 are
 ADAPTER-COMPUTED classifications of raw process/timeout/API-error behavior — no real CLI emits

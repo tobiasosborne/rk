@@ -232,6 +232,16 @@ inside it reinstates the bug class it exists to prevent. Fix: raise `min` to the
 the required features, list 0.1.5 in `tested[]`, and derive the minimum from
 `REQUIRED_AF_FEATURES` rather than maintaining two numbers by hand.
 
+> **Correction, 2026-07-25 (same day, cross-repo version-hygiene lane).** The "0.1.5" figure above
+> is wrong, and wrong in the direction that matters. Commit archaeology in `../vibefeld` shows the
+> three required capabilities all shipped together in commit `109d048`, which lands *after* the
+> 0.1.5 bump, not at it. Worse, af's `const Version` was last hand-bumped at `5699e92` and then
+> sixteen behavior-changing commits landed on top with no bump at all — so "0.1.5" was already
+> stale relative to vibefeld HEAD, and HANDOFF.md:81 was recording a number that had stopped
+> tracking behavior. The true minimum is **0.1.6**, cut as part of the fix, and af now stamps its
+> version at build time so the number cannot silently stop moving again. Wherever this memo's
+> "0.1.5" is cited downstream, read 0.1.6.
+
 **M7 — `EXTPROP_REFS_CACHE` / `EXTPROP_REFS_CACHE_URL`: another campaign's acronym in rk's public
 env-var namespace. [origin]**
 `src/refs/status.ts:18-21,58-59`, `src/refs/quote-locate.ts:50`, and — user-facing —

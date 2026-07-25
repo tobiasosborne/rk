@@ -164,8 +164,13 @@ field is NEVER silently accepted and NEVER silently kept — it is dropped (fall
 weaker) and produces exactly one loud, `structural: true` (blocking in both phases) ERROR at
 `.rk/config.json:1`, surfaced by a synthetic `config` gate registered first in
 `src/gates/index.ts`. Invalid config is a BLOCKING ERROR: `rk check` exits 1, same as any other
-gate ERROR. Known residual (deliberate scope boundary, tracked): syntactically unparseable JSON
-still degrades to defaults without a finding — a distinct failure mode from a malformed field.
+gate ERROR. A syntactically unparseable `.rk/config.json`, or one whose top-level JSON value is
+not an object, is likewise never silently accepted (rk-45m, closing the residual this section
+previously named): it produces the same loud, `structural: true`, non-demotable ERROR at
+`.rk/config.json:1`, naming the file and carrying the parser's own complaint. Config VALUES still
+degrade to `DEFAULT_GATE_CONFIG` untouched — `rk check` never crashes on a bad config file — but
+the run is never silently green about it. Only a genuinely ABSENT `.rk/config.json` (the
+cold-start default state, SC1) stays silent.
 Corpus fixtures: `config-01` (typo'd `phase` — pre-fix, `phase.ts` treated any
 non-"consolidation" value as exploration, a silent severity demotion), `config-02` (malformed
 `shardsMaxLines` — pre-fix, the NaN comparison false-greened the line cap), `config-03`
@@ -617,6 +622,25 @@ is stale against the code and must not be treated as ground truth).
       batch that validated the node BEFORE it became load-bearing — ⇒ WARN. Genuinely-old batched
       data is thus grandfatherable but never silently, and a fresh batch validation on a
       load-bearing node fails closed.
+
+      **Composer-side counterpart (rk-74o, 2026-07-25).** This check is the LEDGER-side half of
+      PRD C3's critical-path exclusion; the DISPATCH-side half is `src/drive/batch-eligibility.ts`,
+      which refuses a candidate before it can ever be batched. That module screens five constraints
+      against real graph/af state — routine tier (run tier cross-checked against the item's own
+      declared tier), registry critical path (`computeCriticalPath`, computed there, never a flag
+      passed in), af crux, af proof-tree ancestry (closed there from parent edges; an
+      ancestor/descendant pair never co-batches), and cap — and reports each refusal with a
+      `determinacy` of `determined` (crux, on the path, wrong tier) or `indeterminate` (no tier
+      declared, no af identity, unclosable ancestry, an id naming no registry node). Both refuse;
+      they are never conflated, mirroring `src/drive/cross-vendor.ts`'s `identity-unparseable` vs
+      `same-family` split. An absent fact is never read as a permissive one, so eligibility is no
+      longer a caller promise. The module is PURE and so cannot read af itself: "structural" means
+      it never accepts a summary verdict ("this pool is eligible"), only primitive recorded facts,
+      and derives every conclusion from them — the trust anchor for those facts remains the edge
+      that read af, exactly as `cross-vendor.ts` decodes raw identity strings rather than trusting
+      a caller-computed boolean. Batch identity is derived from the members ACTUALLY dispatched:
+      any stage that drops a member re-derives through `deriveBatchId`, because the recorded id is
+      what `af unvalidate --batch <id>` revokes.
     - **Prover-of-record precedence** (GAP 9, RUN-REPORT-8, 2026-07-20): the PROVER side of the
       comparison is the node's **`proof_author` when present, else its `author`**
       (`src/drive/cross-vendor.ts`'s `proverOfRecord`, read here off `RootIdentityFacts.proofAuthor`
@@ -1224,7 +1248,26 @@ proves the limitation is not hypothetical.
 5. **status OVERCLAIM/underclaim** — a registry `status: open` result whose `tab:status` rows
    never frame it as `open` ⇒ ERROR (check-provenance.py:293,317-319,483-484); a `proved`/
    `validated` result framed *only* `open` ⇒ WARN (check-provenance.py:320-321).
-6. **anchor** — a registry result mapping to zero report labels and **not** in
+6. **anchor** — **presence-conditional on the `report/` ROOT directory** (B1, 2026-07-25; extends
+   R13/rk-au6). This check asks, of every registry result, a question about the paper: "does the
+   report cite you?" Its precondition is that a report exists. PRD §4 C6 / IMPLEMENTATION_PLAN M2
+   defer LaTeX generation and treat the report as optional, so a campaign with **no `report/` tree
+   is a legitimate, common, permanent state**, not a not-yet — every result is then unanchored
+   forever and the remedy this finding names (anchor it, or whitelist it in `report/UNWIRED.md`) is
+   unreachable from inside the campaign, since both require hand-creating a tree
+   `templates/manifest.json:5` refuses to stamp. A check whose only remedy is adopting a convention
+   the tool declines to stamp is coercion, not a validity check. So: **`report/` root absent ⇒ this
+   check emits nothing at all** (neither the per-item ERROR nor the whitelist aggregate WARN),
+   surfaced on the coverage line as `report/: absent (not adopted)` — never a silent skip (L2).
+   **`report/` root present ⇒ every clause below is unchanged**, including the partial-adoption
+   case (`report/` present with `sections/` or `UNWIRED.md` missing), which is the incident class
+   this check exists to catch — root-level presence-conditionality never blurs into deeper-item
+   leniency, the same rule `shards-13` pins for Gate 6. The guard keys on the ROOT only, via the
+   same `dirs` fact `src/gates/shards.ts` uses, so the two gates can never disagree about adoption.
+   Corpus: `provenance-21` (report-less golden pass); the unit suite pins the adopted-but-empty
+   ERROR case. The unchanged clauses follow.
+
+   A registry result mapping to zero report labels and **not** in
    `report/UNWIRED.md` ⇒ ERROR "dropped from the paper, or never wired in" (per-item, actionable);
    if whitelisted ⇒ WARN (check-provenance.py:349-365,485). The whitelisted-unanchored WARNs are
    **aggregated into a single finding** (amended 2026-07-18, review ruling f): `<N> registry
@@ -1238,6 +1281,19 @@ proves the limitation is not hypothetical.
    information (every id is named). Non-whitelisted (real) unanchored shards remain per-item ERRORs.
    Corpus: `provenance-05` (single, degenerate aggregate of one), `provenance-18` (three ⇒ one
    aggregate, the flood shape).
+
+   **Scope of the `report/` guard.** It binds **check 6 only**. Checks 2, 3, 4 and 9 read
+   `report/PROVENANCE.md`, and checks 5, 7 and 8 join through `\label{}`s scanned from
+   `report/sections/*.tex`: with `report/` absent all of those inputs are empty, so those checks
+   are vacuous *by construction* and carry no guard (a guard there would be dead code reading as
+   if it suppressed something real). **Check 1 (forward labels) is deliberately NOT bound**: its
+   trigger is not the report's existence but an *authored* `report <label>` token in the shard's
+   own `provenance:` field — a shard naming a report label has adopted the convention for itself
+   and declared something unsatisfiable, and swallowing that is the false-green direction; the
+   message gains a suffix naming the absence instead. Nor is this a whole-gate early return (Gate
+   6's shape): the registry coverage denominator and rk-v18's frontmatter-invalid aggregate WARN
+   are duties this gate owes over `argument/**` regardless of whether a paper exists, and an early
+   return would have traded a false ERROR for a new pass-shaped `0/0` silent skip.
 7. **reverse labels** (WARN) — a `\label{}` with a result-kind prefix (`thm/lem/prop/cor/op/
    obs/ex`) and no registry backref (check-provenance.py:251-259,487).
 8. **coverage** (WARN) — a report-facing registry result (≥1 report label) with no per-claim
@@ -1315,9 +1371,14 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   re-implemented rather than imported so the two gates' parsers stay independent. Same footing
   as Gate 2's rk-9pk widening: a contract amendment removing AISM private-layout residue.
   Fixture: `provenance-20`.
-- **[message-only] Coverage line** (amended 2026-07-18, rk-v18). `checked provenance: <N>/<M>
-  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<E> errors, <W>
-  warnings)`. `M` (the denominator) is every file this gate's recursive `argument/**/*.md` scan discovered
+- **[message-only] Coverage line** (amended 2026-07-18, rk-v18; extended 2026-07-25, B1).
+  `checked provenance: <N>/<M>
+  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows; report/:
+  <present|absent (not adopted)> (<E> errors, <W> warnings)`. The trailing `report/:` clause (B1)
+  is rendered on **every** path, present or absent — Gate 6's own convention
+  (`src/gates/shards.ts`) — so a reader can always tell whether check 6 ran at all rather than
+  inferring it from the absence of findings.
+  `M` (the denominator) is every file this gate's recursive `argument/**/*.md` scan discovered
   (README/INDEX/DAG excluded by name at any depth — rk-2t8),
   `N` (the numerator) is the surviving successfully-parsed set, and `X = M - N` is rendered even
   when `0` — the same "never omitted or folded away" rule `S` already followed. Before this
@@ -1328,6 +1389,7 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   mandatory coverage reporting, applied twice over to this gate's two independent silent-skip
   surfaces (registry parse, tab:status parse) — AISM's script counts neither. Pass/fail is
   unchanged both times; only visibility improves.
+- **[contract amendment, not a strictness triage] Check 6 is presence-conditional on the `report/` root** (B1, `docs/memos/2026-07-25-generality-audit.md`; extends rk-au6/R13). `check-provenance.py:349-365` runs the anchor check over every parsed registry result unconditionally, with `parse_unwired` returning an empty whitelist for a missing file — so on any repo with no `report/` tree every shard is an "unwired" failure. That is AISM private-layout residue, removed here on the same footing as R13's Gate 6 amendment and F5's reversal, not an rk-stricter/rk-bug/ambiguous call. Fixture: `provenance-21`.
 - **[message-only]** Standard cross-gate finding-format change; the `--build` step remains
   opt-in, matching AISM's own `--build` flag exactly (not a divergence, confirmed here for
   clarity).
@@ -1360,6 +1422,7 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-18` | **check 6: three whitelisted-unanchored shards ⇒ one aggregate WARN** [ruling f] — the flood shape (96/118/138 per-item WARNs on real AISM historical trees) collapses into one WARN naming the count + sorted ids |
 | `provenance-19` | **check 4: stale source payload shadowed by a coincidental VCS-named parent** [round-3 landing-blocker 1] — the loader's skip-set is anchored to the repo root and narrowed to `.git` alone, so a `notes/.svn/`-shadowed payload is hashed and its staleness ⇒ ERROR, never a false absent-WARN (row restored 2026-07-19 — the fixture landed in the round-3 wave but this table was never updated; see corpus/README.md's own `provenance-19` row for the full incident) |
 | `provenance-20` | **OVERCLAIM on a root-level (non-`lemmas/`) shard** [rk-2t8, M1 review B2] — recursive `argument/**/*.md` discovery mirrors Gate 2 exactly; `argument/thm-main.md` with `status: open` framed as proved by a `tab:status` row ⇒ OVERCLAIM ERROR, coverage `1/1` (pre-fix: a vacuous `0/0` and no finding) |
+| `provenance-21` | **check 6: registry shards present, `report/` ABSENT** [B1, SC7 blocker] — the state of every stamped campaign; check 6 emits nothing, coverage names `report/: absent (not adopted)`, registry denominator honest at 2/2 |
 
 ---
 
@@ -1713,13 +1776,26 @@ network/clock) — it cannot itself build a `GraphDocument` (af/fr subprocess ca
 `src/render/site.ts`'s `renderSite`. So unlike `linker-index`/`linker-dag` (pure functions of
 the snapshot, computed INSIDE this gate), `render-site-v1`'s expected bytes are computed at the
 EDGE, `src/cli/check.ts`'s `prepareRenderSiteExternalRegen`: it builds the real `GraphDocument`
-(`src/store/build-graph.ts`'s `buildGraphDocument`, imported unmodified), renders it
-(`src/render/site.ts`'s `renderSite`, imported unmodified, `northStarId` sourced from
-`.rk/config.json` the same way `rk render` itself defaults it — `rk check` has no CLI
-equivalent of `rk render`'s own `--title`/`--north-star` overrides, a known limitation below),
-and hands the pure gate the result via `runFreshnessGate`'s third parameter, `externalRegen: Map<
+(`src/store/build-graph.ts`'s `buildGraphDocument`, imported unmodified), renders it through
+**`src/cli/render.ts`'s exported `renderSiteFromRepo` — the same option-assembly path `rk render`
+itself uses** (B2, 2026-07-25), and hands the pure gate the result via `runFreshnessGate`'s third parameter, `externalRegen: Map<
 path, {ok:true, bytes} | {ok:false, reason}>`. The pure gate never regenerates `render-site-v1`
-itself; it only diffs SUPPLIED bytes. Consequently `freshnessGate.run` (the plain 2-arg `Gate`
+itself; it only diffs SUPPLIED bytes.
+
+Before the B2 repair the edge called `renderSite(doc, {northStarId})` — one of the **six** options
+`rk render` passes — dropping `sources`, `runGallery`, `defsData` and `frResiduals`, all of which
+are read from the repo (`runs/**`, `definitions/*.md` + `CONVENTIONS.md`, a second `fr export`)
+rather than from CLI flags. The expected bytes therefore differed from the real artifact on
+**every** repo: `build/site/index.html` reported STALE on a pristine scaffold and re-rendering
+never cleared it — WARN in exploration, ERROR in consolidation, and the stamped pre-commit hook
+runs `rk check`, so commits blocked. Since Gate 7 is the M2.6 regenerate-and-diff mechanism PRD
+SC2's "no drift by construction" rests on, a permanently-false STALE is an L6 truthful-freshness
+defect, not a cosmetic one. **`renderSite` is now called for the site artifact from exactly one
+place in the codebase**, so generator and verifier cannot silently disagree about what a render
+is, and a future seventh option is seen by this gate automatically. The pure gate is unchanged: it
+still only diffs supplied bytes.
+
+Consequently `freshnessGate.run` (the plain 2-arg `Gate`
 interface every OTHER caller uses — `src/gates/index.ts`'s registry, the corpus harness) always
 passes an EMPTY `externalRegen` map, so a `render-site-v1` entry run through that plain interface
 always reports "cannot be regenerated for verification" (`freshness-07`) — never a silent pass.
@@ -1876,13 +1952,25 @@ it).
   binary cannot verify it. A repo that legitimately wants to forward-declare a not-yet-landed
   generator id must accept a blocking ERROR until it upgrades — there is no longer a silent,
   non-blocking middle state.
-- `render-site-v1` verification depends on `src/cli/check.ts`'s `northStarId` defaulting
-  (`.rk/config.json` only) matching whatever `rk render` itself was actually invoked with. A
-  render invoked with an explicit `--north-star`/`--title` CLI override (`rk check` has no
-  equivalent flags) will legitimately diff against this config-only regeneration — a false STALE,
-  not a real one. Accepted for this repair wave, flagged as a residual concern; the eventual fix
-  either records the options used in the manifest entry itself (a schema addition) or drops the
-  override flags from `rk render` in favor of `.rk/config.json`-only configuration.
+- **One residual option divergence, narrowed** (B2, 2026-07-25; supersedes the wider limitation
+  this bullet previously recorded). `rk render`'s `--title` and `--north-star` are CLI-only
+  overrides; `rk check` has no equivalent flags and regenerates from `.rk/config.json` alone
+  (exactly as a *flagless* `rk render` does). A render invoked with an override that actually
+  changes the output will therefore diff against this regeneration. Removing the residual entirely
+  requires recording the options used in the manifest entry itself — a `schemas/generated.v1.json`
+  change and thus a compat event (CLAUDE.md Rule 10) — deferred. It is **narrowed, never silent**,
+  two ways: (a) it is detected *exactly* rather than assumed — `rk render` re-renders the same
+  already-loaded repo data under the options `rk check` will use and byte-compares the two
+  `index.html` bodies, so `--north-star` repeating the configured value (or `--title` repeating the
+  default) warns about nothing; (b) when they do differ, `rk render` reports it **at the moment the
+  divergence is created**, naming the offending flag, the declared artifact path and the remedy,
+  rather than letting it surface later as an unexplained permanent STALE from a different command
+  (`src/cli/render.ts`'s `checkDivergenceWarning`). Proven by `test/cli-check.test.ts`'s
+  render-site-v1 suite: five real `renderCommand` → `checkCommand` round trips plus both warning
+  polarities.
+- `rk check`'s regeneration now makes a second `fr export` subprocess call (via `loadFrResiduals`),
+  matching `rk render`'s own cost profile — see the new-defect note on external-state
+  non-determinism as a freshness input (bead filed 2026-07-25).
 - The `RepoSnapshot` text-map / `build/` gap this session's edge-side `augmentSnapshotForRenderSite`
   works around (see "Edge-supplied generators" above) is a workaround, not a fix — the proper fix
   (widening `src/store/snapshot-load.ts`'s include rules) is join-lane territory this WP does not

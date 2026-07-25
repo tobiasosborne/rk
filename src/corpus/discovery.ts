@@ -107,5 +107,15 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `workers.assignments.<role>.<tier>.model` (the new optional per-assignment model override,
  * src/drive/backend-registry.ts's `validateAssignmentEntry`) is a blocking ERROR at the loading
  * edge, same discipline as a blank `backend` — the companion fixture to config-01/config-02 for
- * the field this bead added so the TJO worker-model pin becomes expressible. */
-export const EXPECTED_FIXTURE_COUNT = 123;
+ * the field this bead added so the TJO worker-model pin becomes expressible.
+ * 124 (+1 over the then-pinned 123): rk-45m — `config-04`: a syntactically unparseable
+ * `.rk/config.json` (a trailing comma), or one whose top-level JSON value is not an object, is a
+ * loud structural ERROR at the loading edge instead of a silent fallback to defaults. Closes the
+ * residual rk-xbm deliberately left open; values still degrade to DEFAULT_GATE_CONFIG so the run
+ * never crashes, but it is never silently green about a config the user thought was in force.
+ * 125 (+1 over the then-pinned 124): 2026-07-25 generality-audit P0 wave — `provenance-21` (B1,
+ * docs/memos/2026-07-25-generality-audit.md): Gate 4's anchor check bound to the `report/` ROOT,
+ * the sibling of `shards-15`/`linker-25` that was never written — and whose absence is exactly why
+ * B1 survived the 2026-07-18 residue audit. Gate 4's "fresh repo no-op" was vacuous: it held only
+ * while the registry was EMPTY, so no fixture ever exercised shards-present + report-absent. */
+export const EXPECTED_FIXTURE_COUNT = 125;
