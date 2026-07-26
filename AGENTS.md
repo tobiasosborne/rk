@@ -77,6 +77,30 @@ Not read these? STOP and read them. Do not improvise from memory of them.
 12. **Commit discipline.** Atomic commits, one WP-step each; message states what gate/
     test proves it; end with the acting model's `Co-Authored-By:` line. Work is not
     done until committed.
+13. **Every spawned process is bounded** (added 2026-07-26, after the incident below).
+    Three parts, in order of how much they depend on anyone remembering them:
+    - **Automatic.** `.claude/settings.json` sets `BASH_ENV=scripts/agent-limits.sh`,
+      putting an 8 GiB soft `RLIMIT_DATA` on every tool-spawned shell and everything it
+      forks. A runaway then dies alone with a catchable `Out of memory`. Headroom is
+      >10x measured peaks (`bun test` 279 MB, `selftest` 66 MB, `--compile` 324 MB).
+      Escape hatch when a step genuinely needs more: `AGENT_MEM_LIMIT_KB=16777216 <cmd>`.
+      The script is committed but the wiring is not — `.claude/` is gitignored, and the
+      path must be absolute — so a fresh clone re-wires it once:
+      `mkdir -p .claude && printf '{"env":{"BASH_ENV":"%s/scripts/agent-limits.sh"}}\n' "$PWD" > .claude/settings.json`
+      Verify with `bash -c 'ulimit -S -d'` from a tool call: 8388608, not `unlimited`.
+    - **`timeout` on anything that loops.** `bun test`, `bun run selftest`, and every
+      ad-hoc script get `timeout <n>`. An un-timeout'd run is a WP-blocking defect when
+      the code under test is a driver loop — that is exactly what mutation waves touch.
+    - **No detached processes.** Never `(cmd &)`. Dev servers and probes run in the
+      foreground or as a tracked background task, and the lane that starts one kills it
+      before reporting. A detached server outlives the agent that forgot it.
+
+    **The incident.** 2026-07-25, twice in one afternoon: an un-timeout'd `bun test` run
+    during a driver-loop mutation wave reached **34.5 GB**, and an ad-hoc scratchpad
+    script looping over every node with no teardown reached **61.5 GB**. Each drained
+    62 GB of RAM plus 16 GB of swap and froze the WSL VM for minutes before the OOM
+    killer fired, losing both sessions. Neither was a big workload — both were unbounded
+    loops. Under rule 13 the same bugs cost one dead process and a legible error.
 
 ## 3. Model policy (user directive, 2026-07-17; cadence amended same day)
 
@@ -126,10 +150,14 @@ Not read these? STOP and read them. Do not improvise from memory of them.
 ## 4. Build & test
 
 ```
-bun test                 # unit + property tests
-bun run selftest         # red corpus + purity grep + compat checks
-bun build --compile src/cli.ts --outfile dist/rk
+timeout 300 bun test                 # unit + property tests        (~26s, 279 MB)
+timeout 120 bun run selftest         # red corpus + purity + compat (~1s,   66 MB)
+bun build --compile src/cli.ts --outfile dist/rk   #               (~0.3s, 324 MB)
 ```
+
+The `timeout` prefixes are rule 13, not decoration: these are the commands that ran
+unbounded on 2026-07-25. The figures are the measured baselines — a run an order of
+magnitude off them is a loop bug, not a big workload.
 
 All three green before any commit that claims a WP step. Live-fire acceptance (on AISM
 or a dogfood repo) is part of each milestone's definition of done — fixtures alone never

@@ -103,6 +103,16 @@ selftest` **OK** (corpus 125/125, purity 108/108, gates-dir 27/27).
 
 ## Standing cautions
 
+- **Bound every process you spawn (CLAUDE.md rule 13, added 2026-07-26).** On 2026-07-25
+  this repo's own test loop OOM-killed the WSL VM: an un-timeout'd `bun test`, run while
+  a mutation wave was editing driver-loop exit conditions, reached **34.5 GB RSS** and
+  took 62 GB of RAM plus 16 GB of swap with it. A second crash the same afternoon came
+  from rk-explorer. An 8 GiB soft `RLIMIT_DATA` is now applied automatically to every
+  tool-spawned shell via `BASH_ENV=scripts/agent-limits.sh`, but the guard only converts
+  a VM-wide freeze into one dead process — it does not make the loop terminate. Keep
+  `timeout` on `bun test`/`selftest`/ad-hoc scripts, and never detach (`(cmd &)`).
+  Mutation waves are the specific risk: mutating a loop's exit condition is *designed* to
+  produce a non-terminating program, and RED is then indistinguishable from a hang.
 - Do NOT take a subagent's finding at face value: this session, one lane corrected the
   orchestrator's own GAP 11 root cause, another corrected the audit's af-0.1.5 figure,
   and a third found a fixture that hardcoded the wrong `modelFamily`. Verify P0 claims
