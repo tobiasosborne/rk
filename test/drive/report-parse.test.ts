@@ -66,6 +66,13 @@ describe("parseDriverLogLine", () => {
     expect(r.ok).toBe(true);
   });
 
+  // rk-xfzg: the driver writes 'prover-body-invalid' whenever an exit-0 prover turn's body fails
+  // validateRawProverOutput (src/drive/driver-prove-node.ts); it must be recognized like its siblings.
+  test("the driver's own 'prover-body-invalid' kind is recognized, never 'unrecognized'", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "prover-body-invalid", at: "t", node: "1.1", issues: [{ path: "$.children[0].inference", message: "unknown property" }], rawSnippet: "{}" }), 1);
+    expect(r.ok).toBe(true);
+  });
+
   // rk-53r (P3) + rk-jit (STOP-4): the driver writes these two discard kinds; the report reader
   // must RECOGNIZE them (never print "unrecognized 'kind'"), and validate their node/reason fields.
   test("the driver's own 'cross-vendor-rejected' kind is recognized, never 'unrecognized'", () => {

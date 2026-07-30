@@ -108,27 +108,35 @@ describe("validateRawProverOutput — every rejection names a CONCRETE path", ()
 // `extractProofContent`: the content is discarded and the turn still counts as usable, so the worker
 // is never told and the proof DAG quietly loses information. The validator makes them repairable.
 describe("validateRawProverOutput — no silent smuggling, no silent drops (checkNoExtraKeys discipline)", () => {
+  // rk-xfzg: extractProofContent now DEFERS to this validator (calls it internally and returns
+  // `undefined` on any issue) — a body this validator refuses is now a REJECTION at extraction time
+  // too, never a silent partial acceptance. These three were previously asserting the OLD
+  // silent-drop behavior (the content vanished, the turn still counted as usable); they now assert
+  // the closed gap instead.
   test("an unknown TOP-LEVEL key is refused outright — driver-owned fields never belong in worker output", () => {
     const out = validateRawProverOutput({ children: [{ statement: "A" }], itemId: "1.2", contentHash: "f".repeat(64) });
     expect(out.map((i) => i.path).sort()).toEqual(["$.contentHash", "$.itemId"]);
-    // ...and `extractProofContent` would have accepted the very same body, silently.
-    expect(extractProofContent({ children: [{ statement: "A" }], itemId: "1.2" })).toBeDefined();
+    // ...and `extractProofContent` now rejects the very same body outright, rather than silently
+    // accepting it with the unknown keys dropped.
+    expect(extractProofContent({ children: [{ statement: "A" }], itemId: "1.2" })).toBeUndefined();
   });
 
   test("an unknown CHILD key is refused — af's own 'inference' spelling would otherwise be silently dropped", () => {
-    // A prover writing af's field name instead of the prompt's `justification` loses its derivation
-    // label entirely today (extractProofContent copies only the three known keys).
+    // A prover writing af's field name instead of the prompt's `justification` would have lost its
+    // derivation label entirely under the old extractProofContent (it copied only the three known
+    // keys); now the whole body is rejected instead, so the loss is never silent.
     expect(paths({ children: [{ statement: "A", inference: "modus_ponens" }] })).toEqual(["$.children[0].inference"]);
-    expect(extractProofContent({ children: [{ statement: "A", inference: "modus_ponens" }] })).toEqual({ children: [{ statement: "A" }] });
+    expect(extractProofContent({ children: [{ statement: "A", inference: "modus_ponens" }] })).toBeUndefined();
   });
 
-  test("a non-string 'depends' ENTRY is refused at its own index — extractProofContent drops it silently", () => {
+  test("a non-string 'depends' ENTRY is refused at its own index — extractProofContent rejects it, never drops it", () => {
     expect(paths({ children: [{ statement: "A", depends: ["#0", 1, null] }] })).toEqual([
       "$.children[0].depends[1]",
       "$.children[0].depends[2]",
     ]);
-    // The silent-drop this guards: a mis-wired dependency vanishes and the proof is recorded anyway.
-    expect(extractProofContent({ children: [{ statement: "A", depends: ["#0", 1] }] })).toEqual({ children: [{ statement: "A", depends: ["#0"] }] });
+    // The silent-drop this guards against: a mis-wired dependency vanishing while the proof is
+    // recorded anyway. Now the whole body is rejected instead of silently losing the bad entry.
+    expect(extractProofContent({ children: [{ statement: "A", depends: ["#0", 1] }] })).toBeUndefined();
   });
 
   test("a blank 'depends' entry is refused too (af would receive an empty reference)", () => {

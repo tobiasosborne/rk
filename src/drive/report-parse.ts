@@ -33,8 +33,12 @@ export interface BalloonUnclassifiedLogRecord { kind: "balloon-unclassified"; at
  * validation. `proof-recorded` (a prover turn recorded a decomposition, src/drive/driver-prove-
  * node.ts) and `churn-cap` (a growth-only run aborted, src/drive/driver-run.ts) were previously
  * OMITTED from the allowlist and so mis-reported as `unrecognized 'kind'` / "could not be parsed"
- * even though rk's OWN driver writes them — recognized here alongside the other four. */
-export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-bd-skipped" | "prover-overreach" | "node-skipped" | "proof-recorded" | "churn-cap"; at: string; }
+ * even though rk's OWN driver writes them — recognized here alongside the other four.
+ * `prover-body-invalid` (rk-xfzg, src/drive/driver-prove-node.ts) is written whenever an exit-0
+ * prover turn's body fails `src/drive/prover-raw.ts`'s `validateRawProverOutput` (the same validator
+ * `extractProofContent` now defers to) — the concrete `issues` and a bounded `rawSnippet` are
+ * diagnostic-only evidence, same family as `bind-failed`/`record-proof-failed`. */
+export interface OtherDriverLogRecord { kind: "balloon-mark-skipped" | "balloon-bd-skipped" | "prover-overreach" | "node-skipped" | "proof-recorded" | "churn-cap" | "prover-body-invalid"; at: string; }
 /** rk-53r (P3) + rk-jit (STOP-4): the driver's two per-node DISCARD kinds. `cross-vendor-rejected`
  * (driver-verify-node.ts) is written whenever the cross-vendor gate refuses an accept;
  * `vacuous-accept-discarded` is the new backstop discard of an accept on a proofless node. Both were
@@ -94,7 +98,7 @@ export interface RecordProofFailedLogRecord { kind: "record-proof-failed"; at: s
 export interface VerdictRepairLogRecord { kind: "verdict-repair"; at: string; node : string; role: Role; outcome: "repaired" | "failed"; issues: { path: string; message: string }[]; repairIssues?: { path: string; message: string }[]; }
 
 export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | VerdictRepairLogRecord | OtherDriverLogRecord;
-const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap"]);
+const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap", "prover-body-invalid"]);
 
 export interface DriverLogIssue { line: number; message: string; }
 export interface DriverLogParseResult { records: DriverLogRecord[]; issues: DriverLogIssue[]; }

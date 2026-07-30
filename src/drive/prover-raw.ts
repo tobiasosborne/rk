@@ -14,26 +14,23 @@
 //   - `child.statement`, non-blank string       — `extractProofContent` rejects a non-string or
 //     whitespace-only statement; af's own `childSpec.statement` (../vibefeld/cmd/af/refine.go) is
 //     the field it becomes.
-//   - `child.justification`, optional string    — `extractProofContent` keeps it only when a
-//     non-empty string; src/drive/driver-af.ts's `buildRecordProofChildren` maps it to af's
-//     `inference`.
-//   - `child.depends`, optional string[]        — `extractProofContent` keeps string entries;
-//     `buildRecordProofChildren` translates each into af's namespace (`#N` in-batch sibling or an
-//     absolute existing id) and FAILS LOUDLY on anything else.
+//   - `child.justification`, optional string    — `extractProofContent` accepts it only when a
+//     non-blank string is present; src/drive/driver-af.ts's `buildRecordProofChildren` maps it to
+//     af's `inference`.
+//   - `child.depends`, optional string[]        — `extractProofContent` accepts only well-typed
+//     string entries; `buildRecordProofChildren` translates each into af's namespace (`#N` in-batch
+//     sibling or an absolute existing id) and FAILS LOUDLY on anything else.
 //
-// TWO PLACES THIS IS DELIBERATELY STRICTER THAN `extractProofContent`, both of them silent-drop
-// paths there (the content vanishes, the turn still counts as usable, and the worker is never told):
-//   1. UNKNOWN KEYS, at the top level and per child — the `checkNoExtraKeys` discipline
-//      src/drive/verdict-raw.ts established. A worker must not be able to smuggle a driver-owned
-//      field (itemId/contentHash/tier/batchId/identity) into a body the driver reads, and a child
-//      written with af's OWN key spelling (`inference` instead of the prompt's `justification`)
-//      currently loses its derivation label in silence.
-//   2. NON-STRING `depends` ENTRIES — `extractProofContent` filters them out, so a mis-wired proof
-//      dependency disappears and the decomposition is recorded as if it had been complete.
-// Being stricter can only cause ONE extra repair turn; it can never make a body usable that was not
-// usable before, because nothing downstream reads this validator's verdict (the repaired body still
-// re-enters `extractProofContent`, `detectProverOverreach`, `buildRecordProofChildren` and af's own
-// hash/role CAS checks unchanged).
+// rk-xfzg (2026-07-30): `extractProofContent` now DEFERS TO THIS VALIDATOR — it calls
+// `validateRawProverOutput` itself and returns `undefined` for ANY non-empty issue list, then builds
+// `ProofContent` from the now-known-clean body. Before rk-xfzg, `extractProofContent` ran its own,
+// laxer copy of these rules and had TWO silent-drop paths this validator already refused: an unknown
+// key (top level or per child — including af's own `inference` spelling instead of the prompt's
+// `justification`) was dropped rather than rejected, and a non-string `depends` entry was `.filter`ed
+// out rather than refused. Both meant the content vanished, the turn still counted as usable, and the
+// worker was never told. There is now exactly ONE place this schema is stated: this file. A body
+// this validator refuses is refused by `extractProofContent` too, by construction — there is nothing
+// left to drift.
 //
 // EVERY MESSAGE HERE IS PROVER-PROMPT BYTES. The repair reprompt echoes them verbatim, so they are
 // (a) self-teaching — they say what to write, not merely which key was wrong — and (b) free of

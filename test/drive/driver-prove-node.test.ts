@@ -51,6 +51,46 @@ describe("extractProofContent — a non-empty children[] decomposition, never a 
     // by detectProverOverreach in proveOneNode).
     expect(extractProofContent({ verdict: { outcome: "accept" } })).toBeUndefined();
   });
+
+  // rk-xfzg: extractProofContent now DEFERS to prover-raw.ts's validateRawProverOutput — a body is
+  // accepted iff that validator reports zero issues. These four cases were previously SILENT-DROP
+  // paths (the content vanished, the turn still counted as usable): they must now be a flat
+  // rejection, never a partial acceptance.
+  test("an unknown CHILD key (af's own 'inference' spelling) rejects the whole body — no silent drop", () => {
+    // mutation: reinstate the old fresh-object copy (statement/justification/depends only, ignoring
+    // everything else) → this body would come back {children:[{statement:'A'}]}, going RED.
+    expect(extractProofContent({ children: [{ statement: "A", inference: "modus_ponens" }] })).toBeUndefined();
+  });
+
+  test("an unknown TOP-LEVEL key rejects the whole body — no silent drop", () => {
+    expect(extractProofContent({ children: [{ statement: "A" }], itemId: "1.2" })).toBeUndefined();
+  });
+
+  test("a non-string 'depends' entry rejects the whole body — the entry is never silently filtered out", () => {
+    // mutation: reinstate `obj.depends.filter((d): d is string => typeof d === "string")` → this body
+    // would come back {children:[{statement:'A', depends:['#0']}]} (the `1` silently dropped), RED.
+    expect(extractProofContent({ children: [{ statement: "A", depends: ["#0", 1] }] })).toBeUndefined();
+  });
+
+  test("a PRESENT but blank justification now rejects (stricter, CLAUDE.md L5) — previously silently dropped", () => {
+    expect(extractProofContent({ children: [{ statement: "A", justification: "" }] })).toBeUndefined();
+    expect(extractProofContent({ children: [{ statement: "A", justification: "   " }] })).toBeUndefined();
+  });
+
+  test("a fully clean body is still accepted, with justification and depends intact", () => {
+    const p = extractProofContent({
+      children: [
+        { statement: "A", justification: "by_definition" },
+        { statement: "B", justification: "modus_ponens", depends: ["#0", "1.3"] },
+      ],
+    });
+    expect(p).toEqual({
+      children: [
+        { statement: "A", justification: "by_definition" },
+        { statement: "B", justification: "modus_ponens", depends: ["#0", "1.3"] },
+      ],
+    });
+  });
 });
 
 describe("proveOneNode — role guard, overreach discard, record, usage logging", () => {
@@ -102,6 +142,22 @@ describe("proveOneNode — role guard, overreach discard, record, usage logging"
     expect(ev.reason).toContain("dependency node 1.1 does not exist");
     expect(ev.rawSnippet).toContain("step alpha"); // the raw children JSON is banked
     expect(ev.rawSnippet.length).toBeLessThanOrEqual(500);
+  });
+
+  // rk-xfzg: an exit-0 body that fails the shared validator must never be a silent, unnamed skip —
+  // the concrete issue(s) that sank it are named in BOTH the skip reason and a structured log record.
+  test("a body that fails validateRawProverOutput names the concrete issues in the skip reason AND a log record", async () => {
+    const h = rec({ dispatchProve: () => proverTurn({ children: [{ statement: "A", inference: "modus_ponens" }] }) });
+    const r = await proveOneNode(h.deps, pnode("1"), new Set(["1"]));
+    expect("skip" in r).toBe(true);
+    expect(h.recorded).toEqual([]);
+    if ("skip" in r) expect(r.skip).toContain("children[0].inference");
+    const ev = h.logs.map((l) => JSON.parse(l)).find((o) => o.kind === "prover-body-invalid");
+    expect(ev).toBeDefined();
+    expect(ev.node).toBe("1");
+    expect(Array.isArray(ev.issues)).toBe(true);
+    expect(ev.issues.length).toBeGreaterThan(0);
+    expect(JSON.stringify(ev.issues)).toContain("children[0].inference");
   });
 
   test("usage is logged with role 'prover' before any discard (tokens are spent on dispatch)", async () => {

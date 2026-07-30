@@ -14,6 +14,7 @@
 
 import { detectProverOverreach, usageTokens } from "./driver-guardrails";
 import { boundedRawSnippet, PARSE_RAW_SNIPPET_CAP } from "./driver-verify-node";
+import { validateRawProverOutput, type RawProverOutput } from "./prover-raw";
 import type { AfNodeView } from "./driver-plan";
 import type { DriverDeps } from "./driver-types";
 
@@ -38,24 +39,23 @@ export interface ProofContent {
 export type RecordProofResult = { ok: true } | { ok: false; reason: string };
 
 /** Parses a prover turn's already-JSON-parsed body into `ProofContent`, or `undefined` if it is not
- * a usable decomposition. Requires a non-empty `children` array whose every element has a non-blank
- * `statement`; optional `justification`/`depends` are passed through when well-typed. Pure: never a
- * verdict path — a body carrying a verdict is rejected here as "no children" AND caught structurally
- * by detectProverOverreach in `proveOneNode`. */
+ * a usable decomposition. rk-xfzg: SINGLE SOURCE OF TRUTH — accepts `raw` iff
+ * `validateRawProverOutput(raw)` (./prover-raw.ts) reports ZERO issues, then builds `ProofContent`
+ * from the now-known-clean body. This closes the two silent-drop paths the pre-rk-xfzg version had
+ * (an unknown key, top-level or per child, was dropped rather than rejected; a non-string `depends`
+ * entry was filtered out rather than refused) — a body with ANY such defect is now rejected outright,
+ * never partially accepted. Pure: never a verdict path — a body carrying a verdict fails validation
+ * (an unrecognized top-level key) AND is caught structurally by detectProverOverreach in
+ * `proveOneNode`. */
 export function extractProofContent(raw: unknown): ProofContent | undefined {
-  if (raw === null || typeof raw !== "object") return undefined;
-  const kids = (raw as Record<string, unknown>).children;
-  if (!Array.isArray(kids) || kids.length === 0) return undefined;
-  const children: ProofChild[] = [];
-  for (const k of kids) {
-    if (k === null || typeof k !== "object") return undefined;
-    const obj = k as Record<string, unknown>;
-    if (typeof obj.statement !== "string" || obj.statement.trim().length === 0) return undefined;
-    const child: ProofChild = { statement: obj.statement };
-    if (typeof obj.justification === "string" && obj.justification.length > 0) child.justification = obj.justification;
-    if (Array.isArray(obj.depends)) child.depends = obj.depends.filter((d): d is string => typeof d === "string");
-    children.push(child);
-  }
+  if (validateRawProverOutput(raw).length > 0) return undefined;
+  const body = raw as RawProverOutput;
+  const children: ProofChild[] = body.children.map((k) => {
+    const child: ProofChild = { statement: k.statement };
+    if (k.justification !== undefined) child.justification = k.justification;
+    if (k.depends !== undefined) child.depends = k.depends;
+    return child;
+  });
   return { children };
 }
 
@@ -131,7 +131,16 @@ export async function proveOneNode(deps: DriverDeps, node: AfNodeView, knownIds:
     return { spentTokens, skip: `prover worker exit ${turn.exit}` };
   }
   const proof = extractProofContent(turn.raw);
-  if (proof === undefined) return { spentTokens, skip: "prover produced no usable proof content (need a non-empty children[] decomposition)" };
+  if (proof === undefined) {
+    // rk-xfzg: extraction failure is now ALWAYS a validateRawProverOutput rejection (extractProofContent
+    // defers to it) — recompute the issues here so the loss is NAMED, never a silent/unnamed skip. A
+    // bounded summary (first 3 issue paths+messages) goes in both the skip reason and a structured
+    // 'prover-body-invalid' log record so a live stop is self-diagnosing without a re-run.
+    const issues = validateRawProverOutput(turn.raw);
+    const summary = issues.slice(0, 3).map((i) => `${i.path}: ${i.message}`).join(" | ");
+    deps.appendLog(JSON.stringify({ kind: "prover-body-invalid", at: deps.now(), node: node.id, issues: issues.map((i) => ({ path: i.path, message: i.message })), rawSnippet: boundedRawSnippet(turn.raw) }));
+    return { spentTokens, skip: `prover produced no usable proof content (need a non-empty children[] decomposition): ${summary}` };
+  }
   const rec = await deps.recordProof(node, proof, knownIds);
   if (!rec.ok) {
     // GAP 8 observability (STOP-REPORT-7, same evidence family as rk-2cm's bind/parse-failed): an af
