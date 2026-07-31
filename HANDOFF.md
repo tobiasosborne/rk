@@ -3,7 +3,22 @@
 
 # HANDOFF
 
-## State (2026-07-31, session close — rk-xfzg LANDED on master)
+## State (2026-07-31, session close — rk-xfzg LANDED; rk-k8dq live-fire DONE)
+
+**rk-k8dq is closed** (attempt 12, banked at
+`../rk-m3.5-baseline/RUN-REPORT-12-2026-07-31.md`). The GAP 11 death mode (claude
+verifier verdict-envelope parse failure ×3) did NOT reproduce under the current build:
+**mass-split B CONVERGED** (root validated + closed, 5/5 nodes, cross-vendor clean,
+273,996 tok, cache 0.90) and **starvation B got past GAP 11** (challenge applied,
+prover dispatched — the step GAP 11 starved) but stuck on a NEW cause: the codex
+prover's decomposition turn timed out (exit 10) twice at the hard-coded 120 s default —
+`LiveDispatchOpts.turnTimeoutMs` exists but is unwired from config → filed **rk-k0m1**
+(P2). The rk-xxp bounded repair NEVER FIRED in either run (zero `verdict-repair`
+records — nothing needed repair), so the bead's fire-once/bind/token criteria closed
+VACUOUS with the residual (repair live-unfired) noted for the M3 batched review.
+Spend: 312,530 tokens, within the §14 authorization. Mass-split now has BOTH
+directions converged; starvation B is the only zero-progress campaign left and is
+blocked on rk-k0m1.
 
 **rk-xfzg is closed.** The Tier A review the previous session parked on was run this
 session by **Fable with explicit TJO permission** ("work on this by yourself, do not use
@@ -33,11 +48,10 @@ selftest **OK** (corpus 127/127, purity, gates-dir, compat).
 
 ## Next steps (in order)
 
-1. **rk-k8dq (P1) — live-confirm the GAP 11 repair**: re-run mass-split B + starvation B
-   from `_pristine/`. Confirm the repair fires at most once, the repaired verdict binds
-   through the unchanged pipeline, repair tokens appear in the report's repair line and
-   the budget, and the prover is finally dispatched. Within the standing M3.5
-   authorization (runbook §14, 1.5M/run). Rebuild `dist/rk` + reinstall af first.
+1. **rk-k0m1 (P2) — wire `turnTimeoutMs`/`sessionTimeoutMs` from `.rk/config.json`**
+   (per-role or per-assignment; compat discipline if the config schema is versioned),
+   then re-run starvation B from `_pristine/` — restore the workspace first (it now
+   carries the applied root challenge, terminal state of attempt 12).
 2. **rk-tbg — ESCALATE the systemic decision before sweeping again** (bead notes,
    2026-07-25): six files are over the 280 cap right now (freshness.ts 442, config.ts
    380, cli/render.ts 356, shards.ts 312, driver-af.ts 305, provenance.ts 303), four of
