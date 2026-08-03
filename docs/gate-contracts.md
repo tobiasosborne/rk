@@ -986,8 +986,10 @@ features layered on the same pure functions, not gate verdicts.
   (it is Tier-A driver logic, covered by `test/drive/cross-vendor.test.ts` and
   `test/drive/driver-run.test.ts`'s dedicated `describe` block instead, per this codebase's
   gates-vs-drive split). Fixtures: `linker-31` (same-family POST-convention ⇒ ERROR), `linker-32`
-  (no parseable seam at all, AISM's real shape ⇒ WARNING legacy-same-family), `linker-33`
-  (batch-validated on the critical path ⇒ WARNING), `linker-34` (cross-family ⇒ golden pass),
+  (no parseable seam at all, AISM's real shape ⇒ **ERROR, fail closed** — 2026-07-19 M3 review
+  blocker 5a; legacy is never INFERRED from an unparseable identity, only granted by the explicit
+  atomic marker, `linker-39`), `linker-33` (batch-validated on the critical path ⇒ **ERROR** —
+  blocker 5c), `linker-34` (cross-family ⇒ golden pass),
   `linker-35`/`linker-36`/`linker-37` (L5 promotion: fresh VALID promotes, stale/correction-pending
   do not), `linker-38` (same-family + explicit `provenance: legacy-same-family` marker ⇒ WARNING
   not ERROR).
@@ -1075,8 +1077,8 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-29` | **[rk-wc3, dogfood-2] multi-line YAML `deps:` naming an unknown id** — the natural block-list style that pre-fix parsed to an EMPTY deps list (dogfood-1's live `3/3 ... 0 errors` over an edgeless graph) ⇒ the list now parses and `unknown dep 'lem-nonexistent'` ERROR fires |
 | `linker-30` | **[rk-wc3 sibling] genuinely malformed frontmatter line in a linker shard** — a colon-less line after a non-empty-valued key (not a list continuation) ⇒ ERROR `frontmatter line without ':'` (Gate 2 now reads `fm.malformedLines` exactly as Gate 1 always has; AISM registers the shard clean with zero diagnostic) |
 | `linker-31` | **[M3.8] critical-path node validated POST-convention SAME-family** — `author`/`validated_by` both parse as the same `modelFamily`, no legacy marker ⇒ ERROR (Check 13) |
-| `linker-32` | **[M3.8] critical-path node validated with NO parseable identity at all** — AISM's real shape (0/44 workspaces carry these fields) ⇒ WARNING `legacy-same-family`, never ERROR (Check 13, grandfathering golden case) |
-| `linker-33` | **[M3.8] critical-path node validated via a BATCH** (`af verdicts apply`, cross-family so isolated from the same-family check) ⇒ WARNING naming the batch id (Check 13) |
+| `linker-32` | **[M3.8, HARDENED by the 2026-07-19 M3 review blocker 5a] critical-path node validated with NO parseable identity at all** — AISM's real shape (0/44 workspaces carry these fields), no explicit marker ⇒ **ERROR, fail closed** (Check 13). Legacy is never INFERRED from an unparseable identity — that let a NEW same-family result evade enforcement by using free text instead of the seam; grandfathering requires the explicit atomic `provenance: legacy-same-family` token (`linker-39`, the byte-identical ledger WITH the marker ⇒ WARNING). The fixture's own `expected.json` pins `"severity": "ERROR"` and its `notes` record the hardening; see also this document's Check 13 statement at "an unresolvable-or-same-family identity on a load-bearing node is an error, unless an explicit atomic `legacy-same-family` token grandfathers it" |
+| `linker-33` | **[M3.8, HARDENED by the 2026-07-19 M3 review blocker 5c] critical-path node validated via a BATCH** (`af verdicts apply`, cross-family so isolated from the same-family check) ⇒ **ERROR** naming the batch id (Check 13) — PRD C3's "a load-bearing critical-path node must NEVER be batch-validated" is a structural exclusion violation, not a mere warning; downgradable to WARNING only via the explicit `legacy-same-family` marker (the "batch validated BEFORE the node became load-bearing" case C2 names). The fixture's own `expected.json` pins `"severity": "ERROR"` and its `notes` record the hardening |
 | `linker-34` | **[M3.8] critical-path node validated CROSS-family** — golden pass, zero findings (Check 13) |
 | `linker-35` | **[M3.8] `status: stated` shard with a fresh VALID L5 verdict** ⇒ WARN `L5 promotable` (the L5-promotion check, `src/gates/linker-l5.ts`) |
 | `linker-36` | **[M3.8] `status: stated` shard, L5 verdict bound to a stale hash** ⇒ no promotion, zero findings |
