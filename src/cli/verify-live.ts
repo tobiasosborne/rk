@@ -19,6 +19,7 @@ import type { WorkerBackend } from "../drive/backend-types";
 import { ClaudeBackend } from "../drive/backend-claude";
 import { CodexBackend } from "../drive/backend-codex";
 import { createLiveDispatcher, describeMissingWorkersConfig, familyForBackend, resolveModel, DEFAULT_SESSION_TIMEOUT_MS, DEFAULT_TURN_TIMEOUT_MS } from "../drive/driver-live";
+import { classificationUnavailableLines } from "../drive/driver-balloon";
 import { parseCampaignBudget } from "./verify-live-budget";
 import { buildSharedContext } from "../drive/driver-prompts";
 import { loadGateConfig } from "../store/config-load";
@@ -138,6 +139,9 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // (a different tier -- l5, "cheap" -- is a different isolation tuple than the hard-tier verify
   // session above), but still benefits from knowing the conjecture, so it reuses the SAME
   // sharedContext rather than an empty one.
+  // LB2: its creation failing is NOT fatal (a roster with no cheap tier is legal) but it is never
+  // silent either -- `classificationUnavailableLines` states the consequence in the preflight block
+  // below, before any spend, exactly as the cross-vendor single-vendor case does.
   const classCreated = createLiveDispatcher({ registry, role: "verifier", tier: "l5", claimId: `${claimId}-balloon`, model, sharedContext, ...registry.timeoutsFor("verifier", "l5") });
 
   // rk-9zd (Tier A, cross-vendor input): resolve BOTH sides' model families from the RESOLVED
@@ -178,6 +182,8 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // rk-id1: the single-vendor consequence, stated BEFORE any spend. Weakens nothing — it is the tool
   // saying what its own rule already implies for this roster.
   for (const line of crossVendorPreflightLines(proverFamily.family, verifierFamily.family, membership.loadBearing)) out.log(`  ${line}`);
+  // LB2: the balloon-classification degradation, stated before any spend when it applies.
+  if (!classCreated.ok) for (const line of classificationUnavailableLines(classCreated.reason)) out.log(`  ${line}`);
   out.log(`  session plan: ONE shared verifier session for claim '${claimId}' + ONE prover session '${claimId}-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)`);
   out.log(`  workspace: ${node.workspace} (${wsResult.value.nodeCount} node(s) total)`);
   out.log(`  estimated turn count: <= ${Math.min(opts.maxTurns, wsResult.value.nodeCount)} (bounded by --max-turns ${opts.maxTurns} and --max-nodes ${opts.maxNodes})`);

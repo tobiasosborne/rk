@@ -10,6 +10,7 @@ import {
   buildBalloonEvent,
   detectBalloon,
   parseClassificationReview,
+  classificationUnavailableLines,
   readBalloonCounterFromFields,
   routeBalloon,
   routingMarksShard,
@@ -108,5 +109,29 @@ describe("readBalloonCounterFromFields — durable repeat-detection read-back", 
   test("an unrecognized classification token is dropped, not fabricated into the vocabulary", () => {
     const c = readBalloonCounterFromFields({ balloons: "1", balloon_classifications: "missing-fact; bogus-class" });
     expect(c.classifications).toEqual(["missing-fact"]);
+  });
+});
+
+// LB2 (M3-close review): the loud-degradation preflight block for a missing verifier/l5 assignment.
+describe("classificationUnavailableLines — loud, non-fatal degradation (LB2)", () => {
+  const reason = "rk verify --live: no worker backend configured for role='verifier' tier='l5'. .rk/config.json needs a 'workers.assignments.verifier.l5' entry naming a backend, e.g.:\n{\n  \"workers\": {}\n}";
+
+  test("renders only the reason's FIRST line (never the multi-line JSON example) and names the enabling key", () => {
+    const lines = classificationUnavailableLines(reason);
+    expect(lines[0]).toContain("balloon classification: UNAVAILABLE");
+    expect(lines[0]).toContain("tier='l5'");
+    expect(lines[0]).not.toContain("e.g.:");            // the dangling lead-in to the omitted example
+    expect(lines.join("\n")).not.toContain('"workers"'); // the example itself is never re-printed
+    expect(lines.join("\n")).toContain("workers.assignments.verifier.l5");
+  });
+
+  test("states the CONSEQUENCE truthfully: unclassified abort, but the counter still persists", () => {
+    const text = classificationUnavailableLines(reason).join("\n");
+    expect(text).toContain("aborts UNCLASSIFIED");
+    expect(text).toContain("counter is still persisted"); // matches driver-balloon-run.ts's behavior
+  });
+
+  test("a single-line reason is rendered unchanged (total, never throws)", () => {
+    expect(classificationUnavailableLines("backend 'x' is not registered")[0]).toBe("balloon classification: UNAVAILABLE — backend 'x' is not registered");
   });
 });

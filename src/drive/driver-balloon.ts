@@ -78,6 +78,29 @@ export function parseClassificationReview(parsed: unknown): ClassificationParseR
   return { ok: true, review: { classification: classification as BalloonClassification, rationale } };
 }
 
+/** LB2 (M3-close review): the preflight block a live run prints when its balloon-CLASSIFICATION
+ * dispatcher could not be created (no `workers.assignments.verifier.l5` — which preflight does not
+ * require, and legitimately cannot: a campaign with no cheap-tier worker is a legal roster). The
+ * degradation used to be silent (`async () => undefined`, which `parseClassificationReview` always
+ * rejects), so every balloon on the default roster aborted unclassified with nothing anywhere
+ * saying why. LOUD, NOT FATAL — the same philosophy as `crossVendorPreflightLines`: state the
+ * consequence before any spend, then let the operator decide.
+ *
+ * `reason` is `createLiveDispatcher`'s own failure text; only its FIRST line is rendered (the
+ * remainder is `describeMissingWorkersConfig`'s multi-line JSON example, which the last line here
+ * points at by key instead of repeating). Pure: string in, strings out. */
+export function classificationUnavailableLines(reason: string): string[] {
+  const headline = (reason.split("\n")[0] ?? reason).replace(/,?\s*e\.g\.:?\s*$/, "").trim();
+  return [
+    `balloon classification: UNAVAILABLE — ${headline}`,
+    `  Consequence, before you spend: if the balloon tripwire fires (node count over the cap), the run`,
+    `  aborts UNCLASSIFIED. The durable balloon counter is still persisted, so repeat detection and the`,
+    `  linker's mandatory-review threshold on COUNT still work; but no classification is recorded, no`,
+    `  provisioning/factoring bd task is filed, and the genuine-gap route can never fire on this run.`,
+    `  To enable: add a cheap-tier assignment at .rk/config.json workers.assignments.verifier.l5.`,
+  ];
+}
+
 // --- Routing ----------------------------------------------------------------------------------
 
 /** Where a balloon routes (PRD C9's exact table):

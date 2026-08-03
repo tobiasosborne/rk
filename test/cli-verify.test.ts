@@ -417,6 +417,28 @@ describe("rk verify --af --live (M3.5-prep): full CLI wiring with a fake backend
     expect(text).toContain("final accounting");
   });
 
+  // LB2 (M3-close review): the balloon-classification dispatcher needs a verifier/l5 assignment,
+  // which preflight does NOT require and the tool's own example config did not show. Its creation
+  // failure used to degrade to `async () => undefined` in silence — every balloon on the default
+  // roster aborting unclassified with no line anywhere saying why. Loud, not fatal: a campaign with
+  // no l5 worker is legal, and this is the same philosophy as the cross-vendor preflight block.
+  test("--live with NO verifier/l5 assignment: preflight says balloon classification is UNAVAILABLE, why, and how to enable it — but the run still starts", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const { out, lines } = capture();
+    const code = await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "1", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT, frCommand: ABSENT, readWorkspace: twoReadyNodesWorkspace(),
+      loadWorkersConfig: async () => FAKE_WORKERS_CONFIG, // verifier/hard + prover/hard only
+      backends: [fakeLiveBackend()],
+      preflightAf: () => ({ ok: true }),
+    });
+    const text = lines.join("\n");
+    expect(text).toContain("balloon classification: UNAVAILABLE");
+    expect(text).toContain("workers.assignments.verifier.l5"); // what to configure
+    expect(text).toContain("aborts UNCLASSIFIED");             // the consequence, before any spend
+    expect(code).toBe(4);                                      // NOT fatal: the run proceeded
+  });
+
   // rk FU5: an af too old to advertise the readiness/closure/dependencies capabilities must fail
   // LOUDLY at preflight, before any model call — never silently read as "nothing ready".
   test("--live with a FAILING af capability preflight: loud abort, exit 1, no worker EVER called", async () => {

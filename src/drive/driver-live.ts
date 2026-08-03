@@ -67,11 +67,22 @@ export const DEFAULT_TURN_TIMEOUT_MS = 120_000;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 8_000;
 
 /** The EXACT `.rk/config.json` shape a live run needs — printed verbatim in the loud error below,
- * never left for a reader to infer from prose. */
+ * never left for a reader to infer from prose.
+ *
+ * LB2: all THREE assignments a full live run uses are shown, because an example that showed only
+ * `verifier.hard` was itself the reason the default path degraded silently. `prover.hard` is
+ * required (a run refuses to start without it); `verifier.l5` is the cheap tier the balloon
+ * classification turn dispatches through — optional, but a roster without it aborts every balloon
+ * unclassified (`classificationUnavailableLines` says so at preflight). The two families differ
+ * deliberately: PRD C9 requires a cross-vendor verifier to promote anything load-bearing. */
 export const WORKERS_CONFIG_EXAMPLE = `{
   "workers": {
     "assignments": {
-      "verifier": { "hard": { "backend": "claude", "fallbacks": ["codex"] } }
+      "prover": { "hard": { "backend": "codex", "fallbacks": [] } },
+      "verifier": {
+        "hard": { "backend": "claude", "fallbacks": ["codex"] },
+        "l5": { "backend": "claude", "fallbacks": ["codex"] }
+      }
     }
   }
 }`;

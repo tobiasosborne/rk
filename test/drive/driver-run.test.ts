@@ -149,14 +149,36 @@ describe("balloon path (synthetic acceptance) — tripwire → classify → rout
     expect(h.logs.some((l) => l.includes("balloon-bd-skipped"))).toBe(true);
   });
 
-  test("an unclassifiable balloon still ABORTS and marks nothing (never guesses a class)", async () => {
+  // LB2 (M3-close review): an unclassified balloon still ABORTS and still never guesses a class —
+  // but it must not abort WITHOUT updating durable state (M3.6's named "no abort-without-state-
+  // update" criterion). Pre-fix the classification-failure branch returned before the counter
+  // persist, so `balloons:` stayed 0 forever on the default (no verifier/l5) config: routeBalloon's
+  // repeat clause and Gate 2 Check 15's threshold were permanently unreachable.
+  test("an unclassifiable balloon ABORTS, persists the COUNTER, and still records NO classification", async () => {
     const h = harness({ workspaces: [ws(over, 5)], config: { balloonCap: 3 }, dispatchClassification: () => ({ nonsense: true }) });
     const r = await runVerifyDriver(h.deps);
     expect(r.status).toBe("aborted");
     expect(r.stopReason).toBe("balloon-abort");
-    expect(h.written.length).toBe(0);
-    expect(h.bdTasks.length).toBe(0);
+    expect(h.bdTasks.length).toBe(0);                                  // no routing without a class
+    expect(h.written.length).toBe(1);                                  // pre-fix: 0 — nothing durable
+    expect(h.written[0]!).toContain("balloons: 1");                    // the tripwire DID fire; count it
+    expect(h.written[0]!).not.toContain("balloon_classifications:");   // never a guessed class
     expect(h.logs.some((l) => l.includes("balloon-unclassified"))).toBe(true);
+  });
+
+  test("an unclassifiable REPEAT balloon advances the count and preserves the prior classification history verbatim", async () => {
+    const h = harness({
+      workspaces: [ws(over, 5)],
+      config: { balloonCap: 3 },
+      priorBalloonCount: 1,
+      priorClassifications: ["missing-fact"],
+      dispatchClassification: () => ({ nonsense: true }),
+    });
+    await runVerifyDriver(h.deps);
+    expect(h.written.length).toBe(1);
+    expect(h.written[0]!).toContain("balloons: 2");
+    expect(h.written[0]!).toContain("balloon_classifications:\n- missing-fact"); // prior history only
+    expect(h.written[0]!.match(/^- /gm)!.length).toBe(1);                        // nothing appended
   });
 });
 

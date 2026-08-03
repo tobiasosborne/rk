@@ -785,9 +785,17 @@ is stale against the code and must not be treated as ground truth).
     hypotheses are suspect, review before further decomposition`, one per qualifying shard. The
     counter itself is read from the shard's OWN persisted `balloons:`/`balloon_classifications:`
     frontmatter (`src/gates/linker-parse.ts`, threaded through `Lemma.balloons` since commit
-    7ede34c) — the routing decision is never persisted (`driver-run.ts`'s `handleBalloon` marks
-    every balloon event, mandatory-review or not), so this check reconstructs the threshold purely
-    from the durable counter rather than trusting a stored verdict. Commit 7ede34c added
+    7ede34c) — the routing decision is never persisted (`src/drive/driver-balloon-run.ts`'s
+    `handleBalloon` persists the counter on every balloon event, mandatory-review or not), so this
+    check reconstructs the threshold purely from the durable counter rather than trusting a stored
+    verdict. The two halves of the counter advance independently (LB2, M3-close review): the
+    `balloons:` COUNT advances on EVERY balloon, including one whose classification turn failed or
+    whose classification dispatcher was never configured (no `workers.assignments.verifier.l5`),
+    because the tripwire firing is an observed fact; `balloon_classifications:` grows ONLY when a
+    real classification turn produced a class — the driver never guesses one, and an unclassified
+    balloon files no bd task. So on a roster with no cheap-tier worker this check's count half
+    (`>= 2`) is still reachable while its `genuine-gap` half is not, and the run says so at
+    preflight (`classificationUnavailableLines`) rather than degrading silently. Commit 7ede34c added
     `checkMandatoryReview` itself plus the board-facing render flag (`⚠MANDATORY-REVIEW` on
     `argument/INDEX.md`/`DAG.md` rows, `linker-render.ts`) but left the check unwired from
     `linkerGate` — a shard past the threshold rendered the board flag yet produced no gate

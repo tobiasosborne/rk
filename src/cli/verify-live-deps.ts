@@ -43,7 +43,10 @@ export interface BuildDriverDepsParams {
   verifierDispatcher: LiveRoleTierDispatcher;
   proverDispatcher: LiveRoleTierDispatcher;
   /** `undefined` iff the classification session failed to resolve -- dispatchClassification then
-   * degrades to a no-op, same as the inline `classCreated.ok ? ... : async () => undefined`. */
+   * degrades to a no-op, which `parseClassificationReview` rejects, so any balloon aborts
+   * UNCLASSIFIED (counter still persisted, no class guessed: src/drive/driver-balloon-run.ts).
+   * LB2: that degradation is REPORTED at preflight by src/cli/verify-live.ts
+   * (`classificationUnavailableLines`) before any spend -- it is never discovered silently here. */
   classDispatcher: LiveRoleTierDispatcher | undefined;
   verifierFamily: ModelFamily;
   proverFamily: ModelFamily;
