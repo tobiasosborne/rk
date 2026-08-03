@@ -156,6 +156,20 @@ members means no session is opened and no id is minted at all.
   on its own default in the SAME run. Family identity (`modelFamily`, section (e) below) is derived
   from the BACKEND name alone (`familyForBackend`, `src/drive/driver-live.ts`) — completely
   independent of which model wins here, so this pin can never perturb the cross-vendor rule.
+- **Timeout selection (rk-k0m1, P2, live-fire RUN-REPORT-12).** The per-turn `timeout` in the
+  request shape below, and the session-creation ceiling behind it, resolve exactly like `model` and
+  for the same reason — one global value cannot express what a real run needs. Most specific wins,
+  per field: (1) `.rk/config.json`'s `workers.assignments.<role>.<tier>.turnTimeoutMs` /
+  `sessionTimeoutMs`, (2) the campaign-wide `workers.turnTimeoutMs` / `workers.sessionTimeoutMs`,
+  (3) `DEFAULT_TURN_TIMEOUT_MS` / `DEFAULT_SESSION_TIMEOUT_MS` (both 120_000,
+  `src/drive/driver-live.ts`). `BackendRegistry.timeoutsFor(role, tier)` is the single reader.
+  The live-fire datum: a codex prover's full-decomposition turn on a hard lemma hit the 120s
+  ceiling twice (exit 10 — a correct loud skip, see the exit-code table) while claude-opus
+  decomposed the same lemma in one turn, so the ceiling has to be raisable for that ASSIGNMENT
+  without stretching the verifier's. Timeouts are NOT part of the isolation tuple: two sessions
+  differing only in their ceiling are the same session identity, and the ceiling can never change
+  a verdict — only whether a turn produced one. See `docs/gate-contracts.md`'s Config-validation
+  section for the validation rules (a present-but-invalid value drops the whole `workers` field).
 
 ## (b) Request shape
 
