@@ -2033,10 +2033,27 @@ passes an EMPTY `externalRegen` map, so a `render-site-v1` entry run through tha
 always reports "cannot be regenerated for verification" (`freshness-07`) — never a silent pass.
 If the edge cannot produce trustworthy expected bytes (a structurally incomplete build —
 `buildGraphDocument`'s own `diagnostics.isStructurallyComplete === false`, the join lane's M2
-boundary review blocker #2 first-class build-diagnostics surface: a registry shard skipped for a
-structural parse reason, or a malformed raw fr log line — or an unexpected exception from
+boundary review blocker #2 first-class build-diagnostics surface — or an unexpected exception from
 `buildGraphDocument`/`renderSite`), every declared `render-site-v1` path gets a loud, named
-`ok:false` ERROR naming the concrete structural-loss entries, never a silent pass or skip.
+`ok:false` ERROR naming the concrete structural-loss entries, never a silent pass or skip. There
+are **FOUR** structural-loss classes, and every consumer must be able to enumerate all four
+(gates-F11 / LB4 — this list said "two" while the producer counted three, so a build refused for
+a corrupt retraction ledger reported "0 structural-loss entries" and pointed at an `rk render`
+that enumerated nothing either):
+
+1. a registry shard skipped for a structural parse reason (`registrySkips`);
+2. a malformed raw fr log line (`frMalformedLines`);
+3. a problem making `.rk/retractions.jsonl` untrustworthy (`retractionStoreProblems`, rk-0ehr /
+   P1) — the ledger of WITHDRAWN claims cannot be read, so the projection's silence about
+   retraction is unearned;
+4. an unparseable `.beads/issues.jsonl` line (`bdMalformedLines`, LB4) — a dropped registry↔bd
+   edge, structurally identical to (2), which had silently `continue`d with the build still
+   reporting `isStructurallyComplete === true`.
+
+`src/render/diagnostics-view.ts`'s `structuralLossLines`/`structuralLossCount` are the single
+implementation of the enumeration and its count, so `rk render`, `rk graph`, `rk verify` and this
+gate's edge can never disagree about how many entries there are or what they say. A fifth class
+added to `BuildDiagnostics.structuralLoss` without being added there is a truthfulness bug.
 
 **Edge-only wrinkle: the snapshot text map doesn't cover `build/`.** `src/store/
 snapshot-load.ts`'s `RepoSnapshot` text map is bounded to the six pre-M2.6 gates' declared

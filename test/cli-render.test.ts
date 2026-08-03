@@ -149,6 +149,40 @@ describe("rk render — CLI edge", () => {
     expect(existsSync(join(root, "build", "site", "index.html"))).toBe(false);
   });
 
+  // LB4 (2026-08-03 M3-close review): the refusal preamble promises "naming every entry", but
+  // src/render/diagnostics-view.ts mirrored only TWO of the producer's structural-loss arrays — so
+  // a build refused for a corrupt retraction ledger printed the preamble and then enumerated
+  // NOTHING. RED before the third/fourth classes were added to `structuralLossLines`.
+  test("BLOCKER (LB4): a corrupt .rk/retractions.jsonl makes rk render REFUSE and NAMES the problem", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "retractions.jsonl"), "{truncated\n");
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("structurally incomplete");
+    expect(text).toContain("retraction store:");
+    expect(text).toContain("line 1");
+    expect(existsSync(join(root, "build", "site", "index.html"))).toBe(false);
+  });
+
+  test("BLOCKER (LB4): a truncated .beads/issues.jsonl line makes rk render REFUSE and NAMES the line", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".beads"), { recursive: true });
+    writeFileSync(
+      join(root, ".beads", "issues.jsonl"),
+      `${JSON.stringify({ id: "rk-ok", issue_type: "task", status: "open" })}\n{"id":"rk-trunc\n`,
+    );
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).not.toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("structurally incomplete");
+    expect(text).toContain("bd issues: line 2 malformed");
+    expect(existsSync(join(root, "build", "site", "index.html"))).toBe(false);
+  });
+
   test("a fallback fr source (malformed-free, but no fr binary) is visibly distinguished, never silently 'absent'", async () => {
     const root = repo();
     mkdirSync(join(root, ".frontier"), { recursive: true });

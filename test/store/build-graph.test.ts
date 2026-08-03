@@ -29,7 +29,9 @@ describe("buildGraphDocument — diagnostics.structuralLoss + diagnostics.source
     expect(diagnostics).toEqual({
       // rk-0ehr / P1 added the retraction ledger as a fourth source: absent here, and its
       // problems array empty — "nothing was ever retracted", never conflated with "unreadable".
-      structuralLoss: { registrySkips: [], frMalformedLines: [], retractionStoreProblems: [] },
+      // LB4 added `bdMalformedLines` as the fourth structural-loss class (an unparseable
+      // `.beads/issues.jsonl` line), mirroring fr's identically-shaped defect.
+      structuralLoss: { registrySkips: [], frMalformedLines: [], retractionStoreProblems: [], bdMalformedLines: [] },
       sources: { af: "absent", fr: "absent", bd: "absent", retraction: "absent" },
       isStructurallyComplete: true,
     });
@@ -44,6 +46,24 @@ describe("buildGraphDocument — diagnostics.structuralLoss + diagnostics.source
       { path: "argument/lem-bad.md", reason: "unrecognized or missing kind 'not-a-real-kind'" },
     ]);
     expect(diagnostics.isStructurallyComplete).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // LB4 (2026-08-03 M3-close review): fr's malformed line has been structural loss since M2; bd's
+  // identically-shaped defect silently dropped its registry↔bd edge and left the build reporting
+  // `isStructurallyComplete === true`. RED before `bdMalformedLines` existed.
+  test("a truncated .beads/issues.jsonl line is structural loss -> structurally INCOMPLETE (LB4)", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, ".beads"), { recursive: true });
+    writeFileSync(
+      join(root, ".beads", "issues.jsonl"),
+      `${JSON.stringify({ id: "rk-ok", issue_type: "task", status: "open" })}\n{"id":"rk-trunc\n`,
+    );
+    const { diagnostics } = buildGraphDocument(root, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(diagnostics.structuralLoss.bdMalformedLines).toEqual([{ lineNo: 2, snippet: '{"id":"rk-trunc' }]);
+    expect(diagnostics.isStructurallyComplete).toBe(false);
+    // bd was genuinely READ — the degradation is loss of one line, not of the source.
+    expect(diagnostics.sources.bd).toBe("read");
     rmSync(root, { recursive: true, force: true });
   });
 

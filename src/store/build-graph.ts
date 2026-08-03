@@ -42,6 +42,11 @@ export interface BuildDiagnostics {
      * about retraction is unearned. One entry per problem; empty when the ledger is healthy or
      * absent. */
     retractionStoreProblems: string[];
+    /** LB4 (2026-08-03 M3-close review): an unparseable `.beads/issues.jsonl` line. Structurally
+     * identical to `frMalformedLines` — a truncated line silently dropped its registry↔bd edge
+     * while the build still reported `isStructurallyComplete === true`, the same defect fr's
+     * reader has treated as first-class since M2. Empty when bd is absent or every line parses. */
+    bdMalformedLines: { lineNo: number; snippet: string }[];
   };
   sources: {
     af: "export" | "ledger-fallback" | "absent";
@@ -125,8 +130,9 @@ export function buildGraphDocument(root: string, options: BuildGraphOptions = {}
   const registrySkips = report.registrySkipped.map((s) => ({ path: s.path, reason: s.reason }));
   const frMalformedLines = frSource.present ? frSource.malformedLines : [];
   const retractionStoreProblems = retractionSource.problems;
+  const bdMalformedLines = bdSource.present ? bdSource.malformedLines : [];
   const diagnostics: BuildDiagnostics = {
-    structuralLoss: { registrySkips, frMalformedLines, retractionStoreProblems },
+    structuralLoss: { registrySkips, frMalformedLines, retractionStoreProblems, bdMalformedLines },
     sources: {
       af: afSourceStatus(afRecords),
       fr: frSourceStatus(frSource),
@@ -134,7 +140,10 @@ export function buildGraphDocument(root: string, options: BuildGraphOptions = {}
       retraction: !retractionSource.present ? "absent" : retractionSource.healthy ? "read" : "corrupt",
     },
     isStructurallyComplete:
-      registrySkips.length === 0 && frMalformedLines.length === 0 && retractionStoreProblems.length === 0,
+      registrySkips.length === 0 &&
+      frMalformedLines.length === 0 &&
+      retractionStoreProblems.length === 0 &&
+      bdMalformedLines.length === 0,
   };
 
   return {

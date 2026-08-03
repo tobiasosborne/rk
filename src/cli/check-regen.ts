@@ -43,6 +43,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildGraphDocument } from "../store/build-graph";
 import { renderSiteFromRepo } from "./render";
+import { structuralLossCount, structuralLossLines } from "../render/diagnostics-view";
 import type { SourceStatuses } from "../render/diagnostics-view";
 import type { ExternalRegenResult } from "../gates/freshness";
 import type { GateConfig } from "../gates/config";
@@ -124,13 +125,14 @@ function regenerateOnce(root: string, config: GateConfig, deps: CheckCommandDeps
   const buildResult = buildGraphDocument(root, { afCommand: deps.afCommand, frCommand: deps.frCommand });
   const { diagnostics } = buildResult;
   if (!diagnostics.isStructurallyComplete) {
-    const lossCount =
-      diagnostics.structuralLoss.registrySkips.length + diagnostics.structuralLoss.frMalformedLines.length;
-    const skipDetail = diagnostics.structuralLoss.registrySkips.map((s) => `${s.path} (${s.reason})`).join("; ");
-    const frDetail = diagnostics.structuralLoss.frMalformedLines
-      .map((l) => `fr log line ${l.lineNo} (${l.snippet})`)
-      .join("; ");
-    const detail = [skipDetail, frDetail].filter((s) => s.length > 0).join("; ");
+    // LB4 (2026-08-03 M3-close review): the count and the detail both cover ALL FOUR structural-
+    // loss classes. Summing only two of them meant a build refused for a corrupt retraction ledger
+    // (or, since LB4, a truncated bd line) was reported as "0 structural-loss entries: see rk
+    // render for detail" — a count that contradicts the refusal it explains. Both now derive from
+    // src/render/diagnostics-view.ts's own `structuralLossCount`/`structuralLossLines`, the single
+    // place the enumeration lives, so a fifth class cannot be seen by one consumer and not another.
+    const lossCount = structuralLossCount(diagnostics.structuralLoss);
+    const detail = structuralLossLines(diagnostics.structuralLoss).join("; ");
     return {
       ok: false,
       reason:

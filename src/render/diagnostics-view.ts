@@ -31,9 +31,28 @@ export interface FrMalformedLine {
   lineNo: number;
   snippet: string;
 }
+/** Same shape as `FrMalformedLine`, kept as its own named type so the two never get spliced into
+ * one array and lose which FILE a line number belongs to (LB4). */
+export interface BdMalformedLine {
+  lineNo: number;
+  snippet: string;
+}
+/** The FOUR structural-loss classes `src/store/build-graph.ts` produces. Every one of them must be
+ * enumerable by `structuralLossLines` below: `rk render`/`rk graph`/`rk verify` promise to name
+ * EVERY entry when they refuse, and a class present in the producer but absent here makes that
+ * promise false — the build refuses while enumerating zero entries (LB4, the defect this shape
+ * fixes for `retractionStoreProblems`; `bdMalformedLines` joined at the same time). Adding a fifth
+ * class to `BuildDiagnostics.structuralLoss` without adding it here is therefore a truthfulness
+ * bug, not an omission. */
 export interface StructuralLoss {
   registrySkips: RegistrySkip[];
   frMalformedLines: FrMalformedLine[];
+  /** rk-0ehr / P1: one entry per problem that makes `.rk/retractions.jsonl` untrustworthy. The
+   * ledger recording which claims are WITHDRAWN cannot be read, so the projection's silence about
+   * retraction is unearned. */
+  retractionStoreProblems: string[];
+  /** LB4: an unparseable `.beads/issues.jsonl` line — a dropped registry↔bd edge. */
+  bdMalformedLines: BdMalformedLine[];
 }
 export type AfSourceStatus = "export" | "ledger-fallback" | "absent";
 export type FrSourceStatus = "export" | "log-fallback" | "absent";
@@ -43,9 +62,16 @@ export interface SourceStatuses {
   fr: FrSourceStatus;
   bd: BdSourceStatus;
 }
-/** Mirrors src/store/build-graph.ts's exported `BuildDiagnostics` field-for-field (structural
- * typing, not a shared import — src/render/ stays decoupled from src/store/, same stance
- * src/graph/query-shared.ts's module doc takes on not importing src/gates/ types). */
+/** Mirrors src/store/build-graph.ts's exported `BuildDiagnostics` (structural typing, not a shared
+ * import — src/render/ stays decoupled from src/store/, same stance src/graph/query-shared.ts's
+ * module doc takes on not importing src/gates/ types).
+ *
+ * LB4: the mirror is field-for-field on `structuralLoss` and MUST STAY SO — that is the whole
+ * safety property of a structural mirror, and it silently stopped holding once
+ * `retractionStoreProblems` was added producer-side and not here (see `StructuralLoss` above).
+ * `sources` is deliberately NARROWER, not a mirror: the producer also carries a fourth source
+ * (`retraction: read|corrupt|absent`) whose corrupt state is already reported as structural loss,
+ * so surfacing it a second time in the af/fr/bd fidelity row would double-count one fault. */
 export interface BuildDiagnostics {
   structuralLoss: StructuralLoss;
   sources: SourceStatuses;
@@ -58,7 +84,25 @@ export function structuralLossLines(loss: StructuralLoss): string[] {
   const lines: string[] = [];
   for (const skip of loss.registrySkips) lines.push(`registry: ${skip.path} skipped -- ${skip.reason}`);
   for (const m of loss.frMalformedLines) lines.push(`fr log: line ${m.lineNo} malformed -- ${m.snippet}`);
+  // LB4: the third and fourth classes. Before this, a refusing `rk render`/`rk graph`/`rk verify`
+  // printed its "naming every entry" preamble and then enumerated NOTHING when the only loss was a
+  // corrupt retraction ledger — the refusal was correct and its explanation was empty.
+  for (const p of loss.retractionStoreProblems) lines.push(`retraction store: ${p}`);
+  for (const m of loss.bdMalformedLines) lines.push(`bd issues: line ${m.lineNo} malformed -- ${m.snippet}`);
   return lines;
+}
+
+/** Total structural-loss ENTRIES across all four classes — the one place the count is derived, so
+ * a consumer that prints "N structural-loss entries" and a consumer that prints the entries
+ * themselves can never disagree about N (LB4: `src/cli/check-regen.ts` summed two of the four and
+ * reported "0 structural-loss entries: see rk render for detail" on a build that refused). */
+export function structuralLossCount(loss: StructuralLoss): number {
+  return (
+    loss.registrySkips.length +
+    loss.frMalformedLines.length +
+    loss.retractionStoreProblems.length +
+    loss.bdMalformedLines.length
+  );
 }
 
 const AF_LABELS: Record<AfSourceStatus, string> = {

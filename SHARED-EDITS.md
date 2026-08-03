@@ -165,6 +165,34 @@ No code change: the corpus fixtures were already the enforcement.
 | Check 16, coverage-line bullet | "`retraction store: <n> live (l5-shard-bytes), <m> live (af-canonical)`" | "`retraction store: <L> live (<n> l5-shard-bytes, <m> af-canonical), <D> drove a Check 16 veto ERROR`" + the rk-lkeh S/J rationale for the pair |
 | Check 16, last bullet | "Fixture: `linker-44`." | "Fixtures: `linker-44` …, `linker-45` (the store-absent hole, LB3), `linker-46` (fail-closed corrupt ledger, gates-F14)." |
 
+### LB4 — Gate 7 "Edge-supplied generators" structural-loss enumeration (commit 3, gates-F11)
+
+| where | before | after |
+|---|---|---|
+| Gate 7, "Edge-supplied generators", the `ok:false` paragraph (~:1998-2000) | inline parenthetical listing **two** classes: "a registry shard skipped for a structural parse reason, or a malformed raw fr log line" | the parenthetical drops the list; a new **numbered list of FOUR** classes follows (`registrySkips`, `frMalformedLines`, `retractionStoreProblems`, `bdMalformedLines`), each with its own one-line rationale, plus a closing paragraph naming `src/render/diagnostics-view.ts`'s `structuralLossLines`/`structuralLossCount` as the single implementation and declaring a fifth-class omission a truthfulness bug |
+
+### LB5 — phase-matrix row for Gate 2 (commit 4)
+
+| where | before | after |
+|---|---|---|
+| Phase matrix, Gate 2 row, structural column (~:300) | ended at "Check 7 (unknown dep/route-member/def id)" | adds "Check 14's and Check 16's STORE-INTEGRITY halves (a corrupt `.rk/l5-verdicts.jsonl` or `.rk/retractions.jsonl`, and the promotion-unconfirmable ERRORs that follow from either)" |
+| Phase matrix, Gate 2 row, non-structural column | listed "Check 14 (L5 promotion, M3.8), Check 16 (retraction, rk-0ehr)" flat | those two entries are qualified as their **semantics halves only** ("Check 14's PROMOTION semantics", "Check 16's RETRACTION-STATUS semantics (the veto itself)"), making the split explicit |
+| Phase matrix, Gate 2 row, rationale column | unchanged prefix | one sentence appended stating the split rule: a ledger that cannot be PARSED is the same class as a shard that cannot be parsed, while what a readable ledger MEANS for a status is consolidation-weight |
+| Phase matrix, "Mutation-proof discipline" paragraph | unchanged | unchanged (already required doc+code+tests in one commit — LB5 complies with it rather than editing it) |
+
+### LB6 — Gate 4 check 5 (commit 5)
+
+| where | before | after |
+|---|---|---|
+| Gate 4, check 5 / `provenance-11` divergence prose | described only the `present-but-unloaded` ERROR and the absent-is-legitimate rule | adds the **explicitly-configured-but-absent ⇒ ERROR** rule (the `ConfigValidationResult.overrides` distinction), and the coverage line gains `tab:status source: read \| present-but-unloaded \| absent` |
+| Gate 4, "Known limitations" | — | adds the characterized label-above-midrule parsing limitation (gates-F5), stated rather than changed |
+
+### LB7 — Gate 7 three-cause STALE, cause 3 (commit 6)
+
+| where | before | after |
+|---|---|---|
+| Gate 7, the degraded-fidelity (cause 3) prose | named only `buildGraphDocument`'s af/fr source statuses as cause-3 inputs | adds the render edge's own second `fr export` read (`loadFrResiduals`) as a cause-3 input, with its fidelity record |
+
 ## corpus/README.md edits
 
 - LB3: two new ledger rows inserted after `linker-44`'s row and before `refs-01`'s

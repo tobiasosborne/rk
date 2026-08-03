@@ -180,4 +180,32 @@ describe("rk check (end to end): a difference measured against a degraded read i
     expect(text).not.toContain("cannot be regenerated for verification");
     expect(code).toBe(0);
   });
+
+  // LB4 (2026-08-03 M3-close review): `regenerateOnce` summed only TWO of the producer's four
+  // structural-loss classes, so a build refused for a corrupt retraction ledger reported
+  // "0 structural-loss entries: see rk render for detail" — a count that contradicts the refusal it
+  // is explaining, and a pointer to a command that (before LB4) enumerated nothing either. RED
+  // before both halves were fixed.
+  test("LB4: a corrupt retraction ledger makes the Gate 7 regeneration refuse with a NONZERO, NAMED loss count", async () => {
+    const root = scaffold("rk-check-regen-retraction-loss-");
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "retractions.jsonl"), "{truncated\n");
+    writeFileSync(
+      join(root, ".rk", "generated.json"),
+      JSON.stringify({ schema_version: "1", entries: [{ path: "build/site/index.html", generator: "render-site-v1" }] }),
+    );
+
+    const lines: string[] = [];
+    const code = await checkCommand(["--root", root], { log: (l: string) => lines.push(l) }, loadSnapshot, {
+      frCommand: FAKE_CMD,
+      afCommand: FAKE_CMD,
+    });
+    const text = lines.join("\n");
+
+    expect(text).toContain("structurally incomplete");
+    expect(text).toContain("1 structural-loss entry");
+    expect(text).not.toContain("0 structural-loss entries");
+    expect(text).toContain("retraction store:"); // the entry is NAMED, not deferred to another command
+    expect(code).toBe(1);
+  });
 });

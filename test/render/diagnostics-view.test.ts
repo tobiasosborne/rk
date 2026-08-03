@@ -13,9 +13,14 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  hasDegradedSource, renderDegradedBanner, renderSourcesBlock, sourceStatusLines, structuralLossLines,
+  hasDegradedSource, renderDegradedBanner, renderSourcesBlock, sourceStatusLines, structuralLossCount,
+  structuralLossLines,
   type SourceStatuses, type StructuralLoss,
 } from "../../src/render/diagnostics-view";
+
+const NO_LOSS: StructuralLoss = {
+  registrySkips: [], frMalformedLines: [], retractionStoreProblems: [], bdMalformedLines: [],
+};
 
 const CLEAN: SourceStatuses = { af: "export", fr: "export", bd: "read" };
 const ALL_ABSENT: SourceStatuses = { af: "absent", fr: "absent", bd: "absent" };
@@ -24,6 +29,7 @@ const FALLBACK: SourceStatuses = { af: "ledger-fallback", fr: "log-fallback", bd
 describe("render/diagnostics-view — structural loss lines (blocker #2)", () => {
   test("names every registrySkip and frMalformedLine, one line each", () => {
     const loss: StructuralLoss = {
+      ...NO_LOSS,
       registrySkips: [{ path: "argument/lem-x.md", reason: "missing/invalid kind" }],
       frMalformedLines: [{ lineNo: 7, snippet: "{not json" }],
     };
@@ -36,7 +42,46 @@ describe("render/diagnostics-view — structural loss lines (blocker #2)", () =>
   });
 
   test("no structural loss: no lines", () => {
-    expect(structuralLossLines({ registrySkips: [], frMalformedLines: [] })).toEqual([]);
+    expect(structuralLossLines(NO_LOSS)).toEqual([]);
+  });
+
+  // LB4 (2026-08-03 M3-close review): the producer (src/store/build-graph.ts) has counted
+  // `retractionStoreProblems` toward `isStructurallyComplete` since rk-0ehr, but this view mirrored
+  // only TWO of its arrays — so `rk render`/`rk graph`/`rk verify` refused while enumerating ZERO
+  // entries, breaking their own "naming every entry" promise. `bdMalformedLines` joined the same
+  // shape at the same time.
+  test("names every retractionStoreProblem — the third class (LB4: previously enumerated as nothing)", () => {
+    const loss: StructuralLoss = {
+      ...NO_LOSS,
+      retractionStoreProblems: ["line 2: not valid JSON — likely a truncated/corrupted append"],
+    };
+    const lines = structuralLossLines(loss);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("retraction store:");
+    expect(lines[0]).toContain("line 2: not valid JSON");
+    expect(structuralLossCount(loss)).toBe(1);
+  });
+
+  test("names every bdMalformedLine — the fourth class (LB4)", () => {
+    const loss: StructuralLoss = { ...NO_LOSS, bdMalformedLines: [{ lineNo: 12, snippet: '{"id":"rk-a' }] };
+    const lines = structuralLossLines(loss);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("bd issues: line 12 malformed");
+    expect(lines[0]).toContain('{"id":"rk-a');
+  });
+
+  test("all four classes at once: one line each, count agrees with the enumeration", () => {
+    const loss: StructuralLoss = {
+      registrySkips: [{ path: "argument/lem-x.md", reason: "missing/invalid kind" }],
+      frMalformedLines: [{ lineNo: 7, snippet: "{not json" }],
+      retractionStoreProblems: ["line 2: not valid JSON"],
+      bdMalformedLines: [{ lineNo: 12, snippet: '{"id":"rk-a' }],
+    };
+    expect(structuralLossLines(loss)).toHaveLength(4);
+    expect(structuralLossCount(loss)).toBe(4);
+    // The count is DERIVED from the same shape the enumeration walks — a consumer can never print
+    // "0 structural-loss entries" while another prints four of them.
+    expect(structuralLossCount(loss)).toBe(structuralLossLines(loss).length);
   });
 });
 

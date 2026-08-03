@@ -35,4 +35,48 @@ describe("loadBdSource", () => {
     expect(source.present).toBe(false);
     rmSync(root, { recursive: true, force: true });
   });
+
+  // LB4 (2026-08-03 M3-close review): an unparseable line used to `continue` with no record of it
+  // anywhere — the registry↔bd edge vanished and the build still reported
+  // `isStructurallyComplete === true`, while fr's identically-shaped defect had been first-class
+  // since M2. RED before `malformedLines` existed on this reader.
+  test("a truncated line is reported as a malformed line, never a silent skip (LB4)", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, ".beads"), { recursive: true });
+    const lines = [
+      JSON.stringify({ id: "rk-ok", issue_type: "task", status: "open" }),
+      '{"id":"rk-trunc',
+      JSON.stringify({ _type: "memory", key: "k", value: "v" }),
+    ].join("\n");
+    writeFileSync(join(root, ".beads", "issues.jsonl"), `${lines}\n`);
+    const source = loadBdSource(root);
+    expect(source.present).toBe(true);
+    if (!source.present) throw new Error("unreachable");
+    expect(source.malformedLines).toEqual([{ lineNo: 2, snippet: '{"id":"rk-trunc' }]);
+    expect(source.issues).toEqual([{ id: "rk-ok", status: "open" }]);
+    // The DELIBERATE skip (a `bd remember` memory row) stays a counted skip, never structural loss.
+    expect(source.skippedNonIssueRows).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // LB4 made `totalRecords` load-bearing: it had been written and read by nothing. The identity
+  // below is what makes it so — no line can be silently dropped into neither bucket.
+  test("totalRecords === issues + skippedNonIssueRows + malformedLines (the accounting identity)", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, ".beads"), { recursive: true });
+    const lines = [
+      JSON.stringify({ id: "rk-a", issue_type: "task" }),
+      JSON.stringify({ _type: "memory", key: "k" }),
+      "{oops",
+      JSON.stringify({ id: "rk-b", issue_type: "bug", status: "closed" }),
+      "{also oops",
+    ].join("\n");
+    writeFileSync(join(root, ".beads", "issues.jsonl"), `${lines}\n`);
+    const source = loadBdSource(root);
+    if (!source.present) throw new Error("unreachable");
+    expect(source.totalRecords).toBe(5);
+    expect(source.issues.length + source.skippedNonIssueRows + source.malformedLines.length).toBe(source.totalRecords);
+    expect(source.malformedLines.map((m) => m.lineNo)).toEqual([3, 5]);
+    rmSync(root, { recursive: true, force: true });
+  });
 });
