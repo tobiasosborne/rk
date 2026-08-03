@@ -7,6 +7,10 @@
 
 # Proposal: rk improvements from the AISM postmortem
 
+**RATIFIED in full — TJO, in-chat, 2026-08-03** (including all five [TJO] decision
+points as proposed: P3.3 = annotation not new rung; P5/P6/P7 scopes as written).
+Per-item beads filed same day; see rk-7jk2 notes for the mapping.
+
 Each item states: current rk state (verified against gate-contracts.md, schemas/,
 IMPLEMENTATION_PLAN.md at commit 5a2ebd5), the gap, the concrete change, size, review
 tier, and where it lands in the milestone sequence. Items marked **[TJO]** need a
