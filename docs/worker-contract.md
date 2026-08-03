@@ -142,7 +142,9 @@ members means no session is opened and no id is minted at all.
   attempt id via `session.mode: "new"` on every turn instead.
 - **`claimId` and `turnId` are both required on every request** (review blocker 2). `claimId`
   identifies the node/batch claim a session belongs to (part of the isolation tuple above);
-  `turnId` is a per-turn idempotency key — see "Retry ownership" below for what it is for.
+  `turnId` is a per-turn id, INTENDED as an idempotency key — but today it is minted fresh on
+  every dispatch, including a re-dispatch after a timeout, so nothing currently keys off it. See
+  "Retry ownership" below for what it was for and what actually defends against a double-apply.
 - **Model selection (rk-7hi, M3.5 STOP-2 blocker).** `model` is part of the isolation tuple above,
   so a prover session and a verifier session pinned to DIFFERENT models are already, mechanically,
   different sessions — nothing about session isolation needed to change for per-role model pinning
@@ -179,7 +181,9 @@ WorkerRequest {
   tier:      "l5" | "hard"
   backend:   string
   claimId:   string                                     // isolation-tuple member (blocker 2)
-  turnId:    string                                     // idempotency key for retry (blocker 2 / Q3)
+  turnId:    string                                     // per-turn id (blocker 2 / Q3); intended as
+                                                        // a retry idempotency key, minted fresh per
+                                                        // attempt today - see "Retry ownership"
   session:   { mode: "new" }
            | { mode: "resume", sessionId: string }       // validated against SessionRecord
   sharedContext?: string                                 // sent ONLY when session.mode = "new"
@@ -258,7 +262,7 @@ post-hoc classification of why a call didn't apply:
 | code | meaning | driver action |
 |---|---|---|
 | 0 | process succeeded, `rawText` should contain a verdict | proceed to parse + bind (may still be rejected at those stages) |
-| 10 | timeout | see "Retry ownership" below — never a blind resume |
+| 10 | timeout | skip the node this round; if af still reports it ready the driver re-dispatches it next round as an ordinary new turn, bounded by `nodeRetryCap` and the campaign cap. There is no retry component and no idempotency key — see "Retry ownership" below for what defends against a double-apply and what does not |
 | 11 | budget exceeded | stop dispatching further turns on this session; report, do not retry blindly |
 | 12 | schema-invalid output | exit was 0 but parsing/binding failed — log the rejection reason (`TurnOutcome.issues`), never apply a partially-valid document. Encoding tolerance (GAP 7a): `toDispatchedTurn` strips at most one surrounding markdown code fence and requires the whole remainder to parse to exactly one JSON object; ambiguous output (prose around JSON, multiple objects, a bare array/primitive) still fails 12. On a parse/extraction failure the driver persists a `parse-failed` driver-log record — node, role, and a bounded 500-char raw snippet — so the model's output is recoverable, never lost behind the bare "worker exit 12" reason |
 | 13 | backend unavailable | fall back per `.rk/config`'s per-role×tier fallback chain (M3.2); if none, abort the claim |
@@ -266,18 +270,48 @@ post-hoc classification of why a call didn't apply:
 Any other nonzero code the backend's own process naturally returns (crash, killed) is treated as
 13 by the driver's wrapper, never surfaced as a silent success.
 
-**Bounded schema repair (rk-xxp, GAP 11).** Before a code-12 **verifier** turn becomes terminal,
-the driver dispatches AT MOST ONE repair reprompt on the SAME session, echoing the concrete `RawIssue[]`
-(path + message) and asking for the corrected object only, with the assessment unchanged. Exactly
-one attempt, ever — structurally, not by a counter: the repair path dispatches directly and never
-re-enters itself. A repair that also fails is a normal terminal 12, and the ORIGINAL failure
-representation is preserved verbatim (a parse-failed stays parse-failed). A repaired reply carries
-NO extra trust: identical raw-shape validation, identical `bindVerdicts`, identical hash and
-cross-vendor checks, and no field is ever copied to satisfy a missing one (`verdict.reason` never
-becomes `justification`). The repair turn is a real backend turn: its usage is logged as its own
-`usage` record (flagged `repair: true`) and accrues to the campaign budget. Codes 10/11/13 are
-never repaired — 11 in particular must never provoke more spend. The incident this rule exists for
-burned 96,066 tokens across three identical rejected turns and applied zero nodes.
+**Bounded schema repair (rk-xxp, GAP 11).** A **verifier** turn has TWO repair triggers, not one
+(`src/drive/verdict-repair.ts`'s `diagnoseRepairableTurn`) — the same trigger set the prover
+paragraph below states for its role: (i) **exit 12 carrying `rawText`** (single-object extraction
+failed: fences, trailing prose, an unterminated string), and (ii) **exit 0 whose body fails
+`validateRawWorkerOutput`** — the attempt-11 shape itself, a `challenge` with no top-level
+`justification`, which never produced a 12 at all. Gating repair on the exit code alone would not
+have fired on the incident this mechanism exists for. Everything else is refused: 10/11/13 are
+process-level failures no reprompt can fix, and a bodiless 12 has no shape to correct. On either
+trigger the driver dispatches AT MOST ONE repair reprompt on the SAME session, echoing the concrete
+`RawIssue[]` (path + message) and asking for the corrected object only, with the assessment
+unchanged. Exactly one attempt, ever — structurally, not by a counter: the repair path dispatches
+directly and never re-enters itself.
+
+A repair that also fails is TERMINAL and the ORIGINAL failure representation is preserved verbatim
+— but *terminal* is supplied by two different mechanisms, and only one of them is an exit code.
+`foldRepairTurn` (`src/drive/verdict-repair.ts:167-175`) returns `{...first, repair}`: whatever
+`exit`, `raw`, `rawText`, `parseError` and `parseClass` the first turn carried, plus the
+`RepairRecord` as evidence and nothing else.
+
+- **Trigger (i)** folds back to **exit 12**, and the per-node paths skip it on their exit check
+  (`src/drive/driver-verify-node.ts`, `driver-prove-node.ts`): a parse-failed stays parse-failed.
+- **Trigger (ii)** folds back to **exit 0 carrying the still-invalid body**. Nothing about the
+  exit code makes that terminal. Terminality comes from the stage AFTER the fold, applying the
+  same validator that triggered the repair: `bindVerdicts` refuses the verifier body (skip reason
+  `verdict bind failed: <path>: <message>`), and `extractProofContent` refuses the prover body
+  (`src/drive/driver-prove-node.ts:133-143` — since rk-xfzg it defers to `validateRawProverOutput`
+  and names the issues in a `prover-body-invalid` record instead of dropping them silently). It is
+  a rejection one stage later, NOT "a normal terminal 12".
+
+**Test gap (rk-wr58).** Trigger (ii)'s failed-repair path — exit 0 in, invalid body out, refused
+downstream — is not pinned end-to-end by any test; `foldRepairTurn`'s preservation is unit-tested,
+but nothing asserts the downstream refusal on a folded exit-0 turn. Until rk-wr58 lands, this
+paragraph is the only statement of that behavior, so treat it as documentation of code, not as a
+guarantee a red fixture is holding up.
+
+A SUCCESSFUL repair carries NO extra trust: identical raw-shape validation, identical
+`bindVerdicts`, identical hash and cross-vendor checks, and no field is ever copied to satisfy a
+missing one (`verdict.reason` never becomes `justification`). The repair turn is a real backend
+turn: its usage is logged as its own `usage` record (flagged `repair: true`) and accrues to the
+campaign budget. Codes 10/11/13 are never repaired — 11 in particular must never provoke more
+spend. The incident this rule exists for burned 96,066 tokens across three identical rejected turns
+and applied zero nodes.
 
 **Bounded schema repair, prover role (rk-i19, 2026-07-25).** The same rule governs
 `liveDispatchProve`, which had the identical exit-12 death mode with no correction — one malformed
@@ -505,16 +539,48 @@ Adding it is a `schema_version` bump when and if it is wanted.
 
 ## Retry ownership (Q3 ruling)
 
-**Retries belong to a shared driver component, not to individual backend adapters.** Q3: "retries
-belong to the shared driver, with caps/backoff in config; adapters perform one attempt, and
-ambiguous timeout retries require a new session or idempotent `turnId`, never blind resume." A
-backend adapter (a future `src/drive/{claude,codex}-backend.ts`) makes exactly one attempt per
-call; a retry after exit 10 (timeout) is the shared driver's decision, governed by caps/backoff
-in `.rk/config`, and MUST either open a fresh session or reuse the SAME `turnId` (an idempotency
-key — see "(b) Request shape") so a backend that actually completed the original call despite an
-apparent timeout can be recognized as a duplicate rather than double-applied. This shared retry
-component is not built in this WP; this section records where it belongs so a future WP does not
-reinvent per-backend retry logic ad hoc.
+**The ruling.** Q3: "retries belong to the shared driver, with caps/backoff in config; adapters
+perform one attempt, and ambiguous timeout retries require a new session or idempotent `turnId`,
+never blind resume." That is the DESIGN INTENT for a retry component. Read the next paragraph
+before relying on any of it.
+
+**What is actually built (2026-08-03).** There is no retry component, no caps/backoff config key,
+and no idempotency key on the wire.
+
+- Adapters do make exactly one attempt per call (`src/drive/backend-claude.ts`,
+  `backend-codex.ts` contain no retry loop) — that half holds.
+- An exit-10 turn is NOT retried by anything that knows it was a timeout. The node is simply
+  skipped for that round (`worker exit 10`, `src/drive/driver-verify-node.ts`) and, if af still
+  reports it ready, re-dispatched on the NEXT round as an ordinary new turn
+  (`src/drive/driver-run-round.ts`). Bounded by `nodeRetryCap` (`checkRetryCap`, which the skip's
+  `attempts` increment feeds) and by the campaign token cap — not by a backoff policy.
+- That re-dispatch runs **on the same resumed session with a FRESH `turnId`**:
+  `src/drive/driver-live.ts:219-222` mints `${claimId}-${itemId}-${turnCounter}` per dispatch and
+  the counter only ever increases. Neither arm of the ruling ("same `turnId`" / "fresh session")
+  is enforced by any code today, so a backend that completed a call rk saw as a timeout cannot be
+  recognized as a duplicate at the request layer at all.
+
+**The duplicate defense that DOES exist is a compare-and-swap on node bytes, not an idempotency
+key.** Every write rk makes carries the target node's dispatch-time content hash, and af re-checks
+it under its own state read:
+
+- verdict apply — the driver re-reads af's authoritative hashes immediately before applying
+  (`deps.reReadContentHashes()`), discards any verdict whose target moved, and sends the surviving
+  item with `expect_hash` (`src/drive/driver-run-round.ts`); the hash is the one bound to the node
+  the item TARGETS, which for a cross-node challenge is the blamed node, not the reviewed one.
+- record-proof — `liveRecordProof` threads `node.contentHash` as `--expect-hash`
+  (`src/drive/driver-live-dispatch.ts:167-170`), so a proof generated for bytes that have since
+  changed is refused rather than half-written.
+
+What that buys: a write whose target has already moved — including because an apparently-failed
+first write actually landed and changed it — is refused instead of applied on top. What it does
+NOT buy, and must not be read as: de-duplication of a repeated write against UNCHANGED bytes. Two
+identical writes that leave the node's hash where the second one expects it would both satisfy
+this guard; whether af itself deduplicates them is af's business and rk asserts nothing about it.
+
+Closing the gap means giving a turn a stable idempotency key across attempts — filed as the
+turnId-idempotency design bead (see bd), deliberately NOT implemented silently as part of this
+documentation repair.
 
 ## Justification is checked structurally only (follow-up 1)
 
