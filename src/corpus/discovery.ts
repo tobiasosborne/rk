@@ -124,5 +124,14 @@ export function totalFixtureCount(corpusRoot: string): number {
  * relocated table made check 5 verify nothing at exit 0. `provenance-22`: a configured file
  * PRESENT on disk but outside the include rules is now an ERROR (distinguished from genuinely
  * absent via `snapshot.sha256`, which spans the whole tree while the text map does not).
- * `provenance-23`: rows parsed but ZERO joined is a WARN naming which of two causes applies. */
-export const EXPECTED_FIXTURE_COUNT = 127;
+ * `provenance-23`: rows parsed but ZERO joined is a WARN naming which of two causes applies.
+ * 128 (+1 over the then-pinned 127): rk-0ehr / P1 (retraction as a first-class event, ratified
+ * plan docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1) — `linker-44`, THE INCIDENT
+ * FIXTURE: AISM 2026-07-28's two retracted-but-still-green proofs, transcribed with their real
+ * ids from docs/memos/2026-08-03-aism-postmortem/03-datamodel.md "Drift & inconsistency found"
+ * item 1. One shard exercises the `af-canonical` domain (Gate 2 Check 8: a retracted shard's own
+ * `af: validated` claim is an ERROR, and it leaves the available set for every dependent), the
+ * other the `l5-shard-bytes` domain (Check 14: a live retraction overrides a FRESH `VALID`
+ * verdict — the half no hash comparison could catch, because the bytes never changed). See
+ * docs/gate-contracts.md Gate 2's new Check 16. */
+export const EXPECTED_FIXTURE_COUNT = 128;

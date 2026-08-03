@@ -136,3 +136,17 @@ export function hardChallengeAcceptsThisTurn(_severity: string): boolean {
 export function correctionRequiresReVerificationBeforePromotion(_correction: CorrectionDetail): boolean {
   return true;
 }
+
+/** rk-0ehr / P1's transition rule, made callable, and the exact sibling of the rule above: a LIVE
+ * retraction (src/drive/retraction-store.ts's `liveRetractionFor` — the item's current hash still
+ * equals the retraction record's, in the matching pinned domain) overrides ANY verdict for that
+ * item, including a fresh `VALID`. There is no verdict value that survives it, which is why
+ * `_verdict` is intentionally unused: the point of this function is that the verdict does NOT
+ * change the answer. It always returns `true`; it exists so the rule is a real, testable statement
+ * with ONE call site (src/drive/l5-promote.ts's `promotionStateFor`) rather than prose a future
+ * implementer could re-derive differently. Ratified plan: docs/memos/2026-08-03-rk-improvement-
+ * plan-from-aism.md §P1 semantics (a) — "status demotes and propagation cascades exactly as an
+ * INVALID would". */
+export function retractionOverridesVerdict(_verdict: string): boolean {
+  return true;
+}

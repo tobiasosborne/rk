@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { promotionQuery, promotionStateFor } from "../../src/drive/l5-promote";
+import { retractionOverridesVerdict } from "../../src/drive/bind-verdicts";
 import type { L5StoredVerdict } from "../../src/drive/l5-record";
 
 const HASH_ORIGINAL = "a".repeat(64);
@@ -85,5 +86,64 @@ describe("promotionQuery — batch form over a whole snapshot", () => {
     expect(result.size).toBe(2);
     expect(result.get("a")).toEqual({ status: "promotable", record: records[0] });
     expect(result.get("never-dispatched")).toEqual({ status: "not-promotable", reason: "no-verdict" });
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// rk-0ehr / P1 — a live retraction overrides any fresh VALID (ratified plan
+// docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1, semantics (a)).
+// ---------------------------------------------------------------------------------------
+
+const RETRACTION = {
+  schemaVersion: "1" as const,
+  ordinal: 0,
+  itemId: "lem-1",
+  contentHash: HASH_ORIGINAL,
+  hashDomain: "l5-shard-bytes" as const,
+  retractedBy: "audit:2026-07-28-independent-sweep",
+  reason: "independent sweep found the step-3 approximation unjustified",
+};
+
+describe("promotionStateFor — retraction overrides the verdict", () => {
+  test("a fresh VALID verdict + a live retraction is NOT promotable", () => {
+    expect(promotionStateFor([rec()], "lem-1", HASH_ORIGINAL)).toEqual({ status: "promotable", record: rec() });
+    const withRetraction = promotionStateFor([rec()], "lem-1", HASH_ORIGINAL, RETRACTION);
+    expect(withRetraction.status).toBe("not-promotable");
+    if (withRetraction.status !== "not-promotable") throw new Error("unreachable");
+    expect(withRetraction.reason).toBe("retracted");
+    expect(withRetraction.retraction).toEqual(RETRACTION);
+  });
+
+  test("`retracted` outranks every other not-promotable reason (it is the strongest signal)", () => {
+    const stale = promotionStateFor([rec({ l5ContentHash: HASH_CORRECTED })], "lem-1", HASH_ORIGINAL, RETRACTION);
+    expect(stale.status === "not-promotable" && stale.reason).toBe("retracted");
+    const none = promotionStateFor([], "lem-1", HASH_ORIGINAL, RETRACTION);
+    expect(none.status === "not-promotable" && none.reason).toBe("retracted");
+  });
+
+  test("no live retraction supplied -> the pre-existing answer is unchanged", () => {
+    expect(promotionStateFor([rec()], "lem-1", HASH_ORIGINAL, undefined)).toEqual({ status: "promotable", record: rec() });
+  });
+
+  test("promotionQuery threads live retractions per item, keyed by the l5-shard-bytes domain", () => {
+    const records = [rec({ itemId: "lem-1" }), rec({ ordinal: 1, itemId: "lem-2" })];
+    const hashes = new Map([["lem-1", HASH_ORIGINAL], ["lem-2", HASH_ORIGINAL]]);
+    const out = promotionQuery(records, hashes, [RETRACTION]);
+    expect(out.get("lem-1")!.status).toBe("not-promotable");
+    expect(out.get("lem-2")!.status).toBe("promotable");
+  });
+
+  test("an af-canonical retraction never demotes an L5 promotion (domains are never cross-compared)", () => {
+    const afDomain = { ...RETRACTION, hashDomain: "af-canonical" as const };
+    const out = promotionQuery([rec()], new Map([["lem-1", HASH_ORIGINAL]]), [afDomain]);
+    expect(out.get("lem-1")!.status).toBe("promotable");
+  });
+});
+
+describe("retractionOverridesVerdict — the rule as a callable statement", () => {
+  test("always true, mirroring correctionRequiresReVerificationBeforePromotion", () => {
+    expect(retractionOverridesVerdict("VALID")).toBe(true);
+    expect(retractionOverridesVerdict("VALID-WITH-CORRECTION")).toBe(true);
+    expect(retractionOverridesVerdict("INVALID")).toBe(true);
   });
 });

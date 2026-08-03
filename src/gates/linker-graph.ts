@@ -5,7 +5,8 @@
 // check_brittleness (argument.py:153-273). af-workspace introspection (scanWorkspaces/
 // introspectWorkspace, argument.py:517-541) lives in linker-workspace.ts — split out to stay
 // clear of CLAUDE.md's 280-line shard cap; re-exported here so callers of this module keep one
-// import surface for "everything checks 6-10+12 need".
+// import surface for "everything checks 6-10+12 need". Check 8 itself (status propagation) moved
+// to linker-status.ts for the same reason when rk-0ehr / P1 added retraction semantics to it.
 
 import type { Finding } from "./framework";
 import type { Lemma } from "./linker-parse";
@@ -13,10 +14,10 @@ import { allDepIds, isMandatoryReview } from "./linker-parse";
 
 export { scanWorkspaces, introspectWorkspace } from "./linker-workspace";
 export type { WorkspaceFacts } from "./linker-workspace";
-
-function pyListRepr(items: Iterable<string>): string {
-  return `[${[...items].map((i) => `'${i}'`).join(", ")}]`;
-}
+// Check 8 (status propagation) moved to ./linker-status.ts by rk-0ehr / P1 — this file hit the
+// 280-line cap once retraction semantics landed in it. Re-exported so every caller keeps one
+// import surface, the same convention as linker-workspace.ts above.
+export { checkStatus, isAvailable } from "./linker-status";
 
 /** `" ".join(s.split())` — collapse any whitespace run to one space, strip ends
  * (argument.py:64-65, `normalize`). Used only for the contract-drift comparison (check 9). */
@@ -106,53 +107,6 @@ export function checkImports(lemmas: Lemma[], defIds: Set<string>): Finding[] {
   return errors;
 }
 
-// ---------------------------------------------------------------------------------------
-// Check 8 — status propagation, the monotone-trust rigour ladder (argument.py:197-236)
-// ---------------------------------------------------------------------------------------
-
-/** A dep is AVAILABLE iff its af is validated OR it is a ground-truth leaf (status=cited) — only
- * `status=='cited'` counts, never consensus/open/obstruction/disproved/proved
- * (argument.py:200-204). This is the monotone-trust invariant: an `af: validated` shard can never
- * be satisfied by a dep that is neither validated nor cited. */
-export function isAvailable(id: string, afOf: Map<string, string>, statusOf: Map<string, string | undefined>): boolean {
-  return afOf.get(id) === "validated" || statusOf.get(id) === "cited";
-}
-
-export function checkStatus(lemmas: Lemma[]): Finding[] {
-  const afOf = new Map(lemmas.map((l) => [l.id, l.af]));
-  const statusOf = new Map(lemmas.map((l) => [l.id, l.status]));
-  const available = (id: string) => isAvailable(id, afOf, statusOf);
-
-  function requirementsMet(l: Lemma): boolean {
-    if (!l.deps.every(available)) return false;
-    // Disjunctive OR-route generalisation: no routes -> reduces byte-for-byte to "all deps
-    // available"; routes present -> ALSO needs at least one route's members ALL available.
-    if (l.routes.length > 0 && !l.routes.some((r) => r.every(available))) return false;
-    return true;
-  }
-
-  const errors: Finding[] = [];
-  for (const l of lemmas) {
-    const met = requirementsMet(l);
-    if (l.af === "validated" && !met) {
-      const bad = l.deps.filter((d) => !available(d));
-      if (l.routes.length > 0) {
-        errors.push({
-          severity: "ERROR",
-          path: l.path,
-          message: `af=validated but no route is fully validated/cited (unconditional bad deps: ${pyListRepr(bad)})`,
-        });
-      } else {
-        errors.push({
-          severity: "ERROR",
-          path: l.path,
-          message: `af=validated but dep(s) not validated: ${pyListRepr(bad)}`,
-        });
-      }
-    }
-  }
-  return errors;
-}
 
 // ---------------------------------------------------------------------------------------
 // Check 9 — contract match (argument.py:239-248)

@@ -36,8 +36,13 @@ import { fileSha256 } from "./snapshot";
 import type { Lemma } from "./linker-parse";
 import { l5StoreHealthy, parseL5Log } from "../drive/l5-store";
 import { promotionStateFor } from "../drive/l5-promote";
+import { RETRACTION_STORE_PATH, type RetractionFacts } from "./linker-retraction";
 
 export const L5_STORE_PATH = ".rk/l5-verdicts.jsonl";
+
+const NO_RETRACTIONS: RetractionFacts = {
+  present: false, healthy: true, problems: [], records: [], liveL5: new Map(), liveAf: new Map(), unmatchedItemIds: [],
+};
 
 export interface L5PromotionResult {
   findings: Finding[];
@@ -53,7 +58,18 @@ export interface L5PromotionResult {
 
 const ABSENT: L5PromotionResult = { findings: [], present: false, checked: 0, promotable: 0 };
 
-export function checkL5Promotion(snapshot: RepoSnapshot, lemmas: readonly Lemma[]): L5PromotionResult {
+/** `retractions` (rk-0ehr / P1) is src/gates/linker-retraction.ts's already-resolved facts — only
+ * its `l5-shard-bytes` view (`liveL5`) is read here, never the `af-canonical` one (the two pinned
+ * hash domains are never cross-compared; the af-canonical view drives Check 8 instead). Omitting
+ * the argument reproduces the pre-P1 behavior exactly. A CORRUPT retraction store poisons promotion
+ * for the same reason a corrupt L5 store does: an unreadable line's own `itemId` is unknowable, so
+ * no shard can be confirmed un-retracted, and confirming a promotion against an unreadable
+ * withdrawal is the false-validity direction. */
+export function checkL5Promotion(
+  snapshot: RepoSnapshot,
+  lemmas: readonly Lemma[],
+  retractions: RetractionFacts = NO_RETRACTIONS,
+): L5PromotionResult {
   const text = snapshot.get(L5_STORE_PATH);
   if (text === undefined) return ABSENT;
 
@@ -70,13 +86,19 @@ export function checkL5Promotion(snapshot: RepoSnapshot, lemmas: readonly Lemma[
     for (const p of health.problems) {
       findings.push({ severity: "ERROR", path: L5_STORE_PATH, message: `L5 store integrity compromised — promotion poisoned, fail closed: ${p}` });
     }
-    // Every already-promoted shard is now unconfirmable against a corrupt store.
+  }
+  // rk-0ehr / P1: a corrupt RETRACTION store poisons promotion identically. Its own per-problem
+  // ERRORs are emitted once by `retractionStoreFindings` (wired in src/gates/linker.ts); what this
+  // check adds is the consequence — no promotion is trusted and no promoted shard is confirmable.
+  const poisoned = !health.healthy || !retractions.healthy;
+  if (poisoned) {
+    const store = !health.healthy ? "L5 store" : "retraction store";
     for (const l of lemmas) {
       if (l.status === "proved-mod-audit") {
         findings.push({
           severity: "ERROR",
           path: l.path,
-          message: `'${l.id}' is labeled 'proved-mod-audit' but the L5 store is corrupt, so its promotion can no longer be confirmed — repair the store or demote`,
+          message: `'${l.id}' is labeled 'proved-mod-audit' but the ${store} is corrupt, so its promotion can no longer be confirmed — repair ${!health.healthy ? L5_STORE_PATH : RETRACTION_STORE_PATH} or demote`,
         });
       }
     }
@@ -90,9 +112,11 @@ export function checkL5Promotion(snapshot: RepoSnapshot, lemmas: readonly Lemma[
     const currentHash = fileSha256(snapshot, l.path);
     if (currentHash === undefined) continue; // shard file present but unhashed should not happen; skip rather than guess
 
+    const liveRetraction = retractions.liveL5.get(l.id);
+
     if (l.status === "stated") {
       checked++;
-      const decision = promotionStateFor(records, l.id, currentHash);
+      const decision = promotionStateFor(records, l.id, currentHash, liveRetraction);
       if (decision.status === "promotable") {
         promotable++;
         findings.push({
@@ -111,8 +135,18 @@ export function checkL5Promotion(snapshot: RepoSnapshot, lemmas: readonly Lemma[
       // is the L5 soft-tier outcome, so a promoted shard with no L5 backing at all is unsupported;
       // stricter reading per CLAUDE.md L5. Presence-conditional: a repo with NO L5 store cannot be
       // checked this way — see the candidate-bead note in the repair report.)
-      const decision = promotionStateFor(records, l.id, currentHash);
-      if (decision.status !== "promotable") {
+      const decision = promotionStateFor(records, l.id, currentHash, liveRetraction);
+      if (decision.status === "not-promotable" && decision.reason === "retracted") {
+        const r = decision.retraction!;
+        findings.push({
+          severity: "ERROR",
+          path: l.path,
+          message:
+            `'${l.id}' is labeled 'proved-mod-audit' but has been retracted by ${r.retractedBy}: ${r.reason} — ` +
+            `demote to 'stated' or re-verify (the retraction is bound to the shard's CURRENT bytes, so no edit has ` +
+            `released it and no L5 verdict overrides it)`,
+        });
+      } else if (decision.status !== "promotable") {
         findings.push({
           severity: "ERROR",
           path: l.path,

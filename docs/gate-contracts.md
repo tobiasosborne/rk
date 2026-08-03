@@ -258,7 +258,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | gate | structural (blocks in both phases) | non-structural (demoted to WARN in exploration) | rationale |
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
-| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), Check 14 (L5 promotion, M3.8) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and L5 promotion are likewise consolidation-weight validity/status concerns over an af-validated claim, not DAG-coherence structural checks |
+| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), Check 14 (L5 promotion, M3.8), Check 16 (retraction, rk-0ehr) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and L5 promotion are likewise consolidation-weight validity/status concerns over an af-validated claim, not DAG-coherence structural checks |
 | **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
@@ -567,6 +567,14 @@ is stale against the code and must not be treated as ground truth).
    *all* available) ⇒ ERROR listing the unmet deps (argument.py:197-236, esp. 220-229). This is
    the mechanical form of the rigour ladder: a validated result can never rest on a
    non-rigorous dep.
+   - **Retraction withdraws availability** (rk-0ehr / P1, `src/gates/linker-status.ts` — Check 8
+     moved out of `linker-graph.ts` into its own shard when this landed): a shard carrying a LIVE
+     `af-canonical` retraction (Check 16) is **not available**, unconditionally — ahead of the
+     `af=validated OR status=cited` test, and overriding `cited` too (a ground-truth leaf found to
+     be wrong has no af workspace to demote, so the retraction is the only signal there is). Its
+     dependents therefore fail this check exactly as if the dep were unvalidated. The retracted
+     shard's OWN `af: validated` claim is additionally an **ERROR** naming who retracted it and
+     why — that is the AISM headline defect stated as a check.
 9. **Contract match** — for every shard with `af != none` and an introspectable af workspace,
    `normalize(af_root_statement) == normalize(registry.contract)` ⇒ ERROR "contract drift"
    otherwise (argument.py:239-248, 684-690). Introspection is a no-op (silently unable to
@@ -751,6 +759,49 @@ is stale against the code and must not be treated as ground truth).
     AISM counterpart — AISM's `argument.py` has no balloon-routing or classification concept at
     all; the balloon/classification machinery is rk's own M3 addition, orphaned pre-7c the same
     way L5 promotion was pre-M3.8)`. Fixture: `linker-43`.
+16. **Retraction** (rk-0ehr / P1, `src/gates/linker-retraction.ts`; ratified plan
+    `docs/memos/2026-08-03-rk-improvement-plan-from-aism.md` §P1) — reads
+    `.rk/retractions.jsonl` (`schemas/retraction.v1.json`) straight off the snapshot's text map,
+    the same presence-conditional mechanism Check 14 uses for `.rk/l5-verdicts.jsonl`. Absence is a
+    legitimate state (nothing has ever been retracted) ⇒ zero findings, named on the coverage line
+    as `retraction store: absent (nothing retracted)`, never an ERROR.
+    - **What a retraction is.** An out-of-band demotion of an item whose artifact bytes are
+      **unchanged** — the one validity event every edit-triggered staleness rule in rk
+      structurally cannot see. THE INCIDENT (L2): AISM 2026-07-28, two proofs validated the
+      previous day were found defective by an independent sweep and retracted by hand-editing the
+      shard plus a prose paragraph; the af ledger's last event was still `node_validated`,
+      `export.md` still read `**Status:** validated`, and the oracle verdict file still read
+      `"result":"pass"` (`docs/memos/2026-08-03-aism-postmortem/03-datamodel.md`, "Drift &
+      inconsistency found" item 1). Prose is not a join key.
+    - **Liveness is a hash binding, not a flag.** A retraction is LIVE iff the item's CURRENT
+      content hash equals the record's `contentHash` **in the matching `hashDomain`**. Edit the
+      artifact and the hash changes, the retraction stops binding, and ordinary staleness takes
+      over (a fresh verification is needed anyway). There is no un-retract record and no tombstone.
+    - **Two domains, never cross-compared** (`schemas/verdict.v1.json`'s own rule). A live
+      `l5-shard-bytes` retraction feeds **Check 14**: `promotionStateFor` returns the new
+      `not-promotable`/`retracted` reason, which outranks stale/invalid/correction-pending/
+      no-verdict. For a `stated` shard that is silent (no promotion nudge); for a
+      `proved-mod-audit` shard it is an **ERROR** naming the retractor and the reason and calling
+      for a demote or re-verification — including when the latest L5 verdict is a FRESH `VALID`
+      (`src/drive/bind-verdicts.ts`'s `retractionOverridesVerdict`, the callable statement of the
+      rule, one call site). A live `af-canonical` retraction feeds **Check 8** instead (see there).
+    - **KNOWN LIMITATION, stated rather than papered over**: rk cannot presently observe an item's
+      current `af-canonical` hash (`af export --graph json` carries no node content hash through
+      `src/store/af-load.ts`), so an `af-canonical` retraction is treated as live until it can.
+      That is the fail-closed direction — a standing demotion outliving an unobservable edit —
+      and it is surfaced on the graph edge as `currentHashObserved: false`, never as a confirmed
+      hash match.
+    - **Store integrity poisons, exactly as Check 14's does.** A single unparseable line or a
+      broken ordinal chain (`src/drive/retraction-store.ts`'s `retractionStoreHealthy`) makes the
+      WHOLE ledger untrustworthy: a truncated line's own `itemId` is unknowable, so no item can be
+      confirmed un-retracted. ⇒ one **ERROR** per problem at `.rk/retractions.jsonl`, ZERO live
+      retractions reported, and every `proved-mod-audit` shard additionally unconfirmable. The
+      writer (`src/drive/retraction-store-io.ts`) likewise refuses to append through corruption.
+    - Coverage line: `retraction store: <n> live (l5-shard-bytes), <m> live (af-canonical)`, plus
+      a count and list of any retraction naming no registry shard (never a silent drop, L2).
+    - `aism_behavior: differs` — AISM has no retraction vocabulary at all (`grep -r retract` over
+      its scripts: no hits), so this is an rk-only mechanism the incident argues for, not a
+      stricter reading of an existing check. Fixture: `linker-44`.
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set
@@ -985,6 +1036,7 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 | `linker-37` | **[M3.8] `status: stated` shard, fresh `VALID-WITH-CORRECTION`** ⇒ correction-pending, no promotion, zero findings (rule (g)) |
 | `linker-38` | **[M3.8] critical-path node, same shape as `linker-31`, but shard carries `provenance: legacy-same-family`** ⇒ WARNING not ERROR (Check 13, explicit-marker escape hatch) |
 | `linker-43` | **[M3 review blocker 7c] `checkMandatoryReview` wired into `linkerGate`** — a shard with `balloons: 2` + `balloon_classifications: [missing-fact, dag-dep]` (a repeat balloon) ⇒ WARN `MANDATORY-REVIEW` through the full gate (Check 15), golden pass otherwise |
+| `linker-44` | **[rk-0ehr / P1 — THE INCIDENT FIXTURE] retraction as a first-class event** (AISM 2026-07-28, real ids, `docs/memos/2026-08-03-aism-postmortem/03-datamodel.md` "Drift & inconsistency found" item 1): two retracted-but-still-green proofs, one per pinned hash domain. `lem-stage1-approximate-group-laws` (`af: validated`, workspace resolved) + a live `af-canonical` retraction ⇒ Check 8 ERROR on its own unchanged validated claim; `lem-stage1-smooth-unitary-operations` (`proved-mod-audit`, backed by a FRESH `VALID` L5 verdict) + a live `l5-shard-bytes` retraction ⇒ Check 14 ERROR (`retracted` reason). The second half is the case no hash comparison could catch — the bytes never changed |
 
 ---
 

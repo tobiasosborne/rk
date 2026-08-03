@@ -32,6 +32,7 @@ import { freshnessSupersededPaths } from "./freshness";
 // (l5-promote.ts's own module header names this file as the wiring point).
 import { checkCriticalPathProvenance } from "./linker-crossvendor";
 import { checkL5Promotion } from "./linker-l5";
+import { readRetractionFacts, retractionStoreFindings } from "./linker-retraction";
 
 export const linkerGate: Gate = {
   name: "linker",
@@ -72,15 +73,20 @@ export const linkerGate: Gate = {
     // M3.8 (Check 13): critical-path cross-vendor/batch provenance — presence-conditional on
     // config.northStarId (M2.5's own "no default" stance; PRD C2's own contract).
     const crossVendor = checkCriticalPathProvenance(lemmas, config.northStarId, identityOf);
+    // rk-0ehr / P1 (Check 16): the retraction ledger, read ONCE and consumed by two checks — its
+    // `l5-shard-bytes` view by Check 14 (promotion) and its `af-canonical` view by Check 8
+    // (propagation). Presence-conditional on `.rk/retractions.jsonl`; corrupt ⇒ fail closed.
+    const retractions = readRetractionFacts(snapshot, lemmas);
     // M3.8 (Check 14): L5 stated->proved-mod-audit promotion — presence-conditional on
     // `.rk/l5-verdicts.jsonl` (M3.7's store).
-    const l5 = checkL5Promotion(snapshot, lemmas);
+    const l5 = checkL5Promotion(snapshot, lemmas, retractions);
 
     const findings = [
       ...parseErrors,
       ...checkAcyclic(lemmas),
       ...checkImports(lemmas, defIds),
-      ...checkStatus(lemmas),
+      ...checkStatus(lemmas, retractions.liveAf),
+      ...retractionStoreFindings(retractions),
       ...checkContracts(lemmas, wsContracts),
       ...checkOrphans(lemmas, wsDirs),
       ...generatedFindings,
@@ -123,13 +129,22 @@ export const linkerGate: Gate = {
         ? "critical-path provenance: configured north star not found in registry"
         : `critical-path provenance: ${crossVendor.checked} checked / ${crossVendor.criticalPathSize} on path`;
     const l5Note = !l5.present ? "L5 store: absent (no promotions)" : `L5 store: ${l5.promotable}/${l5.checked} 'stated' shards promotable`;
+    // rk-0ehr / P1: absent, corrupt, and "present with N live retractions" are three DIFFERENT
+    // states a reader must never have to guess between; an unmatched itemId (a retraction naming
+    // no registry shard) is named too rather than silently dropped (L2).
+    const retractionNote = !retractions.present
+      ? "retraction store: absent (nothing retracted)"
+      : !retractions.healthy
+        ? "retraction store: CORRUPT (retraction status unknowable, fail closed)"
+        : `retraction store: ${retractions.liveL5.size} live (l5-shard-bytes), ${retractions.liveAf.size} live (af-canonical)` +
+          (retractions.unmatchedItemIds.length > 0 ? `, ${retractions.unmatchedItemIds.length} naming no registry shard: ${retractions.unmatchedItemIds.join(", ")}` : "");
 
     return {
       findings,
       coverage: [
         {
           gate: "linker",
-          unit: `lemma shards (${ignoredNote}); mirrors: ${mirrorsNote}; ${crossVendorNote}; ${l5Note}`,
+          unit: `lemma shards (${ignoredNote}); mirrors: ${mirrorsNote}; ${crossVendorNote}; ${l5Note}; ${retractionNote}`,
           checked: total,
           total,
         },

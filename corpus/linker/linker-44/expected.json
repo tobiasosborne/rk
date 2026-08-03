@@ -1,0 +1,19 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-stage1-approximate-group-laws.md",
+      "message_pattern": "af=validated but 'lem-stage1-approximate-group-laws' has been retracted by audit:2026-07-28-independent-sweep"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-stage1-smooth-unitary-operations.md",
+      "message_pattern": "is labeled 'proved-mod-audit' but has been retracted by audit:2026-07-28-independent-sweep"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "differs -- AISM has no retraction record at all (`grep -r retract` over its scripts: no hits). Its two retracted proofs were recorded by hand-editing the shard plus a prose RETRACTED paragraph, and `argument.py` never checked that direction, so both stayed green. This is the rk-only mechanism the incident argues for, not a stricter reading of an existing AISM check, so it is not triaged into the rk-stricter-intended/rk-bug/ambiguous triad.",
+  "notes": "rk-0ehr / P1 (ratified plan docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1) -- THE INCIDENT FIXTURE, transcribed from a real dated event: AISM 2026-07-28, docs/memos/2026-08-03-aism-postmortem/03-datamodel.md 'Drift & inconsistency found' item 1. `lem-stage1-approximate-group-laws` and `lem-stage1-smooth-unitary-operations` were validated on 2026-07-27 (the campaign's 95th and 100th 'rigorous results'), found DEFECTIVE by an independent sweep the next day, and retracted -- and still read validated in three of four layers, because retraction existed only as prose. Both real ids are kept. The two shards deliberately exercise the TWO pinned hash domains, which are never cross-compared: (1) `lem-stage1-approximate-group-laws` carries `af: validated` with a resolved workspace and an `af-canonical` retraction => Check 8 (status propagation) ERRORs on the shard's own unchanged validated claim, and the shard is simultaneously removed from the available set for any dependent; (2) `lem-stage1-smooth-unitary-operations` is `proved-mod-audit` on the strength of a FRESH `VALID` L5 verdict -- bound to this file's current raw bytes, so nothing about edit-triggered staleness fires -- and an `l5-shard-bytes` retraction pinned to those same bytes overrides it => Check 14 ERRORs (`promotionStateFor`'s new `retracted` reason). The second half is the part no hash comparison could have caught: the bytes never changed, which is exactly why retraction has to be its own first-class event. Both `contentHash` values are the shards' real sha256 in their stated domains (the `af-canonical` one is the ledger's own root `content_hash`). Mutation-proven red-first -- see the rk-0ehr commit for the three perturbations run against this fixture. Siblings: `linker-42` (INVALID demotion, the edit-visible analogue), `linker-35`/`linker-36` (the promotion nudge and its stale case)."
+}

@@ -49,18 +49,44 @@
 // ============================================================================================
 
 import { latestVerdictFor } from "./l5-store";
-import { correctionRequiresReVerificationBeforePromotion } from "./bind-verdicts";
+import { correctionRequiresReVerificationBeforePromotion, retractionOverridesVerdict } from "./bind-verdicts";
 import type { L5StoredVerdict } from "./l5-record";
+import type { RetractionRecord } from "./retraction-record";
+import { liveRetractionFor } from "./retraction-store";
 
 export type PromotionStatus =
   | { status: "promotable"; record: L5StoredVerdict }
-  | { status: "not-promotable"; reason: "stale" | "invalid" | "correction-pending" | "no-verdict"; record?: L5StoredVerdict };
+  | {
+      status: "not-promotable";
+      reason: "stale" | "invalid" | "correction-pending" | "no-verdict" | "retracted";
+      record?: L5StoredVerdict;
+      /** Present iff `reason === "retracted"` — the live retraction record itself, for the
+       * finding text (who retracted it, and why). Diagnostic, exactly like `record`. */
+      retraction?: RetractionRecord;
+    };
 
 /** The promotion decision for one shard: `records` is the full parsed log (unfiltered — this
  * function does its own latest-by-ordinal lookup via `latestVerdictFor`), `currentHash` is the
  * shard's CURRENT `l5ContentHash`-domain hash. See this file's header design note for what each
- * non-promotable `reason` means and what it must never be used to infer. */
-export function promotionStateFor(records: readonly L5StoredVerdict[], shardId: string, currentHash: string): PromotionStatus {
+ * non-promotable `reason` means and what it must never be used to infer.
+ *
+ * `liveRetraction` (rk-0ehr / P1) is the shard's LIVE retraction in the `l5-shard-bytes` domain,
+ * when it has one — the caller resolves it via src/drive/retraction-store.ts's `liveRetractionFor`
+ * against this SAME `currentHash`. It is checked FIRST and unconditionally: a retraction is an
+ * out-of-band demotion of unchanged bytes, so no verdict value survives it
+ * (`retractionOverridesVerdict`, src/drive/bind-verdicts.ts). `reason: "retracted"` therefore
+ * outranks `stale`/`invalid`/`correction-pending`/`no-verdict` — all of those also mean "do not
+ * promote", and naming the retraction is the actionable one. Omitting the argument leaves every
+ * pre-existing answer byte-for-byte unchanged. */
+export function promotionStateFor(
+  records: readonly L5StoredVerdict[],
+  shardId: string,
+  currentHash: string,
+  liveRetraction?: RetractionRecord,
+): PromotionStatus {
+  if (liveRetraction !== undefined && retractionOverridesVerdict(latestVerdictFor(records, shardId, currentHash)?.verdict ?? "none")) {
+    return { status: "not-promotable", reason: "retracted", retraction: liveRetraction };
+  }
   const latest = latestVerdictFor(records, shardId, currentHash);
   if (latest === undefined) return { status: "not-promotable", reason: "no-verdict" };
   if (!latest.fresh) return { status: "not-promotable", reason: "stale", record: latest.record };
@@ -83,8 +109,19 @@ export function promotionStateFor(records: readonly L5StoredVerdict[], shardId: 
  * its current hash. Returns a status for every key in `currentHashes` — never a partial map (a
  * shard with no record at all still gets an explicit `no-verdict` entry, not an absent key), so a
  * caller can report coverage the same way src/drive/l5-store.ts's `coverage` does. */
-export function promotionQuery(records: readonly L5StoredVerdict[], currentHashes: ReadonlyMap<string, string>): Map<string, PromotionStatus> {
+export function promotionQuery(
+  records: readonly L5StoredVerdict[],
+  currentHashes: ReadonlyMap<string, string>,
+  retractions: readonly RetractionRecord[] = [],
+): Map<string, PromotionStatus> {
   const out = new Map<string, PromotionStatus>();
-  for (const [shardId, currentHash] of currentHashes) out.set(shardId, promotionStateFor(records, shardId, currentHash));
+  for (const [shardId, currentHash] of currentHashes) {
+    // The `l5-shard-bytes` domain, and ONLY that domain: `currentHash` here is a raw-shard-bytes
+    // hash, so comparing it against an `af-canonical` retraction would be exactly the
+    // cross-domain comparison schemas/verdict.v1.json forbids. An af-canonical retraction is not
+    // ignored — it binds on the af-tier availability path instead (src/gates/linker-graph.ts).
+    const live = liveRetractionFor(retractions, shardId, currentHash, "l5-shard-bytes");
+    out.set(shardId, promotionStateFor(records, shardId, currentHash, live));
+  }
   return out;
 }

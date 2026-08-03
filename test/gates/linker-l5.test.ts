@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { checkL5Promotion, L5_STORE_PATH } from "../../src/gates/linker-l5";
+import { RETRACTION_STORE_PATH, readRetractionFacts } from "../../src/gates/linker-retraction";
 import type { Lemma } from "../../src/gates/linker-parse";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { sha256Hex } from "../../src/gates/sha256";
@@ -163,5 +164,80 @@ describe("checkL5Promotion — BLOCKER 6b: already-promoted shards are continuou
     const snapshot = snapshotFromFiles({ [SHARD_PATH]: PMA_BODY, [L5_STORE_PATH]: line + "\n" });
     const r = checkL5Promotion(snapshot, [lemma({ status: "proved-mod-audit" })]);
     expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// rk-0ehr / P1 — a live retraction overrides the L5 verdict (ratified plan §P1, semantics (a)).
+// End-to-end fixture: corpus/linker/linker-44.
+// ---------------------------------------------------------------------------------------
+
+describe("checkL5Promotion — a live retraction overrides a fresh VALID", () => {
+  const PMA_BODY = "---\nid: lem-x\nkind: lemma\nstatus: proved-mod-audit\naf: none\ncontract: c\n---\n";
+  const PMA_HASH = sha256Hex(new TextEncoder().encode(PMA_BODY));
+
+  function retractionLine(over: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      schemaVersion: "1", ordinal: 0, itemId: "lem-x", contentHash: SHARD_HASH,
+      hashDomain: "l5-shard-bytes", retractedBy: "audit:2026-07-28-independent-sweep",
+      reason: "independent sweep found the step-3 approximation unjustified", ...over,
+    });
+  }
+
+  test("a 'stated' shard with a fresh VALID + a live retraction is silently NOT promotable (no nudge)", () => {
+    const snapshot = snapshotFromFiles({
+      [SHARD_PATH]: SHARD_BODY,
+      [L5_STORE_PATH]: l5Line() + "\n",
+      [RETRACTION_STORE_PATH]: retractionLine() + "\n",
+    });
+    const facts = readRetractionFacts(snapshot, [lemma()]);
+    const r = checkL5Promotion(snapshot, [lemma()], facts);
+    expect(r.checked).toBe(1);
+    expect(r.promotable).toBe(0);
+    expect(r.findings).toEqual([]);
+  });
+
+  test("a 'proved-mod-audit' shard with a live retraction -> ERROR naming the retraction, who, and why", () => {
+    const snapshot = snapshotFromFiles({
+      [SHARD_PATH]: PMA_BODY,
+      [L5_STORE_PATH]: l5Line({ l5ContentHash: PMA_HASH }) + "\n",
+      [RETRACTION_STORE_PATH]: retractionLine({ contentHash: PMA_HASH }) + "\n",
+    });
+    const lemmas = [lemma({ status: "proved-mod-audit" })];
+    const facts = readRetractionFacts(snapshot, lemmas);
+    const r = checkL5Promotion(snapshot, lemmas, facts);
+    const errs = r.findings.filter((f) => f.severity === "ERROR" && f.path === SHARD_PATH);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]!.message).toContain("retracted");
+    expect(errs[0]!.message).toContain("audit:2026-07-28-independent-sweep");
+    expect(errs[0]!.message).toContain("demote");
+  });
+
+  test("editing the shard releases the retraction — the ordinary support check takes over", () => {
+    const snapshot = snapshotFromFiles({
+      [SHARD_PATH]: PMA_BODY,
+      [L5_STORE_PATH]: l5Line({ l5ContentHash: PMA_HASH }) + "\n",
+      [RETRACTION_STORE_PATH]: retractionLine({ contentHash: "c".repeat(64) }) + "\n", // pinned to older bytes
+    });
+    const lemmas = [lemma({ status: "proved-mod-audit" })];
+    const r = checkL5Promotion(snapshot, lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(r.findings).toEqual([]);
+  });
+
+  test("a corrupt retraction store poisons promotion exactly as a corrupt L5 store does", () => {
+    const snapshot = snapshotFromFiles({
+      [SHARD_PATH]: PMA_BODY,
+      [L5_STORE_PATH]: l5Line({ l5ContentHash: PMA_HASH }) + "\n",
+      [RETRACTION_STORE_PATH]: retractionLine({ contentHash: PMA_HASH }) + "\n{truncated\n",
+    });
+    const lemmas = [lemma({ status: "proved-mod-audit" })];
+    const r = checkL5Promotion(snapshot, lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(r.promotable).toBe(0);
+    expect(r.findings.some((f) => f.severity === "ERROR" && f.path === SHARD_PATH)).toBe(true);
+  });
+
+  test("omitting the facts argument leaves every pre-P1 answer unchanged", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [L5_STORE_PATH]: l5Line() + "\n" });
+    expect(checkL5Promotion(snapshot, [lemma()]).promotable).toBe(1);
   });
 });
