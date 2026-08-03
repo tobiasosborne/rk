@@ -290,8 +290,44 @@ describe("rk render — CLI edge", () => {
     const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: FAKE_FR });
     expect(code).toBe(0);
     expect(lines.join("\n")).toContain("1 dead-route residual note(s)");
+    expect(lines.join("\n")).toContain("fr residuals: read"); // LB7: fidelity named on every path
     const html = readFileSync(join(root, "build", "site", "index.html"), "utf8");
     expect(html).toContain("the induction step fails at n=5");
+  });
+
+  // LB7 (2026-08-03 M3-close review): `loadFrResiduals`'s degradation used to be invisible on every
+  // surface. It is now named alongside af/fr/bd in `rk render`'s own source-status block, using the
+  // SAME words `rk check` prints for the cause-3 finding, so the two commands never describe one
+  // state differently. `sources.fr` decides only the WORDING, never the fact.
+  test("LB7: fr engaged but the residual read degrades -- rk render NAMES the reduced fidelity", async () => {
+    const root = repo();
+    mkdirSync(join(root, ".frontier"), { recursive: true });
+    writeFileSync(join(root, ".frontier", "log.jsonl"), "");
+    writeFileSync(
+      join(root, "fake-fr-response.json"),
+      JSON.stringify({
+        schema_version: "1",
+        log: [],
+        verdicts: [],
+        derived: { deadRoutes: [{ residual: 42, killedAtCycle: 1 }] },
+      }),
+    );
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: FAKE_FR });
+    expect(code).toBe(0); // a degraded DISPLAY read never blocks the render — no new failure mode
+    const text = lines.join("\n");
+    expect(text).toContain("fr residuals: reduced fidelity");
+    expect(text).toContain("1 dead-route row(s)");
+  });
+
+  test("LB7: fr not engaged at all -- named as 'not read', never as degradation", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    const code = await renderCommand(["--root", root], out, { afCommand: ABSENT, frCommand: ABSENT });
+    expect(code).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("fr residuals: not read (fr not engaged");
+    expect(text).not.toContain("fr residuals: reduced fidelity");
   });
 
   test("registered on the top-level dispatcher; --help is side-effect-free", async () => {

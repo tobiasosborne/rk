@@ -55,6 +55,34 @@ describe("classifyRegen: the three causes of a byte difference, never conflated"
     expect(r.ok && r.degraded).toBe("fr: log fallback (reduced fidelity)");
   });
 
+  // LB7: the render edge's OWN second `fr export` read is a cause-3 input in its own right —
+  // `sources` describes the JOIN read only, so an authoritative join plus a degraded residual read
+  // used to look, to this taxonomy, exactly like a clean regeneration.
+  test("LB7: a degraded fr-residual read is cause 3, even with every `sources` status authoritative", () => {
+    const a: RegenAttempt = { bytes: "<html>a</html>", sources: CLEAN, residualFidelity: { ok: false, reason: "boom" } };
+    const r = classifyRegen(a, a);
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.degraded).toBe("fr residuals: reduced fidelity (boom)");
+  });
+
+  test("LB7: a degraded fr-residual read with fr ABSENT is NOT degradation (fr was never engaged)", () => {
+    // The regression guard on the guard, again: an fr-less campaign cannot reach fr, and calling
+    // that reduced fidelity would put an unclearable cause-3 finding on every such repo.
+    const a: RegenAttempt = {
+      bytes: "<html>a</html>",
+      sources: ABSENT,
+      residualFidelity: { ok: false, reason: "the 'fr' binary could not be spawned" },
+    };
+    expect(classifyRegen(a, a)).toEqual({ ok: true, bytes: "<html>a</html>" });
+  });
+
+  test("LB7: an omitted residualFidelity leaves the pre-LB7 taxonomy byte-for-byte unchanged", () => {
+    expect(classifyRegen(attempt("<html>a</html>"), attempt("<html>a</html>"))).toEqual({
+      ok: true,
+      bytes: "<html>a</html>",
+    });
+  });
+
   test("degradation in EITHER attempt is reported, and both readers are named together", () => {
     const a: SourceStatuses = { af: "ledger-fallback", fr: "export", bd: "read" };
     const b: SourceStatuses = { af: "export", fr: "log-fallback", bd: "read" };
@@ -186,6 +214,52 @@ describe("rk check (end to end): a difference measured against a degraded read i
   // "0 structural-loss entries: see rk render for detail" — a count that contradicts the refusal it
   // is explaining, and a pointer to a command that (before LB4) enumerated nothing either. RED
   // before both halves were fixed.
+  // LB7 (2026-08-03 M3-close review): `renderSiteFromRepo` reads fr TWICE — once for the JOIN
+  // (`buildGraphDocument`, whose status `sources.fr` reports) and once for the graveyard's residual
+  // text (`loadFrResiduals`). Only the first was a cause-3 input. The fake `fr` below answers BOTH
+  // reads successfully (so `sources.fr === "export"`, no cause-3 from that side, and the two
+  // regenerations agree byte-for-byte, so no cause 2) while its `derived.deadRoutes` carries a
+  // MALFORMED row — a real, deterministic residual-read degradation. Before LB7 this reported a
+  // confident DRIFT and advised `rk render`, which would have re-pinned the artifact to output
+  // rendered under the degraded read.
+  test("LB7: a degraded fr-residual read + byte-differing artifact is cause-3 unattributable, never a STALE", async () => {
+    const root = scaffold("rk-check-regen-residual-degraded-");
+    const stateDir = mkdtempSync(join(tmpdir(), "rk-check-regen-residual-state-"));
+    dirs.push(stateDir);
+    const script = join(stateDir, "fake-fr");
+    writeFileSync(
+      script,
+      "#!/bin/sh\n" +
+        `echo '{"log":[],"verdicts":[],"derived":{"deadRoutes":[{"residual":42,"killedAtCycle":1}]}}'\n` +
+        "exit 0\n",
+      { mode: 0o755 },
+    );
+
+    mkdirSync(join(root, "build", "site"), { recursive: true });
+    writeFileSync(join(root, "build", "site", "index.html"), "<html>hand-edited, not a real render</html>\n");
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(
+      join(root, ".rk", "generated.json"),
+      JSON.stringify({ schema_version: "1", entries: [{ path: "build/site/index.html", generator: "render-site-v1" }] }),
+    );
+
+    const lines: string[] = [];
+    const code = await checkCommand(["--root", root], { log: (l: string) => lines.push(l) }, loadSnapshot, {
+      frCommand: [script],
+      afCommand: FAKE_CMD,
+    });
+    const text = lines.join("\n");
+
+    expect(text).toContain("NOT attributable to artifact drift");
+    expect(text).toContain("fr residuals: reduced fidelity");
+    expect(text).toContain("dead-route row(s)");
+    // The JOIN read was authoritative — this cause-3 comes from the SECOND reader alone.
+    expect(text).not.toContain("fr: log fallback (reduced fidelity)");
+    expect(text).not.toContain("build/site/index.html is STALE");
+    expect(text).not.toContain("NOT reproducible"); // deterministic degradation: cause 2 is ruled out
+    expect(code).toBe(1); // fail closed: unattributable is still never "fresh"
+  });
+
   test("LB4: a corrupt retraction ledger makes the Gate 7 regeneration refuse with a NONZERO, NAMED loss count", async () => {
     const root = scaffold("rk-check-regen-retraction-loss-");
     mkdirSync(join(root, ".rk"), { recursive: true });

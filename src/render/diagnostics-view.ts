@@ -139,12 +139,36 @@ function sourceLabel(kind: SourceKind, sources: SourceStatuses): string {
   return BD_LABELS[sources.bd];
 }
 
+/** LB7 (2026-08-03 M3-close review): whether the render edge's SECOND, independent `fr export` read
+ * (`src/render/fr-edge.ts`'s `loadFrResiduals`, which supplies the graveyard's residual text)
+ * actually reached fr. Declared HERE, in the wording module, rather than in the edge that produces
+ * it: this is a truthfulness surface, and `rk render` and `rk check` must describe the state in the
+ * same words. `SourceStatuses` does not cover it — those describe `buildGraphDocument`'s JOIN read
+ * only, which is precisely why a degraded residual read used to be invisible on every surface. */
+export type FrResidualFidelity = { ok: true } | { ok: false; reason: string };
+
 /** One `"<kind>: <label>"` line per source, e.g. `"af: ledger fallback (reduced fidelity)"` vs
  * `"af: absent"` vs `"af: export"` — the exact wording blocker #2 names, shared verbatim between
  * the terminal output (`out.log`) and the HTML banner/dashboard so the two surfaces never
- * disagree. */
-export function sourceStatusLines(sources: SourceStatuses): string[] {
-  return (["af", "fr", "bd"] as const).map((k) => `${k}: ${sourceLabel(k, sources)}`);
+ * disagree.
+ *
+ * `residualFidelity` (LB7, optional — omitted leaves the pre-LB7 output byte-for-byte) appends one
+ * more line in the same three-state shape: authoritative, degraded (loud), or legitimately not
+ * engaged (named, un-alarming). `sources.fr` decides only the WORDING: with fr `absent` the binary
+ * is legitimately unreachable and that must never read as degradation — the same line this module
+ * already draws between `fallback` and `absent`. */
+export function sourceStatusLines(sources: SourceStatuses, residualFidelity?: FrResidualFidelity): string[] {
+  const lines = (["af", "fr", "bd"] as const).map((k) => `${k}: ${sourceLabel(k, sources)}`);
+  if (residualFidelity !== undefined) lines.push(frResidualLine(residualFidelity, sources.fr));
+  return lines;
+}
+
+/** The `fr residuals: ...` line's exact text (LB7). Exported so `src/cli/check-regen.ts`'s cause-3
+ * reason and `rk render`'s status block are provably the same words. */
+export function frResidualLine(fidelity: FrResidualFidelity, frSource: FrSourceStatus): string {
+  if (fidelity.ok) return "fr residuals: read";
+  if (frSource === "absent") return "fr residuals: not read (fr not engaged -- no .frontier/)";
+  return `fr residuals: reduced fidelity (${fidelity.reason})`;
 }
 
 /** True iff any source is a genuine reduced-fidelity FALLBACK (never true for a merely-absent

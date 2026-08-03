@@ -21,10 +21,19 @@
 //      well-defined "expected" side at all, so no verdict can be drawn from it. DETECTED, not
 //      assumed away: this module regenerates TWICE and byte-compares (see `prepareRenderSiteExternalRegen`).
 //   3. DEGRADED FIDELITY — a reader could only reach its reduced-fidelity fallback (`af:
-//      ledger-fallback`, `fr: log-fallback`), so the expected bytes describe the VERIFIER's
-//      environment as much as the repo. Re-rendering would not fix the artifact; it would re-pin
-//      it to the degraded output, and the STALE would return the moment the source came back.
-//      Reported as `degraded`, which the gate turns into its own non-STALE ERROR.
+//      ledger-fallback`, `fr: log-fallback`), or the render edge's OWN second `fr export` read
+//      (`src/render/fr-edge.ts`'s `loadFrResiduals`, LB7) could not reach fr while fr was engaged.
+//      Either way the expected bytes describe the VERIFIER's environment as much as the repo.
+//      Re-rendering would not fix the artifact; it would re-pin it to the degraded output, and the
+//      STALE would return the moment the source came back. Reported as `degraded`, which the gate
+//      turns into its own non-STALE ERROR.
+//      LB7 (2026-08-03 M3-close review) added the third of those inputs. `renderSiteFromRepo` reads
+//      fr TWICE — once for the join (`buildGraphDocument`, whose status `sources.fr` reports) and
+//      once for the graveyard's residual text — and only the first was visible here. The second
+//      degraded SILENTLY and DETERMINISTICALLY, so two regenerations agreed byte-for-byte, cause 3
+//      found nothing, and a real difference was reported as DRIFT: `rk render` advised, which
+//      re-pins the artifact to degraded output. Exactly the harm `unattributableFinding` exists to
+//      prevent, arriving through the one door it did not watch.
 //
 // Causes 2 and 3 are the "cry wolf" class B2 just fixed by a different door: a freshness signal
 // the user cannot clear trains them to ignore the one mechanism PRD SC2's "no drift by
@@ -43,8 +52,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildGraphDocument } from "../store/build-graph";
 import { renderSiteFromRepo } from "./render";
-import { structuralLossCount, structuralLossLines } from "../render/diagnostics-view";
-import type { SourceStatuses } from "../render/diagnostics-view";
+import { frResidualLine, structuralLossCount, structuralLossLines } from "../render/diagnostics-view";
+import type { FrResidualFidelity, SourceStatuses } from "../render/diagnostics-view";
 import type { ExternalRegenResult } from "../gates/freshness";
 import type { GateConfig } from "../gates/config";
 import type { RepoSnapshot } from "../gates/snapshot";
@@ -63,6 +72,14 @@ export interface CheckCommandDeps {
 export interface RegenAttempt {
   bytes: string;
   sources: SourceStatuses;
+  /** LB7 (2026-08-03 M3-close review): the fidelity of the render edge's OWN second `fr export`
+   * read (`src/render/fr-edge.ts`'s `loadFrResiduals`), which `sources` does not cover —
+   * `buildGraphDocument`'s af/fr statuses describe the JOIN read only. A binary failure or a shape
+   * mismatch there degraded silently and DETERMINISTICALLY, so the reproducibility probe passed,
+   * cause 3 found nothing, and the difference was reported as DRIFT: a re-render advised, which
+   * would re-pin the artifact to degraded output. Optional so every existing caller (and every
+   * direct `classifyRegen` unit test) keeps the pre-LB7 taxonomy byte-for-byte. */
+  residualFidelity?: FrResidualFidelity;
 }
 
 /** Human-readable text for the reduced-fidelity states only. Deliberately NOT `absent`: a source
@@ -71,10 +88,20 @@ export interface RegenAttempt {
  * the stance that keeps a campaign which simply does not use fr from getting an unclearable
  * finding on every check. Only "engaged but only a weaker reader could reach it" makes the
  * expected bytes environment-dependent. Wording mirrors diagnostics-view.ts's own labels. */
-function fidelityLosses(sources: SourceStatuses): string[] {
+function fidelityLosses(sources: SourceStatuses, residualFidelity?: FrResidualFidelity): string[] {
   const out: string[] = [];
   if (sources.af === "ledger-fallback") out.push("af: ledger fallback (reduced fidelity)");
   if (sources.fr === "log-fallback") out.push("fr: log fallback (reduced fidelity)");
+  // LB7: the render edge's OWN `fr export` read, which `sources` does not describe. Gated on fr
+  // having been ENGAGED at all — on a repo with no `.frontier/` the binary is legitimately
+  // unreachable, and calling that a fidelity loss would put an unclearable finding on every repo
+  // that simply does not use fr. That is the same "deliberately NOT `absent`" line this function
+  // already draws above, applied to the second reader.
+  // The text comes from `frResidualLine`, not a second literal, so `rk render`'s status block and
+  // this cause-3 reason are provably the same words.
+  if (sources.fr !== "absent" && residualFidelity && !residualFidelity.ok) {
+    out.push(frResidualLine(residualFidelity, sources.fr));
+  }
   return out;
 }
 
@@ -111,7 +138,12 @@ export function classifyRegen(a: RegenAttempt, b: RegenAttempt): ExternalRegenRe
         `unchanged repo, or whether another process is writing .frontier/.af/.beads during 'rk check'`,
     };
   }
-  const losses = [...new Set([...fidelityLosses(a.sources), ...fidelityLosses(b.sources)])].sort();
+  const losses = [
+    ...new Set([
+      ...fidelityLosses(a.sources, a.residualFidelity),
+      ...fidelityLosses(b.sources, b.residualFidelity),
+    ]),
+  ].sort();
   if (losses.length > 0) return { ok: true, bytes: a.bytes, degraded: losses.join("; ") };
   return { ok: true, bytes: a.bytes };
 }
@@ -145,7 +177,7 @@ function regenerateOnce(root: string, config: GateConfig, deps: CheckCommandDeps
   // option is seen by Gate 7 automatically. The one residual (`--title`/`--north-star`, CLI-only
   // overrides this path has no equivalent of) is detected and warned AT RENDER TIME by
   // src/cli/render.ts's `checkDivergenceWarning`, never left to surface here as a mystery STALE.
-  const { site } = renderSiteFromRepo(root, buildResult.doc, diagnostics.sources, {
+  const { site, frResiduals } = renderSiteFromRepo(root, buildResult.doc, diagnostics.sources, {
     northStarId: config.northStarId,
     frCommand: deps.frCommand,
   });
@@ -158,7 +190,12 @@ function regenerateOnce(root: string, config: GateConfig, deps: CheckCommandDeps
         `${site.files.map((f) => f.path).join(", ") || "none"})`,
     };
   }
-  return { ok: true, attempt: { bytes: indexFile.contents, sources: diagnostics.sources } };
+  // LB7: the residual read's fidelity travels WITH the bytes it helped produce, so `classifyRegen`
+  // sees it for exactly the attempt it describes.
+  return {
+    ok: true,
+    attempt: { bytes: indexFile.contents, sources: diagnostics.sources, residualFidelity: frResiduals.fidelity },
+  };
 }
 
 /** M2 boundary review blocker #3 + rk-xbsx. Produces Gate 7's edge-supplied expected bytes, or a

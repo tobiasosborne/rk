@@ -191,7 +191,7 @@ No code change: the corpus fixtures were already the enforcement.
 
 | where | before | after |
 |---|---|---|
-| Gate 7, the degraded-fidelity (cause 3) prose | named only `buildGraphDocument`'s af/fr source statuses as cause-3 inputs | adds the render edge's own second `fr export` read (`loadFrResiduals`) as a cause-3 input, with its fidelity record |
+| Gate 7, "What a STALE is allowed to mean", the **(3) DEGRADED FIDELITY** bullet (~:2261-2268) | named only `af: ledger-fallback` / `fr: log-fallback` as cause-3 inputs | a new paragraph, **"Cause 3 has THREE inputs, not two"**, adds the render edge's own second `fr export` read (`loadFrResiduals`): why it was invisible (deterministic silent degradation defeats the reproducibility probe), what changed (a `fidelity` record on the read, carried on `RegenAttempt`, printed by `rk render`), what did NOT change (the no-ledger-fallback posture; an authoritative empty `derived.deadRoutes` is not a degradation), and that the `absent`-is-not-degradation rule applies to the residual read too |
 
 ## corpus/README.md edits
 

@@ -36,15 +36,39 @@ export interface DeadRouteResidual {
   killedByWave: string | null;
 }
 
+/** LB7 (2026-08-03 M3-close review): whether this read actually reached fr, and if not, why.
+ *
+ * The degradation itself is unchanged (still an empty result, still no ledger fallback, still never
+ * a crash) — what changed is that it is now OBSERVABLE. Before this, a binary failure or a shape
+ * mismatch degraded silently and DETERMINISTICALLY, so `rk check`'s reproducibility probe saw two
+ * identical regenerations, found no fidelity loss in `buildGraphDocument`'s af/fr statuses (this is
+ * a SECOND, independent `fr export` read), and reported DRIFT — advising a re-render that would
+ * re-pin the artifact to degraded output. That is the exact harm `unattributableFinding` exists to
+ * prevent, arriving through the one door it did not watch.
+ *
+ * The type lives in src/render/diagnostics-view.ts (the module that owns the wording every surface
+ * shares) and is re-exported here so consumers of this reader have one import surface. */
+import type { FrResidualFidelity } from "./diagnostics-view";
+export type { FrResidualFidelity };
+
 export interface FrResidualData {
   /** Keyed by `killedAtCycle` (== `FrEdge.cycle` / `DeadRouteEntry.cycle` — see file header). */
   byCycle: ReadonlyMap<number, DeadRouteResidual>;
+  /** LB7. `{ok:true}` means fr answered and its `derived.deadRoutes` was read whole (possibly
+   * empty — an authoritative empty is NOT a degradation). Consumers decide what to DO with a
+   * degraded read; this module only reports it. NOTE the consumer's own duty: whether fr was
+   * ENGAGED at all is `buildGraphDocument`'s `sources.fr`, not this field — on a repo with no
+   * `.frontier/` the binary is legitimately unreachable and that must never read as degradation
+   * (the same stance src/cli/check-regen.ts's `fidelityLosses` already takes on `absent`). */
+  fidelity: FrResidualFidelity;
 }
 
 /** The honest empty result: no residual text available for any cycle. A graveyard rendered with
  * this (or with no `frResiduals` at all) is byte-identical to today's disclaim-only output — see
- * src/render/graveyard-view.ts's `renderGraveyard`. */
-export const EMPTY_FR_RESIDUALS: FrResidualData = { byCycle: new Map() };
+ * src/render/graveyard-view.ts's `renderGraveyard`. `fidelity: {ok:true}` because this constant is
+ * the "no residual data was ASKED for" default (renderSite's own fallback), not the record of a
+ * failed read — `loadFrResiduals` never returns this object, it builds its own. */
+export const EMPTY_FR_RESIDUALS: FrResidualData = { byCycle: new Map(), fidelity: { ok: true } };
 
 interface RawDeadRouteRow {
   residual: string;
@@ -82,29 +106,47 @@ function extractDeadRoutes(doc: unknown): unknown[] {
  * malformed row (present but wrong field types) is skipped on its own; every other row still
  * lands. */
 export function loadFrResiduals(root: string, frCommand: readonly string[] = ["fr"]): FrResidualData {
+  const degraded = (reason: string): FrResidualData => ({ byCycle: new Map(), fidelity: { ok: false, reason } });
+
   let proc: ReturnType<typeof Bun.spawnSync>;
   try {
     proc = Bun.spawnSync([...frCommand, "export"], { cwd: root });
   } catch {
-    return EMPTY_FR_RESIDUALS;
+    return degraded(`the '${frCommand.join(" ")}' binary could not be spawned`);
   }
-  if (proc.exitCode !== 0) return EMPTY_FR_RESIDUALS;
+  if (proc.exitCode !== 0) return degraded(`'${frCommand.join(" ")} export' exited ${proc.exitCode}`);
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(proc.stdout.toString());
   } catch {
-    return EMPTY_FR_RESIDUALS;
+    return degraded(`'${frCommand.join(" ")} export' output was not parseable JSON`);
   }
 
   const byCycle = new Map<number, DeadRouteResidual>();
+  let skipped = 0;
   for (const row of extractDeadRoutes(parsed)) {
-    if (!isDeadRouteRow(row)) continue; // malformed row -- skip it alone, never abort the read
+    if (!isDeadRouteRow(row)) {
+      skipped++; // malformed row -- skip it alone, never abort the read; LB7: but never silently
+      continue;
+    }
     byCycle.set(row.killedAtCycle, {
       residual: row.residual,
       reason: row.reason,
       killedByWave: row.killedByWave ?? null,
     });
   }
-  return { byCycle };
+  // LB7: a skipped row IS a fidelity loss — this render is missing death-certificate text fr has.
+  // An EMPTY `derived.deadRoutes` (or an absent `derived`) is NOT: fr answered, and "no dead routes"
+  // is a real, authoritative answer.
+  if (skipped > 0) {
+    return {
+      byCycle,
+      fidelity: {
+        ok: false,
+        reason: `${skipped} dead-route row(s) in '${frCommand.join(" ")} export' were malformed and skipped`,
+      },
+    };
+  }
+  return { byCycle, fidelity: { ok: true } };
 }

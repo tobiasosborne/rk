@@ -340,7 +340,9 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
     `  ${conflicts} conflict(s), ${unresolved} unresolved reference(s)` +
       `${northStarId ? `, north star ${northStarId}` : ", no north star configured"}.`,
   );
-  for (const line of sourceStatusLines(diagnostics.sources)) out.log(`  ${line}`);
+  // LB7: the render edge's OWN second `fr export` read is a source too — its fidelity joins the
+  // af/fr/bd block rather than degrading into a silently-empty graveyard (diagnostics-view.ts).
+  for (const line of sourceStatusLines(diagnostics.sources, frResiduals.fidelity)) out.log(`  ${line}`);
   out.log(`  ${runGallery.coverage.checked}/${runGallery.coverage.total} run bundle(s), ${defsData.defs.length} definition(s)` +
     `${defsData.conventions !== undefined ? ", CONVENTIONS.md present" : ", no CONVENTIONS.md"}.`);
   out.log(`  ${frResiduals.byCycle.size} dead-route residual note(s) available from fr export.`);

@@ -41,35 +41,48 @@ describe("render/fr-edge", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("fr binary unavailable: degrades to EMPTY_FR_RESIDUALS, never throws", () => {
+  // LB7 (2026-08-03 M3-close review): the DEGRADATION IS UNCHANGED — still an empty result, still
+  // no ledger fallback, still never a throw — but it is now OBSERVABLE via `fidelity`. Before this,
+  // a binary failure degraded silently and DETERMINISTICALLY, so `rk check`'s reproducibility probe
+  // saw two identical regenerations and reported DRIFT, advising a re-render that would re-pin the
+  // artifact to degraded output. See src/cli/check-regen.ts's header, cause 3.
+  test("fr binary unavailable: degrades to an empty result and REPORTS it, never throws", () => {
     const root = tempRoot();
     const data = loadFrResiduals(root, ABSENT);
-    expect(data).toEqual(EMPTY_FR_RESIDUALS);
+    expect(data.byCycle.size).toBe(0);
+    expect(data.fidelity.ok).toBe(false);
+    expect(data.fidelity.ok === false && data.fidelity.reason).toContain("could not be spawned");
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("fr export exits non-zero (.frontier missing/corrupt): degrades to empty, never throws", () => {
+  test("fr export exits non-zero (.frontier missing/corrupt): empty + reported, never throws", () => {
     const root = tempRoot();
     writeFileSync(join(root, "fake-fr-exit-code"), "1");
     const data = loadFrResiduals(root, FAKE_FR);
-    expect(data).toEqual(EMPTY_FR_RESIDUALS);
+    expect(data.byCycle.size).toBe(0);
+    expect(data.fidelity.ok === false && data.fidelity.reason).toContain("exited 1");
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("RED CASE: unparseable stdout JSON degrades loudly-but-safely to empty, never throws", () => {
+  test("RED CASE: unparseable stdout JSON degrades to empty + reported, never throws", () => {
     const root = tempRoot();
     writeFileSync(join(root, "fake-fr-response.txt"), "{not valid json at all");
     expect(() => loadFrResiduals(root, FAKE_FR)).not.toThrow();
     const data = loadFrResiduals(root, FAKE_FR);
-    expect(data).toEqual(EMPTY_FR_RESIDUALS);
+    expect(data.byCycle.size).toBe(0);
+    expect(data.fidelity.ok === false && data.fidelity.reason).toContain("not parseable JSON");
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("a doc with no derived / no deadRoutes at all degrades to empty, never throws", () => {
+  // The one degradation that is NOT one: fr answered, and "this campaign has no dead routes" is a
+  // real, authoritative answer. Reporting it as reduced fidelity would put an unclearable cause-3
+  // finding on every healthy repo — the exact cry-wolf failure rk-xbsx exists to prevent.
+  test("a doc with no derived / no deadRoutes at all is an AUTHORITATIVE empty (fidelity ok)", () => {
     const root = tempRoot();
     writeFileSync(join(root, "fake-fr-response.json"), JSON.stringify({ schema_version: "1", log: [], verdicts: [] }));
     const data = loadFrResiduals(root, FAKE_FR);
     expect(data).toEqual(EMPTY_FR_RESIDUALS);
+    expect(data.fidelity).toEqual({ ok: true });
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -96,6 +109,26 @@ describe("render/fr-edge", () => {
     expect(data.byCycle.get(1)).toEqual({ residual: "ok row", reason: "ok reason", killedByWave: null });
     expect(data.byCycle.has(2)).toBe(false);
     expect(data.byCycle.has(3)).toBe(false);
+    // LB7: a skipped row IS a fidelity loss — this render is missing death-certificate text fr has.
+    expect(data.fidelity.ok).toBe(false);
+    expect(data.fidelity.ok === false && data.fidelity.reason).toContain("3 dead-route row(s)");
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a clean read with real rows reports fidelity ok (LB7)", () => {
+    const root = tempRoot();
+    writeFileSync(
+      join(root, "fake-fr-response.json"),
+      JSON.stringify({
+        schema_version: "1",
+        log: [],
+        verdicts: [],
+        derived: {
+          deadRoutes: [{ arm: "a1", residual: "r", reason: "why", killedAtCycle: 1, killedByWave: null, outcome: "died" }],
+        },
+      }),
+    );
+    expect(loadFrResiduals(root, FAKE_FR).fidelity).toEqual({ ok: true });
     rmSync(root, { recursive: true, force: true });
   });
 });

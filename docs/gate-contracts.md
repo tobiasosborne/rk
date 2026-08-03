@@ -2271,8 +2271,24 @@ it).
   environment as much as the repo ⇒ `ok:true` with `degraded`, which this gate turns into its own
   ERROR that explicitly withholds the drift verdict and does NOT advise re-rendering (that would
   re-pin the artifact to degraded output). Matching bytes stay clean in all three cases.
+  **Cause 3 has THREE inputs, not two** (LB7, 2026-08-03 M3-close review): `renderSiteFromRepo`
+  reads fr **twice** — once for the JOIN (`buildGraphDocument`, whose status `sources.fr` reports)
+  and once, independently, for the graveyard's residual/death-certificate text
+  (`src/render/fr-edge.ts`'s `loadFrResiduals`) — and only the first was visible to this taxonomy.
+  The second degraded SILENTLY and DETERMINISTICALLY (binary unreachable, non-zero exit,
+  unparseable output, or a malformed `derived.deadRoutes` row), so the reproducibility probe saw
+  two identical regenerations, cause 3 found nothing, and a real byte difference was reported as
+  **DRIFT** — advising an `rk render` that would re-pin the artifact to degraded output, the exact
+  harm this taxonomy exists to prevent, arriving through the one door it did not watch.
+  `loadFrResiduals` now returns a `fidelity` record alongside its residuals; `RegenAttempt` carries
+  it; and `rk render` names the same state, in the same words, in its own source-status block. The
+  edge's no-ledger-fallback posture is unchanged — a degraded residual read still yields an empty
+  result and never blocks a render, it is only no longer invisible. An AUTHORITATIVE empty
+  (`derived.deadRoutes: []`, or no `derived` at all) is **not** a degradation: fr answered.
   A source that was never *engaged* (`absent`) is **not** degradation — a campaign that does not
-  use fr must stay verifiable. The asymmetry is deliberate: degradation matters only at
+  use fr must stay verifiable, and that rule applies to the residual read too (fr `absent` ⇒ its
+  residual read cannot be a fidelity loss, however it failed). The asymmetry is deliberate:
+  degradation matters only at
   verification time; a render made under a degraded reader and verified under an authoritative one
   is a real, convergent STALE. All three fail closed; none is ever silently fresh.
   Cost: two regenerations per `rk check`, only when a `render-site-v1` entry is declared (L6).

@@ -94,6 +94,29 @@ describe("render/diagnostics-view — per-source status wording (blocker #2)", (
     expect(sourceStatusLines(ALL_ABSENT)).toEqual(["af: absent", "fr: absent", "bd: absent"]);
   });
 
+  // LB7 (2026-08-03 M3-close review): the render edge's SECOND, independent `fr export` read
+  // (`loadFrResiduals`, the graveyard's residual text) degraded invisibly — `SourceStatuses`
+  // describes the JOIN read only. Its fidelity now joins this block, in wording `rk check`'s
+  // cause-3 reason reuses verbatim (src/cli/check-regen.ts calls `frResidualLine` directly).
+  test("LB7: an omitted residualFidelity leaves the block byte-for-byte as it was", () => {
+    expect(sourceStatusLines(CLEAN)).toEqual(["af: export", "fr: export", "bd: read"]);
+  });
+
+  test("LB7: an authoritative residual read is named 'read'", () => {
+    expect(sourceStatusLines(CLEAN, { ok: true })).toEqual(["af: export", "fr: export", "bd: read", "fr residuals: read"]);
+  });
+
+  test("LB7: a degraded residual read is LOUD and carries its reason", () => {
+    const lines = sourceStatusLines(CLEAN, { ok: false, reason: "'fr export' exited 1" });
+    expect(lines[3]).toBe("fr residuals: reduced fidelity ('fr export' exited 1)");
+  });
+
+  test("LB7: with fr never ENGAGED, a failed residual read is 'not read', never degradation", () => {
+    const lines = sourceStatusLines(ALL_ABSENT, { ok: false, reason: "the 'fr' binary could not be spawned" });
+    expect(lines[3]).toBe("fr residuals: not read (fr not engaged -- no .frontier/)");
+    expect(lines[3]).not.toContain("reduced fidelity");
+  });
+
   test("fallback sources: the exact 'reduced fidelity' wording the review named", () => {
     expect(sourceStatusLines(FALLBACK)).toEqual([
       "af: ledger fallback (reduced fidelity)",
