@@ -80,6 +80,13 @@ export interface GateConfig {
    * rule lives in `src/refs/quote.ts`'s `wholeQuoteMatch` and must be called, never re-derived,
    * per the carry-forward note in docs/reviews/2026-07-17-tier-a-boundary-review.md). */
   refsMinRunReportingLength: number;
+  /** Refs gate's quote-at-locus tolerance, in LINES (rk-wkzh / P2, docs/memos/2026-08-03-rk-
+   * improvement-plan-from-aism.md; docs/gate-contracts.md Gate 3 Check 6). A matched quote must
+   * fall within the claimed `refs/<path>:<lines>` window widened by this many lines in each
+   * direction — absorbing header/front-matter offsets and re-extraction drift without accepting a
+   * different passage. Default 50. This is a VERDICT threshold, unlike `refsMinRunReportingLength`
+   * above (message-only): the two must never be conflated or repurposed for each other. */
+  refsLocusToleranceLines: number;
   /** M2.5 (`rk graph --critical-path`/`--blocks`, src/cli/graph.ts): the campaign's north-star
    * contract's registry id — PRD C1's constitution slot, made mechanically readable here rather
    * than only living in stamped prose. Optional, same "no default" stance as `shardsPrefix`: a
@@ -119,6 +126,7 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
   // shardsPrefix: deliberately NO default (R12) — omitted, never set to "" or any other sentinel.
   shardsMaxLines: 280,
   refsMinRunReportingLength: 40,
+  refsLocusToleranceLines: 50,
 };
 
 /** Merges a partial config over the defaults — every key independently optional. Pure: takes and
@@ -147,6 +155,7 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "shardsPrefix",
   "shardsMaxLines",
   "refsMinRunReportingLength",
+  "refsLocusToleranceLines",
   "northStarId",
   "workers",
 ]);
@@ -313,6 +322,24 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
         configError(
           `refsMinRunReportingLength: invalid value ${JSON.stringify(v)} -- must be a positive ` +
             `number; falling back to default ${DEFAULT_GATE_CONFIG.refsMinRunReportingLength}`,
+        ),
+      );
+    }
+  }
+
+  if ("refsLocusToleranceLines" in raw) {
+    total++;
+    const v = raw.refsLocusToleranceLines;
+    if (isPositiveFiniteNumber(v)) {
+      overrides.refsLocusToleranceLines = v;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `refsLocusToleranceLines: invalid value ${JSON.stringify(v)} -- must be a positive ` +
+            `number; falling back to default ${DEFAULT_GATE_CONFIG.refsLocusToleranceLines} (an ` +
+            `unvalidated value here would widen or invert Gate 3's quote-at-locus window -- a ` +
+            `verdict threshold, not a message-only one)`,
         ),
       );
     }

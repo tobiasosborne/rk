@@ -144,6 +144,32 @@ describe("validateConfigOverrides — the other four fields + unknown keys", () 
     expect(r.findings).toEqual([]);
   });
 
+  // rk-wkzh (P2, Gate 3 quote-at-locus): the new tolerance field gets the SAME four-place wiring
+  // every other per-repo parameter has — interface, DEFAULT_GATE_CONFIG, KNOWN_CONFIG_KEYS, and a
+  // validation branch. A field wired in three of the four places would either be silently
+  // unconfigurable or reported as an "unknown config key" to anyone who set it.
+  test("refsLocusToleranceLines: default is 50 lines", () => {
+    expect(DEFAULT_GATE_CONFIG.refsLocusToleranceLines).toBe(50);
+  });
+
+  test("refsLocusToleranceLines: a valid positive number passes through, and is a KNOWN key", () => {
+    const r = validateConfigOverrides({ refsLocusToleranceLines: 120 });
+    expect(r.overrides.refsLocusToleranceLines).toBe(120);
+    expect(r.findings).toEqual([]);
+    expect(r.checked).toBe(1);
+    expect(r.total).toBe(1);
+  });
+
+  test("refsLocusToleranceLines: malformed values are rejected, merge falls back to the default", () => {
+    for (const bad of [0, -1, NaN, Infinity, "50", null]) {
+      const r = validateConfigOverrides({ refsLocusToleranceLines: bad });
+      expect(r.overrides.refsLocusToleranceLines).toBeUndefined();
+      expect(r.findings).toHaveLength(1);
+      expect(r.findings[0]!.message).toContain("refsLocusToleranceLines");
+      expect(mergeGateConfig(r.overrides).refsLocusToleranceLines).toBe(50);
+    }
+  });
+
   test("an unrecognized key is dropped and reported, never silently applied", () => {
     const r = validateConfigOverrides({ shardsMxLines: 999 });
     expect((r.overrides as Record<string, unknown>).shardsMxLines).toBeUndefined();
