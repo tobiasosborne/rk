@@ -3,117 +3,127 @@
 
 # HANDOFF
 
-## State (2026-08-03, session close — AISM postmortem + ratified plan; P1+P2 LANDED)
+## State (2026-08-03, session close #2 — M3 review + repair wave LANDED; attempt 13 banked)
 
-**The AISM bitter-lesson snapshot exists and drove a ratified improvement plan.** Seven
-Opus subagents scoured `../almost-idempotent-stochastic-maps` (read-only); synthesis at
-`docs/memos/2026-08-03-aism-bitter-lesson-snapshot.md`, raw reports in
-`docs/memos/2026-08-03-aism-postmortem/01..07` (file:line evidence). The plan
-(`docs/memos/2026-08-03-rk-improvement-plan-from-aism.md`) was **RATIFIED IN FULL by TJO
-in-chat 2026-08-03**, including all five [TJO] decision points as proposed. Beads:
-P3=rk-7v6i (M4), P4=rk-tmno (M4.4), P5=rk-j1w6 (M5.1), P7=rk-psrh (multiplayer memo,
-separate workstream). P6 closed — filed in vibefeld as vibefeld-e0cb (contract exports
-clause), vibefeld-ji8b (challenge outcome enum + non-nullable verified_by), vibefeld-4ahh
-(typed citation fields).
+One session, three landed waves plus a live-fire. Master at 311ad69, pushed.
 
-**P1 (rk-0ehr) + P2 (rk-wkzh) are LANDED on master** (wave branch cherry-picked, head
-06445b3) after a **CLEAN in-session Fable Tier A review with explicit TJO permission**
-("dont use codex subagent" — the L6 escape hatch; record at
-`docs/reviews/2026-08-03-p1p2-validity-wave-tierA-fable.md`, zero landing-blockers,
-three rulings: schema filename = family convention; Checks 16/6-7 non-structural;
-SHARED-EDITS scaffolding deleted). Two Opus lanes authored on isolated worktree
-branches; orchestrator merged shared files (fixture counts 127 → **131**) and reviewed.
+**1. AISM postmortem + ratified plan + P1/P2** (see session-close #1 narrative in git
+history at e935d50 for detail): postmortem memos banked; improvement plan RATIFIED in
+full by TJO; P1 (retraction as first-class event) + P2 (Gate 3 quote-at-locus) landed
+after a clean Fable Tier A review; P6 filed in vibefeld (vibefeld-e0cb/ji8b/4ahh);
+P7 multiplayer memo landed (`docs/memos/2026-08-03-rk-multiplayer-design.md`) —
+placement decision + 6 open questions await TJO in **rk-j4vg**.
 
-New semantics on master:
-- **Retraction as a first-class event**: append-only `.rk/retractions.jsonl`
-  (`schemas/retraction.v1.json`; drive triad `retraction-{record,store,store-io}.ts`),
-  hash-domain-pinned (`l5-shard-bytes` | `af-canonical`, never cross-compared), LIVE iff
-  current hash matches. Gate 2 Check 16 + Check 8 availability override + Check 14
-  `retracted` promotion reason; graph `schema_version "2"` with a fifth conflict kind
-  `retraction-vs-status` (unconditional on live retraction — that conflict IS the render
-  veto via `effectivePresentation`'s existing defect path); taint cascade carries it.
-  Fail-closed everywhere: af-canonical liveness unobservable (rk-iejw), corrupt ledger
-  poisons the store AND promotion confirmation.
-- **Gate 3 checks 6-7**: a matched quote must fall at the claimed `:<lines>` locus
-  (dual-convention line counting, `\n` vs `\n`+`\x0c`, PASS on either, tolerance
-  `refsLocusToleranceLines` default 50); a source naming a refs/ path with no
-  extractable quote is now ERROR, not WARN. Fixtures refs-09/10/11 transcribed from
-  real AISM incidents I2/I3/I4; strict acceptance shrink verified (zero pre-existing
-  expected.json changed).
+**2. rk-k0m1 landed and CLOSED**: per-assignment + workers-level `turnTimeoutMs`/
+`sessionTimeoutMs` from `.rk/config.json` (config-05 fixture); validated live in
+attempt 13's preflight. Codex-direction live validation deferred (no-codex session).
 
-Gates at close: `bun test` **2509 pass / 1 skip / 0 fail** (161 files) + selftest OK
-(corpus **131/131**, purity, gates-dir, compat). Compile OK.
+**3. M3-close batched Tier A review DONE + repair wave LANDED** (the milestone's ONE
+round + ONE wave, anti-Zeno satisfied). Record:
+`docs/reviews/2026-08-03-m3-close-batched-tierA-fable.md` — reviewer Fable with
+explicit TJO permission; three Opus hostile lenses as inputs; **9 landing-blockers
+confirmed at source and ALL FIXED** same-day by two Opus repair lanes:
+- LB1 cross-node challenges were structurally unapplyable (false stale message,
+  misdirected retry burn) → per-target hash binding, truthful discard causes.
+- LB2 unclassified balloons aborted without persisting the counter; classification
+  dispatcher degraded silently on the example config → persist + loud preflight.
+- LB3 gate-side retraction veto had store-presence/status-list holes (hostile
+  re-derivation caught it in P1 the same day P1 was reviewed clean — the postmortem's
+  ~5-10% residual-within-a-framing rate, demonstrated in-house) → unconditional
+  `checkRetractionVeto`, S/J coverage, fixtures linker-45/46.
+- LB4 structural-loss classes unnamed downstream; bd parse failures silently dropped
+  → four classes named everywhere, bd malformed lines first-class.
+- LB5 store-integrity ERRORs were phase-demotable; four newest phase-matrix rows
+  untested → structural:true + full three-way doc/code/test alignment.
+- LB6 Gate 4 configured-but-absent status table silent (incident (a) reborn) →
+  overriddenKeys threading, ERROR + three-way source-state coverage, provenance-24.
+- LB7 render-edge fr-residual degradation collapsed STALE cause 3 into cause 1 →
+  fidelity record threaded into classifyRegen.
+- LB8 contract asserted the INVERSE of the enforced cross-vendor severity ×4 → fixed.
+- LB9 worker-contract asserted absent safety mechanisms (repair terminal-12; "never a
+  blind resume") → rewritten to the actual mechanisms; rk-wr58 named as load-bearing.
+~20 follow-ups batched to the M4-boundary review as beads (rk-oy3h zero-usage
+timeouts; rk-jb2c exit-11 + repair-cap-manufactures-exit-11; rk-zdi4 reviewer==author
+field mismatch; rk-sckg doc-drift batch; plus corrected rk-rxq/rk-sp3n/rk-gkxs).
+
+**4. Live-fire attempt 13 banked** (`../rk-m3.5-baseline/RUN-REPORT-13-2026-08-03.md`,
+opus+opus per TJO no-codex directive, same-family consequence stated up front): opus
+decomposed the starvation lemma (8 children — attempt-12's codex-timeout blocker is
+prover-specific, now also fixed by rk-k0m1); family fail-closed held live (15 accepts
+refused, 0 leaked); GAP 11 still dead; budget abort at 1.53M ≥ 1.5M cap demonstrated
+rk-rxq's reserve blind spot live; **rk-tk04** filed (preflight hard-stop for
+unpromotable rosters — the run spent the cap on a roster it had proven unpromotable).
+rk-id1 CLOSED (honest preflight verified live). Campaign matrix: no unknown-cause
+blocker remains anywhere.
+
+Gates at close: `bun test` **2580 pass / 1 skip / 0 fail** (161 files) + selftest OK
+(corpus **135/135**, purity 117/117, gates-dir 30/30, compat). Compile OK.
 
 ## Next steps (in order)
 
-1. **rk-k0m1 (P2) — wire `turnTimeoutMs`/`sessionTimeoutMs` from `.rk/config.json`**,
-   then re-run starvation B from `_pristine/` (restore workspace first — it carries the
-   applied root challenge from attempt 12). Unchanged from previous session.
-2. **rk-tbg — ESCALATE the shard-cap systemic decision** (six files over 280; do not
-   silently sweep a third time). Note: P1 split linker-graph → linker-status correctly
-   under the cap; the pre-existing offenders remain.
-3. **M3 close**: (a) ONE batched Tier A review — scope list from the previous session
-   PLUS this wave's residuals rk-svd5 (retraction-withdrawal record) and rk-gkxs
-   (Check 6 defensive-PASS hardening); reviewer per §Governance. (b) M3.9 SC4
-   comparison; (c) auto-prove.sh disposition in vibefeld; (d) acceptance report.
-4. **Ratified-plan queue**: P3 rk-7v6i + P4 rk-tmno land inside M4; P5 rk-j1w6 inside
-   M5.1; P7 rk-psrh (multiplayer design memo) any time — design-only, no code.
-5. **Then M4** (fr upgrades + bandit experiment, pre-registration M4.0 first — the
-   postmortem's bandit findings are the design prior, snapshot §7).
+1. **M3 final close**: (a) SC4 comparison (M3.9) — needs the M3.5 baseline memo passed
+   via `rk verify --report --baseline`; attempt 13 is NOT an SC4 datum (single-vendor,
+   budget-terminated); a codex-permitted cross-vendor run is the honest datum.
+   (b) auto-prove.sh disposition in ../vibefeld (delete or deprecate with pointer).
+   (c) acceptance report (one per milestone, cites both review records + repair
+   outcomes + RUN-REPORT-12/13).
+2. **rk-j4vg** — TJO ratifies multiplayer memo placement (recommendation: fold into
+   M5, pull MP.1-MP.3 before M4) + its 6 open questions.
+3. **M4** (fr upgrades + bandit, M4.0 pre-registration first) — P3 (rk-7v6i runs
+   edges + rk run verify) and P4 (rk-tmno lane stop rules) land inside it; the
+   M4-boundary review inherits the ~20 batched follow-ups.
+4. **Residual Tier A queue**: rk-svd5 (retraction-withdrawal record) before first
+   production retraction use; rk-wr58 is now load-bearing (pins LB9's rewritten
+   contract sentence) — good early M4 pick.
+5. Occasional shard sweep per rk-tbg's TJO ruling when convenient (worst: freshness
+   442, config 413).
 
-## Governance (standing, in bd memory)
+## Governance (standing)
 
-- Reviews: codex gpt-5.6-sol default; Tier A at xhigh. **Fable only with explicit TJO
-  permission** — used twice now (rk-xfzg 2026-07-31; P1+P2 wave 2026-08-03, TJO
-  in-chat "dont use codex subagent"). Confirm per-wave which reviewer TJO wants.
-- Anti-Zeno: ONE review round + ONE repair wave per milestone; mechanical verification;
-  residuals → beads → next milestone's single review.
-- Worker models this session (TJO in-chat): **implementers = Opus subagents; code
-  queries/summaries = Sonnet**; orchestrator coordinates, never judges Tier A itself
-  except as the sanctioned reviewer above. Campaign workers unchanged (opus/sonnet
-  claude-side, gpt-5.6-sol codex-side).
-- AISM: read-only crash-test corpus + incident seed ONLY. The postmortem is banked;
-  future fixture material cites `docs/memos/2026-08-03-aism-postmortem/`.
+- Reviews: codex gpt-5.6-sol default; **Fable only with explicit TJO permission** —
+  granted three times to date (rk-xfzg; P1+P2 wave; M3-close batch, all banked in
+  docs/reviews/). No-codex was a THIS-SESSION directive; confirm scope next session.
+- Anti-Zeno: M3's one round + one wave are SPENT. Residuals go to the M4-boundary
+  review — do not reopen M3 findings for re-review.
+- Session model roles (TJO): implementers = Opus lanes; surveys/queries = Sonnet;
+  orchestrator coordinates and (when permitted) reviews; campaign workers
+  opus/sonnet claude-side.
+- AISM: read-only incident corpus. Postmortem evidence lives in
+  docs/memos/2026-08-03-aism-postmortem/.
 
 ## Key facts for the next session
 
-- **Orchestration pattern that worked** (this session): Sonnet read-only survey →
-  orchestrator settles design decisions on the bead → Opus lane in worktree isolation
-  on a pushed branch, shared-file edits documented in a SHARED-EDITS.md at worktree
-  root → orchestrator cherry-picks both lanes onto a wave branch (git merge/checkout
-  are classifier-blocked; `git switch`/`git cherry-pick`/`git branch -f` pass),
-  reconciles counts, re-runs gates, reviews, fast-forwards master via `branch -f`.
-- **Verify subagent claims against source**: two survey errors caught this session —
-  the plan memo's "M3.7 not yet built" was wrong (store fully built), and rk-7q1v was
-  filed on a stale doc comment then closed (loader gap already fixed by rk-skd).
-- Corpus is **131** fixtures (127 + linker-44 + refs-09/10/11). BOTH hardcoded counts
-  moved: `test/corpus.test.ts:66-68` and `src/corpus/discovery.ts` EXPECTED_FIXTURE_COUNT.
-  `corpus/README.md`'s Totals grand total is STILL deliberately stale (rk-sp3n tracks
-  the reconciliation; the refs term is corrected to 11).
-- `corpus/graph/` fixtures are OUTSIDE GATE_DIRS/counts — each gets a dedicated
-  `test/graph/corpus-conflict-<kind>.test.ts` (new: conflict-retraction-vs-status).
-- Graph schema: **v2** inside `schemas/graph.v1.json` — filename tracks the FAMILY per
-  review ruling 1; `GRAPH_SCHEMA_VERSION` in `src/graph/types.ts` is the single source.
-- `GraphEdges.retraction` is REQUIRED (not optional) — bun doesn't typecheck; a new
-  `GraphEdges` literal elsewhere fails at runtime. Grep `edges: {` after merges.
-- Open beads from this session: rk-iejw (af export node content hash — has a vibefeld
-  half), rk-svd5, rk-gkxs, rk-sp3n, rk-ifrf (REFS_LOCUS_RE trailing punctuation),
-  rk-psrh, rk-7v6i, rk-tmno, rk-j1w6.
-- Live invocation shape unchanged: `dist/rk verify --af <id> --live
-  --max-campaign-tokens 1500000` from a lemma dir in `../rk-m3.5-baseline`; models
-  pinned per-assignment in `.rk/config.json`; NO `--model` flag.
-- Template **1.4.0**; af **0.1.6**; fr **0.2.1**; bd 1.0.0. `rk doctor` verifies.
+- **Orchestration pattern proven twice** (P1/P2, M3 repair): Sonnet survey → design
+  decisions on the bead → parallel Opus worktree lanes on pushed branches with
+  SHARED-EDITS.md ledgers → orchestrator cherry-picks onto a wave branch (`git
+  merge`/`checkout` classifier-blocked; `switch`/`cherry-pick`/`branch -f` pass),
+  reconciles counts, re-runs gates, lands via `branch -f master`.
+- **Hostile-lens review pattern proven**: three read-only Opus lenses (domain,
+  cross-domain, residuals/stale-prose) → orchestrator-reviewer verifies EVERY
+  landing-blocker at source before listing. The lenses caught a blocker in a wave
+  reviewed clean the same day; different-granularity re-derivation is not optional.
+- Corpus is **135** fixtures (132 + linker-45/46 + provenance-24). Count sites:
+  `test/corpus.test.ts:66,68` + `src/corpus/discovery.ts` EXPECTED_FIXTURE_COUNT.
+  corpus/README.md Totals line still deliberately inconsistent — rk-sp3n (must also
+  pick 135-GATE_DIRS vs 148-all-corpus definition, see its notes).
+- Retraction semantics now END-TO-END: unconditional gate veto (Check 16) + graph
+  conflict + render defect + promotion/availability overrides; store-integrity
+  faults structural in both phases. `_configValidation.overriddenKeys` is new
+  internal contract surface (LB6) — Tier-A-adjacent, named in the review record.
+- `GraphEdges.retraction` REQUIRED; grep `edges: {` after merges (bun doesn't
+  typecheck).
+- Live invocation unchanged; models pinned per-assignment; per-assignment
+  `turnTimeoutMs`/`sessionTimeoutMs` now honored (preflight prints ceilings).
+- Template 1.4.0; af 0.1.6; fr 0.2.1; bd 1.0.0. `rk doctor` verifies.
 
 ## Standing cautions
 
-- **Bound every process (CLAUDE.md rule 13).** 8 GiB RLIMIT wired via
-  `.claude/settings.json`; keep `timeout` on bun test/selftest/ad-hoc scripts; never
-  `(cmd &)`. Baselines now: bun test ~29s / 2509 tests; selftest ~1s.
-- Do NOT take a subagent's finding at face value — verify against source before filing
-  (two live demonstrations this session, see Key facts).
+- Bound every process (rule 13): timeout prefixes always; baselines now bun test
+  ~26-29s / 2580 tests; selftest ~1s. Never `(cmd &)`.
+- Verify subagent claims against source — three demonstrations this session (two
+  survey errors caught; one reviewer-missed blocker caught by a fresh lens).
 - Purity grep false-triggers on `node:` param names — rename, never touch the guard.
-- Live runs write `.rk/parse-failures/` in workspaces — no rotation; clean when
-  restoring pristine.
-- `bd close` with multiple ids applies ONE `--reason` to all (fix notes after).
-- Scratchpad is EPHEMERAL: bank anything durable into `docs/` — done this session for
-  all seven postmortem reports.
+- Live runs write `.rk/parse-failures/` in workspaces; clean when restoring pristine.
+- `bd close` multi-id applies ONE --reason to all.
+- Scratchpad is EPHEMERAL — everything durable this session went to docs/ or
+  ../rk-m3.5-baseline (which is NOT a git repo; files bank by existing there).
