@@ -1,0 +1,18 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "workers.assignments.prover.hard.turnTimeoutMs: must be a positive integer number of milliseconds"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 1
+  },
+  "aism_behavior": "n/a -- .rk/config.json's workers.assignments.<role>.<tier>.turnTimeoutMs field is an rk-only concept (rk-k0m1, P2); no AISM script reads or validates it.",
+  "notes": "rk-k0m1 (P2, live-fire RUN-REPORT-12): the companion fixture to config-03 for the NEW per-assignment turn/session timeout overrides. Before this bead the live turn ceiling was effectively hard-coded -- LiveDispatchOpts.turnTimeoutMs existed but nothing wired it from .rk/config.json, so the codex prover's full-decomposition turn on a hard lemma died at exactly DEFAULT_TURN_TIMEOUT_MS (120s, exit 10) twice with no operator-reachable knob. A ZERO turnTimeoutMs is the sharpest red case for the new field: it is a number, so a lax `typeof v === 'number'` guard would accept it, and `?? DEFAULT_TURN_TIMEOUT_MS` would NOT rescue it (0 is not nullish) -- every turn would then time out instantly. It is rejected at the loading edge by validateAssignmentEntry/readTimeouts (src/drive/backend-registry.ts) under the unchanged rk-xbm mechanism: ANY malformation drops the WHOLE `workers` field, never a partial or silently-guessed assignment, and surfaces through the synthetic `config` gate. The same guard covers negative, fractional, NaN/Infinity, string, null and boolean values at both nesting levels (per-assignment and the campaign-wide `workers.turnTimeoutMs`/`workers.sessionTimeoutMs`). aism_behavior: n/a -- this field has no AISM counterpart at all. Mutation-proven red-first: short-circuiting readTimeouts' isPositiveIntegerMs branch so it never fires turns this fixture green when it must be red (and takes test/drive/backend-registry.test.ts's three reject cases with it); reverted after confirming -- see the rk-k0m1 commits."
+}

@@ -187,7 +187,37 @@ non-"consolidation" value as exploration, a silent severity demotion), `config-0
 optional per-assignment model override added so a `--live` run can pin the claude side to an
 explicit model while the codex side stays on its own default; validated with the same
 non-blank-string discipline as `backend`; see `docs/worker-contract.md`'s isolation-tuple
-section and `src/drive/backend-registry.ts`'s `RoleTierAssignment`).
+section and `src/drive/backend-registry.ts`'s `RoleTierAssignment`), `config-05` (rk-k0m1: zero
+`workers.assignments.<role>.<tier>.turnTimeoutMs` — see the timeout paragraph immediately below).
+
+**Worker timeouts (rk-k0m1, P2, live-fire RUN-REPORT-12).** `workers` carries two OPTIONAL
+positive-integer-millisecond fields, `turnTimeoutMs` (the per-turn wall-clock ceiling) and
+`sessionTimeoutMs` (the turn-1 `createSession` ceiling), at TWO levels: on `workers` itself
+(campaign-wide default) and inside any `workers.assignments.<role>.<tier>` entry (that assignment
+only). Resolution is per FIELD, most specific first: **per-assignment > `workers`-level >
+`DEFAULT_TURN_TIMEOUT_MS`/`DEFAULT_SESSION_TIMEOUT_MS` (both 120_000, `src/drive/driver-live.ts`)**.
+`BackendRegistry.timeoutsFor(role, tier)` is the single reader; it returns an ABSENT field when
+nothing configured one, so `createLiveDispatcher`'s own `?? DEFAULT_*` stays the one place a number
+is invented and a repo configuring no timeouts dispatches exactly as it did before the fields
+existed. Per-ASSIGNMENT is load-bearing, not a convenience: RUN-REPORT-12 recorded the codex
+prover's full-decomposition turn on a hard lemma hitting the 120s ceiling twice (exit 10 — a
+correct loud skip, never a validity fault) while claude-opus decomposed the same lemma in one turn,
+so raising the prover's ceiling must not stretch the verifier's. `rk verify --live` prints both
+roles' effective ceilings at preflight, before any spend. Validation follows the rk-xbm discipline
+exactly: a PRESENT-but-invalid value — `0`, negative, fractional, NaN/Infinity, string, `null`,
+boolean — at EITHER level is one loud `.rk/config.json` ERROR that drops the WHOLE `workers` field,
+never a silent fallback to the very ceiling the operator meant to raise. Zero is the case the
+corpus pins (`config-05`): it is a number, so a lax numeric guard would accept it, and
+`?? DEFAULT_TURN_TIMEOUT_MS` would not rescue it (`0` is not nullish) — every turn would time out
+instantly. No AISM counterpart; these fields are rk-only.
+Example:
+```json
+{"workers": {"turnTimeoutMs": 300000,
+  "assignments": {"prover": {"hard": {"backend": "codex", "turnTimeoutMs": 900000}},
+                  "verifier": {"hard": {"backend": "claude"}}}}}
+```
+(prover turns get 900s, verifier turns inherit the campaign-wide 300s, both sessions are created
+under the 120s default.)
 
 **Fixture/harness invocation (read before running any AISM script against a fixture or
 historical tree).** Two harness pitfalls surfaced building the M0.2 corpus (recorded in full in

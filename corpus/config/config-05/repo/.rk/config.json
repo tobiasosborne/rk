@@ -1,0 +1,7 @@
+{
+  "workers": {
+    "assignments": {
+      "prover": { "hard": { "backend": "codex", "turnTimeoutMs": 0 } }
+    }
+  }
+}

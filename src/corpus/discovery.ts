@@ -141,5 +141,13 @@ export function totalFixtureCount(corpusRoot: string): number {
  * acceptance-shrink case), `refs-10` is I3 (a source naming a refs/ path with no extractable
  * quote rode `skip_noquote` WARN past the fabrication gate; now an ERROR), `refs-11` is I4 (a
  * pdftotext payload with real `\x0c` bytes whose locus is plausible under form-feed-aware line
- * counting and off under `\n`-only counting — PASSes via the either-convention rule). */
-export const EXPECTED_FIXTURE_COUNT = 131;
+ * counting and off under `\n`-only counting — PASSes via the either-convention rule).
+ * 132 (+1 over the then-pinned 131): rk-k0m1 / P2 (live-fire RUN-REPORT-12) — `config-05`: a ZERO
+ * `workers.assignments.<role>.<tier>.turnTimeoutMs` is a blocking ERROR at the loading edge, the
+ * companion fixture to `config-03` for the new per-assignment/campaign-wide turn+session timeout
+ * overrides (`src/drive/backend-registry.ts`'s `readTimeouts`). Zero is the sharpest red case: it
+ * is a number, so a lax numeric guard accepts it, and `?? DEFAULT_TURN_TIMEOUT_MS` does not rescue
+ * it (0 is not nullish) — every turn would time out instantly. Before this bead the 120s ceiling
+ * was unreachable from `.rk/config.json` at all, which is what stalled the codex prover's
+ * full-decomposition turn twice (exit 10). */
+export const EXPECTED_FIXTURE_COUNT = 132;
