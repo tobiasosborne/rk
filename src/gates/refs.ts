@@ -1,15 +1,20 @@
 // ROLE: Gate 3 — refs (proofs/<ws>/externals/*.json). Contract: docs/gate-contracts.md
-// "Gate 3 — refs" (Checks 1-5); corpus/refs/*'s 7 fixtures. Calls src/refs/quote.ts's
+// "Gate 3 — refs" (Checks 1-7); corpus/refs/*'s 11 fixtures. Calls src/refs/quote.ts's
 // `wholeQuoteMatch` for the PASS/FAIL verdict — never re-derives the whole-quote-match rule
 // (Tier-A boundary-review carry-forward, docs/reviews/2026-07-17-tier-a-boundary-review.md).
 // The ">=40-char best matched run" FAIL diagnostic below is a longest-run computation for the
 // finding MESSAGE ONLY — it must never feed the pass/fail decision, per that same carry-forward.
+// Checks 6-7 (rk-wkzh / P2, docs/memos/2026-08-03-rk-improvement-plan-from-aism.md) are the two
+// AISM-incident-driven tightenings: a matched quote must fall at the CLAIMED locus (I2), and an
+// external naming a refs/ path with no extractable quote is an ERROR rather than a WARN skip (I3).
+// The window arithmetic lives in ./refs-locus.ts (I4's form-feed ambiguity, and the 280-line cap).
 // PURITY: pure — no fs/network/clock (L3).
 
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";
 import { normalizeQuoteText, wholeQuoteMatch } from "../refs/quote";
+import { checkQuoteAtLocus } from "./refs-locus";
 
 /** check-refs.py:44 — a refs/ locus embedded in freeform source text, e.g.
  * "refs/hos/joa-m.md:2300" or "refs/kitaev-2405.02434/approximate_algebras.tex:503-532". No
@@ -165,9 +170,27 @@ export const refsGate: Gate = {
       }
 
       if (cls.verdict === "skip_noquote") {
+        // Check 7 (rk-wkzh / P2 item 2; AISM incident I3, docs/memos/2026-08-03-aism-postmortem/
+        // 07-refs-report.md): a source that NAMES a refs/ path but carries no extractable quote is
+        // a citation the fabrication gate cannot check at all — "green must never mean we couldn't
+        // parse." In AISM five of the campaign's newest citations drifted off the freeform
+        // `refs/...:lines VERBATIM: "..."` convention and rode this WARN straight past the gate.
+        // A source with NO refs/ locus is a different animal (numerical evidence, prose notes —
+        // nothing was ever claimed to be quoted) and keeps the WARN skip.
+        if (cls.refsLocus) {
+          failed++;
+          findings.push({
+            severity: "ERROR",
+            path: ext.path,
+            message:
+              `external names refs locus ${cls.refsLocus} but carries no double-quoted verbatim ` +
+              `text — the claimed citation cannot be byte-verified at all (a skip here is a silent ` +
+              `exemption from the fabrication gate, not a legitimate no-quote external)`,
+          });
+          continue;
+        }
         noQuoteSkipped++;
-        const reasons: string[] = [];
-        if (!cls.refsLocus) reasons.push("no refs/ locus");
+        const reasons = ["no refs/ locus"];
         if (!cls.quote) reasons.push("no double-quoted verbatim text");
         findings.push({
           severity: "WARN",
@@ -192,7 +215,23 @@ export const refsGate: Gate = {
 
       const { matched, normalizedQuote } = wholeQuoteMatch(cls.quote!, refsText);
       if (matched) {
-        passed++;
+        // Check 6 (rk-wkzh / P2 item 1; AISM incident I2). Runs ONLY after the whole-quote match
+        // has already succeeded: it constrains WHERE a matched quote may fall and can never
+        // rescue a quote that failed the match (the FAIL branch below is unreachable from here).
+        // See src/gates/refs-locus.ts for the dual-convention (\n vs \n+\x0c) rule the I4
+        // form-feed ambiguity forces.
+        const atLocus = checkQuoteAtLocus(
+          cls.refsLocus!,
+          cls.quote!,
+          refsText,
+          config.refsLocusToleranceLines,
+        );
+        if (atLocus.ok) {
+          passed++;
+          continue;
+        }
+        failed++;
+        findings.push({ severity: "ERROR", path: ext.path, message: atLocus.message! });
         continue;
       }
 

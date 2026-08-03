@@ -1,19 +1,20 @@
-// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 8 fixtures
-// (refs-08 added by rk-6r3, M0.3 review finding 7: malformed non-object JSON externals).
+// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 11 fixtures
+// (refs-08 added by rk-6r3, M0.3 review finding 7: malformed non-object JSON externals;
+// refs-09/refs-10/refs-11 added by rk-wkzh / P2, AISM incidents I2/I3/I4).
 //
 // Two fixture-loading paths are used deliberately:
 //  - "hand-built snapshot" tests construct a RepoSnapshot Map directly — these are the true unit
 //    tests (extraction preference order, locus selection, skip classification, coverage split).
 //  - the "corpus fixtures" describe block at the bottom loads each corpus/refs/<id>/repo/ tree
 //    with a LOCAL, full-tree recursive reader defined in this file (`loadFullSnapshot`), not
-//    src/store/snapshot-load.ts's `loadSnapshot`. This is intentional, not a style choice: `loadSnapshot`'s
-//    INCLUDE_RULES currently has no rule for generic `refs/<source-id>/*` payload files (only
-//    `refs/manifest/*`), so `test/corpus.test.ts` (which uses `loadSnapshot`) silently drops
-//    refs-02/refs-03/refs-07's `refs/src-*/paper.md` payload from the snapshot and misreports
-//    those three fixtures. That gap lives in a shared EDGE file outside this gate's write scope
-//    (src/gates/refs.ts + this file) — see the session report for the full writeup. This file's
-//    own fixture tests route around it so refs.ts's correctness is verified 8/8 regardless of
-//    when/whether that shared-file gap gets fixed.
+//    src/store/snapshot-load.ts's `loadSnapshot` — a second, independent reader over the same
+//    trees, so this gate's fixtures are verified 11/11 even if the shared loading edge changes.
+//    HISTORY (rk-wkzh, 2026-08-03): this header used to say `loadSnapshot`'s INCLUDE_RULES had no
+//    rule for generic `refs/<source-id>/*` payloads, so test/corpus.test.ts silently dropped them.
+//    That gap is CLOSED — snapshot-load.ts:129 carries `{ dir: "refs", recursive: true }` (rk-skd),
+//    verified directly: `loadSnapshot("corpus/refs/refs-02/repo")` returns both the external JSON
+//    and `refs/src-x/paper.md`. Both harnesses now exercise every refs fixture. Bead rk-7q1v (the
+//    filed follow-up for the gap) is therefore stale and should be closed, not implemented.
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -376,6 +377,183 @@ describe("refsGate — checks 1-5", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// refsGate — checks 6-7 (rk-wkzh / P2): quote-at-locus, and the closed no-quote escape.
+// Incidents I2/I3/I4, docs/memos/2026-08-03-aism-postmortem/07-refs-report.md.
+// The window logic itself is unit-tested in test/gates/refs-locus.test.ts; these are the gate-
+// level wiring, severity, counting and no-rescue proofs.
+// ---------------------------------------------------------------------------------------------
+
+/** A payload whose `quote` sits alone on 1-indexed line `at`, with filler above and below. */
+function payloadWithQuoteAtLine(at: number, quote: string): string {
+  const lines: string[] = [];
+  for (let i = 1; i < at; i++) lines.push(`filler line ${i} of the reference payload`);
+  lines.push(quote);
+  lines.push("trailing filler", "trailing filler");
+  return lines.join("\n");
+}
+
+const AT_LOCUS_QUOTE = "the always-tight hulls are disjoint";
+
+describe("refsGate — check 6 (quote-at-locus, I2)", () => {
+  function locusSnap(claimedLine: number, actualLine: number): RepoSnapshot {
+    return snap({
+      "proofs/lem-i2/externals/GT-i2-1.json": JSON.stringify({
+        name: "GT-i2-1",
+        source: `See refs/src-i2/paper.txt:${claimedLine}. VERBATIM "${AT_LOCUS_QUOTE}" grounds the step.`,
+      }),
+      "refs/src-i2/paper.txt": payloadWithQuoteAtLine(actualLine, AT_LOCUS_QUOTE),
+    });
+  }
+
+  test("quote present at the claimed locus: PASS, zero findings (the check does not false-positive)", () => {
+    const result = refsGate.run(locusSnap(200, 200), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(0);
+    expect(result.coverage[0]!.checked).toBe(1);
+  });
+
+  test("I2: bytes present but ~500 lines from the claimed locus ⇒ ERROR, was PASS before rk-wkzh", () => {
+    const result = refsGate.run(locusSnap(700, 200), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.path).toBe("proofs/lem-i2/externals/GT-i2-1.json");
+    expect(result.findings[0]!.message).toContain("OUTSIDE the claimed locus");
+    expect(result.findings[0]!.message).toContain("700");
+    expect(result.findings[0]!.message).toContain("200");
+    // Counted as a failure, never as a skip and never silently (L2).
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(formatCoverageLine(result.coverage[0]!)).toContain("1 failed");
+  });
+
+  test("within the default 50-line tolerance ⇒ PASS; one line beyond it ⇒ ERROR", () => {
+    expect(refsGate.run(locusSnap(200, 250), DEFAULT_GATE_CONFIG).findings).toHaveLength(0);
+    expect(refsGate.run(locusSnap(200, 251), DEFAULT_GATE_CONFIG).findings).toHaveLength(1);
+  });
+
+  test("the tolerance is read from GateConfig, not hardcoded", () => {
+    const s = locusSnap(200, 300);
+    expect(refsGate.run(s, DEFAULT_GATE_CONFIG).findings).toHaveLength(1);
+    const loose = { ...DEFAULT_GATE_CONFIG, refsLocusToleranceLines: 150 };
+    expect(refsGate.run(s, loose).findings).toHaveLength(0);
+  });
+
+  test("a locus with NO line suffix keeps today's behavior: PASS wherever the quote sits", () => {
+    const s = snap({
+      "proofs/lem-i2/externals/GT-i2-2.json": JSON.stringify({
+        name: "GT-i2-2",
+        // No `:<lines>` suffix, and no trailing punctuation: the locus regex's path class
+        // includes `.`, so a trailing period would be swallowed into the payload path.
+        source: `Cites refs/src-i2/paper.txt -- VERBATIM "${AT_LOCUS_QUOTE}" grounds the step.`,
+      }),
+      "refs/src-i2/paper.txt": payloadWithQuoteAtLine(900, AT_LOCUS_QUOTE),
+    });
+    expect(refsGate.run(s, DEFAULT_GATE_CONFIG).findings).toHaveLength(0);
+  });
+
+  test("I4: a locus plausible only under form-feed-aware counting still PASSes (either convention)", () => {
+    const head: string[] = [];
+    for (let i = 1; i <= 9; i++) head.push(`filler line ${i}`);
+    const s = snap({
+      "proofs/lem-i4/externals/GT-i4-1.json": JSON.stringify({
+        name: "GT-i4-1",
+        // \n-only readers see line 10; splitlines() readers see line 300. The recorded locus is
+        // the latter — a tool-of-record difference, not a fabrication.
+        source: `See refs/lee-smooth/lee.txt:300. VERBATIM "${AT_LOCUS_QUOTE}" is the definition.`,
+      }),
+      "refs/lee-smooth/lee.txt": `${head.join("\n")}\n${"\x0c".repeat(290)}${AT_LOCUS_QUOTE}\ntail`,
+    });
+    expect(refsGate.run(s, DEFAULT_GATE_CONFIG).findings).toHaveLength(0);
+  });
+
+  test("NO RESCUE: a failed whole-quote match stays exactly one 'NOT found' ERROR, locus irrelevant", () => {
+    const s = snap({
+      "proofs/lem-i2/externals/GT-i2-3.json": JSON.stringify({
+        name: "GT-i2-3",
+        source: 'See refs/src-i2/paper.txt:900. VERBATIM "this sentence was never written in the payload" here.',
+      }),
+      "refs/src-i2/paper.txt": payloadWithQuoteAtLine(5, AT_LOCUS_QUOTE),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.message).toContain("NOT found");
+    expect(result.findings[0]!.message).not.toContain("OUTSIDE the claimed locus");
+  });
+
+  test("the ABSENT branch still wins over the locus check (no payload, no window to check)", () => {
+    const s = snap({
+      "proofs/lem-i2/externals/GT-i2-4.json": JSON.stringify({
+        name: "GT-i2-4",
+        source: `See refs/src-gone/paper.txt:900. VERBATIM "${AT_LOCUS_QUOTE}" here.`,
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.message).toContain("ABSENT");
+  });
+});
+
+describe("refsGate — check 7 (the closed no-quote escape, I3)", () => {
+  test("I3: a source naming a refs/ locus with NO extractable quote is an ERROR, not a WARN skip", () => {
+    const s = snap({
+      "proofs/lem-i3/externals/GT-i3-1.json": JSON.stringify({
+        name: "GT-i3-1",
+        // The AISM I3 shape: the citation convention drifted (no double quotes), so the quote
+        // regex misses and the external silently bypassed the fabrication gate.
+        source: "See refs/kitaev/defs.tex:120 -- Definition of delta-homomorphism, quoted verbatim above.",
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("refs/kitaev/defs.tex:120");
+    expect(result.findings[0]!.message).toContain("no double-quoted verbatim text");
+    // Counted as a failure, and NOT as a no-quote skip.
+    expect(formatCoverageLine(result.coverage[0]!)).toBe(
+      "checked refs: 0/1 externals byte-verified, 1 failed, 0 import-skipped, 0 no-quote-skipped",
+    );
+  });
+
+  test("no refs/ locus at all ⇒ unchanged WARN skip_noquote (refs-05's golden case is untouched)", () => {
+    const s = snap({
+      "proofs/lem-w/externals/GT-w-1.json": JSON.stringify({
+        name: "GT-w-1",
+        source: "Numerical evidence only; no refs/ locus or quoted text is claimed here.",
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("WARN");
+    expect(result.findings[0]!.message).toContain("no refs/ locus");
+    expect(formatCoverageLine(result.coverage[0]!)).toBe(
+      "checked refs: 0/1 externals byte-verified, 0 failed, 0 import-skipped, 1 no-quote-skipped",
+    );
+  });
+
+  test("skip_import is untouched: a proofs/ reference with no refs/ locus stays a silent skip", () => {
+    const s = snap({
+      "proofs/lem-z/externals/GT-z-1.json": JSON.stringify({
+        name: "GT-z-1",
+        source: "Imports the already-validated result at proofs/lem-other-validated; no new quote needed.",
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(0);
+    expect(formatCoverageLine(result.coverage[0]!)).toContain("1 import-skipped");
+  });
+
+  test("a whitespace-only quoted run next to a refs/ locus is still 'no quote' ⇒ ERROR", () => {
+    const s = snap({
+      "proofs/lem-i3/externals/GT-i3-2.json": JSON.stringify({
+        name: "GT-i3-2",
+        source: 'See refs/kitaev/defs.tex:120 for "   " the definition.',
+      }),
+    });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // Coverage line — the four-way split (checked/total, failed, import-skipped, no-quote-skipped)
 // must never collapse two skip reasons into one number (Gate 3 Divergences, message-only).
 // ---------------------------------------------------------------------------------------------
@@ -421,9 +599,8 @@ describe("refsGate — coverage line (four-way split, never merged)", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Corpus fixtures — corpus/refs/refs-01..07, loaded directly (see file header: this bypasses
-// src/store/snapshot-load.ts's current refs/<source-id>/* payload gap so refs.ts's own correctness is
-// verified 7/7 independent of that shared-file issue).
+// Corpus fixtures — corpus/refs/refs-01..11, loaded through this file's own recursive reader
+// (see the file header: a second, independent loading path over the same trees).
 // ---------------------------------------------------------------------------------------------
 
 function loadFullSnapshot(root: string): RepoSnapshot {

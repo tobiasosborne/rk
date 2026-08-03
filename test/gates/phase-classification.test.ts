@@ -105,4 +105,29 @@ describe("Gate 3 (refs) structural classification", () => {
     const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
     expect(structuralOf(findings, "ABSENT")).toBeFalsy();
   });
+
+  // rk-wkzh / P2: both new checks join the NON-STRUCTURAL column, the same column Checks 2-4
+  // already occupy (docs/gate-contracts.md "Phase matrix", Gate 3 row). They are byte-verification
+  // /attribution claims about a quote, not "this file cannot be reasoned about at all" faults.
+  test("check 6 (quote matched OUTSIDE the claimed locus) is NON-structural", () => {
+    const payload = ["alpha", "beta", "the map is idempotent on X", "gamma"].join("\n");
+    const snap = linkerSnap({
+      "proofs/ws/externals/ext.json": JSON.stringify({
+        source: 'See refs/src/paper.md:900. VERBATIM "the map is idempotent on X" here.',
+      }),
+      "refs/src/paper.md": payload,
+    });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(findings).toHaveLength(1);
+    expect(structuralOf(findings, "OUTSIDE the claimed locus")).toBeFalsy();
+  });
+
+  test("check 7 (refs locus named, no extractable quote) is NON-structural", () => {
+    const snap = linkerSnap({
+      "proofs/ws/externals/ext.json": JSON.stringify({ source: "See refs/src/paper.md:12 for the bound." }),
+    });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(findings).toHaveLength(1);
+    expect(structuralOf(findings, "no double-quoted verbatim text")).toBeFalsy();
+  });
 });
