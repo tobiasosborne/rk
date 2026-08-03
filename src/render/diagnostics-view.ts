@@ -2,10 +2,14 @@
 // side): a structurally incomplete or degraded projection must never render as a complete report.
 // src/store/build-graph.ts's `BuildGraphResult.diagnostics` (the join lane's landed producer-side
 // contract) carries two DISTINCT concerns this module renders:
-//   1. STRUCTURAL LOSS (`structuralLoss`: registry shards skipped for a structural parse reason,
-//      malformed raw fr log lines) — this is not a degraded-but-usable read, it is DATA MISSING
-//      from the projection entirely. `rk render`/`rk graph` (src/cli/render.ts, src/cli/graph.ts)
-//      REFUSE to emit any output when `isStructurallyComplete` is false, naming every entry here.
+//   1. STRUCTURAL LOSS (`structuralLoss` — FOUR classes: registry shards skipped for a structural
+//      parse reason, malformed raw fr log lines, problems making `.rk/retractions.jsonl`
+//      untrustworthy, and unparseable `.beads/issues.jsonl` lines) — this is not a
+//      degraded-but-usable read, it is DATA MISSING from the projection entirely. `rk render`/`rk
+//      graph` (src/cli/render.ts, src/cli/graph.ts) REFUSE to emit any output when
+//      `isStructurallyComplete` is false, naming every entry here. LB4 (2026-08-03) added the last
+//      two: the third was counted producer-side but unnameable here, so the refusal enumerated
+//      nothing; the fourth was not treated as loss at all.
 //   2. SOURCE STATUS (`sources`: was af/fr/bd read via its authoritative export, a reduced-fidelity
 //      fallback reader, or not present at all) — THREE distinct states, never conflated:
 //        - authoritative ("export"/"read"): the source was engaged and read for real.
