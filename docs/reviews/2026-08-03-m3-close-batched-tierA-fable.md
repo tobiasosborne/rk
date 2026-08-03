@@ -185,6 +185,61 @@ wiring in production, the honest single-vendor preflight (rk-id1's ask — bead
 closeable), opus decomposition past the attempt-12 starvation point, and family
 fail-closed live (accepts refused same-family on the load-bearing path).
 
-## Repair-wave outcomes (completed post-wave)
+## Repair-wave outcomes (completed post-wave, same day)
 
-(appended after mechanical verification)
+Two Opus lanes (rk-m3repair-drive: LB1/LB2/LB9; rk-m3repair-gates: LB3-LB8), merged
+as rk-m3repair-wave, mechanically verified by the orchestrator-reviewer: full test
+suite + selftest re-run independently in each lane worktree AND on the merged branch;
+every LB's pinning test located and its RED-first/perturbation evidence checked
+against the lane transcripts.
+
+- LB1 FIXED (437f15e): per-target hash binding (verifyOneNode takes the round's byId
+  view; dispatchRound carries reviewedId); truthful two-cause discard message;
+  attempts charge the dispatched node on stale-discard AND applied-challenge paths.
+  Pinned: test/drive/driver-run-round.test.ts:207-290. Adjudicated scope calls, both
+  ACCEPTED: (a) attempts fix extends to the applied-challenge path — same
+  undispatched-node starvation, same repair line; (b) a cross-node challenge is NOT
+  discarded when only the reviewed node's bytes moved — fail-safe direction (a
+  challenge never promotes; the reviewed node re-dispatches against new bytes).
+- LB2 FIXED (e8bba51): persistBalloonCounter on the unclassified path (count only,
+  never a guessed class); classification-dispatcher failure loud at preflight, not
+  fatal; WORKERS_CONFIG_EXAMPLE shows verifier.l5; Check 15 prose repaired.
+- LB9 FIXED (9326a6a): three worker-contract passages state the actual mechanisms
+  (fold-to-exit-0 terminality via bindVerdicts/extractProofContent, rk-wr58 cited;
+  hash-CAS as the real duplicate defense with its limits stated; both verifier-repair
+  triggers), plus two echoes of the false claim.
+- LB8 FIXED (6d71910): four inverted contract rows corrected to the enforced ERROR,
+  citing blockers 5a/5c.
+- LB3 FIXED (e6f98b6): checkRetractionVeto — unconditional ERROR per (shard, live
+  retraction), both domains, no status list, no L5-store dependence; S/J coverage
+  ("D drove a Check 16 veto ERROR"); fixtures linker-45 (RED-first: pre-fix 0
+  findings/exit 0 demonstrated) and linker-46 (fail-closed half); Check 8/14 findings
+  re-worded as propagation/promotion consequences of the veto.
+- LB4 FIXED (e4d98cb+e0383cb): StructuralLoss gains retractionStoreProblems AND
+  bdMalformedLines; one structuralLossCount derivation; bd malformed lines are
+  first-class loss with totalRecords made load-bearing via an asserted identity;
+  Gate 7 prose four classes.
+- LB5 FIXED (6d45d90): structural:true on retraction/L5 store-integrity ERRORs (not
+  on promotion/demotion semantics findings); phase-matrix row split
+  integrity-vs-semantics; classification tests for Checks 13/14×2/16×2 and Gate 7×3
+  with expectPresent anti-vacuity; doc+code+tests one commit.
+- LB6 FIXED (f4d3cdf): explicitly-configured-but-absent status table is ERROR via
+  overriddenKeys threaded through the config edge (purity preserved); three-way
+  source state on coverage; fixture provenance-24 is the sharpest red case (override
+  set to exactly the default value). Label-above-midrule parsing kept as
+  characterized prior art in Known limitations. Note: _configValidation gained
+  overriddenKeys — internal side channel, not user config surface; flagged as
+  Tier-A-adjacent contract shape for the acceptance report.
+- LB7 FIXED (a39b9f3): loadFrResiduals returns a fidelity record; cause-3 gating in
+  classifyRegen (fr!=absent); rk render prints it; no-ledger-fallback posture kept.
+
+Corpus 132→135 (linker-45/46, provenance-24). Merged-wave gates: full suite + selftest
+green (figures in HANDOFF). Lane disclosures accepted into the record: one mid-lane
+git-checkout recovery with work re-applied and re-verified before commit (gates lane,
+no loss on the branch); pre-existing shard-cap overages grew minimally
+(cli/render.ts 356→358, provenance.ts 303→328) — extraction queued under rk-tbg's
+occasional-sweep ruling, not absorbed into this wave.
+
+**M3 acceptance: the review's landing-blocker gate is CLEARED.** Residual M3-close
+items (SC4 comparison, auto-prove.sh disposition, acceptance report) tracked in
+HANDOFF; follow-up beads batched to the M4-boundary review.
