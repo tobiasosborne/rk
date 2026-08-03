@@ -24,6 +24,8 @@ import {
   liveDispatchVerify,
   resolveModel,
   DEFAULT_MODEL_BY_BACKEND,
+  DEFAULT_SESSION_TIMEOUT_MS,
+  DEFAULT_TURN_TIMEOUT_MS,
   toDispatchedTurn,
   extractSingleJsonObject,
 } from "../../src/drive/driver-live";
@@ -90,6 +92,91 @@ describe("createLiveDispatcher — preflight loudness", () => {
     const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "claude"), []); // "claude" named, not registered
     const result = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "shared" });
     expect(result.ok).toBe(false);
+  });
+});
+
+// rk-k0m1 (P2, RUN-REPORT-12): the turn/session timeout ceilings a live turn actually runs under.
+// The DEFAULT_* constants stay the LAST fallback; a configured value must reach the backend call
+// itself (spec.timeoutMs / item.timeoutMs), not merely a log line.
+describe("createLiveDispatcher — turn/session timeouts reach the backend call", () => {
+  /** Records the timeoutMs each backend call was handed. */
+  function timeoutRecordingBackend() {
+    const seen: { session?: number; turns: number[] } = { turns: [] };
+    const backend: WorkerBackend = {
+      name: "fake",
+      modelFamily: "claude",
+      capabilities: { sessionResume: true },
+      async createSession(spec: SessionSpec) {
+        seen.session = spec.timeoutMs;
+        return { sessionId: "session-1" };
+      },
+      async runTurn(_sessionId: string, item: TurnItem) {
+        seen.turns.push(item.timeoutMs);
+        return { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+      },
+    };
+    return { backend, seen };
+  }
+
+  test("nothing configured: the DEFAULT_* constants are what the backend sees (behavior unchanged by this bead)", async () => {
+    const { backend, seen } = timeoutRecordingBackend();
+    const registry = new BackendRegistry<WorkerBackend>(workersConfig("verifier", "hard", "fake"), [backend]);
+    const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "s", ...registry.timeoutsFor("verifier", "hard") });
+    if (!created.ok) throw new Error("expected ok");
+    await created.dispatcher.dispatch("n1", "prompt");
+    expect(seen.session).toBe(DEFAULT_SESSION_TIMEOUT_MS);
+    expect(seen.turns).toEqual([DEFAULT_TURN_TIMEOUT_MS]);
+  });
+
+  test("a per-assignment turnTimeoutMs/sessionTimeoutMs reaches createSession and every runTurn", async () => {
+    const { backend, seen } = timeoutRecordingBackend();
+    const registry = new BackendRegistry<WorkerBackend>(
+      { assignments: { verifier: { hard: { backend: "fake", fallbacks: [], turnTimeoutMs: 600_000, sessionTimeoutMs: 300_000 } } } },
+      [backend],
+    );
+    const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "s", ...registry.timeoutsFor("verifier", "hard") });
+    if (!created.ok) throw new Error("expected ok");
+    await created.dispatcher.dispatch("n1", "prompt");
+    await created.dispatcher.dispatch("n2", "prompt");
+    expect(seen.session).toBe(300_000);
+    expect(seen.turns).toEqual([600_000, 600_000]);
+  });
+
+  test("a workers-LEVEL default applies when the assignment names none", async () => {
+    const { backend, seen } = timeoutRecordingBackend();
+    const registry = new BackendRegistry<WorkerBackend>(
+      { turnTimeoutMs: 240_000, assignments: { verifier: { hard: { backend: "fake", fallbacks: [] } } } },
+      [backend],
+    );
+    const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "s", ...registry.timeoutsFor("verifier", "hard") });
+    if (!created.ok) throw new Error("expected ok");
+    await created.dispatcher.dispatch("n1", "prompt");
+    expect(seen.turns).toEqual([240_000]);
+    // sessionTimeoutMs was configured at NEITHER level -- still the default, per field.
+    expect(seen.session).toBe(DEFAULT_SESSION_TIMEOUT_MS);
+  });
+
+  test("one ROLE's override never leaks into another role's dispatcher built from the same registry", async () => {
+    const prover = timeoutRecordingBackend();
+    const verifier = timeoutRecordingBackend();
+    const proverBackend = { ...prover.backend, name: "p" };
+    const verifierBackend = { ...verifier.backend, name: "v" };
+    const registry = new BackendRegistry<WorkerBackend>(
+      {
+        assignments: {
+          prover: { hard: { backend: "p", fallbacks: [], turnTimeoutMs: 900_000 } },
+          verifier: { hard: { backend: "v", fallbacks: [] } },
+        },
+      },
+      [proverBackend, verifierBackend],
+    );
+    const p = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: "c1", model: "m", sharedContext: "s", ...registry.timeoutsFor("prover", "hard") });
+    const v = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId: "c1", model: "m", sharedContext: "s", ...registry.timeoutsFor("verifier", "hard") });
+    if (!p.ok || !v.ok) throw new Error("expected ok");
+    await p.dispatcher.dispatch("n1", "prompt");
+    await v.dispatcher.dispatch("n1", "prompt");
+    expect(prover.seen.turns).toEqual([900_000]);
+    expect(verifier.seen.turns).toEqual([DEFAULT_TURN_TIMEOUT_MS]);
   });
 });
 

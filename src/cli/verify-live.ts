@@ -18,7 +18,7 @@ import { BackendRegistry, type WorkersConfig } from "../drive/backend-registry";
 import type { WorkerBackend } from "../drive/backend-types";
 import { ClaudeBackend } from "../drive/backend-claude";
 import { CodexBackend } from "../drive/backend-codex";
-import { createLiveDispatcher, describeMissingWorkersConfig, familyForBackend, resolveModel } from "../drive/driver-live";
+import { createLiveDispatcher, describeMissingWorkersConfig, familyForBackend, resolveModel, DEFAULT_SESSION_TIMEOUT_MS, DEFAULT_TURN_TIMEOUT_MS } from "../drive/driver-live";
 import { parseCampaignBudget } from "./verify-live-budget";
 import { buildSharedContext } from "../drive/driver-prompts";
 import { loadGateConfig } from "../store/config-load";
@@ -112,7 +112,13 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // rk-7hi: config's per-assignment model > global --model > default (driver-live.ts's resolveModel).
   const model = resolveModel(registry, "verifier", "hard", opts.model);
 
-  const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId, model, sharedContext });
+  // rk-k0m1: config's per-assignment timeouts > workers-level defaults > driver-live.ts's DEFAULT_*
+  // (`BackendRegistry.timeoutsFor`, resolved per FIELD). Read once per (role, tier) and spread into
+  // that dispatcher alone — the prover's raised ceiling must never stretch the verifier's, which is
+  // why this is three separate lookups rather than one run-wide value.
+  const verifierTimeouts = registry.timeoutsFor("verifier", "hard");
+  const proverTimeouts = registry.timeoutsFor("prover", "hard");
+  const created = createLiveDispatcher({ registry, role: "verifier", tier: "hard", claimId, model, sharedContext, ...verifierTimeouts });
   if (!created.ok) {
     out.log(created.reason);
     return 1;
@@ -123,7 +129,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // prover-ready node needs one, and starting a spend that cannot make prover progress is the exact
   // half-wired hole rk-gn4 fixes. The prover may use a different backend/model than the verifier.
   const proverModel = resolveModel(registry, "prover", "hard", opts.model);
-  const proverCreated = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: `${claimId}-prover`, model: proverModel, sharedContext });
+  const proverCreated = createLiveDispatcher({ registry, role: "prover", tier: "hard", claimId: `${claimId}-prover`, model: proverModel, sharedContext, ...proverTimeouts });
   if (!proverCreated.ok) {
     out.log(proverCreated.reason);
     return 1;
@@ -132,7 +138,7 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   // (a different tier -- l5, "cheap" -- is a different isolation tuple than the hard-tier verify
   // session above), but still benefits from knowing the conjecture, so it reuses the SAME
   // sharedContext rather than an empty one.
-  const classCreated = createLiveDispatcher({ registry, role: "verifier", tier: "l5", claimId: `${claimId}-balloon`, model, sharedContext });
+  const classCreated = createLiveDispatcher({ registry, role: "verifier", tier: "l5", claimId: `${claimId}-balloon`, model, sharedContext, ...registry.timeoutsFor("verifier", "l5") });
 
   // rk-9zd (Tier A, cross-vendor input): resolve BOTH sides' model families from the RESOLVED
   // BACKEND INSTANCES' own registry-declared `modelFamily` — never re-derived from a backend name
@@ -161,6 +167,13 @@ export async function runLiveVerify(root: string, node: RegistryNode, out: Out, 
   out.log(`rk verify --af ${node.id} --live: preflight`);
   out.log(`  backend resolved: verifier/hard -> '${created.dispatcher.backendName}' (model '${model}', family '${verifierFamily.family}')`);
   out.log(`  backend resolved: prover/hard -> '${proverCreated.dispatcher.backendName}' (model '${proverModel}', family '${proverFamily.family}')`);
+  // rk-k0m1: the EFFECTIVE ceilings, printed before any spend — an exit-10 turn timeout is only
+  // legible if the operator can see which number the turn actually ran under (and confirm a config
+  // override took effect, rather than silently keeping the 120s default they meant to raise).
+  out.log(
+    `  turn timeout: verifier/hard ${verifierTimeouts.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS}ms, prover/hard ${proverTimeouts.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS}ms; ` +
+      `session-create timeout: ${verifierTimeouts.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS}ms / ${proverTimeouts.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS}ms`,
+  );
   out.log(`  ${describeLoadBearing(membership)}`);
   // rk-id1: the single-vendor consequence, stated BEFORE any spend. Weakens nothing — it is the tool
   // saying what its own rule already implies for this roster.

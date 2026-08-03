@@ -11,7 +11,7 @@ import { verifyCommand } from "../src/cli/verify";
 import type { AfParseResult, AfWorkspaceView } from "../src/drive/driver-af";
 import type { SessionSpec, TurnItem, WorkerBackend } from "../src/drive/backend-types";
 import type { WorkersConfig } from "../src/drive/backend-registry";
-import { DEFAULT_MODEL_BY_BACKEND } from "../src/drive/driver-live";
+import { DEFAULT_MODEL_BY_BACKEND, DEFAULT_SESSION_TIMEOUT_MS, DEFAULT_TURN_TIMEOUT_MS } from "../src/drive/driver-live";
 
 function usageLine(o: { contractId: string; claimId: string; nodeId: string; sessionId: string; usage: { input: number; output: number; cache_read: number; cache_creation: number } }): string {
   return JSON.stringify({ kind: "usage", at: "2026-07-19T00:00:00Z", role: "verifier", ...o });
@@ -282,6 +282,111 @@ describe("rk verify --af --live (rk-7hi): per-assignment model reaches EACH back
     // ...while the verifier (no per-assignment model) falls back to the global --model flag.
     expect(seenModels.codex).toBe("gpt-5.1-codex-explicit");
     expect(lines.join("\n")).toContain("backend resolved: verifier/hard -> 'codex' (model 'gpt-5.1-codex-explicit', family 'gpt')");
+  });
+});
+
+/** rk-k0m1: like `fakeNamedBackend`, but records the TIMEOUTS each backend call received --
+ * `spec.timeoutMs` for the session-creating turn 1 and every `item.timeoutMs` after it -- keyed by
+ * backend name, so a per-role override can be shown to reach that role's calls and no other's. */
+function fakeTimeoutBackend(name: string, seen: Record<string, { session?: number; turns: number[] }>, modelFamily: WorkerBackend["modelFamily"]): WorkerBackend {
+  seen[name] = { turns: [] };
+  return {
+    name,
+    modelFamily,
+    capabilities: { sessionResume: true },
+    async createSession(spec: SessionSpec) {
+      seen[name]!.session = spec.timeoutMs;
+      return { sessionId: `session-${name}` };
+    },
+    async runTurn(_sessionId: string, item: TurnItem) {
+      seen[name]!.turns.push(item.timeoutMs);
+      return { exit: 0, usage: { input: 1, output: 1, cache_read: 0, cache_creation: 0 }, rawText: JSON.stringify({ verdict: { outcome: "accept" }, justification: "ok" }) };
+    },
+  };
+}
+
+// rk-k0m1 (P2, RUN-REPORT-12): the codex prover's full-decomposition turn on a hard lemma timed out
+// at exactly the hard-coded 120s twice (exit 10 -- a correct loud skip), and the operator had no way
+// to raise the ceiling. `.rk/config.json` can now express it PER ASSIGNMENT.
+describe("rk verify --af --live (rk-k0m1): configured timeouts reach EACH role's backend calls", () => {
+  const dirs: string[] = [];
+  afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  test("prover/hard turnTimeoutMs raised to 900s; the verifier -- which configured none -- still runs at the 120s default", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seen: Record<string, { session?: number; turns: number[] }> = {};
+    const workers: WorkersConfig = {
+      assignments: {
+        prover: { hard: { backend: "claude", fallbacks: [], turnTimeoutMs: 900_000, sessionTimeoutMs: 300_000 } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } },
+      },
+    };
+    const { out } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: proverAndVerifierReadyWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeTimeoutBackend("claude", seen, "claude"), fakeTimeoutBackend("codex", seen, "gpt")],
+      preflightAf: () => ({ ok: true }),
+    });
+    expect(seen.claude!.turns.length).toBeGreaterThan(0);
+    expect(seen.claude!.turns.every((t) => t === 900_000)).toBe(true);
+    expect(seen.claude!.session).toBe(300_000);
+    // the verifier role is untouched by the prover's override -- the whole point of per-ASSIGNMENT.
+    expect(seen.codex!.turns.length).toBeGreaterThan(0);
+    expect(seen.codex!.turns.every((t) => t === DEFAULT_TURN_TIMEOUT_MS)).toBe(true);
+    expect(seen.codex!.session).toBe(DEFAULT_SESSION_TIMEOUT_MS);
+  });
+
+  test("a workers-LEVEL turnTimeoutMs is the campaign-wide default both roles inherit, and a per-assignment value still outranks it", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seen: Record<string, { session?: number; turns: number[] }> = {};
+    const workers: WorkersConfig = {
+      turnTimeoutMs: 240_000,
+      assignments: {
+        prover: { hard: { backend: "claude", fallbacks: [], turnTimeoutMs: 900_000 } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } },
+      },
+    };
+    const { out } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: proverAndVerifierReadyWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeTimeoutBackend("claude", seen, "claude"), fakeTimeoutBackend("codex", seen, "gpt")],
+      preflightAf: () => ({ ok: true }),
+    });
+    expect(seen.claude!.turns.every((t) => t === 900_000)).toBe(true);
+    expect(seen.codex!.turns.every((t) => t === 240_000)).toBe(true);
+  });
+
+  test("no timeouts configured anywhere: every call still runs at the DEFAULT_* constants (unchanged behavior)", async () => {
+    const root = tmpRoot(); dirs.push(root);
+    writeShard(root, "lem-a", { af: "seeded", workspace: "proofs/lem-a" });
+    const seen: Record<string, { session?: number; turns: number[] }> = {};
+    const workers: WorkersConfig = {
+      assignments: {
+        prover: { hard: { backend: "claude", fallbacks: [] } },
+        verifier: { hard: { backend: "codex", fallbacks: [] } },
+      },
+    };
+    const { out } = capture();
+    await verifyCommand(["--af", "lem-a", "--root", root, "--live", "--max-turns", "5", "--max-campaign-tokens", "1000000"], out, {
+      afCommand: ABSENT,
+      frCommand: ABSENT,
+      readWorkspace: proverAndVerifierReadyWorkspace(),
+      loadWorkersConfig: async () => workers,
+      backends: [fakeTimeoutBackend("claude", seen, "claude"), fakeTimeoutBackend("codex", seen, "gpt")],
+      preflightAf: () => ({ ok: true }),
+    });
+    for (const name of ["claude", "codex"]) {
+      expect(seen[name]!.session).toBe(DEFAULT_SESSION_TIMEOUT_MS);
+      expect(seen[name]!.turns.every((t) => t === DEFAULT_TURN_TIMEOUT_MS)).toBe(true);
+    }
   });
 });
 
