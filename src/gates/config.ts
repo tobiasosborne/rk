@@ -103,16 +103,11 @@ export interface GateConfig {
    * `BackendRegistry.chainFor`/`resolve` treat an absent (role,tier) entry as "nothing configured,"
    * never a silent default backend choice.
    *
-   * rk-k0m1 (P2, RUN-REPORT-12): besides `assignments`, `workers` carries two OPTIONAL campaign-wide
-   * timeout defaults — `turnTimeoutMs` and `sessionTimeoutMs` — and each
-   * `assignments.<role>.<tier>` entry may override either one for that assignment alone.
-   * Precedence, per field: per-assignment > `workers`-level > src/drive/driver-live.ts's
-   * `DEFAULT_TURN_TIMEOUT_MS`/`DEFAULT_SESSION_TIMEOUT_MS` (both 120_000). Values are positive
-   * integer milliseconds; a present-but-invalid one is a loading-edge ERROR that drops the whole
-   * `workers` field, never a silent fallback to the 120s ceiling the operator meant to raise
-   * (corpus fixture `config-05`). Example:
-   * `{"workers": {"turnTimeoutMs": 300000,
-   *   "assignments": {"prover": {"hard": {"backend": "codex", "turnTimeoutMs": 900000}}}}}`. */
+   * rk-k0m1 (P2, RUN-REPORT-12): `workers` also carries OPTIONAL `turnTimeoutMs`/`sessionTimeoutMs`
+   * (positive integer ms), campaign-wide at the `workers` level and overridable per
+   * `assignments.<role>.<tier>`; per-field precedence per-assignment > `workers`-level >
+   * driver-live.ts's `DEFAULT_*`. Present-but-invalid drops the whole field like any other
+   * malformation (fixture `config-05`) — see docs/gate-contracts.md's "Worker timeouts". */
   workers?: WorkersConfig;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
