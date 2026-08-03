@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/retraction.v1.json",
+  "title": "rk retraction record (v1) — one line of .rk/retractions.jsonl",
+  "description": "A RETRACTION: an out-of-band demotion of an item whose artifact bytes are UNCHANGED. This is the one validity event rk's edit-triggered staleness machinery structurally cannot see — every other freshness rule in the system (schemas/verdict.v1.json's pinned hash domains, src/drive/l5-store.ts's stale-on-edit rule) answers the question 'did the artifact change since it was checked?', and a retraction is precisely the case where the answer is no and the claim is nevertheless withdrawn. THE INCIDENT (CLAUDE.md L2, real and dated): AISM 2026-07-28 — `lem-stage1-approximate-group-laws` and `lem-stage1-smooth-unitary-operations` were af-validated on 2026-07-27, then found DEFECTIVE by an independent sweep and retracted by hand-editing the shard's frontmatter and adding a prose RETRACTED paragraph. Three of the four layers still reported pass (af ledger's last event `node_validated`, `export.md` `**Status:** validated`, the oracle verdict file `\"result\":\"pass\"`), because prose is not a join key and no gate checked that direction; see docs/memos/2026-08-03-aism-postmortem/03-datamodel.md, 'Drift & inconsistency found' item 1, and the ratified plan docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1. The ledger is a SIBLING of `.rk/l5-verdicts.jsonl`, never interleaved into it: a retraction carries no verifier identity, no tier, and no justification-of-a-check, and must be issuable by a human or an audit without impersonating a worker turn — so it gets its own append-only file, its own ordinal chain, and its own fail-closed health assessment (src/drive/retraction-store.ts's `retractionStoreHealthy`, mirroring `l5StoreHealthy`). One JSON object per line, no trailing content; src/drive/retraction-record.ts is the runtime validator enforcing every constraint here, and src/drive/retraction-store-io.ts is the ONE fs edge that appends (appendFileSync only — a truncating rewrite of this file is how a retraction silently disappears).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "ordinal", "itemId", "contentHash", "hashDomain", "retractedBy", "reason"],
+  "properties": {
+    "schemaVersion": {
+      "const": "1",
+      "description": "Consumers must check this before parsing the rest of the record; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Same convention as schemas/verdict.v1.json and schemas/graph.v1.json. Note the camelCase spelling: this file's records are the STORE's own on-disk shape (matching `.rk/l5-verdicts.jsonl`'s `schemaVersion`), not the snake_case `schema_version` of the driver-constructed verdict document."
+    },
+    "ordinal": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Ledger position, assigned by the writer edge at append time: 0-based, strictly increasing, contiguous, never reused (`1 + max-on-disk`, never a line count). The ONLY field the store's queries use to break ties between two records that both bind to the same item; record i in file order MUST carry ordinal i, and any deviation — duplicate, gap, reorder, truncated prefix — poisons the WHOLE store (src/drive/retraction-store.ts's `assessRetractionOrdinalChain`). On this ledger a silently dropped record is a silently un-retracted claim, which is why the chain check is fail-closed rather than advisory."
+    },
+    "itemId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The retracted item's registry id — the same id `.rk/l5-verdicts.jsonl` records against and the registry shard's own `id:` frontmatter field. An id naming no registry node is never silently dropped: at the graph level it lands in graph.v1's first-class `unresolved` bucket with `edge:\"retraction\"`."
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "The item's content hash AT RETRACTION TIME, in `hashDomain`. THE BINDING: the retraction is LIVE iff the item's CURRENT hash still equals this value in the same domain. Editing the artifact changes the hash, the record stops binding, and ordinary staleness semantics take over — which loses nothing, because every verdict bound to the old bytes is stale too and a fresh verification is required regardless. There is no un-retract record and no tombstone: like verdict staleness, liveness is COMPUTED at read time from a hash comparison, never stored as a flag."
+    },
+    "hashDomain": {
+      "enum": ["l5-shard-bytes", "af-canonical"],
+      "description": "Which of schemas/verdict.v1.json's TWO PINNED hash domains `contentHash` lives in. `l5-shard-bytes` is that schema's `l5ContentHash` domain (lowercase hex SHA-256 of the RAW shard-file bytes, no normalization) — what Gate 2's L5-promotion check re-derives from its snapshot. `af-canonical` is that schema's `hardContentHash` domain (../vibefeld's own `Node.ComputeContentHash()` field concatenation) — what the af-tier monotone-trust availability check answers to. A retraction binds in EXACTLY ONE domain and the two are NEVER compared to each other (verdict.v1's own words: 'the two must never be compared to each other'); a same-valued hash in the wrong domain is not a match. A live `l5-shard-bytes` retraction demotes L5 promotion; a live `af-canonical` retraction makes the item unavailable to dependents' monotone-trust check. Extending this enum is a schema_version bump plus a fixture, never a silent string addition. KNOWN LIMITATION (v1, documented rather than papered over): rk cannot presently observe an item's CURRENT `af-canonical` hash — `af export --graph json` does not carry a node content hash through src/store/af-load.ts's reader — so an `af-canonical` retraction is treated as live until rk learns to read that hash. That is the fail-closed direction (a standing demotion outlives an unobservable edit) and it is recorded on the graph edge as `currentHashObserved: false` rather than presented as a confirmed hash match."
+    },
+    "retractedBy": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who issued the retraction — free text, e.g. \"TJO\" or \"audit:2026-07-28-independent-sweep\". Non-blank is structural, not cosmetic: an unattributed retraction is not auditable. Deliberately NOT the verdict document's structured `verifier` object — a retraction is not a worker turn and must not borrow a worker's provenance shape (see this file's top-level description)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the item was retracted. Structurally checked (non-blank) exactly as a verdict's `justification` is — a retraction with no stated reason is the prose-only, unqueryable failure mode this record type replaces. Rendered verbatim on the retraction conflict record so a reader sees the withdrawal AND its stated grounds, never one without the other."
+    },
+    "supersedesVerdictOrdinal": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional: the `.rk/l5-verdicts.jsonl` ordinal of the verdict this retraction withdraws, when the issuer knows it. DIAGNOSTIC ONLY — no query resolves liveness or promotion by chasing this pointer (the hash comparison is the whole decision), so a wrong or absent value can never change a validity answer. It exists so an auditor reading the two ledgers side by side can find the withdrawn verdict without replaying both files."
+    },
+    "appendedAt": {
+      "type": "string",
+      "description": "Optional ISO-8601 wall-clock timestamp, set at the fs edge only (src/drive/retraction-store-io.ts; the pure core never reads a clock — CLAUDE.md L3). Explicitly NON-IDENTITY: no liveness, ordering, or promotion decision reads it — `ordinal` is the identity-relevant field. A record missing it (or carrying a bogus value) still round-trips and still participates correctly in every query."
+    }
+  }
+}
