@@ -206,6 +206,14 @@ export function retractionStoreFindings(facts: RetractionFacts): Finding[] {
   return facts.problems.map((p) => ({
     severity: "ERROR" as const,
     path: RETRACTION_STORE_PATH,
+    // LB5 (2026-08-03 M3-close review, reviewer ruling): a ledger/parse-integrity fault on THIS
+    // store is STRUCTURAL — the same class as a linker/defs/refs parse fault, per the Phase matrix's
+    // own "parse errors" bullet. Without it, `rk check` printed OK on a corrupt retraction ledger in
+    // exploration phase while `rk render` refused the same tree, and the stamped pre-commit hook
+    // runs the permissive surface. Note the split this flag draws: an UNREADABLE ledger blocks in
+    // both phases; what a READABLE ledger MEANS for a status (`checkRetractionVeto`) stays
+    // consolidation-weight non-structural.
+    structural: true,
     message:
       `retraction store integrity compromised — retraction status is unknowable, fail closed: ${p}` +
       ` (a corrupt line's own itemId cannot be read, so no item can be confirmed un-retracted)`,

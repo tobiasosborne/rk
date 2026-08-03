@@ -84,7 +84,15 @@ export function checkL5Promotion(
   const health = l5StoreHealthy(parsed);
   if (!health.healthy) {
     for (const p of health.problems) {
-      findings.push({ severity: "ERROR", path: L5_STORE_PATH, message: `L5 store integrity compromised — promotion poisoned, fail closed: ${p}` });
+      findings.push({
+        severity: "ERROR",
+        path: L5_STORE_PATH,
+        // LB5 (2026-08-03 M3-close review, reviewer ruling): STRUCTURAL — a ledger/parse-integrity
+        // fault, the same class the Phase matrix's "parse errors" bullet already names. See the
+        // split note in src/gates/linker-retraction.ts's `retractionStoreFindings`.
+        structural: true,
+        message: `L5 store integrity compromised — promotion poisoned, fail closed: ${p}`,
+      });
     }
   }
   // rk-0ehr / P1: a corrupt RETRACTION store poisons promotion identically. Its own per-problem
@@ -98,6 +106,13 @@ export function checkL5Promotion(
         findings.push({
           severity: "ERROR",
           path: l.path,
+          // LB5: STRUCTURAL. This finding's SUBJECT is a shard status, but its CAUSE is the
+          // parse-integrity fault above — it exists only because a ledger could not be read, and
+          // demoting it to WARN in exploration would leave the corruption's one shard-attributed
+          // consequence soft while its ledger-attributed sibling blocks. The ordinary
+          // promotion/demotion findings below (a readable store that simply does not support the
+          // label) stay non-structural: those are consolidation-weight status semantics.
+          structural: true,
           message: `'${l.id}' is labeled 'proved-mod-audit' but the ${store} is corrupt, so its promotion can no longer be confirmed — repair ${!health.healthy ? L5_STORE_PATH : RETRACTION_STORE_PATH} or demote`,
         });
       }
