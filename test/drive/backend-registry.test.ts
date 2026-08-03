@@ -51,6 +51,35 @@ describe("validateWorkersConfig — valid shapes", () => {
     const r = validateWorkersConfig({ assignments: {} });
     expect(r.ok).toBe(true);
   });
+
+  // rk-k0m1 (P2, RUN-REPORT-12): the per-assignment turn/session timeout overrides. Same optional-
+  // but-strict discipline as `model`: absent is legal, present-and-well-formed is threaded through.
+  test("well-formed per-assignment turnTimeoutMs/sessionTimeoutMs are accepted and threaded through", () => {
+    const r = validateWorkersConfig({
+      assignments: { prover: { hard: { backend: "codex", fallbacks: [], turnTimeoutMs: 600_000, sessionTimeoutMs: 300_000 } } },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.config.assignments.prover?.hard).toEqual({ backend: "codex", fallbacks: [], turnTimeoutMs: 600_000, sessionTimeoutMs: 300_000 });
+  });
+
+  test("well-formed workers-LEVEL turnTimeoutMs/sessionTimeoutMs are accepted (campaign-wide defaults)", () => {
+    const r = validateWorkersConfig({ assignments: {}, turnTimeoutMs: 240_000, sessionTimeoutMs: 180_000 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.config.turnTimeoutMs).toBe(240_000);
+    expect(r.config.sessionTimeoutMs).toBe(180_000);
+  });
+
+  test("the timeout fields stay optional -- an entry/config with neither carries neither key", () => {
+    const r = validateWorkersConfig({ assignments: { verifier: { hard: { backend: "codex" } } } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.config).not.toHaveProperty("turnTimeoutMs");
+    expect(r.config).not.toHaveProperty("sessionTimeoutMs");
+    expect(r.config.assignments.verifier?.hard).not.toHaveProperty("turnTimeoutMs");
+    expect(r.config.assignments.verifier?.hard).not.toHaveProperty("sessionTimeoutMs");
+  });
 });
 
 describe("validateWorkersConfig — malformed shapes are rejected, never partially applied", () => {
@@ -123,6 +152,37 @@ describe("validateWorkersConfig — malformed shapes are rejected, never partial
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("expected rejection");
     expect(r.issues.some((i) => i.message.includes("foo"))).toBe(true);
+  });
+
+  // rk-k0m1 red cases: a PRESENT-but-invalid timeout is a loading-edge ERROR, exactly like a blank
+  // `model` -- never a silent fallback to DEFAULT_TURN_TIMEOUT_MS (a zero/negative/NaN ceiling would
+  // otherwise make every turn time out instantly, or silently keep the 120s ceiling the operator
+  // believed they had raised).
+  test("a ZERO turnTimeoutMs is rejected", () => {
+    const r = validateWorkersConfig({ assignments: { prover: { hard: { backend: "codex", turnTimeoutMs: 0 } } } });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected rejection");
+    expect(r.issues.some((i) => i.path.endsWith(".turnTimeoutMs") && i.message.includes("positive"))).toBe(true);
+  });
+
+  test("a NEGATIVE, NON-INTEGER, NON-FINITE, STRING, or null timeout value is rejected at either level", () => {
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "600000", null, true]) {
+      const perAssignment = validateWorkersConfig({ assignments: { prover: { hard: { backend: "codex", turnTimeoutMs: bad } } } });
+      expect(perAssignment.ok).toBe(false);
+      const perAssignmentSession = validateWorkersConfig({ assignments: { prover: { hard: { backend: "codex", sessionTimeoutMs: bad } } } });
+      expect(perAssignmentSession.ok).toBe(false);
+      const topLevel = validateWorkersConfig({ assignments: {}, turnTimeoutMs: bad });
+      expect(topLevel.ok).toBe(false);
+      const topLevelSession = validateWorkersConfig({ assignments: {}, sessionTimeoutMs: bad });
+      expect(topLevelSession.ok).toBe(false);
+    }
+  });
+
+  test("an invalid workers-LEVEL timeout names its own path, not an assignment's", () => {
+    const r = validateWorkersConfig({ assignments: {}, sessionTimeoutMs: -5 });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected rejection");
+    expect(r.issues.some((i) => i.path === "workers.sessionTimeoutMs")).toBe(true);
   });
 
   test("fallbacks must be an array of non-blank strings", () => {
@@ -208,5 +268,37 @@ describe("BackendRegistry", () => {
   test("modelFor returns undefined for an unconfigured (role, tier) pair", () => {
     const registry = new BackendRegistry(config(), []);
     expect(registry.modelFor("reviewer", "hard")).toBeUndefined();
+  });
+
+  // rk-k0m1: timeoutsFor is the read side of the timeout overrides. Precedence, most specific
+  // first: per-assignment > workers-level > (absent -- driver-live.ts's DEFAULT_* then applies).
+  const timeoutConfig = (): WorkersConfig => ({
+    turnTimeoutMs: 240_000,
+    sessionTimeoutMs: 180_000,
+    assignments: {
+      prover: { hard: { backend: "codex", fallbacks: [], turnTimeoutMs: 600_000 } },
+      verifier: { hard: { backend: "claude", fallbacks: [] } },
+    },
+  });
+
+  test("timeoutsFor: the per-assignment value WINS over the workers-level default", () => {
+    const registry = new BackendRegistry(timeoutConfig(), []);
+    expect(registry.timeoutsFor("prover", "hard").turnTimeoutMs).toBe(600_000);
+  });
+
+  test("timeoutsFor: the workers-level default applies per-FIELD -- the same assignment's un-overridden sessionTimeoutMs still inherits it", () => {
+    const registry = new BackendRegistry(timeoutConfig(), []);
+    expect(registry.timeoutsFor("prover", "hard").sessionTimeoutMs).toBe(180_000);
+  });
+
+  test("timeoutsFor: a role with no override of its own inherits the workers-level defaults, and one role's override never leaks into another", () => {
+    const registry = new BackendRegistry(timeoutConfig(), []);
+    expect(registry.timeoutsFor("verifier", "hard")).toEqual({ turnTimeoutMs: 240_000, sessionTimeoutMs: 180_000 });
+  });
+
+  test("timeoutsFor: nothing configured anywhere yields an EMPTY object -- never a fabricated number (driver-live.ts's DEFAULT_* stays the one fallback)", () => {
+    const registry = new BackendRegistry(config(), []);
+    expect(registry.timeoutsFor("prover", "l5")).toEqual({});
+    expect(registry.timeoutsFor("reviewer", "hard")).toEqual({});
   });
 });
