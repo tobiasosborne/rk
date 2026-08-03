@@ -25,7 +25,7 @@ const doc: GraphDocument = {
     n("goal", "open", ["mid"]),
     n("alt-goal", "open", [], [["mid"]]),
   ],
-  edges: { af: [], bd: [], fr: [], report: [] },
+  edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
   unresolved: [],
   conflicts: [],
 };

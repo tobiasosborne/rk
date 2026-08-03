@@ -39,6 +39,8 @@ export function validateGraphDocument(doc: GraphDocument): GraphIssue[] {
   checkFrUnresolvedBucket(doc, issues);
   checkReportEdges(doc, nodeById, issues);
   checkReportUnresolvedBucket(doc, issues);
+  checkRetractionEdges(doc, nodeById, issues);
+  checkRetractionUnresolvedBucket(doc, issues);
   checkConflicts(doc, nodeById, issues);
   checkCanonicalForm(doc, issues);
 
@@ -124,6 +126,52 @@ function checkReportUnresolvedBucket(doc: GraphDocument, issues: GraphIssue[]): 
   }
 }
 
+/** rk-0ehr / P1: `edges.retraction`'s referential integrity, in BOTH directions. A `resolved: true`
+ * edge must name a real node (a retraction that claims to bind to a node that is not here is a
+ * broken join, not a withdrawn claim); a `resolved: false` edge must NOT name a real node (it
+ * should have resolved — silently leaving a live retraction unattached to the very node it
+ * withdraws is the exact failure this whole edge kind exists to prevent). */
+function checkRetractionEdges(doc: GraphDocument, nodeById: ReadonlyMap<string, unknown>, issues: GraphIssue[]): void {
+  for (const e of doc.edges.retraction) {
+    if (e.resolved && !nodeById.has(e.nodeId)) {
+      issues.push(err(`retraction edge references unknown node '${e.nodeId}' while claiming to be resolved`, e.nodeId));
+    }
+    if (!e.resolved && nodeById.has(e.nodeId)) {
+      issues.push(err(`retraction edge for '${e.nodeId}' is marked unresolved, but a node with that id IS in this document`, e.nodeId));
+    }
+  }
+}
+
+/** retraction's portion of the unresolved-bucket EXACT accounting, keyed on
+ * `(edge:"retraction", ref)` — `ref` is the record's `itemId`, and the COUNT must match, not
+ * merely be non-zero: two distinct retraction records naming the same unknown id are two distinct
+ * bucket rows, never collapsed into one (the same discipline the Tier A review's blocker 4 imposed
+ * on fr). Keyed on `ref` rather than `nodeId` because an unresolved retraction has no node — the
+ * id it names is precisely the thing that failed to resolve. */
+function checkRetractionUnresolvedBucket(doc: GraphDocument, issues: GraphIssue[]): void {
+  const bucketCounts = new Map<string, number>();
+  for (const u of doc.unresolved) {
+    if (u.edge !== "retraction") continue;
+    bucketCounts.set(u.ref, (bucketCounts.get(u.ref) ?? 0) + 1);
+  }
+  const edgeCounts = new Map<string, number>();
+  for (const e of doc.edges.retraction) {
+    if (e.resolved) continue;
+    edgeCounts.set(e.nodeId, (edgeCounts.get(e.nodeId) ?? 0) + 1);
+  }
+  for (const [ref, expected] of edgeCounts) {
+    const actual = bucketCounts.get(ref) ?? 0;
+    if (actual !== expected) {
+      issues.push(err(`unresolved retraction edge(s) for '${ref}': ${expected} on the edge array but ${actual} in the unresolved bucket (exact accounting, never a silent drop)`));
+    }
+  }
+  for (const [ref, actual] of bucketCounts) {
+    if (!edgeCounts.has(ref)) {
+      issues.push(err(`unresolved bucket has ${actual} retraction entr${actual === 1 ? "y" : "ies"} for '${ref}' with no matching unresolved retraction edge`));
+    }
+  }
+}
+
 /** The identity-bearing determinism invariant (PRD C5 / M2.1 acceptance: "Deterministic: sorted
  * keys ... stable node ordering"). Compares EVERY array in `doc` (nodes, all four edge arrays,
  * unresolved, conflicts) against its own canonical order — src/graph/serialize.ts's
@@ -145,6 +193,7 @@ function checkCanonicalForm(doc: GraphDocument, issues: GraphIssue[]): void {
   arrayOrder("edges.bd", doc.edges.bd, canonical.edges.bd);
   arrayOrder("edges.fr", doc.edges.fr, canonical.edges.fr);
   arrayOrder("edges.report", doc.edges.report, canonical.edges.report);
+  arrayOrder("edges.retraction", doc.edges.retraction, canonical.edges.retraction);
   arrayOrder("unresolved", doc.unresolved, canonical.unresolved);
   arrayOrder("conflicts", doc.conflicts, canonical.conflicts);
 }

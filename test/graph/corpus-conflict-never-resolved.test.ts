@@ -19,6 +19,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { buildGraphDocument } from "../../src/store/build-graph";
 import { canonicalizeGraphDocument } from "../../src/graph/serialize";
+import { GRAPH_SCHEMA_VERSION } from "../../src/graph/types";
 import type { ConflictKind, GraphDocument } from "../../src/graph/types";
 import { validateGraphDocument } from "../../src/graph/validate";
 
@@ -110,13 +111,14 @@ describe("never-auto-resolved property — every tamper on a real assembled conf
       const a = loadFixture("conflict-status-mismatch");
       const b = loadFixture("conflict-contract-mismatch");
       const combined = canonicalizeGraphDocument({
-        schema_version: "1",
+        schema_version: GRAPH_SCHEMA_VERSION,
         nodes: [...a.nodes, ...b.nodes],
         edges: {
           af: [...a.edges.af, ...b.edges.af],
           bd: [...a.edges.bd, ...b.edges.bd],
           fr: [...a.edges.fr, ...b.edges.fr],
           report: [...a.edges.report, ...b.edges.report],
+          retraction: [...a.edges.retraction, ...b.edges.retraction],
         },
         unresolved: [...a.unresolved, ...b.unresolved],
         conflicts: [...a.conflicts, ...b.conflicts],

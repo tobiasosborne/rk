@@ -5,6 +5,10 @@
 // review's four landing-blocker repairs (2026-07-19) — see docs/memos/2026-07-19-graph-schema-
 // v1.md's "review outcomes" section for the full rationale behind each discriminated union here.
 
+import type { RetractionHashDomain } from "../drive/retraction-record";
+
+export type { RetractionHashDomain };
+
 interface AfEdgeBase {
   nodeId: string;
   /** Copied from the owning node's own `workspace:` field — MUST be byte-identical to it
@@ -139,6 +143,46 @@ export interface ReportEdge {
   resolved: boolean;
 }
 
+/** registry↔retraction: the campaign's own `.rk/retractions.jsonl` ledger
+ * (schemas/retraction.v1.json), joined on `itemId` == registry `id` — the same key bd uses, and
+ * the one edge whose source rk itself writes. Added by rk-0ehr / P1 with `schema_version: "2"`
+ * (ratified plan docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1).
+ *
+ * EVERY record becomes an edge, resolved or not — the fr precedent (an `UnresolvedFrEdge` stays
+ * fully visible in `edges.fr`), not the bd one (which emits no edge when nothing matches). A
+ * retraction naming an unknown id is a real fact about the ledger that a consumer must be able to
+ * see; it additionally carries a companion `unresolved` bucket entry, never a silent drop. */
+export interface RetractionEdge {
+  /** The record's `itemId`. A registry node id when `resolved`; a dangling reference otherwise. */
+  nodeId: string;
+  /** The ledger position this record occupies — the retraction's identity within the ledger, and
+   * what breaks ties when one item carries several records. */
+  ordinal: number;
+  contentHash: string;
+  /** Which pinned hash domain `contentHash` lives in. The two are NEVER compared to each other
+   * (schemas/verdict.v1.json). Type-only mirror of src/drive/retraction-record.ts's own union —
+   * one definition, imported as a type so the graph layer takes no runtime dependency on the
+   * drive layer. */
+  hashDomain: RetractionHashDomain;
+  retractedBy: string;
+  reason: string;
+  /** True iff `nodeId` names a node in this document. */
+  resolved: boolean;
+  /** True iff the retraction still BINDS: the item's current hash in `hashDomain` equals
+   * `contentHash`, OR that current hash could not be observed at all (fail closed — see
+   * `currentHashObserved`). Resolved by the M2.2-style store reader (src/store/retraction-load.ts),
+   * exactly as `FrEdge.verdictFresh` is — the pure graph layer never hashes a file. A live
+   * retraction on a resolved node ALWAYS produces a `retraction-vs-status` conflict. */
+  live: boolean;
+  /** Whether the reader actually OBSERVED a current hash in this record's domain. False means
+   * `live` is a fail-closed default, not a confirmed match: rk cannot presently read an item's
+   * current `af-canonical` hash (`af export --graph json` carries no node content hash through
+   * src/store/af-load.ts), so an af-canonical retraction stands until it can. Recorded rather
+   * than hidden so a renderer can say "retracted; edit-release not verifiable" instead of
+   * implying a hash comparison that never happened. */
+  currentHashObserved: boolean;
+}
+
 interface UnresolvedRefBase {
   /** The raw reference text that failed to resolve — a workspace path (af), a registry id
    * (bd), a free-text artifact string (fr), or an anchor (report). */
@@ -158,7 +202,7 @@ export interface UnresolvedFrRef extends UnresolvedRefBase {
 }
 
 export interface UnresolvedOtherRef extends UnresolvedRefBase {
-  edge: "af" | "bd" | "report";
+  edge: "af" | "bd" | "report" | "retraction";
 }
 
 /** The first-class unresolved-reference bucket (PRD C5: "expect a real unresolved-reference
@@ -169,11 +213,15 @@ export interface UnresolvedOtherRef extends UnresolvedRefBase {
  * another cycle also failed to resolve; the two attempts stay distinct rows). */
 export type UnresolvedRef = UnresolvedFrRef | UnresolvedOtherRef;
 
-/** The four closed conflict kinds, settled by the Tier A review (memo question 1: a closed enum,
- * not an open string — "typo tolerance is the wrong tradeoff on a validity surface"; a new
- * conflict class needs a `schema_version` bump, not a silent vocabulary extension). */
+/** The closed conflict kinds, settled by the Tier A review (memo question 1: a closed enum, not an
+ * open string — "typo tolerance is the wrong tradeoff on a validity surface"; a new conflict class
+ * needs a `schema_version` bump, not a silent vocabulary extension). Four kinds in v1;
+ * `retraction-vs-status` is the FIFTH, added by rk-0ehr / P1 together with the mandated
+ * `schema_version: "1" -> "2"` bump and its corpus fixture (CLAUDE.md rule 10 — the enum being
+ * closed is precisely what makes an extension a compat event rather than a silent widening). */
 export const CONFLICT_KINDS = [
   "status-mismatch", "contract-mismatch", "taint-status-mismatch", "banked-without-oracle",
+  "retraction-vs-status",
 ] as const;
 export type ConflictKind = (typeof CONFLICT_KINDS)[number];
 
@@ -187,7 +235,7 @@ export type ConflictKind = (typeof CONFLICT_KINDS)[number];
  * (PRD C5). */
 export interface ConflictRecord {
   kind: ConflictKind;
-  edge: "af" | "bd" | "fr" | "report";
+  edge: "af" | "bd" | "fr" | "report" | "retraction";
   nodeId?: string;
   registryValue?: string;
   otherValue?: string;
@@ -199,4 +247,7 @@ export interface GraphEdges {
   bd: BdEdge[];
   fr: FrEdge[];
   report: ReportEdge[];
+  /** rk-0ehr / P1 (`schema_version: "2"`). The fifth join, and the only one whose source ledger rk
+   * writes itself. */
+  retraction: RetractionEdge[];
 }

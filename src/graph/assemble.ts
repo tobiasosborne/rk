@@ -15,6 +15,7 @@ import type { BdSourceRecord } from "./from-bd";
 import { buildBdEdges } from "./from-bd";
 import type { FrSourceRecord } from "./from-fr";
 import { buildFrEdges } from "./from-fr";
+import { buildRetractionEdges, type RetractionSourceRecord } from "./from-retraction";
 import { convertRegistry, type RegistrySkip } from "./from-registry";
 import { canonicalizeGraphDocument } from "./serialize";
 import { GRAPH_SCHEMA_VERSION, type ConflictRecord, type GraphDocument, type UnresolvedRef } from "./types";
@@ -25,6 +26,10 @@ export interface RawStoreInput {
   afRecords: readonly AfSourceRecord[];
   frRecords: readonly FrSourceRecord[];
   bdRecords: readonly BdSourceRecord[];
+  /** rk-0ehr / P1 (graph `schema_version: "2"`). Optional so every pre-P1 caller keeps compiling
+   * and producing the identical document minus an empty array — a repo with no
+   * `.rk/retractions.jsonl` and a caller that does not read it are the same projected state. */
+  retractionRecords?: readonly RetractionSourceRecord[];
 }
 
 /** Every input/output count, so a caller (the AISM read-through, a future `rk graph` CLI) can
@@ -43,6 +48,14 @@ export interface AssembleReport {
   frUnresolved: number;
   bdRecordsIn: number;
   bdEdges: number;
+  /** rk-0ehr / P1: the retraction ledger's own total-conversion accounting. `retractionsLive` is
+   * the subset still BINDING (the ones that produce a conflict and veto rendering) — reported
+   * separately because "N retractions on file" and "N claims currently withdrawn" are different
+   * numbers the moment anything has been edited since. */
+  retractionRecordsIn: number;
+  retractionResolved: number;
+  retractionUnresolved: number;
+  retractionsLive: number;
 }
 
 function conflictMessage(kind: string, registryValue: string | undefined, otherValue: string | undefined): string {
@@ -54,13 +67,14 @@ export function assembleGraphDocument(input: RawStoreInput): { doc: GraphDocumen
   const af = buildAfEdges(nodes, input.afRecords);
   const fr = buildFrEdges(nodes, input.frRecords);
   const bd = buildBdEdges(nodes, input.bdRecords);
+  const retraction = buildRetractionEdges(nodes, input.retractionRecords ?? []);
 
-  const unresolved: UnresolvedRef[] = [...af.unresolved, ...fr.unresolved];
+  const unresolved: UnresolvedRef[] = [...af.unresolved, ...fr.unresolved, ...retraction.unresolved];
 
   const preConflicts: GraphDocument = {
     schema_version: GRAPH_SCHEMA_VERSION,
     nodes,
-    edges: { af: af.edges, bd, fr: fr.edges, report: [] },
+    edges: { af: af.edges, bd, fr: fr.edges, report: [], retraction: retraction.edges },
     unresolved,
     conflicts: [],
   };
@@ -87,6 +101,10 @@ export function assembleGraphDocument(input: RawStoreInput): { doc: GraphDocumen
     frUnresolved: fr.edges.filter((e) => e.resolutionMethod === "unresolved").length,
     bdRecordsIn: input.bdRecords.length,
     bdEdges: bd.length,
+    retractionRecordsIn: (input.retractionRecords ?? []).length,
+    retractionResolved: retraction.edges.filter((e) => e.resolved).length,
+    retractionUnresolved: retraction.edges.filter((e) => !e.resolved).length,
+    retractionsLive: retraction.edges.filter((e) => e.resolved && e.live).length,
   };
   return { doc, report };
 }

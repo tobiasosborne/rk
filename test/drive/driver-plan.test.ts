@@ -16,7 +16,7 @@ function regNode(id: string, o: Partial<RegistryNode> = {}): RegistryNode {
   return { id, kind: "lemma", path: `argument/${id}.md`, contract: `${id}`, af: "none", deps: [], routes: [], defs: [], balloons: { count: 0, classifications: [] }, ...o };
 }
 function doc(nodes: RegistryNode[]): GraphDocument {
-  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [], retraction: [] }, unresolved: [], conflicts: [] };
 }
 
 describe("isProoflessNode — the bootstrap-ROOT emptiness predicate (rk-jit / STOP-4, blocker-1 narrowed)", () => {

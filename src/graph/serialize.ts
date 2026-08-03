@@ -30,6 +30,7 @@ import type {
   GraphDocument,
   RegistryNode,
   ReportEdge,
+  RetractionEdge,
   UnresolvedRef,
 } from "./types";
 
@@ -94,6 +95,15 @@ function sortReport(edges: readonly ReportEdge[]): ReportEdge[] {
   return [...edges].sort((a, b) => cmp(a.nodeId, b.nodeId) || cmp(a.anchor, b.anchor) || fullTiebreak(a, b));
 }
 
+/** rk-0ehr / P1. Primary key is `ordinal` — the ledger position, which is unique in a healthy
+ * `.rk/retractions.jsonl` by construction (src/drive/retraction-store.ts's chain check) and is the
+ * order a human reading the ledger expects. `nodeId` then `fullTiebreak` keep the order total even
+ * on a document assembled from a corrupt ledger with duplicate ordinals (the serializer must
+ * produce ONE order even while validation is in flight — see this file's header). */
+function sortRetraction(edges: readonly RetractionEdge[]): RetractionEdge[] {
+  return [...edges].sort((a, b) => a.ordinal - b.ordinal || cmp(a.nodeId, b.nodeId) || fullTiebreak(a, b));
+}
+
 /** fr's own cycle number when `u.edge === "fr"` (required on that variant), else a sentinel of
  * -1 — fr cycles are non-negative (../knowledge-frontier's 1-based monotone index), so -1 never
  * collides with a real cycle and non-fr entries all sort before any fr entry at this key. */
@@ -130,6 +140,7 @@ export function canonicalizeGraphDocument(doc: GraphDocument): GraphDocument {
       bd: sortBd(doc.edges.bd),
       fr: sortFr(doc.edges.fr),
       report: sortReport(doc.edges.report),
+      retraction: sortRetraction(doc.edges.retraction),
     },
     unresolved: sortUnresolved(doc.unresolved),
     conflicts: sortConflicts(doc.conflicts),

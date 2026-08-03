@@ -26,7 +26,7 @@ function node(id: string, overrides: Partial<RegistryNode> = {}): RegistryNode {
 }
 
 function doc(nodes: RegistryNode[]): GraphDocument {
-  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [], retraction: [] }, unresolved: [], conflicts: [] };
 }
 
 /** rk-74o: fully-evidenced l5 candidates — the only shape src/drive/batch-eligibility.ts admits. */

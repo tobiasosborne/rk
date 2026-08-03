@@ -34,7 +34,7 @@ function regNode(id: string, overrides: Partial<RegistryNode> = {}): RegistryNod
 }
 
 function doc(nodes: RegistryNode[]): GraphDocument {
-  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [], retraction: [] }, unresolved: [], conflicts: [] };
 }
 
 /** A fully-evidenced l5 candidate: the ONLY shape the screen ever lets through at that tier. */

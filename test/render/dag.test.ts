@@ -26,7 +26,7 @@ const doc: GraphDocument = {
     n("alt", "stated", []),
     n("goal", "open", ["mid"], [["alt"]]),
   ],
-  edges: { af: [], bd: [], fr: [], report: [] },
+  edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
   unresolved: [],
   conflicts: [],
 };
@@ -75,7 +75,7 @@ describe("render/dag", () => {
   });
 
   test("an empty graph renders a placeholder, not a crash", () => {
-    const empty: GraphDocument = { ...doc, nodes: [], edges: { af: [], bd: [], fr: [], report: [] } };
+    const empty: GraphDocument = { ...doc, nodes: [], edges: { af: [], bd: [], fr: [], report: [], retraction: [] } };
     expect(renderDag(empty)).toContain("no nodes");
   });
 
@@ -90,7 +90,7 @@ describe("render/dag", () => {
     const conflicted: GraphDocument = {
       ...doc,
       nodes: doc.nodes.map((nd) => (nd.id === "mid" ? { ...nd, af: "validated" as const, workspace: "proofs/mid" } : nd)),
-      edges: { af: [afEdge], bd: [], fr: [], report: [] },
+      edges: { af: [afEdge], bd: [], fr: [], report: [], retraction: [] },
       conflicts: [conflict],
     };
     const svg = renderDag(conflicted);
@@ -121,7 +121,7 @@ describe("render/dag", () => {
         n("d", "proved", ["a", "b"]),
         n("e", "cited", ["c"], [["a", "b"]]),
       ],
-      edges: { af: [], bd: [], fr: [], report: [] },
+      edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
       unresolved: [],
       conflicts: [],
     };
@@ -202,7 +202,7 @@ describe("render/dag", () => {
         n("t2", "stated", ["r2"]),
         n("t3", "stated", ["r1"]),
       ],
-      edges: { af: [], bd: [], fr: [], report: [] },
+      edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
       unresolved: [],
       conflicts: [],
     };

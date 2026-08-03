@@ -27,7 +27,7 @@ function emptyDoc(): GraphDocument {
   return {
     schema_version: "1",
     nodes: [],
-    edges: { af: [], bd: [], fr: [], report: [] },
+    edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
     unresolved: [],
     conflicts: [],
   };

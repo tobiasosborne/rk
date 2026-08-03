@@ -31,6 +31,7 @@ import type { ConflictRecord, GraphDocument } from "../../src/graph/types";
 export function buildSampleDocument(): GraphDocument {
   return {
     edges: {
+      retraction: [],
       report: [{ resolved: false, anchor: "thm:main", nodeId: "lem-base" }],
       fr: [
         { resolutionMethod: "unresolved", cycle: 12, artifact: "notes/scratch-42.md" },
@@ -147,6 +148,7 @@ export function buildRenameHazardDocument(brokenEdge: boolean): GraphDocument {
       },
     ],
     edges: {
+      retraction: [],
       af: [
         {
           nodeId: "lem-halo-collapse",
@@ -193,6 +195,7 @@ export function buildAfEvidenceDocument(withEdge: boolean): GraphDocument {
     schema_version: "1",
     nodes: [node],
     edges: {
+      retraction: [],
       af: withEdge
         ? [
             {
@@ -243,6 +246,7 @@ export function buildAfRootMismatchDocument(rootNodeId: string): GraphDocument {
       },
     ],
     edges: {
+      retraction: [],
       af: [
         {
           nodeId: "lem-inner-match",
@@ -292,6 +296,7 @@ export function buildProvedConflictDocument(conflicts: ConflictRecord[]): GraphD
       },
     ],
     edges: {
+      retraction: [],
       af: [
         {
           nodeId: "lem-troubled",
@@ -350,6 +355,7 @@ export function buildBankedDocument(
       },
     ],
     edges: {
+      retraction: [],
       af: [],
       bd: [],
       fr: [
@@ -387,6 +393,7 @@ export function buildFrCollapseDocument(bucketEntries: "one" | "two"): GraphDocu
     schema_version: "1",
     nodes: [],
     edges: {
+      retraction: [],
       af: [],
       bd: [],
       fr: [
@@ -423,6 +430,7 @@ export function buildSupersededFrDocument(superseded: boolean): GraphDocument {
     schema_version: "1",
     nodes: [mkNode("lem-new"), mkNode("lem-old")],
     edges: {
+      retraction: [],
       af: [],
       bd: [],
       fr: [
@@ -473,6 +481,7 @@ export function buildDualBankedSameNodeDocument(verdictA: string | undefined, ve
       },
     ],
     edges: {
+      retraction: [],
       af: [],
       bd: [],
       fr: [
@@ -493,6 +502,7 @@ export function buildFrGhostDocument(): GraphDocument {
     schema_version: "1",
     nodes: [],
     edges: {
+      retraction: [],
       af: [],
       bd: [],
       fr: [{ cycle: 7, artifact: "argument/lemmas/lem-ghost.md", resolutionMethod: "path", resolvedNodeId: "lem-ghost" }],

@@ -61,6 +61,21 @@ export function computeTaintTrace(doc: GraphDocument): Map<string, TaintEntry> {
   const byId = new Map(doc.nodes.map((n) => [n.id, n]));
   const memo = new Map<string, TaintEntry>();
   const inProgress = new Set<string>();
+  // rk-0ehr / P1: a LIVE retraction is an OWN taint source at the same priority slot as af's own
+  // `tainted`/`self_admitted` — so it propagates over `requiredIds` exactly as any other taint,
+  // giving the ratified "propagation cascades exactly as an INVALID would" for free rather than as
+  // a second, parallel traversal. Highest-ordinal live record wins, matching the conflict
+  // computation (src/graph/validate-conflicts.ts) so the two never disagree about WHICH retraction
+  // is the operative one. A node with `af: "none"` is included deliberately: a retraction is not
+  // an af fact, so it must taint an item that was never under af verification at all.
+  const liveRetractions = new Map<string, { ordinal: number; retractedBy: string; reason: string }>();
+  for (const e of doc.edges.retraction) {
+    if (!e.resolved || !e.live) continue;
+    const prev = liveRetractions.get(e.nodeId);
+    if (prev === undefined || e.ordinal > prev.ordinal) {
+      liveRetractions.set(e.nodeId, { ordinal: e.ordinal, retractedBy: e.retractedBy, reason: e.reason });
+    }
+  }
 
   function resolve(id: string): TaintEntry {
     const cached = memo.get(id);
@@ -85,12 +100,21 @@ export function computeTaintTrace(doc: GraphDocument): Map<string, TaintEntry> {
     const own = ownTaint(node, doc.edges.af);
     const reqs = requiredIds(node).map(resolve);
 
+    const retraction = liveRetractions.get(id);
+
     let entry: TaintEntry;
     if (own?.taint === "unresolved") {
       entry = { id, taint: "unresolved", reason: own.reason, isSource: true };
     } else if (reqs.some((r) => r.taint === "unresolved")) {
       const src = reqs.find((r) => r.taint === "unresolved")!;
       entry = { id, taint: "unresolved", reason: `requires ${src.id}, which is unresolved`, isSource: false };
+    } else if (retraction !== undefined) {
+      entry = {
+        id,
+        taint: "tainted",
+        reason: `retracted by ${retraction.retractedBy} (ordinal ${retraction.ordinal}): ${retraction.reason}`,
+        isSource: true,
+      };
     } else if (own?.taint === "self_admitted" || own?.taint === "tainted") {
       entry = { id, taint: own.taint, reason: own.reason, isSource: true };
     } else if (reqs.some((r) => r.taint === "tainted" || r.taint === "self_admitted")) {

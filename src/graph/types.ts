@@ -23,13 +23,19 @@ export {
 } from "./types-edges";
 export type {
   AfEdge, AfEpistemicState, AfTaintState, BdEdge, ConflictKind, ConflictRecord, FrEdge,
-  GraphEdges, ReportEdge, ResolvedAfEdge, ResolvedFrEdge, UnresolvedAfEdge, UnresolvedFrEdge,
-  UnresolvedFrRef, UnresolvedOtherRef, UnresolvedRef,
+  GraphEdges, ReportEdge, ResolvedAfEdge, ResolvedFrEdge, RetractionEdge, RetractionHashDomain,
+  UnresolvedAfEdge, UnresolvedFrEdge, UnresolvedFrRef, UnresolvedOtherRef, UnresolvedRef,
 } from "./types-edges";
 
 import type { GraphEdges, UnresolvedRef, ConflictRecord } from "./types-edges";
 
-export const GRAPH_SCHEMA_VERSION = "1";
+/** Bumped "1" -> "2" by rk-0ehr / P1 (CLAUDE.md rule 10 — a schema change is a compat event): the
+ * closed `conflictKind` enum gains `retraction-vs-status`, `ConflictRecord.edge` and the
+ * `unresolved` bucket's `edge` gain `"retraction"`, and `edges` gains a fifth array. The file name
+ * `schemas/graph.v1.json` is deliberately unchanged — its `$id`/filename track the schema FAMILY,
+ * the `schema_version` const inside tracks the version — flagged for the Tier A review in this
+ * branch's SHARED-EDITS.md rather than resolved unilaterally. */
+export const GRAPH_SCHEMA_VERSION = "2";
 
 // ---------------------------------------------------------------------------------------
 // The registry spine

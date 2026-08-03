@@ -122,7 +122,7 @@ describe("serializeGraphDocument — total tie-breaker over tied primary-key ent
     return {
       schema_version: "1",
       nodes: [],
-      edges: { af: [], bd: order === "ab" ? [a, b] : [b, a], fr: [], report: [] },
+      edges: { af: [], bd: order === "ab" ? [a, b] : [b, a], fr: [], report: [], retraction: [] },
       unresolved: [],
       conflicts: [],
     };
@@ -153,7 +153,7 @@ describe("serializeGraphDocument — total tie-breaker over tied primary-key ent
     return {
       schema_version: "1",
       nodes: [],
-      edges: { af: [], bd: [], fr: [], report: [] },
+      edges: { af: [], bd: [], fr: [], report: [], retraction: [] },
       unresolved: [],
       conflicts: order === "ab" ? [a, b] : [b, a],
     };

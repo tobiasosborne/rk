@@ -66,6 +66,12 @@ describe("assembleGraphDocument — end to end, must satisfy validateGraphDocume
       frUnresolved: 0,
       bdRecordsIn: 1,
       bdEdges: 1,
+      // rk-0ehr / P1: the retraction ledger's own accounting, zero here (no records supplied) —
+      // asserted explicitly rather than omitted, so a future reader sees the four counters exist.
+      retractionRecordsIn: 0,
+      retractionResolved: 0,
+      retractionUnresolved: 0,
+      retractionsLive: 0,
     });
   });
 

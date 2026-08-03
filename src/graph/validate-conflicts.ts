@@ -25,13 +25,13 @@ import { err, type GraphIssue } from "./validate-issue";
 
 export interface ExpectedConflict {
   kind: ConflictKind;
-  edge: "af" | "fr";
+  edge: "af" | "fr" | "retraction";
   nodeId?: string;
   registryValue?: string;
   otherValue?: string;
 }
 
-function identity(kind: ConflictKind, edge: "af" | "bd" | "fr" | "report", nodeId: string | undefined): string {
+function identity(kind: ConflictKind, edge: ConflictRecord["edge"], nodeId: string | undefined): string {
   return `${kind} ${edge} ${nodeId ?? ""}`;
 }
 
@@ -112,6 +112,41 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
       // text (e.g. one "claimed", another "audited"): every distinct value, sorted, joined — never
       // an arbitrarily-chosen single cycle's value standing in for the whole node.
       otherValue: [...verdicts].sort().join(","),
+    });
+  }
+
+  // rk-0ehr / P1 (graph `schema_version: "2"`), the FIFTH kind: `retraction-vs-status`. A LIVE
+  // retraction on a resolved node ALWAYS conflicts — unconditionally, whatever the node's declared
+  // status happens to be. Three reasons this is not gated on a rigorous-status list:
+  //   1. TRUTHFULNESS. The conflict is the mechanism by which no render surface can present a
+  //      retracted item as validated/proved (src/render/styling.ts's `effectivePresentation` folds
+  //      any conflict naming a node into `DEFECT_TIER_CLASS`, `rigorous: false`). A veto that
+  //      depends on a status list would silently stop working the day the list drifts.
+  //   2. The withdrawal is a FACT about the item, not a disagreement between two status vocabularies
+  //      — a shard already demoted to `stated` is still a shard whose claim was withdrawn, and a
+  //      reader deserves to see that rather than a plain "stated" node indistinguishable from one
+  //      that was never claimed at all. (This is exactly what AISM's prose-only retraction lost.)
+  //   3. It makes the conflict set a pure function of `edges.retraction`, so the recomputation
+  //      invariant below cannot be satisfied by a document that quietly dropped a live retraction.
+  // NODE-LEVEL IDENTITY (same discipline as `banked-without-oracle` above): identity is
+  // `(kind, edge, nodeId)`, so several live retractions on ONE node coalesce into ONE conflict.
+  // The HIGHEST-ordinal live record is the one named — deterministic, never an arbitrary pick.
+  const liveByNode = new Map<string, { ordinal: number; hashDomain: string }>();
+  for (const e of doc.edges.retraction) {
+    if (!e.resolved || !e.live) continue;
+    const prev = liveByNode.get(e.nodeId);
+    if (prev === undefined || e.ordinal > prev.ordinal) liveByNode.set(e.nodeId, { ordinal: e.ordinal, hashDomain: e.hashDomain });
+  }
+  const statusByNode = new Map(doc.nodes.map((n) => [n.id, n.status]));
+  for (const [nodeId, live] of liveByNode) {
+    out.push({
+      kind: "retraction-vs-status",
+      edge: "retraction",
+      nodeId,
+      // "unset" rather than "" — an absent status is a real, distinct state (src/render/styling.ts's
+      // `UNSET_STYLE`), never folded into a real status and never rendered as an empty string.
+      registryValue: statusByNode.get(nodeId) ?? "unset",
+      otherValue: `retracted (${live.hashDomain}, ordinal ${live.ordinal})`,
     });
   }
 

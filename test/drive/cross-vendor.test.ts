@@ -136,7 +136,7 @@ function regNode(id: string, overrides: Partial<RegistryNode> = {}): RegistryNod
   return { id, kind: "lemma", path: `argument/${id}.md`, contract: `${id} holds.`, af: "none", deps: [], routes: [], defs: [], balloons: { count: 0, classifications: [] }, ...overrides };
 }
 function doc(nodes: RegistryNode[]): GraphDocument {
-  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [], retraction: [] }, unresolved: [], conflicts: [] };
 }
 
 // star --dep--> mid --dep--> deep ; star --route--> alt-a | alt-b ; island is reachable from nothing.

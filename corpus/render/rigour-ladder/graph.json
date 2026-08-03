@@ -124,7 +124,8 @@
         "nodeId": "n-stated",
         "resolved": false
       }
-    ]
+    ],
+    "retraction": []
   },
   "nodes": [
     {
@@ -134,7 +135,9 @@
         "count": 0
       },
       "contract": "Contract of n-cited.",
-      "defs": ["def-foo"],
+      "defs": [
+        "def-foo"
+      ],
       "deps": [],
       "id": "n-cited",
       "kind": "lemma",
@@ -286,7 +289,9 @@
         "count": 0
       },
       "contract": "Contract of n-proved.",
-      "defs": ["def-bar"],
+      "defs": [
+        "def-bar"
+      ],
       "deps": [],
       "id": "n-proved",
       "kind": "theorem",
@@ -317,7 +322,9 @@
         "count": 0
       },
       "contract": "Contract of n-stated.",
-      "defs": ["def-missing"],
+      "defs": [
+        "def-missing"
+      ],
       "deps": [],
       "id": "n-stated",
       "kind": "lemma",
@@ -388,7 +395,7 @@
       "workspace": "proofs/missing-proved"
     }
   ],
-  "schema_version": "1",
+  "schema_version": "2",
   "unresolved": [
     {
       "edge": "af",
@@ -404,8 +411,8 @@
     },
     {
       "edge": "fr",
-      "ref": "attempt/unmatched-path.md",
       "reason": "no registry node's path or id matches artifact 'attempt/unmatched-path.md'",
+      "ref": "attempt/unmatched-path.md",
       "sourceCycle": 4
     }
   ]

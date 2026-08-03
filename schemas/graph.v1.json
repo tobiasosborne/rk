@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rk.tools/schemas/graph.v1.json",
   "title": "rk unified projection graph document (v1)",
-  "description": "Read-only, deterministic, stateless projection of one rk research campaign (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry (argument/**/*.md shards) is the spine (`nodes`); the other three stores — af, bd, fr — and the generated report join to it by DIFFERENT keys per edge (`edges.af` / `edges.bd` / `edges.fr` / `edges.report`) — there is no universal join key, do not invent one. `unresolved` is a first-class bucket every edge kind's failed lookups land in (never a silent drop). `conflicts` is a first-class defect record, CLOSED to four settled kinds (registry-vs-af disagreement, contract mismatch, taint-vs-status inconsistency, fr banked-without-oracle) as of the Tier A review repair wave (2026-07-19) — src/graph/validate.ts RECOMPUTES these from the raw node/edge data and treats a missing/duplicate/inconsistent recorded conflict as an ERROR. See docs/memos/2026-07-19-graph-schema-v1.md for the design rationale (including the review's four landing-blocker repairs) and src/graph/{types,serialize,validate}.ts for the TS mirror + canonical serializer + structural validator (this JSON Schema alone cannot express cross-array cardinality — e.g. 'exactly one af edge per af!=none node' — referential integrity, unresolved-bucket exact accounting, conflict recomputation, or canonical sort order — those are src/graph/validate.ts's job).",
+  "description": "Read-only, deterministic, stateless projection of one rk research campaign (PRD C5, IMPLEMENTATION_PLAN.md M2.1). The registry (argument/**/*.md shards) is the spine (`nodes`); the other three stores — af, bd, fr — and the generated report join to it by DIFFERENT keys per edge (`edges.af` / `edges.bd` / `edges.fr` / `edges.report`) — there is no universal join key, do not invent one. `unresolved` is a first-class bucket every edge kind's failed lookups land in (never a silent drop). `conflicts` is a first-class defect record, CLOSED to five settled kinds (registry-vs-af disagreement, contract mismatch, taint-vs-status inconsistency, fr banked-without-oracle, and — at v2, rk-0ehr / P1 — retraction-vs-status) as of the Tier A review repair wave (2026-07-19) plus the v2 bump — src/graph/validate.ts RECOMPUTES these from the raw node/edge data and treats a missing/duplicate/inconsistent recorded conflict as an ERROR. See docs/memos/2026-07-19-graph-schema-v1.md for the design rationale (including the review's four landing-blocker repairs) and src/graph/{types,serialize,validate}.ts for the TS mirror + canonical serializer + structural validator (this JSON Schema alone cannot express cross-array cardinality — e.g. 'exactly one af edge per af!=none node' — referential integrity, unresolved-bucket exact accounting, conflict recomputation, or canonical sort order — those are src/graph/validate.ts's job).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "nodes", "edges", "unresolved", "conflicts"],
   "properties": {
     "schema_version": {
-      "const": "1",
-      "description": "Consumers must check this before parsing the rest of the document; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Mirrors the convention set by ../vibefeld's `af export --graph json` (docs/export-graph-v1.md)."
+      "const": "2",
+      "description": "Consumers must check this before parsing the rest of the document; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Mirrors the convention set by ../vibefeld's `af export --graph json` (docs/export-graph-v1.md). BUMPED \"1\" -> \"2\" by rk-0ehr / P1 (retraction as a first-class event, docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P1): `edges` gained a fifth array (`retraction`), the CLOSED `conflictKind` enum gained `retraction-vs-status`, and both `conflictRecord.edge` and the unresolved bucket's `edge` gained `\"retraction\"`. A v1 consumer reading a v2 document would silently miss every retraction — exactly the failure this schema change exists to prevent — hence a version bump rather than a tolerated widening. The FILE NAME is deliberately unchanged: `$id`/filename track the schema FAMILY, the const above tracks the version (flagged for the Tier A review in this branch's SHARED-EDITS.md)."
     },
     "nodes": {
       "type": "array",
@@ -19,8 +19,8 @@
     "edges": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["af", "bd", "fr", "report"],
-      "description": "The four per-edge joins (PRD C5 table). Each array's canonical sort order is defined in src/graph/serialize.ts, not here.",
+      "required": ["af", "bd", "fr", "report", "retraction"],
+      "description": "The per-edge joins (PRD C5's four, plus `retraction` added at v2). Each array's canonical sort order is defined in src/graph/serialize.ts, not here.",
       "properties": {
         "af": {
           "type": "array",
@@ -41,6 +41,11 @@
           "type": "array",
           "description": "registry↔report: shard label/id anchors (as check-provenance.py's own anchor resolution does today). Known hazard: anchors are ids, not contracts.",
           "items": { "$ref": "#/$defs/reportEdge" }
+        },
+        "retraction": {
+          "type": "array",
+          "description": "registry↔retraction (v2, rk-0ehr / P1): the campaign's own `.rk/retractions.jsonl` ledger (schemas/retraction.v1.json), joined on `itemId` == registry `id` — the same key bd uses, and the ONLY edge whose source ledger rk writes itself, so there is no foreign-vocabulary hazard here. EVERY record becomes an entry, resolved or not (the fr precedent, not the bd one): a retraction naming an unknown id is a real fact about the ledger, so it stays visible here AND carries a companion `unresolved` bucket entry keyed on `(edge:\"retraction\", ref)` with EXACT count matching (two records naming the same unknown id are two rows, never one). src/graph/validate.ts enforces referential integrity in both directions — a `resolved:true` entry must name a real node, and a `resolved:false` entry must NOT.",
+          "items": { "$ref": "#/$defs/retractionEdge" }
         }
       }
     },
@@ -51,7 +56,7 @@
     },
     "conflicts": {
       "type": "array",
-      "description": "First-class defect records — registry-status vs af-epistemic-state disagreement, contract byte-mismatch, taint vs status inconsistency, fr banked-claim without a fresh oracle verdict. CLOSED to these four kinds (Tier A review, memo question 1: a new conflict class needs a schema_version bump, not silent vocabulary extension — typo tolerance is the wrong tradeoff on a validity surface). src/graph/validate.ts recomputes the conflict set the raw data implies and ERRORs on a missing, duplicate, or inconsistent recorded entry. Conflicts are rendered, never auto-resolved.",
+      "description": "First-class defect records — registry-status vs af-epistemic-state disagreement, contract byte-mismatch, taint vs status inconsistency, fr banked-claim without a fresh oracle verdict, and a live retraction standing against an item (v2). CLOSED to these five kinds (Tier A review, memo question 1: a new conflict class needs a schema_version bump, not silent vocabulary extension — typo tolerance is the wrong tradeoff on a validity surface). src/graph/validate.ts recomputes the conflict set the raw data implies and ERRORs on a missing, duplicate, or inconsistent recorded entry. Conflicts are rendered, never auto-resolved.",
       "items": { "$ref": "#/$defs/conflictRecord" }
     }
   },
@@ -275,15 +280,32 @@
       "additionalProperties": false,
       "required": ["edge", "ref", "reason"],
       "properties": {
-        "edge": { "enum": ["af", "bd", "report"] },
-        "ref": { "type": "string", "description": "The raw reference text that failed to resolve — a workspace path (af), a registry id (bd), or an anchor (report)." },
+        "edge": { "enum": ["af", "bd", "report", "retraction"] },
+        "ref": { "type": "string", "description": "The raw reference text that failed to resolve — a workspace path (af), a registry id (bd), an anchor (report), or a retraction record's `itemId` (retraction, v2)." },
         "reason": { "type": "string" },
         "nodeId": { "type": "string", "description": "The registry node this unresolved lookup was attempted FROM." }
       }
     },
+    "retractionEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "ordinal", "contentHash", "hashDomain", "retractedBy", "reason", "resolved", "live", "currentHashObserved"],
+      "description": "One record of `.rk/retractions.jsonl` (schemas/retraction.v1.json) projected onto the registry. A retraction is an out-of-band demotion of an item whose artifact bytes are UNCHANGED — the one validity event every edit-triggered staleness rule in rk structurally cannot see. THE INCIDENT (CLAUDE.md L2): AISM 2026-07-28, two proofs validated the previous day were found defective by an independent sweep and retracted in prose only, and still read validated in three of four layers (docs/memos/2026-08-03-aism-postmortem/03-datamodel.md, 'Drift & inconsistency found' item 1).",
+      "properties": {
+        "nodeId": { "type": "string", "description": "The record's `itemId`: a registry node id when `resolved`, a dangling reference otherwise." },
+        "ordinal": { "type": "integer", "minimum": 0, "description": "The record's position in the append-only ledger — its identity there, and what breaks ties when one item carries several records (highest ordinal wins, in BOTH the conflict computation and the taint trace, so the two can never disagree about which retraction is operative)." },
+        "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The item's content hash AT RETRACTION TIME, in `hashDomain`." },
+        "hashDomain": { "enum": ["l5-shard-bytes", "af-canonical"], "description": "Which of schemas/verdict.v1.json's two PINNED hash domains `contentHash` lives in. The two are NEVER compared to each other. A live `l5-shard-bytes` retraction demotes L5 promotion (docs/gate-contracts.md Gate 2 Check 14); a live `af-canonical` retraction removes the item from the monotone-trust available set (Check 8)." },
+        "retractedBy": { "type": "string", "minLength": 1, "description": "Who issued it (e.g. \"TJO\", \"audit:2026-07-28-independent-sweep\"). Non-blank is structural, not cosmetic: an unattributed retraction is not auditable." },
+        "reason": { "type": "string", "minLength": 1, "description": "Why. Carried onto the conflict record so a reader sees the withdrawal AND its stated grounds, never one without the other." },
+        "resolved": { "type": "boolean", "description": "Whether `nodeId` names a node in this document. An unresolved entry additionally carries an `unresolved` bucket row — never a silent drop." },
+        "live": { "type": "boolean", "description": "Whether the retraction still BINDS: the item's current hash in `hashDomain` equals `contentHash`, OR that current hash could not be observed at all (fail closed — see `currentHashObserved`). Resolved by the store reader (src/store/retraction-load.ts), exactly as `frEdge.verdictFresh` is; the pure graph layer never hashes a file. Editing the artifact changes the hash and releases the binding, at which point ordinary staleness semantics take over — nothing is lost, because every verdict bound to the old bytes is stale too. A live retraction on a resolved node ALWAYS produces a `retraction-vs-status` conflict, and is a taint SOURCE that cascades over the requirement closure." },
+        "currentHashObserved": { "type": "boolean", "description": "Whether the reader ACTUALLY observed a current hash in this record's domain. `false` means `live` is a fail-closed default, not a confirmed comparison. KNOWN LIMITATION, recorded rather than hidden: rk cannot presently read an item's current `af-canonical` hash (`af export --graph json` carries no node content hash through src/store/af-load.ts), so every `af-canonical` retraction stands until it can. Reversing that default would silently un-retract a claim on the strength of data rk does not have." }
+      }
+    },
     "conflictKind": {
-      "enum": ["status-mismatch", "contract-mismatch", "taint-status-mismatch", "banked-without-oracle"],
-      "description": "CLOSED as of the Tier A review (memo question 1). A new conflict class requires a schema_version bump."
+      "enum": ["status-mismatch", "contract-mismatch", "taint-status-mismatch", "banked-without-oracle", "retraction-vs-status"],
+      "description": "CLOSED as of the Tier A review (memo question 1). A new conflict class requires a schema_version bump — which is exactly what `retraction-vs-status` got (v1 -> v2, rk-0ehr / P1): a LIVE retraction on a resolved node ALWAYS produces one, unconditionally, whatever the node's declared status is. That unconditional rule is the mechanism by which no render surface can present a retracted item as validated/proved (src/render/styling.ts's `effectivePresentation` folds any conflict naming a node into the defect tier); a veto gated on a status list would silently stop working the day the list drifted. Identity is `(kind, edge, nodeId)`, so several live retractions on one node coalesce into ONE node-level conflict naming the highest-ordinal record."
     },
     "conflictRecord": {
       "type": "object",
@@ -291,7 +313,7 @@
       "required": ["kind", "edge", "message"],
       "properties": {
         "kind": { "$ref": "#/$defs/conflictKind" },
-        "edge": { "enum": ["af", "bd", "fr", "report"] },
+        "edge": { "enum": ["af", "bd", "fr", "report", "retraction"] },
         "nodeId": { "type": "string" },
         "registryValue": { "type": "string" },
         "otherValue": { "type": "string" },

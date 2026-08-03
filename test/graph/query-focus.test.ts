@@ -26,13 +26,13 @@ function node(id: string, overrides: Partial<RegistryNode> = {}): RegistryNode {
 
 function doc(
   nodes: RegistryNode[],
-  edges: { af?: AfEdge[]; bd?: BdEdge[]; fr?: FrEdge[]; report?: ReportEdge[] } = {},
+  edges: { af?: AfEdge[]; bd?: BdEdge[]; fr?: FrEdge[]; report?: ReportEdge[]; retraction?: RetractionEdge[] } = {},
   conflicts: ConflictRecord[] = [],
 ): GraphDocument {
   return {
     schema_version: GRAPH_SCHEMA_VERSION,
     nodes,
-    edges: { af: edges.af ?? [], bd: edges.bd ?? [], fr: edges.fr ?? [], report: edges.report ?? [] },
+    edges: { af: edges.af ?? [], bd: edges.bd ?? [], fr: edges.fr ?? [], report: edges.report ?? [], retraction: edges.retraction ?? [] },
     unresolved: [],
     conflicts,
   };

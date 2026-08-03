@@ -27,8 +27,10 @@ describe("buildGraphDocument — diagnostics.structuralLoss + diagnostics.source
     const root = tempRoot();
     const { diagnostics } = buildGraphDocument(root, { afCommand: ABSENT, frCommand: ABSENT });
     expect(diagnostics).toEqual({
-      structuralLoss: { registrySkips: [], frMalformedLines: [] },
-      sources: { af: "absent", fr: "absent", bd: "absent" },
+      // rk-0ehr / P1 added the retraction ledger as a fourth source: absent here, and its
+      // problems array empty — "nothing was ever retracted", never conflated with "unreadable".
+      structuralLoss: { registrySkips: [], frMalformedLines: [], retractionStoreProblems: [] },
+      sources: { af: "absent", fr: "absent", bd: "absent", retraction: "absent" },
       isStructurallyComplete: true,
     });
     rmSync(root, { recursive: true, force: true });

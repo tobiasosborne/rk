@@ -45,7 +45,7 @@ function doc(nodes: RegistryNode[], af: AfEdge[] = []): GraphDocument {
   return {
     schema_version: GRAPH_SCHEMA_VERSION,
     nodes,
-    edges: { af, bd: [], fr: [], report: [] },
+    edges: { af, bd: [], fr: [], report: [], retraction: [] },
     unresolved: [],
     conflicts: [],
   };

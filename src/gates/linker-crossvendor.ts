@@ -36,6 +36,7 @@ import { decodeVerifierSeam } from "../drive/identity";
 import { proverOfRecord } from "../drive/cross-vendor";
 import { computeCriticalPath } from "../graph/query-path";
 import type { GraphDocument, RegistryNode, AfFlag } from "../graph/types";
+import { GRAPH_SCHEMA_VERSION } from "../graph/types";
 
 const LEGACY_MARKER = "legacy-same-family";
 
@@ -57,7 +58,7 @@ function toMinimalGraphDoc(lemmas: readonly Lemma[]): GraphDocument {
     defs: l.defs,
     balloons: { count: 0, classifications: [] },
   }));
-  return { schema_version: "1", nodes, edges: { af: [], bd: [], fr: [], report: [] }, unresolved: [], conflicts: [] };
+  return { schema_version: GRAPH_SCHEMA_VERSION, nodes, edges: { af: [], bd: [], fr: [], report: [], retraction: [] }, unresolved: [], conflicts: [] };
 }
 
 export interface CriticalPathProvenanceResult {
