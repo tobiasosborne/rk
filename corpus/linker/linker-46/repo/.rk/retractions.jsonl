@@ -1,0 +1,2 @@
+{"schemaVersion":"1","ordinal":0,"itemId":"lem-some-other-claim","contentHash":"3f5a1d0c8b7e6a49230d5c1b8e4f7a2d9c6b3e0a1f8d7c4b5a2e9f6d3c0b7a41","hashDomain":"l5-shard-bytes","retractedBy":"audit:2026-08-03-lb3-sweep","reason":"a readable first record, so the corruption below is the only fault","appendedAt":"2026-08-03T09:00:00.000Z"}
+{"schemaVersion":"1","ordinal":1,"itemId":"lem-corrupt-retraction-ledger","contentHash":"6a0abfabb3b43165615d83a5fe48a80d2e8646da24ae50a2b7aac0eff10

@@ -1,0 +1,27 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-retracted-no-l5-store.md",
+      "message_pattern": "retraction veto: 'lem-retracted-no-l5-store' carries a LIVE retraction (l5-shard-bytes, ordinal 0) issued by audit:2026-08-03-lb3-sweep"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-retracted-no-l5-store.md",
+      "message_pattern": "the registry still declares status: proved, af: none"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": [
+      "L5 store: absent (no promotions)",
+      "retraction store: 1 live (1 l5-shard-bytes, 0 af-canonical), 1 drove a Check 16 veto ERROR"
+    ]
+  },
+  "aism_behavior": "differs -- AISM has no retraction record at all (`grep -r retract` over its scripts: no hits), so there is no AISM behavior to characterize here. This is the rk-only Check 16 mechanism, not a stricter reading of an existing AISM check, so it is not triaged into the rk-stricter-intended/rk-bug/ambiguous triad.",
+  "notes": "LB3 of the 2026-08-03 M3-close batched Tier A review (docs/reviews/2026-08-03-m3-close-batched-tierA-fable.md) -- THE STORE-ABSENT HOLE. A LIVE `l5-shard-bytes` retraction stands against a `status: proved` shard in a repo with NO `.rk/l5-verdicts.jsonl` at all (the legitimate day-1 state of any campaign that has never dispatched an L5 review). RED-FIRST, mutation-proven: before `checkRetractionVeto` existed this fixture produced ZERO findings and `rk check` exited 0, while `src/graph/validate-conflicts.ts`'s `retraction-vs-status` vetoed the SAME tree unconditionally and `rk render` refused it. Two independent preconditions caused the silence, and the fixture is built so BOTH are exercised at once: (1) `checkL5Promotion` early-returns on the absent L5 store BEFORE it ever reads `liveL5` (src/gates/linker-l5.ts's `ABSENT` return), and (2) even with the store present, `liveL5` was consulted only inside the `stated`/`proved-mod-audit` status branches -- `proved` is on neither list. Check 8 cannot cover it either: this retraction is in the `l5-shard-bytes` domain and Check 8 reads only `af-canonical` (the two domains are never cross-compared). The repair moves enforcement into Check 16 itself, unconditionally, mirroring `validate-conflicts.ts:118-133`'s own three reasons -- chiefly that a veto depending on a status list silently stops working the day the list drifts. The coverage expectation pins the rk-lkeh S/J accounting the same review demanded: `1 live ..., 1 drove a Check 16 veto ERROR`, never a bare live-count that READS as enforcement. Perturbation run and confirmed red: deleting the `veto.findings` spread from src/gates/linker.ts drops this fixture to 0 findings and flips verdict/exit_code; replacing `driven: findings.length` with `driven: live` leaves the count honest here but is caught by the sibling unit test. Siblings: `linker-44` (the incident fixture, both domains, L5 store present), `linker-46` (the fail-closed corrupt-ledger half)."
+}

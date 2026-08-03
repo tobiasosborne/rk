@@ -149,5 +149,11 @@ export function totalFixtureCount(corpusRoot: string): number {
  * is a number, so a lax numeric guard accepts it, and `?? DEFAULT_TURN_TIMEOUT_MS` does not rescue
  * it (0 is not nullish) — every turn would time out instantly. Before this bead the 120s ceiling
  * was unreachable from `.rk/config.json` at all, which is what stalled the codex prover's
- * full-decomposition turn twice (exit 10). */
-export const EXPECTED_FIXTURE_COUNT = 132;
+ * full-decomposition turn twice (exit 10).
+ * 134 (+2 over the then-pinned 132): the 2026-08-03 M3-close batched Tier A review, LB3 (with
+ * gates-F14 folded in) — `linker-45` is the STORE-ABSENT hole (a live `l5-shard-bytes` retraction
+ * on a `status: proved` shard in a repo with no `.rk/l5-verdicts.jsonl` produced ZERO findings
+ * while the graph side vetoed the same tree, so `rk check` exited 0 on a defect `rk render`
+ * refused), and `linker-46` is Check 16's FAIL-CLOSED half (a truncated ledger line poisons the
+ * whole store), which had been unit-tested only and so, per L2, did not exist. */
+export const EXPECTED_FIXTURE_COUNT = 134;

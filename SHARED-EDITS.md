@@ -110,3 +110,72 @@ does exist — the per-target hash CAS (`reReadContentHashes` + `expect_hash` in
 `driver-run-round.ts`; `--expect-hash` in `driver-live-dispatch.ts:167-170`) — with an explicit
 statement of what it does NOT buy (no de-duplication of a repeated write against unchanged bytes).
 Closes by pointing at the turnId-idempotency design bead (see bd) rather than implementing it.
+
+---
+
+<!-- ROLE: this repair lane's ledger of every edit it made to an ORCHESTRATOR-OWNED shared file
+     (docs/gate-contracts.md, corpus/README.md, src/corpus/discovery.ts, test/corpus.test.ts).
+     UPDATE-POLICY: append one section per landing-blocker as the lane works; frozen at push.
+     TRIGGER: read by the orchestrator when reconciling this wave's lanes. -->
+
+# SHARED-EDITS — gates repair lane (branch `rk-m3repair-gates`)
+
+Wave: the 2026-08-03 M3-close batched Tier A review repair wave. This lane repairs LB3-LB8.
+The drive lane repairs LB1/LB2/LB9 and also edits `docs/gate-contracts.md` — **Check 15's
+paragraph only**; this lane never touched it.
+
+## Fixture-count ledger (this lane owns the bumps this wave)
+
+| step | before | after | fixtures added |
+|---|---|---|---|
+| LB3 (+ gates-F14) | 132 | 134 | `corpus/linker/linker-45`, `corpus/linker/linker-46` |
+| LB6 | 134 | 135 | `corpus/provenance/provenance-24` |
+
+Three count sites, bumped together every time (the third is easy to miss):
+
+1. `src/corpus/discovery.ts` — `EXPECTED_FIXTURE_COUNT`, plus a dated delta paragraph in its
+   doc comment.
+2. `test/corpus.test.ts` — the SECOND hardcoded total, in **both** the test title and the
+   assertion (`test("total fixture count matches corpus/README.md's ledger (N)")` /
+   `expect(total).toBe(N)`).
+3. `corpus/README.md` — one ledger row per new fixture, plus a delta paragraph near the
+   `refs-09`..`refs-11` / `config-05` paragraphs, and the `EXPECTED_FIXTURE_COUNT = N`
+   mention inside the `config-05` paragraph.
+
+`bun run selftest`'s `checked corpus: N/N` line is derived, not authored.
+
+## docs/gate-contracts.md edits
+
+### LB8 — four inverted rows corrected (commit 1)
+
+| where | before | after |
+|---|---|---|
+| Check 13 fixture list (~:980-982) | "`linker-32` (no parseable seam at all, AISM's real shape ⇒ WARNING legacy-same-family), `linker-33` (batch-validated on the critical path ⇒ WARNING)" | "`linker-32` (… ⇒ **ERROR, fail closed** — 2026-07-19 M3 review blocker 5a; legacy is never INFERRED …), `linker-33` (batch-validated on the critical path ⇒ **ERROR** — blocker 5c)" |
+| fixture-ledger row `linker-32` (~:1070) | "⇒ WARNING `legacy-same-family`, never ERROR (Check 13, grandfathering golden case)" | "⇒ **ERROR, fail closed** (Check 13)" + blocker 5a citation + pointer to the fixture's own `expected.json`/`notes` and to this document's own correct statement at the Check 13 "unresolvable-or-same-family identity" sentence |
+| fixture-ledger row `linker-33` (~:1071) | "⇒ WARNING naming the batch id (Check 13)" | "⇒ **ERROR** naming the batch id (Check 13)" + blocker 5c citation + PRD C3 rationale + the explicit-marker downgrade |
+
+No code change: the corpus fixtures were already the enforcement.
+
+### LB3 — Gate 2 Check 16 prose (commit 2)
+
+| where | before | after |
+|---|---|---|
+| Check 16, before the "Two domains" bullet | (absent) | NEW bullet **"THE VETO IS UNCONDITIONAL"** — every shard with a live retraction in either domain ERRORs, independent of status vocabulary and of any other store's presence; mirrors `validate-conflicts.ts`'s three reasons; names the closed hole and fixture `linker-45` |
+| Check 16, "Two domains, never cross-compared" bullet | opened "A live `l5-shard-bytes` retraction feeds **Check 14**…" | opens "On TOP of the unconditional veto, each domain feeds one specialized check that adds semantics the veto deliberately does not carry; neither replaces it…", and closes with a **"One story, not three"** paragraph fixing the wording split (veto states the withdrawal; Check 8 = propagation consequence; Check 14 = promotion consequence) |
+| Check 16, coverage-line bullet | "`retraction store: <n> live (l5-shard-bytes), <m> live (af-canonical)`" | "`retraction store: <L> live (<n> l5-shard-bytes, <m> af-canonical), <D> drove a Check 16 veto ERROR`" + the rk-lkeh S/J rationale for the pair |
+| Check 16, last bullet | "Fixture: `linker-44`." | "Fixtures: `linker-44` …, `linker-45` (the store-absent hole, LB3), `linker-46` (fail-closed corrupt ledger, gates-F14)." |
+
+## corpus/README.md edits
+
+- LB3: two new ledger rows inserted after `linker-44`'s row and before `refs-01`'s
+  (`linker-45`, `linker-46`); one new delta paragraph after the `config-05` paragraph;
+  `EXPECTED_FIXTURE_COUNT` mention in the `config-05` paragraph 132 → 134.
+- LB6: one new ledger row (`provenance-24`) and its delta paragraph; count 134 → 135.
+
+## corpus fixture `expected.json` files this lane also STRENGTHENED (not orchestrator-owned,
+listed for completeness)
+
+- `corpus/linker/linker-44/expected.json` — two `retraction veto:` expectations added plus a
+  `coverage` block pinning the new S/J unit text; `notes` extended.
+- `corpus/provenance/provenance-13/expected.json` — `unit_patterns` extended with the new
+  `tab:status source: <state>` clause (LB6).

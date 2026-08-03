@@ -144,7 +144,11 @@ export function checkL5Promotion(
           message:
             `'${l.id}' is labeled 'proved-mod-audit' but has been retracted by ${r.retractedBy}: ${r.reason} — ` +
             `demote to 'stated' or re-verify (the retraction is bound to the shard's CURRENT bytes, so no edit has ` +
-            `released it and no L5 verdict overrides it)`,
+            `released it and no L5 verdict overrides it). ` +
+            // LB3 wording adjudication (2026-08-03): Check 16's unconditional veto states the
+            // withdrawal itself; THIS finding is its PROMOTION consequence and says so.
+            `(Check 16 reports the withdrawal itself; this is its promotion consequence — the ` +
+            `already-granted 'proved-mod-audit' label can no longer be confirmed.)`,
         });
       } else if (decision.status !== "promotable") {
         findings.push({

@@ -74,7 +74,12 @@ export function checkStatus(lemmas: Lemma[], retractions: ReadonlyMap<string, Re
         message:
           `af=validated but '${l.id}' has been retracted by ${ownRetraction.retractedBy}: ` +
           `${ownRetraction.reason} — demote (af: seeded / status off the rigorous ladder) or re-verify; ` +
-          `a retraction stands until the artifact itself changes`,
+          `a retraction stands until the artifact itself changes. ` +
+          // LB3 wording adjudication (2026-08-03): Check 16's own unconditional veto states the
+          // withdrawal itself; THIS finding is its PROPAGATION consequence and says so, so a reader
+          // seeing both sees one story rather than two competing descriptions of one fault.
+          `(Check 16 reports the withdrawal itself; this is its propagation consequence — the shard ` +
+          `also leaves the available set, so every dependent's own requirements re-evaluate.)`,
       });
     }
     const met = requirementsMet(l);

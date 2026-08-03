@@ -4,7 +4,12 @@
 // End-to-end fixture: corpus/linker/linker-44.
 
 import { describe, expect, test } from "bun:test";
-import { RETRACTION_STORE_PATH, readRetractionFacts, retractionStoreFindings } from "../../src/gates/linker-retraction";
+import {
+  RETRACTION_STORE_PATH,
+  checkRetractionVeto,
+  readRetractionFacts,
+  retractionStoreFindings,
+} from "../../src/gates/linker-retraction";
 import type { Lemma } from "../../src/gates/linker-parse";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { sha256Hex } from "../../src/gates/sha256";
@@ -108,6 +113,82 @@ describe("readRetractionFacts — fail-closed on a corrupt store", () => {
     const facts = readRetractionFacts(snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [RETRACTION_STORE_PATH]: text }), [lemma()]);
     expect(facts.healthy).toBe(false);
     expect(retractionStoreFindings(facts).length).toBeGreaterThan(0);
+  });
+});
+
+// LB3 (2026-08-03 M3-close batched Tier A review): Check 16's UNCONDITIONAL veto. The hole this
+// pins closed is that enforcement used to live only inside two consumers, each reachable only
+// through a precondition of its own (Check 14's L5-store presence + its two status branches; Check
+// 8's `af: validated`). docs/gate-contracts.md Gate 2 Check 16, "THE VETO IS UNCONDITIONAL".
+// End-to-end fixtures: corpus/linker/linker-45 (store-absent hole), linker-44, linker-46.
+describe("checkRetractionVeto — enforcement independent of status vocabulary and of every other store", () => {
+  // The four statuses below are chosen so NONE of them is a status Check 14 branches on
+  // (`stated`/`proved-mod-audit`) except the one that is, and none carries `af: validated` (what
+  // Check 8 branches on) — so every ERROR here comes from the veto alone.
+  for (const status of ["proved", "consensus", "open", undefined]) {
+    test(`a live l5-shard-bytes retraction ERRORs on a shard whose status is ${status ?? "unset"}`, () => {
+      const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [RETRACTION_STORE_PATH]: line() + "\n" });
+      const lemmas = [lemma({ status })];
+      const report = checkRetractionVeto(lemmas, readRetractionFacts(snapshot, lemmas));
+      expect(report.findings).toHaveLength(1);
+      expect(report.findings[0]!.severity).toBe("ERROR");
+      expect(report.findings[0]!.path).toBe(SHARD_PATH);
+      expect(report.findings[0]!.message).toContain("retraction veto: 'lem-x' carries a LIVE retraction (l5-shard-bytes, ordinal 0)");
+      // domain, ordinal, issuer, reason, and the shard's OWN declared status are all named.
+      expect(report.findings[0]!.message).toContain("audit:2026-07-28-independent-sweep");
+      expect(report.findings[0]!.message).toContain("step-3 approximation unjustified");
+      expect(report.findings[0]!.message).toContain(`the registry still declares status: ${status ?? "unset"}, af: none`);
+    });
+  }
+
+  test("an af-canonical retraction ERRORs on the same terms (either domain, never only one)", () => {
+    const snapshot = snapshotFromFiles({
+      [SHARD_PATH]: SHARD_BODY,
+      [RETRACTION_STORE_PATH]: line({ hashDomain: "af-canonical", contentHash: OTHER_HASH }) + "\n",
+    });
+    const lemmas = [lemma({ status: "proved", af: "seeded" })];
+    const report = checkRetractionVeto(lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]!.message).toContain("(af-canonical, ordinal 0)");
+  });
+
+  test("a shard retracted in BOTH domains gets one ERROR per domain, l5-shard-bytes first (deterministic order)", () => {
+    const text = [line(), line({ ordinal: 1, hashDomain: "af-canonical", contentHash: OTHER_HASH })].join("\n") + "\n";
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [RETRACTION_STORE_PATH]: text });
+    const lemmas = [lemma({ status: "proved" })];
+    const report = checkRetractionVeto(lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(report.findings).toHaveLength(2);
+    expect(report.findings[0]!.message).toContain("(l5-shard-bytes, ordinal 0)");
+    expect(report.findings[1]!.message).toContain("(af-canonical, ordinal 1)");
+    expect(report.live).toBe(2);
+    expect(report.driven).toBe(2);
+  });
+
+  test("a released (edited-since) retraction drives nothing — the veto is not a presence check", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY + "edited\n", [RETRACTION_STORE_PATH]: line() + "\n" });
+    const lemmas = [lemma({ status: "proved" })];
+    const report = checkRetractionVeto(lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(report.findings).toEqual([]);
+    expect(report.live).toBe(0);
+    expect(report.driven).toBe(0);
+  });
+
+  test("a CORRUPT store drives no veto (fail-closed and veto are never two descriptions of one fault)", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [RETRACTION_STORE_PATH]: line() + "\n{truncated\n" });
+    const lemmas = [lemma({ status: "proved-mod-audit" })];
+    const facts = readRetractionFacts(snapshot, lemmas);
+    expect(checkRetractionVeto(lemmas, facts).findings).toEqual([]);
+    expect(retractionStoreFindings(facts).length).toBeGreaterThan(0);
+  });
+
+  // The rk-lkeh S/J discipline: `live` and `driven` are a PAIR, so a future conditional shows up
+  // as `driven < live` on the coverage line instead of being silent.
+  test("coverage accounting: `driven` counts findings actually emitted, never the live count restated", () => {
+    const snapshot = snapshotFromFiles({ [SHARD_PATH]: SHARD_BODY, [RETRACTION_STORE_PATH]: line() + "\n" });
+    const lemmas = [lemma({ status: "proved" })];
+    const report = checkRetractionVeto(lemmas, readRetractionFacts(snapshot, lemmas));
+    expect(report.driven).toBe(report.findings.length);
+    expect(report.live).toBe(1);
   });
 });
 

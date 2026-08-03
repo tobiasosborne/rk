@@ -1,0 +1,29 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/retractions.jsonl",
+      "message_pattern": "retraction store integrity compromised — retraction status is unknowable, fail closed: line 2:"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/retractions.jsonl",
+      "message_pattern": "a corrupt line's own itemId cannot be read, so no item can be confirmed un-retracted"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-corrupt-retraction-ledger.md",
+      "message_pattern": "is labeled 'proved-mod-audit' but the retraction store is corrupt, so its promotion can no longer be confirmed"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["retraction store: CORRUPT (retraction status unknowable, fail closed)"]
+  },
+  "aism_behavior": "differs -- AISM has no retraction record at all, so it has no ledger to corrupt and no health assessment to fail closed on. rk-only mechanism; not triaged into the rk-stricter-intended/rk-bug/ambiguous triad.",
+  "notes": "gates-F14 of the 2026-08-03 M3-close batched Tier A review (folded into LB3's fixture work) -- Check 16's FAIL-CLOSED half, which had been unit-tested only and so, per CLAUDE.md L2, 'did not exist'. `.rk/retractions.jsonl` line 2 is truncated mid-`contentHash`: its own `itemId` is unknowable, so it could name ANY item and no item in the repo can be confirmed un-retracted. The whole store is therefore poisoned rather than partially trusted -- `readRetractionFacts` returns ZERO live retractions in BOTH domains AND `retractionStoreFindings` emits one ERROR per problem, never a quietly-degraded 'nothing retracted' answer. The shard deliberately holds a `proved-mod-audit` label backed by a genuinely FRESH `VALID` L5 verdict bound to its current raw bytes: nothing about staleness fires, and the promotion is still un-confirmable, because the ledger that could withdraw it cannot be read. Note what does NOT appear here: no `retraction veto:` finding, because a corrupt store yields no live retractions by construction -- the fail-closed ERROR and the veto ERROR are never two descriptions of one fault. The store-integrity ERRORs carry `structural: true` (LB5 of the same review: ledger/parse-integrity faults on the retraction and L5 stores block in BOTH phases, exactly like linker-parse/defs/refs parse faults), pinned in test/gates/phase-classification.test.ts. Siblings: `linker-44` (the incident fixture), `linker-45` (the store-absent hole)."
+}

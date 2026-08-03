@@ -824,7 +824,24 @@ is stale against the code and must not be treated as ground truth).
       content hash equals the record's `contentHash` **in the matching `hashDomain`**. Edit the
       artifact and the hash changes, the retraction stops binding, and ordinary staleness takes
       over (a fresh verification is needed anyway). There is no un-retract record and no tombstone.
-    - **Two domains, never cross-compared** (`schemas/verdict.v1.json`'s own rule). A live
+    - **THE VETO IS UNCONDITIONAL** (`checkRetractionVeto`; LB3 of the 2026-08-03 M3-close
+      batched Tier A review). Every registry shard carrying a LIVE retraction in **either** domain
+      is an **ERROR**, naming the domain, ordinal, issuer, reason, and the shard's own declared
+      `status`/`af`. It does not depend on the status vocabulary (no status is enumerated in the
+      check at all) and it does not depend on any other store being present — in particular an
+      absent `.rk/l5-verdicts.jsonl` cannot suppress it. This mirrors, verbatim, the three reasons
+      `src/graph/validate-conflicts.ts`'s `retraction-vs-status` refuses to gate on a rigorous-
+      status list: (1) a veto that depends on a status list silently stops working the day the
+      list drifts; (2) a withdrawal is a FACT about the item, not a disagreement between two
+      status vocabularies; (3) it makes enforcement a pure function of the ledger. **The hole this
+      closes** (fixture `linker-45`): a live `l5-shard-bytes` retraction on a `status: proved`
+      shard in a repo that never dispatched an L5 review produced ZERO gate findings — Check 14
+      early-returned on the absent store before reading `liveL5`, and consulted it only inside the
+      `stated`/`proved-mod-audit` branches — while the graph side vetoed the same tree
+      unconditionally: `rk check` exit 0, `rk render` defect, one repo.
+    - **Two domains, never cross-compared** (`schemas/verdict.v1.json`'s own rule). On TOP of the
+      unconditional veto, each domain feeds one specialized check that adds semantics the veto
+      deliberately does not carry; neither replaces it and neither is replaced by it. A live
       `l5-shard-bytes` retraction feeds **Check 14**: `promotionStateFor` returns the new
       `not-promotable`/`retracted` reason, which outranks stale/invalid/correction-pending/
       no-verdict. For a `stated` shard that is silent (no promotion nudge); for a
@@ -832,6 +849,11 @@ is stale against the code and must not be treated as ground truth).
       for a demote or re-verification — including when the latest L5 verdict is a FRESH `VALID`
       (`src/drive/bind-verdicts.ts`'s `retractionOverridesVerdict`, the callable statement of the
       rule, one call site). A live `af-canonical` retraction feeds **Check 8** instead (see there).
+      **One story, not three**: the veto STATES the withdrawal; Check 8's message names itself as
+      that withdrawal's *propagation* consequence (the shard leaves the available set and every
+      dependent re-evaluates) and Check 14's as its *promotion* consequence (an already-granted
+      `proved-mod-audit` label can no longer be confirmed). The remedy sentence is identical in
+      all three: demote, or edit the artifact and re-verify.
     - **KNOWN LIMITATION, stated rather than papered over**: rk cannot presently observe an item's
       current `af-canonical` hash (`af export --graph json` carries no node content hash through
       `src/store/af-load.ts`), so an `af-canonical` retraction is treated as live until it can.
@@ -844,11 +866,18 @@ is stale against the code and must not be treated as ground truth).
       confirmed un-retracted. ⇒ one **ERROR** per problem at `.rk/retractions.jsonl`, ZERO live
       retractions reported, and every `proved-mod-audit` shard additionally unconfirmable. The
       writer (`src/drive/retraction-store-io.ts`) likewise refuses to append through corruption.
-    - Coverage line: `retraction store: <n> live (l5-shard-bytes), <m> live (af-canonical)`, plus
-      a count and list of any retraction naming no registry shard (never a silent drop, L2).
+    - Coverage line: `retraction store: <L> live (<n> l5-shard-bytes, <m> af-canonical), <D> drove
+      a Check 16 veto ERROR`, plus a count and list of any retraction naming no registry shard
+      (never a silent drop, L2). The `<L>`/`<D>` pair is the rk-lkeh S/J discipline applied to
+      retraction (LB3): a BARE live-count READS as enforcement without being it, which is exactly
+      how the store-absent hole above stayed invisible. Under the unconditional veto `D === L` on a
+      healthy store by construction — and that is the point: the day an edit reintroduces a
+      condition, `D < L` is visible on every run's coverage line instead of being silent.
     - `aism_behavior: differs` — AISM has no retraction vocabulary at all (`grep -r retract` over
       its scripts: no hits), so this is an rk-only mechanism the incident argues for, not a
-      stricter reading of an existing check. Fixture: `linker-44`.
+      stricter reading of an existing check. Fixtures: `linker-44` (the incident, both domains),
+      `linker-45` (the store-absent hole, LB3), `linker-46` (fail-closed corrupt ledger,
+      gates-F14).
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set

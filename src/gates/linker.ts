@@ -4,7 +4,9 @@
 // checkMandatoryReview + af-workspace introspection (linker-graph.ts, checks 6-10, 12, 15),
 // checkGenerated (linker-render.ts, check 11), checkCriticalPathProvenance
 // (linker-crossvendor.ts, check 13 — M3.8), and checkL5Promotion (linker-l5.ts, check 14 —
-// M3.8). Check 15 (mandatory review, M3 review blocker 7c): checkMandatoryReview itself and its
+// M3.8), and readRetractionFacts/retractionStoreFindings/checkRetractionVeto (linker-retraction.ts,
+// check 16 — rk-0ehr / P1, with LB3's unconditional veto).
+// Check 15 (mandatory review, M3 review blocker 7c): checkMandatoryReview itself and its
 // isMandatoryReview predicate were added in commit 7ede34c but never wired into this gate until
 // now.
 // PURITY: pure — no fs/network/clock (L3).
@@ -32,7 +34,7 @@ import { freshnessSupersededPaths } from "./freshness";
 // (l5-promote.ts's own module header names this file as the wiring point).
 import { checkCriticalPathProvenance } from "./linker-crossvendor";
 import { checkL5Promotion } from "./linker-l5";
-import { readRetractionFacts, retractionStoreFindings } from "./linker-retraction";
+import { checkRetractionVeto, readRetractionFacts, retractionStoreFindings } from "./linker-retraction";
 
 export const linkerGate: Gate = {
   name: "linker",
@@ -77,6 +79,12 @@ export const linkerGate: Gate = {
     // `l5-shard-bytes` view by Check 14 (promotion) and its `af-canonical` view by Check 8
     // (propagation). Presence-conditional on `.rk/retractions.jsonl`; corrupt ⇒ fail closed.
     const retractions = readRetractionFacts(snapshot, lemmas);
+    // LB3 (2026-08-03 M3-close review): Check 16's UNCONDITIONAL veto — every shard carrying a live
+    // retraction in EITHER domain ERRORs, whatever its declared status and whether or not
+    // `.rk/l5-verdicts.jsonl` exists. The two specialized consumers below add propagation (Check 8)
+    // and promotion (Check 14) semantics on top; they never stand in for this. See
+    // src/gates/linker-retraction.ts's header for why enforcement may not hang off a status list.
+    const veto = checkRetractionVeto(lemmas, retractions);
     // M3.8 (Check 14): L5 stated->proved-mod-audit promotion — presence-conditional on
     // `.rk/l5-verdicts.jsonl` (M3.7's store).
     const l5 = checkL5Promotion(snapshot, lemmas, retractions);
@@ -87,6 +95,7 @@ export const linkerGate: Gate = {
       ...checkImports(lemmas, defIds),
       ...checkStatus(lemmas, retractions.liveAf),
       ...retractionStoreFindings(retractions),
+      ...veto.findings,
       ...checkContracts(lemmas, wsContracts),
       ...checkOrphans(lemmas, wsDirs),
       ...generatedFindings,
@@ -132,11 +141,15 @@ export const linkerGate: Gate = {
     // rk-0ehr / P1: absent, corrupt, and "present with N live retractions" are three DIFFERENT
     // states a reader must never have to guess between; an unmatched itemId (a retraction naming
     // no registry shard) is named too rather than silently dropped (L2).
+    // LB3 (2026-08-03): the live count is rendered WITH how many of those live retractions actually
+    // DROVE a Check 16 veto ERROR — the rk-lkeh S/J discipline. A bare live-count reads as
+    // enforcement without being it, which is precisely how the pre-LB3 hole stayed invisible.
     const retractionNote = !retractions.present
       ? "retraction store: absent (nothing retracted)"
       : !retractions.healthy
         ? "retraction store: CORRUPT (retraction status unknowable, fail closed)"
-        : `retraction store: ${retractions.liveL5.size} live (l5-shard-bytes), ${retractions.liveAf.size} live (af-canonical)` +
+        : `retraction store: ${veto.live} live (${retractions.liveL5.size} l5-shard-bytes, ${retractions.liveAf.size} af-canonical), ` +
+          `${veto.driven} drove a Check 16 veto ERROR` +
           (retractions.unmatchedItemIds.length > 0 ? `, ${retractions.unmatchedItemIds.length} naming no registry shard: ${retractions.unmatchedItemIds.join(", ")}` : "");
 
     return {
