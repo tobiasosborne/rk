@@ -83,7 +83,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run({});
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows (0 joined); report/: absent (not adopted)" },
+      { gate: "provenance", checked: 0, total: 0, unit: "registry results, 0 frontmatter-invalid, 0 claim rows, 0 tab:status rows (0 joined), tab:status source: absent; report/: absent (not adopted)" },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe("provenanceGate — day-1 vacuity", () => {
     const result = run(baseline());
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual([
-      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined); report/: present" },
+      { gate: "provenance", checked: 1, total: 1, unit: "registry results, 0 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined), tab:status source: absent; report/: present" },
     ]);
   });
 });
@@ -113,7 +113,7 @@ describe("provenanceGate — rk-v18: malformed registry shards are a visible ski
         gate: "provenance",
         checked: 1,
         total: 2,
-        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined); report/: present",
+        unit: "registry results, 1 frontmatter-invalid, 1 claim rows, 0 tab:status rows (0 joined), tab:status source: absent; report/: present",
       },
     ]);
   });
@@ -880,6 +880,63 @@ describe("rk-lkeh: check 5's JOIN coverage — a parsed status table that compar
     const result = run(entries);
     expect(result.coverage[0]!.unit).toContain("0 tab:status rows (0 joined)");
     expect(result.findings).toEqual([]);
+  });
+
+  // LB6 (2026-08-03 M3-close review): incident (a). `provenanceStatusTableFile` has a non-undefined
+  // DEFAULT, so the merged GateConfig looks identical whether the repo configured the path or never
+  // touched config — and a renamed table therefore left check 5 (OVERCLAIM, this gate's #1 guarded
+  // failure mode) verifying nothing and reporting green. `_configValidation.overriddenKeys` is the
+  // one fact that separates the two. Corpus fixture: provenance-24.
+  test("EXPLICITLY configured + absent ⇒ ERROR naming the path and that it was explicitly set (LB6)", () => {
+    const result = provenanceGate.run(snapshot(baseline()), {
+      ...DEFAULT_GATE_CONFIG,
+      _configValidation: { findings: [], checked: 1, total: 1, overriddenKeys: ["provenanceStatusTableFile"] },
+    });
+    const e = errors(result).find((f) => f.message.includes("EXPLICITLY SET"));
+    expect(e).toBeDefined();
+    expect(e!.path).toBe(DEFAULT_GATE_CONFIG.provenanceStatusTableFile);
+    expect(e!.message).toContain(DEFAULT_GATE_CONFIG.provenanceStatusTableFile);
+    expect(result.coverage[0]!.unit).toContain("tab:status source: absent (explicitly configured)");
+  });
+
+  test("DEFAULT + absent stays a non-finding — the day-1 state, byte-identical config value (LB6)", () => {
+    const result = provenanceGate.run(snapshot(baseline()), {
+      ...DEFAULT_GATE_CONFIG,
+      // Same VALUE as the test above; only the override fact differs. That is the whole mechanism.
+      _configValidation: { findings: [], checked: 0, total: 0, overriddenKeys: [] },
+    });
+    expect(errors(result)).toEqual([]);
+    expect(result.coverage[0]!.unit).toContain("tab:status source: absent");
+    expect(result.coverage[0]!.unit).not.toContain("explicitly configured");
+  });
+
+  // A field that was PRESENT but MALFORMED is dropped by validateConfigOverrides, the default
+  // applies, and the config gate already ERRORed on it — so it must NOT also count as an explicit
+  // override here, or one fault is reported twice under two descriptions.
+  test("a malformed (dropped) provenanceStatusTableFile is not an explicit override (LB6)", () => {
+    const result = provenanceGate.run(snapshot(baseline()), {
+      ...DEFAULT_GATE_CONFIG,
+      _configValidation: { findings: [], checked: 0, total: 1, overriddenKeys: [] },
+    });
+    expect(errors(result)).toEqual([]);
+  });
+
+  // gates-F5: the three source states are distinguishable on the coverage line.
+  test("coverage renders the status-table source state: read / present-but-unloaded / absent (gates-F5)", () => {
+    const read = baseline();
+    read["report/sections/13_discussion.tex"] = "This section discusses results informally.\n";
+    expect(run(read).coverage[0]!.unit).toContain("tab:status source: read");
+
+    expect(run(baseline()).coverage[0]!.unit).toContain("tab:status source: absent");
+
+    // On disk (hashed by the whole-tree walk) but outside the loader's text include rules.
+    const unloaded = run(baseline(), { sha256: new Map([["paper/status.tex", "a".repeat(64)]]) });
+    const cfgUnloaded = provenanceGate.run(
+      snapshot(baseline(), { sha256: new Map([["paper/status.tex", "a".repeat(64)]]) }),
+      { ...DEFAULT_GATE_CONFIG, provenanceStatusTableFile: "paper/status.tex" },
+    );
+    expect(unloaded.coverage[0]!.unit).toContain("tab:status source: absent"); // default path, unaffected
+    expect(cfgUnloaded.coverage[0]!.unit).toContain("tab:status source: present-but-unloaded");
   });
 });
 

@@ -86,6 +86,7 @@ import {
   parseUnwired,
   splitSourceTokens,
   statusTableRows,
+  statusTableSource,
   type ClaimRow,
 } from "./provenance-md";
 import { checkSourceHashes, checkStatusTable } from "./provenance-checks";
@@ -264,7 +265,25 @@ export const provenanceGate: Gate = {
     // check, the "configured table exists but was never loaded" ERROR, and the JOIN count that
     // says how many of the `S` parsed rows check 5 could actually compare. All three live in
     // provenance-checks.ts — see `checkStatusTable` there.
-    const join = checkStatusTable(snapshot, config.provenanceStatusTableFile, statusRows, shards, tex, findings);
+    // LB6 (2026-08-03): plus the fourth state — EXPLICITLY configured but absent from the repo,
+    // which `provenanceStatusTableFile`'s non-undefined default makes indistinguishable from the
+    // day-1 no-report state on the VALUE alone. `_configValidation.overriddenKeys` is the fact that
+    // distinguishes them; it reaches this pure gate the same way every other config fact does, on
+    // the already-merged `GateConfig` the edge hands in (src/store/config-load.ts).
+    const statusTableExplicit =
+      config._configValidation?.overriddenKeys?.includes("provenanceStatusTableFile") === true;
+    const join = checkStatusTable(
+      snapshot,
+      config.provenanceStatusTableFile,
+      statusRows,
+      shards,
+      tex,
+      findings,
+      statusTableExplicit,
+    );
+    // gates-F5 / LB6: the coverage line renders WHERE the status table came from, so `0 tab:status
+    // rows` because the file was never parsed is never mistaken for `0` because there is no table.
+    const statusTableSourceState = statusTableSource(snapshot, config.provenanceStatusTableFile);
     checkAnchor(shards, tex, whitelist, findings, reportAdopted);
     checkReverseLabels(shards, tex, findings);
     checkCoverage(shards, prov.claimRows, tex, findings);
@@ -291,7 +310,13 @@ export const provenanceGate: Gate = {
           // rk-lkeh: `(<J> joined)` is rendered on EVERY path, exactly like `S` itself — a reader
           // can always tell how many of the parsed rows check 5 was able to compare, rather than
           // inferring enforcement from a nonzero `S` that may join nothing.
-          `claim rows, ${statusRows.length} tab:status rows (${join.joinedRows} joined); ` +
+          // gates-F5 / LB6: `tab:status source: <state>` is likewise rendered on EVERY path — `S=0`
+          // has three completely different meanings (the file was read and holds no rows; it exists
+          // but was never text-loaded; it is not there at all) and a reader must never have to guess
+          // which. `(explicitly configured)` is appended when the path came from `.rk/config.json`
+          // rather than the default, since that is what turns the `absent` state into an ERROR.
+          `claim rows, ${statusRows.length} tab:status rows (${join.joinedRows} joined), ` +
+          `tab:status source: ${statusTableSourceState}${statusTableExplicit ? " (explicitly configured)" : ""}; ` +
           // B1: the report/-adoption bit is rendered on EVERY path, present or absent (Gate 6's
           // own convention, src/gates/shards.ts) — a reader can always tell whether check 6 ran.
           `report/: ${reportAdopted ? "present" : "absent (not adopted)"}`,

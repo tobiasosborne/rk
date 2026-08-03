@@ -198,6 +198,19 @@ export interface ConfigValidationSummary {
   checked: number;
   /** Present config fields (known + unknown), the validation denominator. */
   total: number;
+  /** LB6 (2026-08-03 M3-close review): the KNOWN keys `.rk/config.json` explicitly set AND that
+   * validated cleanly — i.e. exactly `Object.keys(ConfigValidationResult.overrides)`, the fact the
+   * reviewer noted the validator already knows. A PURE gate cannot otherwise tell "the repo chose
+   * this value" from "this is `DEFAULT_GATE_CONFIG`'s value", because the merged `GateConfig` it
+   * receives looks identical either way — and for `provenanceStatusTableFile` that difference is
+   * the difference between a legitimate day-1 non-finding and a check the repo CONFIGURED that is
+   * silently verifying nothing (provenance-22's reasoning, one step further).
+   *
+   * A field that was PRESENT but malformed is deliberately absent here: it was dropped, the default
+   * applies, and `validateConfigOverrides` already emitted its own loud ERROR — treating it as an
+   * explicit override would report one fault twice under two descriptions. Absent/empty means "no
+   * `.rk/config.json`, or nothing in it applied", the cold-start default state. */
+  overriddenKeys?: readonly string[];
 }
 
 export interface ConfigValidationResult extends ConfigValidationSummary {

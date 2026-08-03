@@ -155,5 +155,11 @@ export function totalFixtureCount(corpusRoot: string): number {
  * on a `status: proved` shard in a repo with no `.rk/l5-verdicts.jsonl` produced ZERO findings
  * while the graph side vetoed the same tree, so `rk check` exited 0 on a defect `rk render`
  * refused), and `linker-46` is Check 16's FAIL-CLOSED half (a truncated ledger line poisons the
- * whole store), which had been unit-tested only and so, per L2, did not exist. */
-export const EXPECTED_FIXTURE_COUNT = 134;
+ * whole store), which had been unit-tested only and so, per L2, did not exist.
+ * 135 (+1 over 134): the same review's LB6 — `provenance-24`: `provenanceStatusTableFile` set in
+ * `.rk/config.json` to EXACTLY the default value, pointing at a file that no longer exists (the
+ * table was renamed). The merged `GateConfig` is byte-identical to a repo with no config at all, so
+ * only `_configValidation.overriddenKeys` can tell the two apart — and without that distinction a
+ * renamed status table leaves check 5 (OVERCLAIM, Gate 4's #1 guarded failure mode) verifying
+ * nothing and reporting green. AISM incident (a), reproduced. */
+export const EXPECTED_FIXTURE_COUNT = 135;

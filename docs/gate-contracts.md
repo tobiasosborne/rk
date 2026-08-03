@@ -1542,6 +1542,17 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   and this gate is otherwise the only one of the six with no coverage unit of its own visible in
   the finding stream — see Divergences for the fix (an explicit coverage line with `S=0`
   rendered loudly) and fixture `provenance-13`.
+- **Label-above-`\midrule` parsing: characterized prior art, deliberately unchanged** (gates-F5,
+  2026-08-03 M3-close review). `statusTableRows` (`src/gates/provenance-md.ts`) slices the table
+  body as "everything before `\label{tab:status}`, after the LAST `\midrule`" — the port of
+  check-provenance.py:207-211. A file that carries `\label{tab:status}` ABOVE its `\midrule`, or
+  that has one and not the other, therefore yields `[]` with no finding from the parser itself.
+  This is AISM's own behavior and it is **not** changed here: the row set is a parse result, not a
+  verdict, and rk's rule is that the *silence* is the defect, not the parse. What LB6 changed is
+  the visibility around it — the coverage line now renders `tab:status source: read` for exactly
+  this case, so `0 rows` on a file that WAS read is legible as such rather than as an absent or
+  unloaded table. Tightening the parser itself would be a behavior change to characterized prior
+  art and belongs to its own bead with its own fixture, not to a repair wave.
 - **Silent-skip false-green surface (registry parse), fixed 2026-07-18 (rk-v18, review finding
   4).** `parse_registry`'s own `fm is None: continue` (check-provenance.py:128-129) drops a
   registry shard with missing/unterminated frontmatter with no finding and no count; the port's
@@ -1584,7 +1595,8 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   Fixture: `provenance-20`.
 - **[message-only] Coverage line** (amended 2026-07-18, rk-v18; extended 2026-07-25, B1).
   `checked provenance: <N>/<M>
-  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<J> joined);
+  registry results, <X> frontmatter-invalid, <R> claim rows, <S> tab:status rows (<J> joined),
+  tab:status source: <read|present-but-unloaded|absent>[ (explicitly configured)];
   report/:
   <present|absent (not adopted)> (<E> errors, <W> warnings)`. The trailing `report/:` clause (B1)
   `J` (2026-07-25, rk-lkeh) is likewise rendered on every path, exactly as `S` already was — a
@@ -1619,6 +1631,32 @@ check-provenance.py:38-46 — the gate's admitted false-green surface):
   never conflated. Note the file's LOCATION is deliberately **not** the predicate: a table
   outside `report/` joins correctly whenever `report/sections/*.tex` still defines its labels.
   Fixtures: `provenance-22`, `provenance-23`.
+- **[rk-stricter-intended] An EXPLICITLY CONFIGURED status table that is absent from the repo is
+  an ERROR** (LB6, 2026-08-03 M3-close review). `provenanceStatusTableFile` has a non-undefined
+  DEFAULT, so its value alone cannot distinguish "day-1, nobody has configured anything, there is
+  no report yet" from "this repo pointed the check at a path and that path is gone" — and the
+  second is incident (a) itself, the rename that silently blinded check 5 (OVERCLAIM, this gate's
+  #1 guarded failure mode). The distinguishing fact is `ConfigValidationResult.overrides`, which
+  the config validator already computes; it reaches this PURE gate as
+  `_configValidation.overriddenKeys` on the already-merged `GateConfig`, the same channel every
+  other config fact travels (`src/store/config-load.ts`). So:
+  - **explicitly configured + absent** ⇒ **ERROR** naming the configured path and the fact that it
+    was explicitly set. Same principle as Gate 7's unrecognized-generator rule: a check the repo
+    DECLARED and that cannot run must never exit green.
+  - **default + absent** ⇒ non-finding, unchanged. This is the legitimate day-1 state and every
+    repo running the default with no `report/` must stay clean.
+  - A field that was PRESENT in `.rk/config.json` but MALFORMED does not count as an explicit
+    override: it was dropped, the default applies, and the config gate already ERRORed on it —
+    counting it here would report one fault twice.
+  Fixture: `provenance-24` (which sets the override to EXACTLY the default value, so nothing but
+  `overriddenKeys` can produce the finding).
+- **[message-only] The coverage line renders the status table's SOURCE STATE** (gates-F5 / LB6,
+  2026-08-03): `tab:status source: read | present-but-unloaded | absent`, plus
+  `(explicitly configured)` when the path came from `.rk/config.json` rather than the default.
+  `S = 0` has three completely different meanings — the file was read and honestly holds no rows
+  (`provenance-13`), it exists but was never text-loaded (`provenance-22`), or it is not there at
+  all (`provenance-24`) — and a reader must never have to guess which. Rendered on every path,
+  same rule as `S` and `J`.
 - **[contract amendment, not a strictness triage] Check 6 is presence-conditional on the `report/` root** (B1, `docs/memos/2026-07-25-generality-audit.md`; extends rk-au6/R13). `check-provenance.py:349-365` runs the anchor check over every parsed registry result unconditionally, with `parse_unwired` returning an empty whitelist for a missing file — so on any repo with no `report/` tree every shard is an "unwired" failure. That is AISM private-layout residue, removed here on the same footing as R13's Gate 6 amendment and F5's reversal, not an rk-stricter/rk-bug/ambiguous call. Fixture: `provenance-21`.
 - **[message-only]** Standard cross-gate finding-format change; the `--build` step remains
   opt-in, matching AISM's own `--build` flag exactly (not a divergence, confirmed here for
@@ -1655,6 +1693,7 @@ none of them are `routes:`/`workspace:`; this gate never inspects those two fiel
 | `provenance-21` | **check 6: registry shards present, `report/` ABSENT** [B1, SC7 blocker] — the state of every stamped campaign; check 6 emits nothing, coverage names `report/: absent (not adopted)`, registry denominator honest at 2/2 |
 | `provenance-22` | **check 5: configured `provenanceStatusTableFile` PRESENT on disk but outside the loader's text include rules** [rk-lkeh] — `paper/status.tex` yielded `[]` rows indistinguishable from "no table"; now an ERROR, distinguished from genuinely-absent via `snapshot.sha256` |
 | `provenance-23` | **check 5: status table parsed (`S=1`) but ZERO rows joined** [rk-lkeh] — WARN naming `labels-disjoint` vs `no-join-universe`, never conflated; coverage reads `1 tab:status rows (0 joined)` |
+| `provenance-24` | **check 5: `provenanceStatusTableFile` EXPLICITLY configured but ABSENT from the repo** [LB6] — incident (a) reproduced (the table was renamed); the override is set to exactly the DEFAULT value, so only `_configValidation.overriddenKeys` can produce the ERROR; coverage reads `tab:status source: absent (explicitly configured)` |
 
 ---
 

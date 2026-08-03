@@ -194,19 +194,47 @@ function statusJoinWarning(tabStatusFile: string, join: StatusJoinReport): Findi
  * declaring an unverifiable artifact must never exit green ... regardless of WHY this binary
  * cannot verify it". A GENUINELY absent file stays a non-finding: that is the ordinary day-1 /
  * no-report state (`provenance-13`, and every repo running the default value with no report/). */
-function statusTableSourceError(snapshot: RepoSnapshot, tabStatusFile: string): Finding | undefined {
-  if (statusTableSource(snapshot, tabStatusFile) !== "present-but-unloaded") return undefined;
-  return {
-    severity: "ERROR",
-    path: tabStatusFile,
-    message:
-      `configured provenanceStatusTableFile '${tabStatusFile}' is present on disk but its text was ` +
-      `NOT loaded — it lies outside src/store/snapshot-load.ts's include rules (definitions/, ` +
-      `argument/**, proofs/**, refs/**, runs/**, report/**/*.{tex,md}, .rk/). check 5 read ZERO rows ` +
-      `from a table that exists, so an OVERCLAIM in it cannot be seen. Move the table under report/ ` +
-      `(its labels are scanned from report/sections/*.tex either way — see docs/gate-contracts.md ` +
-      `Gate 4, provenance-11 scope) or drop the override.`,
-  };
+function statusTableSourceError(
+  snapshot: RepoSnapshot,
+  tabStatusFile: string,
+  explicitlyConfigured: boolean,
+): Finding | undefined {
+  const source = statusTableSource(snapshot, tabStatusFile);
+  if (source === "present-but-unloaded") {
+    return {
+      severity: "ERROR",
+      path: tabStatusFile,
+      message:
+        `configured provenanceStatusTableFile '${tabStatusFile}' is present on disk but its text was ` +
+        `NOT loaded — it lies outside src/store/snapshot-load.ts's include rules (definitions/, ` +
+        `argument/**, proofs/**, refs/**, runs/**, report/**/*.{tex,md}, .rk/). check 5 read ZERO rows ` +
+        `from a table that exists, so an OVERCLAIM in it cannot be seen. Move the table under report/ ` +
+        `(its labels are scanned from report/sections/*.tex either way — see docs/gate-contracts.md ` +
+        `Gate 4, provenance-11 scope) or drop the override.`,
+    };
+  }
+  // LB6 (2026-08-03 M3-close review): EXPLICITLY CONFIGURED but absent from the snapshot entirely.
+  // This is provenance-22's reasoning one step further, and it reproduces AISM incident (a): a
+  // renamed status-table file left check 5 — this gate's #1 guarded failure mode, OVERCLAIM —
+  // verifying NOTHING, green, coverage `0 tab:status rows (0 joined)`, byte-identical to the state
+  // of a campaign that simply has no status table. `provenanceStatusTableFile` has a non-undefined
+  // DEFAULT (src/gates/config.ts:131), so the value alone cannot tell the two apart; the
+  // `overriddenKeys` fact carried on `config._configValidation` (LB6) can, and that is the whole
+  // reason it was threaded in.
+  if (source === "absent" && explicitlyConfigured) {
+    return {
+      severity: "ERROR",
+      path: tabStatusFile,
+      message:
+        `provenanceStatusTableFile is EXPLICITLY SET in .rk/config.json to '${tabStatusFile}', but no ` +
+        `such file exists in this repo — check 5 (OVERCLAIM/underclaim) verified NOTHING and would ` +
+        `otherwise have reported clean, indistinguishable from a campaign with no status table at ` +
+        `all. A configured check that cannot run must never exit green (the same principle Gate 7 ` +
+        `applies to an unverifiable declared artifact). next: fix the path (was the table renamed or ` +
+        `moved?), or drop the override to fall back to the default.`,
+    };
+  }
+  return undefined;
 }
 
 /** Check 5's whole surface in one call (rk-lkeh): the source-availability ERROR, the
@@ -220,8 +248,12 @@ export function checkStatusTable(
   shards: RegistryShard[],
   tex: TexLabels,
   findings: Finding[],
+  /** LB6: whether `provenanceStatusTableFile` was EXPLICITLY set in `.rk/config.json` (as opposed
+   * to being `DEFAULT_GATE_CONFIG`'s value). Defaults to `false` so every existing caller — unit
+   * tests, corpus fixtures with no config — keeps the pre-LB6 day-1 semantics byte-for-byte. */
+  explicitlyConfigured = false,
 ): StatusJoinReport {
-  const sourceError = statusTableSourceError(snapshot, tabStatusFile);
+  const sourceError = statusTableSourceError(snapshot, tabStatusFile, explicitlyConfigured);
   if (sourceError) findings.push(sourceError);
   const join = checkStatusDrift(statusRows, shards, tex, findings);
   // Suppressed when the table could not be read at all: the source ERROR above already names the

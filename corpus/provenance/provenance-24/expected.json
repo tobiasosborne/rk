@@ -1,0 +1,20 @@
+{
+  "gate": "provenance",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "report/sections/13_discussion.tex",
+      "message_pattern": "provenanceStatusTableFile is EXPLICITLY SET in .rk/config.json to 'report/sections/13_discussion.tex', but no such file exists in this repo"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["0 tab:status rows (0 joined)", "tab:status source: absent (explicitly configured)", "report/: present"]
+  },
+  "config_override": { "provenanceStatusTableFile": "report/sections/13_discussion.tex" },
+  "aism_behavior": "differs: check-provenance.py:206 reads the hardcoded ROOT/'report/sections/13_discussion.tex' and, finding nothing, status_table_rows() returns [] silently (check-provenance.py:207-211), exit 0 -- which IS incident (a): a renamed status-table file left the OVERCLAIM check verifying nothing and reporting green. AISM has no notion of an explicit override, so there is no script behavior to match; the divergence is rk's own config parameter (provenance-11) gaining the one distinction that makes the incident detectable. Triage: rk-stricter-intended.",
+  "notes": "LB6 of the 2026-08-03 M3-close batched Tier A review -- incident (a), reproduced. THE SHARP POINT: `.rk/config.json` sets `provenanceStatusTableFile` to EXACTLY `DEFAULT_GATE_CONFIG`'s own value, so the merged `GateConfig` a pure gate receives is byte-identical to a repo with no config at all. The ONLY thing that distinguishes them is `_configValidation.overriddenKeys` (LB6; sourced from `ConfigValidationResult.overrides`, the fact the reviewer noted the validator already had). Without it a renamed table file is a silent non-finding: check 5 (OVERCLAIM/underclaim -- this gate's #1 guarded failure mode) verifies NOTHING, the gate reports clean, and the coverage line reads `0 tab:status rows (0 joined)`, indistinguishable from a campaign that simply has no status table. The repo makes the incident concrete: the real table lives at `report/sections/13_results.tex` (renamed), still carries `\\label{tab:status}` and frames `thm-main` as `proved`, while the registry says `status: open` -- so the OVERCLAIM is genuinely there and genuinely unreachable. RED-FIRST and mutation-proven: dropping `overriddenKeys` from `_configValidation` (or passing `explicitlyConfigured = false` at the `checkStatusTable` call site in src/gates/provenance.ts) turns this fixture green, verdict pass, exit 0 -- which is exactly the bug. The coverage expectation also pins gates-F5's fix: `tab:status source: absent (explicitly configured)` makes the three source states (`read` / `present-but-unloaded` / `absent`) distinguishable, so `0 rows` because unparsed can never again read the same as `0 rows` because there is no table. Siblings: `provenance-22` (the present-but-unloaded state, rk-lkeh), `provenance-13` (`read` but zero rows -- the legitimate F3 case, still green)."
+}

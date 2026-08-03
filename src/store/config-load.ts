@@ -36,14 +36,16 @@ import type { GateConfig } from "../gates/config";
 import { CONFIG_PATH, configError, mergeGateConfig, validateConfigOverrides } from "../gates/config";
 
 function noValidation(): NonNullable<GateConfig["_configValidation"]> {
-  return { findings: [], checked: 0, total: 0 };
+  return { findings: [], checked: 0, total: 0, overriddenKeys: [] };
 }
 
 /** rk-45m: the shared shape for both whole-file failure modes below -- one loud finding, `checked:
  * 0` (nothing could even be checked field-by-field), `total: 1` (the file itself is the one thing
  * that failed), mirroring how a single malformed field is counted by `validateConfigOverrides`. */
 function wholeFileFailure(message: string): NonNullable<GateConfig["_configValidation"]> {
-  return { findings: [configError(message)], checked: 0, total: 1 };
+  // LB6: no field was applied, so nothing is an explicit override — the strict defaults are in
+  // force and every presence-conditional gate must treat them as such.
+  return { findings: [configError(message)], checked: 0, total: 1, overriddenKeys: [] };
 }
 
 function describeTopLevelShape(parsed: unknown): string {
@@ -108,6 +110,9 @@ export async function loadGateConfig(root: string): Promise<GateConfig> {
   // `config._configValidation` for `configGate` (src/gates/index.ts) to surface.
   const { overrides, findings, checked, total } = validateConfigOverrides(parsed as Record<string, unknown>);
   const config = mergeGateConfig(overrides);
-  config._configValidation = { findings, checked, total };
+  // LB6: `overriddenKeys` carries WHICH known fields the repo actually set, so a pure gate can tell
+  // an explicit override from a default it happens to equal. `overrides` is already exactly that
+  // set (malformed/unknown fields never enter it), so this is a projection, not a second decision.
+  config._configValidation = { findings, checked, total, overriddenKeys: Object.keys(overrides) };
   return config;
 }

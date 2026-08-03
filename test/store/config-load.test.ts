@@ -67,7 +67,7 @@ describe("loadGateConfig (edge: reads .rk/config.json)", () => {
     // DEFAULT_GATE_CONFIG) so this test states what changed, rather than silently widening.
     const { _configValidation, ...rest } = cfg;
     expect(rest).toEqual(DEFAULT_GATE_CONFIG);
-    expect(_configValidation).toEqual({ findings: [], checked: 0, total: 0 });
+    expect(_configValidation).toEqual({ findings: [], checked: 0, total: 0, overriddenKeys: [] });
   });
 
   test("merges a present .rk/config.json over the defaults", async () => {
@@ -208,7 +208,11 @@ describe("loadGateConfig — rk-xbm: every field runtime-validated, never silent
 
   test("a fully valid config produces zero validation findings and a checked==total coverage pair", async () => {
     const cfg = await withConfig({ phase: "exploration", shardsMaxLines: 350, shardsPrefix: "MC" });
-    expect(cfg._configValidation).toEqual({ findings: [], checked: 3, total: 3 });
+    // LB6: `overriddenKeys` names exactly the known fields this config actually applied — the fact
+    // a pure gate needs to tell an explicit override from a default it happens to equal.
+    expect(cfg._configValidation).toEqual({
+      findings: [], checked: 3, total: 3, overriddenKeys: ["phase", "shardsPrefix", "shardsMaxLines"],
+    });
   });
 
   // Mutation proof: temporarily changing `if (v === "exploration" || v === "consolidation")` in
