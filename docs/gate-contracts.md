@@ -143,8 +143,8 @@ invocation has no direct rk counterpart to adopt, but the mechanism it wanted is
 absent. Recorded here explicitly so M0.5's AISM-parity divergence bookkeeping excludes both on
 purpose, not by oversight.
 
-**Per-repo parameters (this WP's scope).** Two config values are explicitly per-repo, not
-global constants, ported from AISM's hardcoded defaults:
+**Per-repo parameters (this WP's scope).** These config values are explicitly per-repo, not
+global constants — the first two ported from AISM's hardcoded defaults, the third an rk addition:
 - **Brittleness soft cap** (linker gate): default **26** nodes, **no depth check** by default.
   AISM's own `argument/README.md:80-81` still documents the *old* rule ("default >12 / depth
   >3") — that prose is stale against the code (`af_constants.py:19`, `check_brittleness`'s
@@ -153,11 +153,20 @@ global constants, ported from AISM's hardcoded defaults:
 - **Report-shard PREFIX** (no default — amended 2026-07-18, R12; was "AISM" in the AISM source)
   and **MAX_LINES** (280, already an env-var override in AISM) — see the report-shards gate
   section.
+- **Refs quote-at-locus tolerance** (`refsLocusToleranceLines`, refs gate): default **50** lines,
+  added by P2/rk-wkzh (2026-08-03) with Gate 3 check 6. The claimed `refs/<path>:<lines>` window is
+  widened by this many lines in each direction before the matched quote's position is tested
+  against it — absorbing header/front-matter offsets and re-extraction drift without accepting a
+  different passage. Per-repo because the right slack depends on how a repo's `refs/` payloads
+  were extracted. Unlike `refsMinRunReportingLength` (MIN_RUN, message-only), this one **decides a
+  verdict**; the two are never conflated or repurposed for each other. No AISM counterpart — AISM
+  never enforced the locus at all.
 
 **Config validation (rk-xbm, M1 review B1).** `.rk/config.json` is untrusted, untyped JSON.
 Every field is runtime-validated before use (`src/gates/config.ts`'s `validateConfigOverrides`):
 enum membership for `phase`, positive-finite-number for the numeric fields
-(`linkerBrittlenessSoftCap`, `shardsMaxLines`, `refsMinRunReportingLength`), non-empty-string for
+(`linkerBrittlenessSoftCap`, `shardsMaxLines`, `refsMinRunReportingLength`,
+`refsLocusToleranceLines`), non-empty-string for
 `provenanceStatusTableFile`/`shardsPrefix`, and unknown-key detection. A malformed or unknown
 field is NEVER silently accepted and NEVER silently kept — it is dropped (falling back to
 `DEFAULT_GATE_CONFIG`'s strict value, so a typo can only ever make checking STRICTER, never
@@ -259,7 +268,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
 | **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), Check 14 (L5 promotion, M3.8), Check 16 (retraction, rk-0ehr) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and L5 promotion are likewise consolidation-weight validity/status concerns over an af-validated claim, not DAG-coherence structural checks |
-| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed |
+| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all" |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
@@ -1082,6 +1091,8 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   minimum-length threshold for the ≥40-char-partial-match **FAIL** diagnostic (see Checks item 4
   and Divergences) rather than as a PASS threshold — AISM's own PASS-on-partial-match tuning
   tradeoff is documented under Known limitations below as the thing rk's divergence resolves.
+- Config: `refsLocusToleranceLines` (default 50) — check 6's window slack, per-repo. No AISM
+  counterpart (AISM never enforced the locus); see Shared conventions' "Per-repo parameters".
 - Regexes: `refs/[A-Za-z0-9_./-]+(:[\d,-]+)?` (refs-locus, line 44); `proofs/[A-Za-z0-9_-]+`
   (proofs-reference / IMPORT marker, line 46).
 - **Quote extraction** (check-refs.py:63-74, `extract_quote`): prefer the double-quoted run
@@ -1100,7 +1111,10 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
 1. **Classification** (check-refs.py:108-133):
    - IMPORT external — `source` contains a `proofs/` reference and **no** refs/ locus ⇒
      verdict `skip_import` (not an error: it imports a validated lemma, nothing to quote-check).
-   - No extractable quote — no refs/ locus, or no double-quoted text ⇒ verdict `skip_noquote`, WARN.
+   - No extractable quote — no refs/ locus, or no double-quoted text ⇒ verdict `skip_noquote`.
+     **WARN only when the `source` names no refs/ locus at all**; a `source` that DOES name one and
+     still yields no quote is check 7's ERROR (P2/rk-wkzh). The classification itself is unchanged —
+     the two skip reasons stay distinguishable — only the severity of the locus-present case moves.
    - refs-quote external — has both a refs/ locus and a quote ⇒ proceeds to checks 2–4.
 2. **Payload existence** — for a refs-quote external whose `refs/<path>` file is **not** present
    on disk ⇒ verdict **FAIL**, never a skip: "refs file <fp> ABSENT — a claimed VERBATIM refs
@@ -1128,6 +1142,29 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    quote.ts`); the gate must call that function rather than re-deriving the guard.
 5. Unparseable external JSON ⇒ **FAIL** "unparseable JSON: <error>" — a corrupt file is a hard
    fail, never a skip (check-refs.py:174-179).
+6. **Quote at locus** (rk addition, P2/rk-wkzh — AISM incidents I2/I4; see Divergences) — when
+   check 4 has already PASSed **and** the locus carries a `:<lines>` suffix, the matched quote
+   must also fall at the claimed place. The suffix grammar is the locus regex's own optional group
+   (`:[\d,-]+`): `N` ⇒ the window `N..N`, `N-M` ⇒ `N..M`, a comma list ⇒ its enclosing span
+   `min..max`; a locus with **no** line suffix, or a suffix carrying no digits, makes this check
+   **vacuous** (PASS — nothing was claimed). The window is widened by
+   `refsLocusToleranceLines` (default **50**) in each direction. The matched run's line span is
+   computed on the **RAW** refs text — never the normalized text, in which `\x0c` is `\s` and
+   vanishes — under **both** counting conventions: `\n`-only (what `grep -n`/`wc -l` report) and
+   `\n`+`\x0c` (what Python's `splitlines()` reports). **PASS** if some occurrence's span overlaps
+   the widened window under **either** convention; **FAIL** only when every occurrence lies outside
+   it under **both**, with a finding naming the claimed window, the found location under each
+   convention, and the tolerance. This check only ever constrains WHERE a matched quote may fall:
+   it runs strictly inside check 4's PASS branch and can never rescue a quote that failed the
+   whole-quote match. Implementation: `src/gates/refs-locus.ts` (called once by `src/gates/refs.ts`).
+7. **No-quote escape closed** (rk addition, P2/rk-wkzh — AISM incident I3; see Divergences) — an
+   external classified `skip_noquote` because its `source` names a `refs/` locus but yields no
+   extractable double-quoted run ⇒ **FAIL**, not a WARN skip: a claimed citation the gate cannot
+   byte-verify at all is a silent exemption from the fabrication gate, and "green must never mean
+   we couldn't parse". The failure is counted in the coverage line's `failed`, never in
+   `no-quote-skipped`. An external whose `source` names **no** `refs/` locus (numerical evidence,
+   an import, prose notes — nothing was ever claimed to be quoted) keeps check 1's WARN
+   `skip_noquote` unchanged; that boundary is exactly the one `refs-05` and `refs-10` pin.
 
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
@@ -1184,6 +1221,35 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   externals ever existing); a bd issue is filed for a future splice-aware grammar (segment-wise
   whole-match around `...` boundaries) only if a future repo actually needs one — not built
   speculatively here.
+- **[rk-stricter-intended] Quote-at-locus enforced, and the no-quote escape closed** (P2, bead
+  rk-wkzh; ratified 2026-08-03 in `docs/memos/2026-08-03-rk-improvement-plan-from-aism.md` §P2).
+  Provenance: `docs/memos/2026-08-03-aism-postmortem/07-refs-report.md`,
+  §Hallucination/staleness. This entry ADDS a divergence where the port previously carried AISM's
+  behavior forward without comment; three real dated incidents, not a class-driven tightening:
+  - **I2 — wrong-passage citation that PASSED.** `GT-lee-2ed-thm-21.10` quotes text sitting at
+    line 25202 while recording locus 25748 (a different theorem); check-refs PASSes it because
+    "the locus line number is advisory" and the gate asks only whether the string occurs
+    *anywhere* in the file. The bad external is still registered and still green in AISM. Name ↔
+    locus ↔ quote was prose-trust; only quote ⊆ file was mechanical. Check 6 above makes the
+    recorded locus a checkable claim. Fixture: `refs-09`.
+  - **I3 — five citations silently exempt.** `GT-kitaev-def-delta-homomorphism`, in five
+    `lem-maincb-*` workspaces created 2026-08-02 (the campaign's newest wave), writes its `source`
+    with no `refs/` prefix and no double quotes; both regexes miss, so check-refs returns
+    `skip_noquote` (WARN, not FAIL). The quoted substance was verified correct by hand — the
+    defect is that the freeform-string schema let five of the newest citations out of the only
+    gate that would have caught a fabrication. Check 7 above closes the half of that escape rk can
+    close from the checking side (the other half is the typed-citation V-item in P6). Fixture:
+    `refs-10`.
+  - **I4 — line loci are tool-ambiguous.** `pdftotext` output contains form feeds (558 before line
+    25748 in the Lee `.txt`); `grep -n`/`wc -l` do not count `\x0c` as a line break, Python's
+    `splitlines()` does, so the same recorded locus resolves ~546 lines apart depending on the
+    reader. Hit live during the 2026-08-03 audit. This is why check 6 accepts a match satisfying
+    **either** convention rather than picking one and widening the tolerance to cover the gap: a
+    tolerance large enough to absorb 546 lines would enforce nothing. Fixture: `refs-11`.
+  **Cost**: the acceptance set strictly shrinks — only externals that previously PASSed can newly
+  FAIL, and only via checks 6-7. Zero AISM externals are affected in either direction (zero
+  refs-quote externals have ever existed there — see the zero-cost evidence in the entry above);
+  the affected population is future rk repos, which is the point.
 - **[message-only]** Coverage line reports a four-way breakdown: `checked refs: <P>/<T>
   externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped` — instead of
   AISM's `<total> externals, <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which
@@ -1210,6 +1276,9 @@ changed across AISM's history at time of reading.
 | `refs-06` | unparseable external JSON |
 | `refs-07` | **paraphrase-wrapped verbatim core** [ruling #3] — ≥40-char genuine verbatim run wrapped in paraphrased outer wording ⇒ FAIL under whole-quote-match (would PASS under AISM's own longest-run rule) |
 | `refs-08` | **syntactically-valid non-object JSON external** [rk-6r3, finding 7] — `null`/array payload ⇒ check 5's unparseable-JSON treatment extended to non-object shapes, ERROR "malformed external", never a thrown exception (AISM crashes with an uncaught `AttributeError` here, check-refs.py:180) |
+| `refs-09` | **wrong-passage citation** [P2/rk-wkzh, AISM incident I2] — quote bytes genuine but 83 lines outside the claimed `:<lines>` window under both counting conventions ⇒ check 6 ERROR (PASSed before this bead; the strict acceptance-shrink case) |
+| `refs-10` | **no-quote escape** [P2/rk-wkzh, AISM incident I3] — `source` names a `refs/` locus and carries no double-quoted run ⇒ check 7 ERROR (was WARN `skip_noquote`) |
+| `refs-11` | **form-feed locus ambiguity** [P2/rk-wkzh, AISM incident I4] — pdftotext payload with real `\x0c` bytes; the locus is plausible under `\n`+`\x0c` counting and off under `\n`-only ⇒ PASS via the either-convention rule (`config_override` pins the tolerance to 5 so the conventions are discriminating at fixture scale) |
 
 ---
 

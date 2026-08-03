@@ -93,6 +93,9 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `refs-06` | refs | unparseable external JSON | class-driven (no incident on record) | landed |
 | `refs-07` | refs | ≥40-char verbatim core wrapped in paraphrase (FAIL under whole-quote-match) | class-driven (no incident on record; zero refs-quote externals have ever existed in AISM history — a full history scan of `proofs/*/externals/*.json` finds none, so this is provably parity-free per the 2026-07-17 Fable review's flagged ruling #3) | landed |
 | `refs-08` | refs | syntactically-valid non-object JSON external (`null`, array) — malformed-external ERROR, never a throw | **rk-6r3** / `docs/reviews/2026-07-18-m0.3-milestone-review-codex.md` finding 7: `refs.ts:138` cast a parsed JSON external without an object/null guard before reading `obj.source`, so a `null`/array external threw and killed the entire composed `rk check` (the finding's other half, `cli/check.ts:25`'s missing per-gate exception boundary, is covered by a `test/cli-check.test.ts` fault-injection test, not a separate fixture). AISM's own `check-refs.py` has the identical bug class — `check_refs`'s `d.get("name", f.stem)` (check-refs.py:180) raises an uncaught `AttributeError` on `d=None`, script-verified directly against this fixture. Triage: rk-stricter-intended. | landed |
+| `refs-09` | refs | wrong-passage citation: quote bytes present and whole-quote-matching, but 83 lines outside the claimed `refs/lee-smooth-2ed/lee-2ed.txt:95` window under BOTH line-counting conventions ⇒ check 6 ERROR | **rk-wkzh** / P2 (`docs/memos/2026-08-03-rk-improvement-plan-from-aism.md` §P2, ratified 2026-08-03), AISM incident **I2** (`docs/memos/2026-08-03-aism-postmortem/07-refs-report.md` §Hallucination/staleness): `GT-lee-2ed-thm-21.10` quotes text at line 25202 while recording locus 25748 (a different theorem) — right bytes, wrong attribution, **still registered and still green in AISM**. Transcribed here at 1/230 scale: the quoted sentence is Proposition 21.2's weaker statement at line 12; the recorded locus 95 is Theorem 21.10's sharper 2n+1 statement. This is rk-wkzh's strict acceptance-shrink case: PASS before the bead, ERROR after, and the only direction any verdict moves. Runs at the shipped default tolerance (50 lines), so it also pins that the default is not vacuous. `aism_behavior: differs` — check-refs.py PASSes it (locus advisory, whole-file substring search); triage rk-stricter-intended. Mutation-proven red-first through the corpus harness (`if (atLocus.ok \|\| true)` in refs.ts turns it green at exit 0 — the bug itself; reverted). | landed |
+| `refs-10` | refs | `source` names `refs/kitaev-2405.02434/approximate_algebras.tex:503-532` but carries no double-quoted run ⇒ check 7 ERROR (was WARN `skip_noquote`) | **rk-wkzh** / P2, AISM incident **I3**: `GT-kitaev-def-delta-homomorphism` in five `lem-maincb-*` workspaces (created 2026-08-02, the campaign's newest wave) writes its `source` with no `refs/` prefix and no double quotes; both regexes miss, so check-refs returns `skip_noquote` WARN and five of the newest citations sit outside the only gate that would catch a fabrication. The quoted substance was verified correct by hand — the ESCAPE was the defect, not the content. rk: green must never mean we could not parse. Boundary partner `refs-05` (no `refs/` locus anywhere in the `source`) keeps the WARN skip unchanged; the two fixtures together pin the exact edge. `aism_behavior: differs` (check-refs.py exits 0); triage rk-stricter-intended. Mutation-proven red-first (disabling the locus-present condition returns the fixture to a WARN skip with `1 no-quote-skipped`; reverted). | landed |
+| `refs-11` | refs | pdftotext-shaped payload with 11 real `\x0c` bytes: the quote is at line 91 counting `\n` only and line 102 counting `\n`+`\x0c`, the recorded locus is 102 ⇒ golden PASS via the either-convention rule | **rk-wkzh** / P2, AISM incident **I4**: `pdftotext` output contains form feeds (558 before line 25748 in the Lee `.txt`); `grep -n`/`wc -l` do not count `\x0c` as a line break, Python's `splitlines()` does, so the same recorded locus resolves ~546 lines apart depending on the reader — hit live during the 2026-08-03 audit. Check 6 therefore accepts a match satisfying EITHER convention instead of picking one and widening the tolerance to cover the gap (a tolerance that large would enforce nothing). `config_override` pins `refsLocusToleranceLines` to 5 so the two conventions are genuinely discriminating at fixture scale; at the shipped default of 50 an 11-line gap would be absorbed and the fixture would prove nothing. `aism_behavior: same` (check-refs.py also exits 0, for the weaker reason that its locus is advisory). Mutation-proven red-first (dropping the `\x0c` clause from the overlap rule turns this fixture RED with one check-6 ERROR; reverted). The far-outside counterpart is `refs-09` plus `test/gates/refs-locus.test.ts`'s "outside BOTH conventions" case. | landed |
 | `provenance-01` [PLAN] | provenance | OVERCLAIM (registry `open` framed as proved) | class-driven; the gate's own header names this "the project's #1 guarded failure mode" (`check-provenance.py:24`) — no dated instance actually caught in AISM history, guarded preventively | landed |
 | `provenance-02` | provenance | underclaim (proved framed only `open`, WARN) | class-driven (no incident on record) | landed |
 | `provenance-03` [PLAN] | provenance | stale SHA256 (tracked source edited post-hash) | class-driven (no incident on record) | landed |
@@ -155,11 +158,22 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `freshness-10` | freshness | extra top-level manifest key ⇒ loud ERROR (`additionalProperties: false` enforced at runtime) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-11` | freshness | extra per-entry key ⇒ loud ERROR, entry never half-accepted | **M2 boundary review blocker 4** (613b304). | landed |
 
-Totals: 3 config + 15 defs + 43 argument/linker + 8 refs + 20 provenance + 8 runs +
+Totals: 3 config + 15 defs + 43 argument/linker + 11 refs + 20 provenance + 8 runs +
 15 report-shards + 11 freshness = **123 fixtures** across the eight gates named in
 `docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
 with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
 are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).
+`refs-09`, `refs-10`, `refs-11` (+3 over the then-pinned 128) are rk-wkzh / P2 (Gate 3's
+quote-at-locus tightening and the closed no-quote escape), the first refs fixtures transcribed
+from real dated incidents rather than classes: AISM I2 (wrong-passage citation, permanently
+green), I3 (five newest citations silently exempt via freeform-string drift) and I4 (form-feed
+line-number ambiguity) — see their own rows above, `docs/gate-contracts.md` Gate 3 checks 6-7 and
+its new `[rk-stricter-intended]` divergence entry, and
+`docs/memos/2026-08-03-aism-postmortem/07-refs-report.md` for the incident writeups. (The Totals
+line above still reads 123 — it has been stale since the 127-fixture recount and is deliberately
+left as-is here; only its `refs` term is corrected, 8 → 11. The authoritative counts are
+`src/corpus/discovery.ts`'s `EXPECTED_FIXTURE_COUNT` = 131 and `bun run selftest`'s own
+`checked corpus:` line.)
 `linker-44` (+1 over the then-pinned 127) is rk-0ehr / P1 (retraction as a first-class event):
 the AISM 2026-07-28 incident fixture — see its own row above and `docs/gate-contracts.md`
 Gate 2's new Check 16. NOTE: the "Totals" line immediately above was already stale before this
@@ -642,7 +656,7 @@ script-verified / rk-only / untested breakdown.
 |---|---|---|---|---|
 | defs | 15/15 | 14 | 1 (`defs-15`, rk-stricter-intended, F5/M0.7 strict-provenance) | 0 |
 | linker | 27/27 | 21 | 6 (`linker-15` message-only, `linker-21` crash→ERROR, `linker-24` missing-`kind` no-op — confirmed rk-stricter-intended by empirical harness run, rk-4uw, see below; `linker-25` mirror-presence-conditional, contract amendment not a strictness triage, R14/rk-1rv; `linker-26`/`linker-27` recursive `argument/**/*.md` discovery, contract amendment not a strictness triage, rk-9pk — AISM's `argument/lemmas/*.md`-only glob would see 0 shards on `linker-26`'s tree and never reach `linker-27`'s stray file at all) | 0 |
-| refs | 8/8 | 6 | 2 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended) | 0 |
+| refs | 11/11 | 7 | 4 (`refs-07`, whole-quote-match rule; `refs-08`, crash→ERROR — check-refs.py:180 uncaught AttributeError on null external, rk-stricter-intended; `refs-09`, quote-at-locus enforced — check-refs.py PASSes a right-bytes/wrong-passage citation, rk-stricter-intended; `refs-10`, no-quote escape closed — check-refs.py returns a WARN `skip_noquote`, rk-stricter-intended. `refs-11` is `same`: both exit 0) | 0 |
 | provenance | 19/19 | 16 | 3 (`provenance-11`, hardcoded-filename incident; `provenance-17`, silent registry-parse denominator shrinkage — rk-stricter-intended; `provenance-18`, per-item-WARN flood — rk-stricter-intended) | 0 |
 | runs | 8/8 | 8 | 0 | 0 |
 | shards | 15/15 | 13 | 2 (`shards-14`, rk-stricter-intended, R12 shardsPrefix requiredness; `shards-15` report/-root-presence-conditional, contract amendment not a strictness triage, R13/rk-au6) | 0 |
@@ -655,6 +669,14 @@ existed when the AISM-script harness runs were performed. The 6 M1-repair-wave f
 (argument.py / check-provenance.py), not by harness execution, and the two config fixtures have
 no AISM counterpart to run at all. The table's totals are deliberately left at the M0 cohort's
 92 rather than restated.)
+
+(Scope note, 2026-08-03, rk-wkzh: the refs row is updated to 11/11 to keep the per-gate fixture
+count truthful, but `refs-09`/`refs-10`/`refs-11` are outside the M0 cohort on the same footing as
+the M1-repair-wave fixtures above — their `aism_behavior` fields are backed by a direct read of
+`check-refs.py`'s logic (advisory locus, whole-file substring search, `skip_noquote` WARN) as
+recorded in `docs/memos/2026-08-03-aism-postmortem/07-refs-report.md`, where I2 is documented as
+*observed live and still green*, not by a fresh harness execution. The `total` row stays at the
+M0 cohort's 92.)
 
 `shards-14` (R12, bead rk-psm) was script-validated 2026-07-18: `check-report-shards.sh` run
 directly against `corpus/shards/shards-14/repo` (`GIT_CEILING_DIRECTORIES` pinned to rk's own
