@@ -133,5 +133,13 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `af: validated` claim is an ERROR, and it leaves the available set for every dependent), the
  * other the `l5-shard-bytes` domain (Check 14: a live retraction overrides a FRESH `VALID`
  * verdict — the half no hash comparison could catch, because the bytes never changed). See
- * docs/gate-contracts.md Gate 2's new Check 16. */
-export const EXPECTED_FIXTURE_COUNT = 128;
+ * docs/gate-contracts.md Gate 2's new Check 16.
+ * 131 (+3 over the then-pinned 128): rk-wkzh — `refs-09`, `refs-10`, `refs-11`, Gate 3's P2
+ * tightening (docs/memos/2026-08-03-rk-improvement-plan-from-aism.md §P2), the first refs fixtures
+ * transcribed from real dated incidents rather than classes: `refs-09` is AISM I2 (quote bytes
+ * genuine, recorded locus a DIFFERENT theorem — PASS before this bead, ERROR after; the strict
+ * acceptance-shrink case), `refs-10` is I3 (a source naming a refs/ path with no extractable
+ * quote rode `skip_noquote` WARN past the fabrication gate; now an ERROR), `refs-11` is I4 (a
+ * pdftotext payload with real `\x0c` bytes whose locus is plausible under form-feed-aware line
+ * counting and off under `\n`-only counting — PASSes via the either-convention rule). */
+export const EXPECTED_FIXTURE_COUNT = 131;

@@ -1,0 +1,108 @@
+Chapter 21. Some Applications to Differential Geometry
+21.1 Riemannian Metrics and Embeddings
+In this chapter we collect several applications of the theory developed so far.
+The reader is assumed to be familiar with the notion of a smooth manifold with
+boundary, together with the basic properties of partitions of unity.
+Throughout, all manifolds are assumed to be smooth, second countable, and
+Hausdorff, and all maps are assumed to be smooth unless stated otherwise.
+We begin with a preliminary observation about proper maps, which will be used
+repeatedly in the arguments that follow.
+Proposition 21.2. Let M be a smooth n-manifold with or without boundary.
+The statement of the proposition is recorded on the following line.
+Every smooth n-manifold admits a proper smooth embedding into some Euclidean space.
+Proof. Choose a countable cover of M by regular coordinate balls, and let
+{psi_i} be a smooth partition of unity subordinate to that cover. Each of the
+coordinate charts may be composed with a suitable bump function so that the
+resulting map is compactly supported.
+Assembling these locally defined maps yields a smooth map into a Euclidean space
+of possibly very large dimension, and a routine argument shows that the map so
+obtained is injective on each element of the cover.
+Properness follows from the fact that the exhaustion function constructed above
+is proper by design, so preimages of compact sets are compact.
+This completes the proof of the preliminary result.
+Remark 21.3. The dimension produced by the argument above is not optimal, and
+in general it grows with the number of charts required to cover the manifold.
+The remainder of this section is devoted to reducing that dimension.
+Exercise 21.4. Show that the hypothesis of second countability cannot be
+dropped from the statement of the preceding proposition.
+Exercise 21.5. Give an example of a manifold for which the naive construction
+above produces an embedding into a space of dimension strictly greater than 2n.
+21.2 The Whitney Theorems
+The results of this section are due to Hassler Whitney, and are among the most
+frequently quoted theorems in all of differential topology.
+We first record a measure-theoretic lemma that is used in the proof.
+Lemma 21.6 (Sard). If F is a smooth map between smooth manifolds, then the set
+of critical values of F has measure zero in the codomain.
+Proof. See the references at the end of the chapter; the proof is a careful
+induction on the dimension of the domain and is omitted here.
+Corollary 21.7. The set of regular values of a smooth map is dense.
+Proof. Immediate from the preceding lemma, since a set of measure zero has
+empty interior in a manifold.
+Lemma 21.8. Let M be a smooth n-manifold and suppose F is a smooth map from M
+into a Euclidean space of dimension strictly greater than 2n + 1.
+Then almost every linear projection onto a hyperplane restricts to an injective
+immersion on the image of F.
+Proof. Consider the smooth map defined on the complement of the diagonal in the
+product of M with itself, sending a pair of distinct points to the direction of
+the line joining their images.
+The domain of this map has dimension 2n, which is strictly less than the
+dimension of the target projective space by hypothesis.
+By the preceding corollary, the image of that map therefore omits at least one
+direction, and any projection along an omitted direction is injective.
+A similar argument applied to the unit sphere bundle of the tangent bundle shows
+that almost every such projection is also an immersion.
+Since the intersection of two sets of full measure again has full measure, a
+single projection may be chosen with both properties simultaneously.
+This proves the lemma.
+Remark 21.9. The dimension bound in the preceding lemma is sharp for the
+argument given, but not for the theorem that follows.
+The reader should note carefully that repeated application of the lemma reduces
+the ambient dimension one step at a time, and that the reduction stops as soon
+as the dimension count in the proof no longer applies.
+It is precisely this stopping point that accounts for the numerical bound
+appearing in the statement of the main theorem below.
+We are now ready to state and prove the principal result of this chapter.
+Before doing so we fix some notation that will remain in force for the rest of
+the section.
+Let M denote a smooth n-manifold without boundary, and let N denote a smooth
+manifold of dimension m, again without boundary.
+All embeddings considered below are proper unless explicitly stated otherwise.
+We write B for the open unit ball in Euclidean space of the relevant dimension,
+and we write S for the corresponding unit sphere.
+The letter k is reserved for indices ranging over a countable cover.
+With these conventions in place, the statement of the theorem is as follows.
+The proof occupies the remainder of this section and is broken into three steps.
+Step one reduces the general case to the case of a compact manifold.
+Step two applies the projection lemma repeatedly to reduce the dimension.
+Step three verifies that the resulting map is proper.
+Each step is carried out in detail below, and the reader who is willing to
+accept the compact case may skip directly to the second step.
+We remark that the argument given here differs slightly from Whitney's original
+treatment, which proceeded by a direct construction.
+The version presented here has the advantage of isolating the measure-theoretic
+input into the single lemma proved above.
+It has the disadvantage of producing a weaker bound in the non-compact case.
+Both versions of the argument may be found in the literature cited at the end of
+the chapter, and the interested reader is encouraged to compare them.
+We now turn to the statement itself.
+The following theorem is the central result of this chapter and is used without
+further comment in the chapters that follow.
+Its proof combines every result established so far in this section.
+Readers primarily interested in applications may take the statement on faith and
+proceed directly to the examples in the next section.
+The examples there illustrate the sharpness of the dimension bound.
+We state the theorem in the form in which it will be applied later.
+Theorem 21.10 (Whitney Embedding Theorem). Every smooth n-manifold admits a
+proper smooth embedding into Euclidean space of dimension 2n + 1.
+Proof. By the first step of the reduction described above, it suffices to treat
+the case in which M is compact.
+In that case the preliminary proposition provides an embedding into a Euclidean
+space of some finite dimension, possibly very large.
+If that dimension exceeds 2n + 1, the projection lemma supplies a hyperplane
+projection that remains an injective immersion.
+Iterating the projection lemma reduces the dimension one step at a time until
+the bound 2n + 1 is reached, at which point the lemma no longer applies.
+An injective immersion of a compact manifold is an embedding, and an embedding
+of a compact manifold is automatically proper.
+This completes the proof in the compact case, and with it the proof of the
+theorem.

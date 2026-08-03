@@ -1,0 +1,4 @@
+{
+  "name": "GT-kitaev-def-delta-homomorphism",
+  "source": "Definition of a delta-homomorphism, taken from refs/kitaev-2405.02434/approximate_algebras.tex:503-532 and reproduced verbatim in the workspace notes: a linear map is a delta-homomorphism when the multiplicative defect is bounded by delta in the relevant norm."
+}

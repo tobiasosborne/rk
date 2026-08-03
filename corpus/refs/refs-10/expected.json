@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-maincb-delta-hom/externals/GT-kitaev-def-delta-homomorphism.json",
+      "message_pattern": "carries no double-quoted verbatim text"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "aism_behavior": "differs",
+  "notes": "AISM incident I3 (docs/memos/2026-08-03-aism-postmortem/07-refs-report.md, Hallucination/staleness): `GT-kitaev-def-delta-homomorphism` in five `lem-maincb-*` workspaces (created 2026-08-02, the campaign's newest wave) writes its `source` with no double quotes, so `extract_quote` finds nothing and check-refs returns skip_noquote (WARN) — five of the newest citations silently exempt from the only gate that would catch a fabrication. Checked by hand at the time: the 820-char quote WAS exact; the substance was fine and the ESCAPE was the defect. This fixture reproduces the escape shape: the payload is present and the prose is accurate, but nothing double-quoted is extractable, so the claim cannot be byte-verified at all. rk Check 7: a source that NAMES a refs/ locus and offers no quote is an ERROR — green must never mean we could not parse. `aism_behavior: differs` — check-refs.py exits 0 with a WARN skip. Triage: rk-stricter-intended. Contrast refs-05 (no refs/ locus anywhere in the source), which keeps the WARN skip unchanged: this fixture and that one together pin the exact boundary of the new ERROR."
+}

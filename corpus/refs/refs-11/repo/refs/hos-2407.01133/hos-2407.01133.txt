@@ -1,0 +1,96 @@
+Approximate idempotents and their stability, page 1
+Line 2 of page 1: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 1: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 1: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 1: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 1: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 1: the argument proceeds by a routine estimate on the resolvent.
+1
+Approximate idempotents and their stability, page 2
+Line 2 of page 2: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 2: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 2: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 2: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 2: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 2: the argument proceeds by a routine estimate on the resolvent.
+2
+Approximate idempotents and their stability, page 3
+Line 2 of page 3: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 3: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 3: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 3: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 3: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 3: the argument proceeds by a routine estimate on the resolvent.
+3
+Approximate idempotents and their stability, page 4
+Line 2 of page 4: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 4: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 4: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 4: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 4: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 4: the argument proceeds by a routine estimate on the resolvent.
+4
+Approximate idempotents and their stability, page 5
+Line 2 of page 5: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 5: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 5: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 5: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 5: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 5: the argument proceeds by a routine estimate on the resolvent.
+5
+Approximate idempotents and their stability, page 6
+Line 2 of page 6: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 6: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 6: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 6: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 6: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 6: the argument proceeds by a routine estimate on the resolvent.
+6
+Approximate idempotents and their stability, page 7
+Line 2 of page 7: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 7: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 7: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 7: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 7: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 7: the argument proceeds by a routine estimate on the resolvent.
+7
+Approximate idempotents and their stability, page 8
+Line 2 of page 8: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 8: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 8: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 8: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 8: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 8: the argument proceeds by a routine estimate on the resolvent.
+8
+Approximate idempotents and their stability, page 9
+Line 2 of page 9: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 9: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 9: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 9: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 9: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 9: the argument proceeds by a routine estimate on the resolvent.
+9
+Approximate idempotents and their stability, page 10
+Line 2 of page 10: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 10: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 10: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 10: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 10: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 10: the argument proceeds by a routine estimate on the resolvent.
+10
+Approximate idempotents and their stability, page 11
+Line 2 of page 11: the argument proceeds by a routine estimate on the resolvent.
+Line 3 of page 11: the argument proceeds by a routine estimate on the resolvent.
+Line 4 of page 11: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 11: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 11: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 11: the argument proceeds by a routine estimate on the resolvent.
+11
+Approximate idempotents and their stability, page 12
+Line 2 of page 12: the argument proceeds by a routine estimate on the resolvent.
+the trace-norm distance between the two channels is bounded by twice the diamond-norm defect
+Line 4 of page 12: the argument proceeds by a routine estimate on the resolvent.
+Line 5 of page 12: the argument proceeds by a routine estimate on the resolvent.
+Line 6 of page 12: the argument proceeds by a routine estimate on the resolvent.
+Line 7 of page 12: the argument proceeds by a routine estimate on the resolvent.
+12

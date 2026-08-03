@@ -1,0 +1,10 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["0 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "config_override": { "refsLocusToleranceLines": 5 },
+  "aism_behavior": "same",
+  "notes": "AISM incident I4 (docs/memos/2026-08-03-aism-postmortem/07-refs-report.md): pdftotext output carries form feeds (558 before line 25748 in the Lee .txt). `grep -n`/`wc -l` do NOT count \\x0c as a line break; Python's `splitlines()` does — the same recorded locus resolves ~546 lines apart depending on which tool wrote it down. This payload is a 12-page pdftotext-shaped extract with 11 real \\x0c bytes; the quote sits at line 91 counting \\n only and line 102 counting \\n and form feeds. The recorded locus is 102 (a splitlines-based reader), so the \\n-only reading is 11 lines off. Check 6 PASSes it because a match satisfying EITHER convention satisfies the window — that either-convention rule, not a large tolerance, is what makes Check 6 safe against I4. The tolerance is deliberately overridden to 5 (declared in config_override) so the two conventions are genuinely discriminating at fixture scale: at the shipped default of 50 an 11-line gap would be absorbed and the fixture would prove nothing. `aism_behavior: same` — check-refs.py also exits 0 here (its locus is advisory), for a weaker reason. The far-outside counterpart, where BOTH conventions place the match outside the window, is refs-09 plus test/gates/refs-locus.test.ts's \"outside BOTH conventions\" case; one fixture tree cannot carry both expectations."
+}

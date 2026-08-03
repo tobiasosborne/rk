@@ -26,7 +26,8 @@ import {
   refsFilePath,
   refsGate,
 } from "../../src/gates/refs";
-import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
+import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
+import type { GateConfig } from "../../src/gates/config";
 import { formatCoverageLine } from "../../src/gates/framework";
 import { unmatchedExpectations } from "../../src/gates/subset-match";
 import type { ExpectedFinding } from "../../src/gates/subset-match";
@@ -625,9 +626,13 @@ interface ExpectedJson {
   verdict: "pass" | "fail";
   findings: ExpectedFinding[];
   exit_code: number;
+  /** Mirrors src/corpus/run.ts's own field: a fixture whose point depends on a non-default
+   * parameter (refs-11's locus tolerance) must be run under that parameter here too, or this
+   * harness would silently check a DIFFERENT contract than test/corpus.test.ts does. */
+  config_override?: Partial<GateConfig>;
 }
 
-describe("corpus fixtures — refs-01..08 (direct-load)", () => {
+describe("corpus fixtures — refs-01..11 (direct-load)", () => {
   const CORPUS_REFS = join(import.meta.dir, "..", "..", "corpus", "refs");
   const FIXTURE_IDS = [
     "refs-01",
@@ -638,6 +643,9 @@ describe("corpus fixtures — refs-01..08 (direct-load)", () => {
     "refs-06",
     "refs-07",
     "refs-08",
+    "refs-09",
+    "refs-10",
+    "refs-11",
   ];
 
   for (const id of FIXTURE_IDS) {
@@ -645,7 +653,7 @@ describe("corpus fixtures — refs-01..08 (direct-load)", () => {
       const dir = join(CORPUS_REFS, id);
       const expected: ExpectedJson = JSON.parse(readFileSync(join(dir, "expected.json"), "utf8"));
       const snapshot = loadFullSnapshot(join(dir, "repo"));
-      const result = refsGate.run(snapshot, DEFAULT_GATE_CONFIG);
+      const result = refsGate.run(snapshot, mergeGateConfig(expected.config_override));
 
       const missing = unmatchedExpectations(result.findings, expected.findings);
       expect(missing).toEqual([]);

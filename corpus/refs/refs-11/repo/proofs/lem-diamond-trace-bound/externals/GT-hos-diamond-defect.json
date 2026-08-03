@@ -1,0 +1,4 @@
+{
+  "name": "GT-hos-diamond-defect",
+  "source": "Bound taken from refs/hos-2407.01133/hos-2407.01133.txt:102 (page 12 of the pdftotext extract). VERBATIM \"the trace-norm distance between the two channels is bounded by twice the diamond-norm defect\" is the inequality this step relies on."
+}

@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-embedding-dimension/externals/*.json",
+      "message_pattern": "OUTSIDE the claimed locus lines 95"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "aism_behavior": "differs",
+  "notes": "AISM incident I2 (docs/memos/2026-08-03-aism-postmortem/07-refs-report.md, Hallucination/staleness), transcribed at 1/230 scale. The real external `GT-lee-2ed-thm-21.10` quotes text sitting at line 25202 while recording locus 25748 (Theorem 21.10) — a WRONG-ATTRIBUTION citation whose bytes are genuine, and which is permanently green in AISM. Here: the quoted sentence is Proposition 21.2's weaker statement at line 12, while the recorded locus 95 is Theorem 21.10's sharper 2n+1 statement; the two differ in exactly the way that matters. `aism_behavior: differs` — check-refs.py PASSes this input (its locus is advisory and `longest_run_match` asks only whether the string occurs ANYWHERE in the file); rk Check 6 FAILs it. Triage: rk-stricter-intended. This is the strict-acceptance-shrink fixture for rk-wkzh: a case that used to PASS and now FAILs, and the ONLY direction the P2 change moves any verdict. Default tolerance (50 lines) applies — no config_override — so the fixture also pins that the shipped default is not vacuous: the quote is 83 lines from the claimed window's near edge. Both line-counting conventions agree here (the payload has no form feeds); refs-11 is the convention-divergent case."
+}
