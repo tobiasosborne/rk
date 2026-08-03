@@ -49,14 +49,24 @@ export function boundedRawSnippet(raw: unknown, cap: number = RAW_SNIPPET_CAP): 
 /** The outcome of one `verifyOneNode` call. `spentTokens` (rk-s9t) is the turn's all-in token cost
  * (0 when no worker was available or the dispatcher reported no usage) — reported on BOTH the apply
  * and the skip branch so the caller adds it to the running campaign total regardless of whether the
- * verdict was ever applied (a rejected/discarded turn spent real tokens too). */
+ * verdict was ever applied (a rejected/discarded turn spent real tokens too).
+ *
+ * LB1: `contentHash` is the dispatch-time hash of the node the ITEM TARGETS (`item.node`) — which
+ * for a challenge is the BLAMED node, not necessarily the reviewed one. See the binding comment at
+ * the bottom of `verifyOneNode`. */
 export type VerifyNodeOutcome = { spentTokens: number } & ({ item: AfApplyItem; contentHash: string } | { skip: string; vacuousNode?: string });
 
 /** Dispatches + binds a single node's verdict, applying the prover-overreach guard. Returns the af
  * item to apply (with the content hash the verdict was bound against, so the caller can re-confirm
  * the authoritative bytes immediately before apply — M3 blocker 1), or a reason it was skipped
- * (never applied); either way carries the turn's `spentTokens` for the campaign budget. */
-export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string, knownNodeIds: ReadonlySet<string>, allNodes: readonly AfNodeView[]): Promise<VerifyNodeOutcome> {
+ * (never applied); either way carries the turn's `spentTokens` for the campaign budget.
+ *
+ * `knownNodes` is THIS ROUND's af export view keyed by node id (the caller's `byId`): it supplies
+ * both the id set driver-verdict-map validates a challenge's blamed node against and — LB1 — that
+ * node's dispatch-time content hash. One map, one source: the hash bound to an item can never come
+ * from a different read than the membership check that admitted it, and no post-hoc workspace
+ * re-read (which would reintroduce the TOCTOU window M3 blocker 1 closed) is needed. */
+export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verifiedBySeam: string, knownNodes: ReadonlyMap<string, AfNodeView>, allNodes: readonly AfNodeView[]): Promise<VerifyNodeOutcome> {
   // GAP 10: `allNodes` (this round's full export view) is forwarded to `dispatchVerify` so the live
   // edge can resolve the node's declared dependencies to their content for the verifier's context.
   const turn = await deps.dispatchVerify(node, allNodes);
@@ -134,7 +144,7 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
     deps.appendLog(JSON.stringify({ kind: "bind-failed", at: deps.now(), node: node.id, issues: bound.issues.map((i) => ({ path: i.path, message: i.message })), rawSnippet: boundedRawSnippet(turn.raw) }));
     return { spentTokens, skip: `verdict bind failed: ${detail}` };
   }
-  const mapped = afItemFromVerdictDocument(node.id, bound.document, knownNodeIds);
+  const mapped = afItemFromVerdictDocument(node.id, bound.document, new Set(knownNodes.keys()));
   if (!mapped.ok) return { spentTokens, skip: `verdict map failed: ${mapped.reason}` };
   // M3.8: the cross-vendor rule only gates PROMOTION — a challenge never accepts the node this
   // turn regardless (driver-verdict-map.ts's own invariant), so there is nothing to promote and
@@ -169,5 +179,24 @@ export async function verifyOneNode(deps: DriverDeps, node: AfNodeView, verified
       return { spentTokens, skip: reason };
     }
   }
-  return { spentTokens, item: mapped.item, contentHash: node.contentHash };
+  // LB1 (M3-close review): bind the hash of the node this item ACTUALLY TARGETS. An `accept` always
+  // targets the reviewed node, so `item.node === node.id` and this is byte-identical to the previous
+  // `node.contentHash`. A `challenge` targets the BLAMED node (driver-verdict-map.ts's FIX 6), which
+  // may be a dependency: binding the reviewed node's hash there made the caller's pre-apply re-read
+  // compare two different nodes' bytes — an unconditional mismatch that discarded every cross-node
+  // challenge under a message asserting a content change nobody observed.
+  //   Why the blamed node's hash is the RIGHT one: the caller's guard and af's `--expect-hash` CAS
+  // both key on the node the verdict is recorded against, so the bytes that must not have moved are
+  // that node's. The reviewed node's own bytes moving does not invalidate a challenge on a DIFFERENT
+  // node — a challenge only ever blocks, never promotes (bind-verdicts.ts's
+  // `hardChallengeAcceptsThisTurn` is always false) — and the reviewed node is re-dispatched against
+  // its new bytes next round anyway.
+  //   Fail closed if the target somehow carries no dispatch-time hash: the mapper already refused a
+  // blamed node outside `knownNodes`, so this is unreachable today, but binding "no hash" would let a
+  // verdict through the caller's guard on an `undefined === undefined` comparison.
+  const targetHash = mapped.item.node === node.id ? node.contentHash : knownNodes.get(mapped.item.node)?.contentHash;
+  if (targetHash === undefined) {
+    return { spentTokens, skip: `verdict target '${mapped.item.node}' has no content hash in this round's af export — refusing to bind a verdict to unknown bytes` };
+  }
+  return { spentTokens, item: mapped.item, contentHash: targetHash };
 }

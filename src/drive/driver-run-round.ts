@@ -102,7 +102,10 @@ export async function dispatchRound(
 
   // VERIFY half: dispatch a VERIFIER turn over each verifier-ready node, bind, collect apply items.
   // Unchanged validity path (M3 repair wave — verifier-only, per-node, hash-re-bound).
-  const composed: { item: AfApplyItem; contentHash: string }[] = [];
+  // LB1: `reviewedId` is the node whose DISPATCH produced this item — kept alongside the item
+  // because `item.node` may be a different (blamed) node, and the retry counter must charge the
+  // node that actually consumed a turn.
+  const composed: { item: AfApplyItem; contentHash: string; reviewedId: string }[] = [];
   for (const id of verifierReadyIds) {
     const node = byId.get(id)!;
     const attemptsSoFar = state.attempts.get(id) ?? 0;
@@ -113,11 +116,13 @@ export async function dispatchRound(
         return { done: true, result: { status: "aborted", stopReason: "budget-exhausted", message: decision.reason!, appliedNodeIds: state.appliedNodeIds, outcomes: state.outcomes, rounds: round + 1 } };
       }
     }
-    // rk-qxp (FIX 6): the mapper validates a challenge's blamed node id against the proof export —
-    // pass the current round's node-id set (byId is built from allNodes each round).
-    const r = await verifyOneNode(deps, node, verifiedBySeam, new Set(byId.keys()), allNodes);
+    // rk-qxp (FIX 6): the mapper validates a challenge's blamed node id against the proof export.
+    // LB1: `byId` (this round's export view, built from allNodes) is passed WHOLE rather than as a
+    // bare id set, so verifyOneNode can bind the TARGET node's dispatch-time hash from the same read
+    // the membership check uses.
+    const r = await verifyOneNode(deps, node, verifiedBySeam, byId, allNodes);
     tokensSpent += r.spentTokens; // accrue whether the turn applied or was discarded
-    if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash });
+    if ("item" in r) composed.push({ item: r.item, contentHash: r.contentHash, reviewedId: id });
     else {
       state.attempts.set(id, attemptsSoFar + 1);
       // rk-jit (STOP-4): tally a vacuous-accept discard so a stuck abort can name the bootstrap
@@ -137,13 +142,24 @@ export async function dispatchRound(
     // (empty batch_id), children-first so a child is recorded before its parent. M3 blocker 2:
     // only an af-recorded ACCEPT is progress; a recorded challenge is never counted.
     const ordered = [...composed].sort((a, b) => childrenFirst(a.item, b.item));
-    for (const { item, contentHash } of ordered) {
+    for (const { item, contentHash, reviewedId } of ordered) {
+      // LB1: the comparison is PER TARGET — `contentHash` is the dispatch-time hash of `item.node`
+      // (the blamed node for a cross-node challenge, the reviewed node otherwise), so the guard
+      // checks the bytes af will actually CAS against, and the two discard causes are reported
+      // SEPARATELY: an absent node was never observed to change, and saying so would be a false
+      // claim in a message that feeds `stallReasonClass` and the stuck-abort's dominant-cause line.
       const current = fresh.get(item.node);
       if (current === undefined || current !== contentHash) {
-        const staleReason = `stale verdict discarded: af node content hash changed between dispatch and apply (bound ${contentHash}, current ${current ?? "absent"})`;
+        const staleReason =
+          current === undefined
+            ? `stale verdict discarded: af node absent from the pre-apply re-read — deleted, renamed, or unreadable since dispatch (target ${item.node}, bound ${contentHash})`
+            : `stale verdict discarded: af content hash changed between dispatch and apply (target ${item.node}, bound ${contentHash}, current ${current})`;
         noteSkip(staleReason);
         deps.appendLog(JSON.stringify({ kind: "node-skipped", at: deps.now(), node: item.node, reason: staleReason }));
-        state.attempts.set(item.node, (state.attempts.get(item.node) ?? 0) + 1);
+        // The RETRY counter charges the node whose dispatch was consumed — the REVIEWED node. A
+        // blamed node was never dispatched this round, and charging it would let `checkRetryCap`
+        // exhaust (and so permanently starve) a node that has never been given a turn.
+        state.attempts.set(reviewedId, (state.attempts.get(reviewedId) ?? 0) + 1);
         continue;
       }
       // rk B1: send the bound content hash as `expect_hash` so af RE-checks it (and verifier-ready
@@ -156,7 +172,11 @@ export async function dispatchRound(
         deps.appendLog(JSON.stringify({ kind: "verdict-outcome", at: deps.now(), node: o.node, verdict: o.verdict, status: o.status, exit: report.exit }));
         if (o.status === "applied" && o.verdict === "accept") { state.appliedNodeIds.push(o.node); progressed = true; epistemicAdvance = true; /* rk-cpk: an accept is the ONLY epistemic advancement — a node newly validated */ }
         else {
-          state.attempts.set(o.node, (state.attempts.get(o.node) ?? 0) + 1);
+          // LB1: same rule as the stale discard above — the attempt belongs to the node whose
+          // dispatch produced this outcome (`reviewedId`), not to `o.node`, which for a cross-node
+          // challenge is the blamed, never-dispatched node. Identical to the previous behavior
+          // whenever blamed == reviewed, which is every accept and every self-challenge.
+          state.attempts.set(reviewedId, (state.attempts.get(reviewedId) ?? 0) + 1);
           // rk-dp1 (RUN-REPORT-9): an APPLIED challenge is NOT progress — it re-blocks the node. The
           // stall classifier previously counted only node-SKIPPED reasons, so run A's dependency-
           // content challenge loop (node '1.7' challenged 3x on the same grounds) never appeared in
