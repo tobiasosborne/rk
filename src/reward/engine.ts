@@ -45,9 +45,9 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
     const p = predictions.get(id);
     return p ? Math.log2(1 + p.sumE / p.count / HARDNESS_T0) : undefined;
   };
-  const childActivity = (node: string, seq: number) => {
+  const childActivity = (nodeId: string, seq: number) => {
     for (const e of escrows) {
-      if (e.expired || !e.shares.has(node)) continue;
+      if (e.expired || !e.shares.has(nodeId)) continue;
       e.lastActivityRound = currentRound;
       void seq;
     }
@@ -64,7 +64,7 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
           if (currentRound - e.lastActivityRound >= ESCROW_EXPIRY_ROUNDS) {
             e.expired = true;
             diagnostics.push({
-              seq, code: "escrow-expired", node: e.obligation,
+              seq, code: "escrow-expired", nodeId: e.obligation,
               detail: `escrow from reduce@${e.grantSeq}: ${e.remaining.toFixed(6)} voided after ${ESCROW_EXPIRY_ROUNDS} inactive rounds`,
             });
             e.remaining = 0;
@@ -85,7 +85,7 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
         const hParent = hPred(ev.obligation);
         const hChildren = ev.children.map((c) => hPred(c));
         if (hParent === undefined || hChildren.some((h) => h === undefined)) {
-          diagnostics.push({ seq, code: "reduce-unpredicted", node: ev.obligation,
+          diagnostics.push({ seq, code: "reduce-unpredicted", nodeId: ev.obligation,
             detail: "parent and every child need a prediction before a reduce can be valued" });
           break;
         }
@@ -107,21 +107,21 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
       case "close": {
         totals.closes += 1;
         if (ev.wildcard) totals.wildcardCloses += 1;
-        if (closed.has(ev.node)) {
-          diagnostics.push({ seq, code: "duplicate-close", node: ev.node });
+        if (closed.has(ev.nodeId)) {
+          diagnostics.push({ seq, code: "duplicate-close", nodeId: ev.nodeId });
           break;
         }
-        closed.set(ev.node, ev.spentTokens);
+        closed.set(ev.nodeId, ev.spentTokens);
         const payout = CLOSE_TIER_WEIGHTS[ev.tier] * hardnessReal(ev.spentTokens);
-        credit(ev.node, payout);
+        credit(ev.nodeId, payout);
         const cited = [...ev.citedDefs, ...ev.citedLemmas];
         for (const c of cited) credit(c, (REUSE_RATE * payout) / cited.length);
         // Vest this node's share in every live escrow that named it a child.
         for (const e of escrows) {
           if (e.expired) continue;
-          const share = e.shares.get(ev.node);
+          const share = e.shares.get(ev.nodeId);
           if (share === undefined) continue;
-          e.shares.delete(ev.node);
+          e.shares.delete(ev.nodeId);
           e.remaining -= share;
           e.lastActivityRound = currentRound; // vesting IS child activity — before the delete above ate the evidence
           credit(e.obligation, share);
@@ -131,28 +131,28 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
       case "prune": {
         totals.prunes += 1;
         if (ev.wildcard) totals.wildcardPrunes += 1;
-        const h = hPred(ev.node);
+        const h = hPred(ev.nodeId);
         if (h === undefined) {
-          diagnostics.push({ seq, code: "prune-unpredicted", node: ev.node,
+          diagnostics.push({ seq, code: "prune-unpredicted", nodeId: ev.nodeId,
             detail: "a prune pays 0.3 x H_pred; no prediction exists for this node" });
           break;
         }
-        credit(ev.node, PRUNE_RATE * h);
-        childActivity(ev.node, seq);
+        credit(ev.nodeId, PRUNE_RATE * h);
+        childActivity(ev.nodeId, seq);
         break;
       }
       case "compress": {
         const distinct = new Set(ev.useSites).size;
-        const spent = closed.get(ev.node);
-        if (distinct < 2 || compressed.has(ev.node) || spent === undefined) {
-          diagnostics.push({ seq, code: "compress-refused", node: ev.node,
+        const spent = closed.get(ev.nodeId);
+        if (distinct < 2 || compressed.has(ev.nodeId) || spent === undefined) {
+          diagnostics.push({ seq, code: "compress-refused", nodeId: ev.nodeId,
             detail: spent === undefined ? "node never closed"
-              : compressed.has(ev.node) ? "already compressed once"
+              : compressed.has(ev.nodeId) ? "already compressed once"
               : `needs >= 2 distinct use sites, got ${distinct}` });
           break;
         }
-        compressed.add(ev.node);
-        credit(ev.node, COMPRESS_RATE * hardnessReal(spent));
+        compressed.add(ev.nodeId);
+        credit(ev.nodeId, COMPRESS_RATE * hardnessReal(spent));
         break;
       }
     }

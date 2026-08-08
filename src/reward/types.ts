@@ -44,11 +44,11 @@ export type RewardEvent =
        * event is appended only after that check — the engine trusts the log, the gates guard
        * what may enter it. */
       type: "reduce"; obligation: string; children: string[] }
-  | { type: "close"; node: string; tier: CloseTier; spentTokens: number;
+  | { type: "close"; nodeId: string; tier: CloseTier; spentTokens: number;
       citedDefs: string[]; citedLemmas: string[]; wildcard?: boolean }
   | { /** Verified refutation; `certRef` names the death certificate (refutation record). */
-      type: "prune"; node: string; certRef: string; wildcard?: boolean }
-  | { type: "compress"; node: string; useSites: string[] };
+      type: "prune"; nodeId: string; certRef: string; wildcard?: boolean }
+  | { type: "compress"; nodeId: string; useSites: string[] };
 
 export interface RewardDiagnostic {
   /** 0-based position of the offending event in the log. */
@@ -59,7 +59,7 @@ export interface RewardDiagnostic {
     | "prune-unpredicted"
     | "compress-refused"
     | "escrow-expired";
-  node?: string;
+  nodeId?: string;
   detail?: string;
 }
 

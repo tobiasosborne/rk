@@ -27,7 +27,7 @@ const H_FAST = Math.log2(2.25);
 describe("computePayouts", () => {
   it("pays CLOSE at tier-weight x H_real, and mints REUSE trickle to direct citations", () => {
     const events: RewardEvent[] = [
-      { type: "close", node: "lem-a", tier: "proved", spentTokens: 300_000, citedDefs: ["def-x"], citedLemmas: ["lem-b"] },
+      { type: "close", nodeId: "lem-a", tier: "proved", spentTokens: 300_000, citedDefs: ["def-x"], citedLemmas: ["lem-b"] },
     ];
     const r = computePayouts(events);
     expect(r.balances["lem-a"]).toBeCloseTo(2.0, 6); // 1.0 * log2(1 + 300k/100k)
@@ -38,8 +38,8 @@ describe("computePayouts", () => {
 
   it("weights CLOSE by tier: proved-mod-audit 0.6, numerical 0.25", () => {
     const r = computePayouts([
-      { type: "close", node: "n1", tier: "proved-mod-audit", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
-      { type: "close", node: "n2", tier: "numerical", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "n1", tier: "proved-mod-audit", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "n2", tier: "numerical", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
     ]);
     expect(r.balances["n1"]).toBeCloseTo(1.2, 6);
     expect(r.balances["n2"]).toBeCloseTo(0.5, 6);
@@ -62,7 +62,7 @@ describe("computePayouts", () => {
     // c1 closes: half the escrow (equal child H_pred) vests to goal's balance.
     r = computePayouts([
       ...events,
-      { type: "close", node: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
     ]);
     expect(r.balances["goal"]).toBeCloseTo(0.25 * V + 0.375 * V, 6);
     expect(r.balances["c1"]).toBeCloseTo(1.0, 6); // log2(2), its own close
@@ -94,7 +94,7 @@ describe("computePayouts", () => {
     // A close AFTER expiry vests nothing.
     const late = computePayouts([
       ...base, ...rounds,
-      { type: "close", node: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
     ]);
     const V = H_SLOW - H_FAST;
     expect(late.balances["goal"]).toBeCloseTo(0.25 * V, 6); // upfront only, no vest
@@ -108,7 +108,7 @@ describe("computePayouts", () => {
       { type: "round", n: 1 },
       { type: "reduce", obligation: "goal", children: ["c1", "c2"] },
       ...Array.from({ length: 8 }, (_, i): RewardEvent => ({ type: "round", n: i + 2 })),
-      { type: "close", node: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "c1", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
       ...Array.from({ length: 8 }, (_, i): RewardEvent => ({ type: "round", n: i + 10 })),
     ];
     const r = computePayouts(events);
@@ -119,21 +119,21 @@ describe("computePayouts", () => {
   it("pays PRUNE at 0.3 x H_pred with a certificate, and ignores duplicate CLOSEs loudly", () => {
     const r = computePayouts([
       { type: "predict", obligation: "b1", estimator: "e1", p250k: 0, p1m: 1 },
-      { type: "prune", node: "b1", certRef: "af:refutation:b1#4" },
-      { type: "close", node: "n", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
-      { type: "close", node: "n", tier: "proved", spentTokens: 900_000, citedDefs: [], citedLemmas: [] },
+      { type: "prune", nodeId: "b1", certRef: "af:refutation:b1#4" },
+      { type: "close", nodeId: "n", tier: "proved", spentTokens: 100_000, citedDefs: [], citedLemmas: [] },
+      { type: "close", nodeId: "n", tier: "proved", spentTokens: 900_000, citedDefs: [], citedLemmas: [] },
     ]);
     expect(r.balances["b1"]).toBeCloseTo(0.3 * H_SLOW, 6);
     expect(r.balances["n"]).toBeCloseTo(1.0, 6); // first close only
-    expect(r.diagnostics.some((d) => d.code === "duplicate-close" && d.node === "n")).toBe(true);
+    expect(r.diagnostics.some((d) => d.code === "duplicate-close" && d.nodeId === "n")).toBe(true);
   });
 
   it("COMPRESS needs >= 2 distinct use sites and pays once per node", () => {
     const r = computePayouts([
-      { type: "close", node: "n", tier: "proved", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
-      { type: "compress", node: "n", useSites: ["a"] },
-      { type: "compress", node: "n", useSites: ["a", "b"] },
-      { type: "compress", node: "n", useSites: ["a", "b", "c"] },
+      { type: "close", nodeId: "n", tier: "proved", spentTokens: 300_000, citedDefs: [], citedLemmas: [] },
+      { type: "compress", nodeId: "n", useSites: ["a"] },
+      { type: "compress", nodeId: "n", useSites: ["a", "b"] },
+      { type: "compress", nodeId: "n", useSites: ["a", "b", "c"] },
     ]);
     // 2.0 (close) + 0.1 * 2.0 (one compress) — the 1-site attempt and the repeat both refused.
     expect(r.balances["n"]).toBeCloseTo(2.2, 6);
@@ -151,7 +151,7 @@ describe("computePayouts", () => {
     const r = computePayouts([
       { type: "predict", obligation: "b1", estimator: "e1", p250k: 0, p1m: 1 },
       { type: "predict", obligation: "b1", estimator: "e2", p250k: 1, p1m: 1 },
-      { type: "prune", node: "b1", certRef: "cert" },
+      { type: "prune", nodeId: "b1", certRef: "cert" },
     ]);
     // mean E = (625k + 125k)/2 = 375k -> H = log2(4.75)
     expect(r.balances["b1"]).toBeCloseTo(0.3 * Math.log2(4.75), 6);
