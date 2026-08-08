@@ -95,3 +95,32 @@ follows the first clean S0.
 
 Numbers above change only: (a) after S0 smoke findings, for mechanics that S0 proves
 broken (dated append required); (b) after the N5.1 postmortem (N5.2). Nothing else.
+
+## Appended 2026-08-08 (same day, TJO-ratified): N5.1 paper-firewall benchmark protocol
+
+Ratified in-session. The N5.1 "real research goal" becomes a settled-question benchmark:
+a post-cutoff arXiv paper's question, campaign firewalled from the answer.
+
+- Leakage channels controlled: (1)/(2) search -> NO network for any worker; ONE librarian
+  role, arXiv API only, hard submittedDate <= D cap, append-only request/response ledger;
+  PreToolUse deny hooks as defense-in-depth. (3) weights -> paper must postdate the newest
+  fleet cutoff + buffer; CANARY PREFLIGHT mandatory (probe every fleet model with the
+  question + title probes in throwaway contexts; any confident hit burns the paper).
+  (4) setup -> examiner context (reads paper, seals answer) is DISJOINT from the campaign
+  orchestrator, which never reads the paper; goal statement must be posable in pre-cutoff
+  language, ideally sourced from a pre-cutoff public statement (MathOverflow / conjecture
+  catalog). (5) residue -> fresh campaign repo and stores.
+- Answer envelope: examiner commits sha256 of the settled statement + a sealed
+  method-fingerprint term list BEFORE launch (sealed dir, orchestrator-pledged unread;
+  audit subagents read it). Tripwire: an audit lens greps banked artifacts + librarian
+  ledger for fingerprint terms each round via an ISOLATED subagent reporting only
+  hit/no-hit; a hit halts the campaign.
+- Pre-registered outcome classes: (a) settled at comparable strength; (b) weaker version /
+  key lemma / same crux reached; (c) different-but-valid route; (d) goal unmet but
+  nontrivial banked byproducts (examiner-scored blind); (e) validity held (zero false
+  banked claims under sampled deep verification) regardless of progress. Ledger metrics
+  (pull rate, false-accept) are co-primary endpoints. Batch of 3-5 papers across
+  difficulty is the unit of evidence; single papers are anecdotes. Results expire per
+  model generation (rolling benchmark; the time series is the deliverable).
+- Asymmetry disclosure (fixed framing): "can the orchestration reach a known frontier
+  point unaided" — never a head-to-head with the authors.
