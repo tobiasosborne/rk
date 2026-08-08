@@ -53,6 +53,24 @@ I.1 (boundary probes before review) + I.2 (no fencing without a citable record) 
 mid-trial from the campaign's own findings; first probed review dropped refutations
 to 1/6 components (n=1).
 
+## Late-session addendum (2026-08-09, appended before final close)
+
+After the first HANDOFF rewrite, the session continued: window 5 launched on campaign
+A (probe-runner built first — scripts/probe-runner.sh + constitution I.3, closing
+RUN-REPORT-4's structural blocker; example probe carries its own boundary-failure
+scar). **Window 5 may STILL BE RUNNING at read time** — check ../rk-campaign-A for
+RUN-REPORT-5.md; audit checklist: transcript 0/0/0 (WebSearch/WebFetch/mcp), tripwire
+baseline exactly 1, score vs ../rk-bench/paper-A/seal/. Campaign B (question-finding
+variant, candidate B sealed per prereg appends) ran ONE window and closed clean:
+portfolio 12 live / 45-of-72 killed-with-cause; blinded grading happened but the arm
+comparison is VOID — examiner extraction confound, documented with a same-question
+A/B proof in ../rk-bench/paper-B/grading/results.md; a cheap 4-question regrade
+repairs it. Process yield regardless: critic asymmetry (aggressive critic 11/11
+right — verification panels need a maximally hostile seat), kills-as-content,
+question-generation saturates in one window. The full trial record lives in
+../rk-bench/paper-A/analyst-notes.md (append-only, triage-coded) — read it before
+touching either campaign.
+
 ## Next steps (in order)
 
 1. **Probe-runner channel** (window-4 structural finding): campaign workers cannot
