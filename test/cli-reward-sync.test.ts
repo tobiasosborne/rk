@@ -73,6 +73,8 @@ function syncRepo(): string {
   writeShard(root, "lem-open", { status: "open" });
   writeShard(root, "lem-dead", { status: "disproved" });
   writeShard(root, "lem-obs", { status: "obstruction" });
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(join(root, "docs", "review-record.md"), "# hostile review record (test)\n", "utf8");
   return root;
 }
 
@@ -263,6 +265,51 @@ describe("rk reward sync — CLI wiring", () => {
     expect(lines.join("\n")).toContain("close lem-l5-backed tier=proved-mod-audit");
     const result = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
     expect(result.findings).toEqual([]);
+  });
+
+  test("review blocker 1: reward report --strict exits 1 on a hand-authored unbacked pma close", async () => {
+    const root = syncRepo();
+    writeShard(root, "lem-laundered", { status: "proved-mod-audit" }); // no backing
+    seedLedger(root, { type: "close", nodeId: "lem-laundered", tier: "proved-mod-audit",
+      spentTokens: 100_000, citedDefs: [], citedLemmas: [] });
+    const { out, lines } = capture();
+    expect(await run(["reward", "report", "--strict", "--root", root], { out })).toBe(1);
+    expect(lines.join("\n")).toContain("reward-tier-unbacked");
+  });
+
+  test("review major 1: an unhealthy L5 store (ordinal gap) backs nothing", async () => {
+    const root = syncRepo();
+    writeShard(root, "lem-gap", { status: "proved-mod-audit" });
+    const bytes = readFileSync(join(root, "argument", "lem-gap.md"));
+    const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    // ordinal jumps 0 -> 2: broken append-only chain; the earlier VALID must not resurrect.
+    writeFileSync(join(root, ".rk", "l5-verdicts.jsonl"),
+      JSON.stringify({ schemaVersion: "1", ordinal: 0, itemId: "lem-gap", l5ContentHash: hash,
+        verdict: "VALID", justification: "j", verifierSeam: "s" }) + "\n" +
+      JSON.stringify({ schemaVersion: "1", ordinal: 2, itemId: "lem-gap", l5ContentHash: hash,
+        verdict: "VALID", justification: "j", verifierSeam: "s" }) + "\n", "utf8");
+    const { out, lines } = capture();
+    await rewardSyncCommand(["--root", root], out, DEPS);
+    expect(lines.join("\n")).toContain("close lem-gap WITHHELD");
+  });
+
+  test("review major 2: a live l5-shard-bytes retraction defeats an otherwise-fresh VALID backing", async () => {
+    const root = syncRepo();
+    writeShard(root, "lem-withdrawn", { status: "proved-mod-audit" });
+    const bytes = readFileSync(join(root, "argument", "lem-withdrawn.md"));
+    const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "l5-verdicts.jsonl"),
+      JSON.stringify({ schemaVersion: "1", ordinal: 0, itemId: "lem-withdrawn", l5ContentHash: hash,
+        verdict: "VALID", justification: "j", verifierSeam: "s" }) + "\n", "utf8");
+    writeFileSync(join(root, ".rk", "retractions.jsonl"),
+      JSON.stringify({ schemaVersion: "1", ordinal: 0, itemId: "lem-withdrawn", contentHash: hash,
+        hashDomain: "l5-shard-bytes", retractedBy: "test:sweep", reason: "withdrawn",
+        appendedAt: "2026-08-08T00:00:00.000Z" }) + "\n", "utf8");
+    const { out, lines } = capture();
+    await rewardSyncCommand(["--root", root], out, DEPS);
+    expect(lines.join("\n")).toContain("close lem-withdrawn WITHHELD");
   });
 
   test("registered as a reward subcommand, and in the reward help", async () => {

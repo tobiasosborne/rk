@@ -9,12 +9,13 @@
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { hasPath } from "./snapshot";
+import { readRetractionFacts } from "./linker-retraction";
 import type { GateConfig } from "./config";
 import { loadDefIds, parseRegistry } from "./linker-parse";
 import type { Lemma } from "./linker-parse";
 import { fileSha256 } from "./snapshot";
 import { L5_STORE_PATH } from "./linker-l5";
-import { latestVerdictFor, parseL5Log } from "../drive/l5-store";
+import { l5StoreHealthy, latestVerdictFor, parseL5Log } from "../drive/l5-store";
 import { parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
 import { computePayouts } from "../reward/engine";
 import { supportedCloseTier, TIER_RANK } from "../reward/tier";
@@ -38,17 +39,39 @@ function targetIds(ev: RewardEvent): string[] {
   }
 }
 
-/** Check 4b's backing test: a fresh VALID L5 verdict for the shard (same hash domain and
- * latest-by-ordinal rule as the linker's promotion machinery — src/drive/l5-store.ts), or a
- * non-empty `provenance:` frontmatter declaration. VALID-WITH-CORRECTION does not back a bank
- * (correction pending — mirrors linker-37's promotion stance); stale verdicts do not back. */
-export function pmaBacked(snapshot: RepoSnapshot, target: Lemma): boolean {
-  if ((target.provenance ?? "").trim().length > 0) return true;
+/** Check 4b's backing test (hardened per the Tier A review of f5b6b7c, all four findings):
+ * (a) PROVENANCE backs only if its FIRST whitespace-token resolves to an existing repo file
+ *     that is not the shard itself — arbitrary prose, a nonexistent path, self-reference, and
+ *     the M3.8 `legacy-same-family` marker (which asserts the OPPOSITE of verification) never
+ *     back. Review finding: the escape was self-authenticating.
+ * (b) An L5 verdict backs only from a HEALTHY store (zero parse issues, intact ordinal chain —
+ *     l5StoreHealthy, the same poisoning stance as linker promotion; review reproduced an
+ *     earlier-VALID resurrection on linker-41's truncated store),
+ * (c) with a healthy retraction ledger and NO live retraction for the shard in EITHER hash
+ *     domain (a withdrawn verdict must not back a permanent close; review reproduced on
+ *     linker-44), and
+ * (d) the latest-by-ordinal verdict fresh against current shard bytes and exactly VALID
+ *     (VALID-WITH-CORRECTION and stale never back — linker-37 stance). */
+export function pmaBacked(snapshot: RepoSnapshot, target: Lemma, lemmas: readonly Lemma[]): boolean {
+  const prov = (target.provenance ?? "").trim();
+  if (prov.length > 0) {
+    const token = prov.split(/\s+/)[0]!;
+    // Existence via the sha256 facts map, which covers EVERY file on disk (snapshot-load.ts:
+    // "a provenance source row naming ANY present path is verified") — the text map's bounded
+    // include set is irrelevant here; only existence is asserted, content is the auditor's job.
+    if (token !== target.path && fileSha256(snapshot, token) !== undefined) return true;
+    // unresolvable provenance is NOT backing; fall through to the L5 route
+  }
   const text = snapshot.get(L5_STORE_PATH);
   if (text === undefined) return false;
+  const parsed = parseL5Log(text);
+  if (!l5StoreHealthy(parsed).healthy) return false;
+  const retractions = readRetractionFacts(snapshot, lemmas);
+  if (!retractions.healthy) return false;
+  if (retractions.liveL5.has(target.id) || retractions.liveAf.has(target.id)) return false;
   const hash = fileSha256(snapshot, target.path);
   if (hash === undefined) return false;
-  const latest = latestVerdictFor(parseL5Log(text).records, target.id, hash);
+  const latest = latestVerdictFor(parsed.records, target.id, hash);
   return latest !== undefined && latest.fresh && latest.verdict === "VALID";
 }
 
@@ -113,7 +136,7 @@ export const rewardGate: Gate = {
               severity: "ERROR", path, structural: true,
               message: `[reward-tier-unsupported] event ${seq} closes '${ev.nodeId}' at tier '${ev.tier}' but the registry supports ${supported === undefined ? "no close tier (status=" + String(target.status) + ", af=" + target.af + " — self-report never banks)" : `at most '${supported}'`}`,
             });
-          } else if (ev.tier === "proved-mod-audit" && target.af !== "validated" && !pmaBacked(snapshot, target)) {
+          } else if (ev.tier === "proved-mod-audit" && target.af !== "validated" && !pmaBacked(snapshot, target, lemmas)) {
             // Check 4b (window-1 finding rk-90so): pma-by-STATUS is itself a self-reportable
             // axis — before it banks, the status must be BACKED by an external record: a fresh
             // VALID L5 verdict for this shard, or a non-empty `provenance:` declaration naming

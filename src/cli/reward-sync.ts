@@ -171,7 +171,7 @@ export async function rewardSyncCommand(args: string[], out: Out, deps: GraphCom
   const snap = loadSnapshot(root);
   const unbackedPmaIds = new Set(
     parseRegistry(snap).lemmas
-      .filter((l) => l.status === "proved-mod-audit" && l.af !== "validated" && !pmaBacked(snap, l))
+      .filter((l, _i, all) => l.status === "proved-mod-audit" && l.af !== "validated" && !pmaBacked(snap, l, all))
       .map((l) => l.id),
   );
   const plan = planRewardSync(doc.nodes, load.events, loadDefIds(snap), withRound, unbackedPmaIds);

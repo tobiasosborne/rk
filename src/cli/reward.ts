@@ -17,6 +17,10 @@
 // log on every run, so there is no cache here to go stale.
 
 import { computePayouts } from "../reward/engine";
+import { rewardGate } from "../gates/reward";
+import { DEFAULT_GATE_CONFIG } from "../gates/config";
+import { formatFinding } from "../gates/framework";
+import { loadSnapshot } from "../store/snapshot-load";
 import type { PayoutResult } from "../reward/types";
 import { loadRewardLedger, type RewardLedgerLoad } from "../store/reward-ledger";
 import type { Out } from "./args";
@@ -86,8 +90,16 @@ async function rewardReport(args: string[], out: Out): Promise<number> {
   const load = loadRewardLedger(root);
   const result = computePayouts(load.events);
   for (const line of formatRewardReport(load, result)) out.log(line);
+  // Tier A review of f5b6b7c, blocker 1: the report is a PAYOUT surface — it must never show a
+  // balance Gate 8 would refuse. The gate runs here unconditionally; --strict turns findings
+  // into a nonzero exit.
+  const gate = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
+  if (gate.findings.length > 0) {
+    out.log(`gate findings (${gate.findings.length}) — balances above are NOT bankable until these clear:`);
+    for (const f of gate.findings) out.log(`  ${formatFinding(f)}`);
+  }
   if (!strict) return 0;
-  return result.diagnostics.length > 0 || load.malformed.length > 0 ? 1 : 0;
+  return result.diagnostics.length > 0 || load.malformed.length > 0 || gate.findings.length > 0 ? 1 : 0;
 }
 
 const REWARD_COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = {
