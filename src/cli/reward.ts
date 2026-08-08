@@ -21,6 +21,7 @@ import type { PayoutResult } from "../reward/types";
 import { loadRewardLedger, type RewardLedgerLoad } from "../store/reward-ledger";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
+import { rewardSyncCommand } from "./reward-sync";
 
 /** Fixed 6-decimal rendering: payouts are log2-scaled reals, and a rounded-to-2 balance hides the
  * difference between "earned nothing" and "earned a sliver of a reuse share". */
@@ -91,6 +92,7 @@ async function rewardReport(args: string[], out: Out): Promise<number> {
 
 const REWARD_COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = {
   report: rewardReport,
+  sync: rewardSyncCommand,
 };
 
 export function rewardHelp(out: Out): number {
@@ -100,7 +102,14 @@ export function rewardHelp(out: Out): number {
   out.log("  diagnostic, the totals, and every malformed ledger line. Shadow only: computes and");
   out.log("  prints, never allocates, never writes. --strict exits 1 iff any diagnostic or any");
   out.log("  malformed line exists (a driver's clean-ledger gate); otherwise the exit is always 0.");
-  out.log("  next: 'rk reward report' in a campaign repo that has banked events.");
+  out.log("  usage: rk reward sync [--dry-run] [--round] [--root <dir>]");
+  out.log("  Reconciles registry ground truth into the ledger: appends the MISSING close events");
+  out.log("  (tier taken from src/reward/tier.ts's one mapping — a self-reported 'proved' with");
+  out.log("  af: none banks nothing) and the missing prune events for refuted nodes. spentTokens");
+  out.log("  is 0 until per-node accounting lands, noted per event. Idempotent; --dry-run writes");
+  out.log("  nothing; --round also appends the next allocation-round marker. Refuses and writes");
+  out.log("  NOTHING on a structurally incomplete build or an unreadable ledger line.");
+  out.log("  next: 'rk reward sync --dry-run' in a campaign repo, then without --dry-run.");
   return 0;
 }
 
