@@ -136,3 +136,25 @@ terms), D_CUTOFF = 2026-05-31, paper v1 2026-07-22. Tripwire terms are PROVENANC
 fingerprints only; the bound formula and hard-instance idea are the rediscovery target
 and are deliberately not tripwire terms. Canary preflight running at time of append;
 go/no-go per its verdict.
+
+## Appended 2026-08-09 (TJO-ratified): candidate B — the question-finding variant
+
+Varies the N5.1 rig to the QUESTION-FINDING tier (previously excluded by design).
+- Candidate B = a post-cutoff paper whose QUESTION is itself the contribution
+  ("initiates the study of" class), not a pre-cutoff open problem. Sealed as before
+  (question + answer + fingerprints + envelope).
+- The campaign receives only a broad DIRECTION statement in pre-cutoff language
+  (fresh repo, fresh orchestrator, same firewall + librarian + date cap).
+- Deliverable: a gated question portfolio (question-kind shards: serves-the-direction
+  rationale, pairwise subsumption, predicted-value ranking, top-5 designated) — one
+  window, no heavy proving (cheap by construction).
+- CONTROL ARM = the canary itself: bare-fleet-model probes "pose the best open
+  questions in <direction>" are recorded; if any bare model poses the sealed question,
+  candidate burned; else those outputs are arm A in a BLINDED TJO taste-grading
+  against the campaign's top-5 (arm B), plus the mechanical score: sealed-question
+  hit (equivalent up to reformulation, TJO adjudicates) / near-miss (same object,
+  different question) / miss.
+- Pre-registered claims at stake: (i) does the harness (gating, subsumption,
+  literature-grounding, portfolio discipline) improve question quality over the bare
+  model; (ii) can EITHER arm find the question a real research group found. Scoring
+  before answering: the campaign never attempts the questions in this window.
