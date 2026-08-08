@@ -196,6 +196,65 @@ Phase 3 — Autonomy unblocking:
 Sequencing note: Phase 1 before Phase 2 — a bandit over an ungated conjecture pool
 optimizes slop throughput. Phase 3.3 can start immediately (it is measurement).
 
+## Amendment 2026-08-08 (same day, TJO pushback): the anti-wandering reward design
+
+TJO pushback, recorded: rk's only real purpose is a dark factory for science that
+produces high-quality results ON THE WAY along a big research direction; proposed
+definitions and conjectures must be MEASURED for progress or the system wanders
+aimlessly (observed repeatedly in practice). Everything else in the plan accepted in
+substance; reward computation needed a real answer.
+
+This amendment SUPERSEDES Phase 2.2-2.3. The embedding-distance PBRS idea is demoted
+to a diagnostic — embedding distance to a goal is gameable and vague. The load-bearing
+design instead:
+
+Principle: progress is verified change in the GOAL GRAPH; nothing earns credit by
+being created, only by what it changes.
+
+1. Goal graph + frontier. Root = the north-star contract (rk scaffold already stamps
+   it). Decompositions are conditional CLAIMS ("if L1..Lk then T"), verified like any
+   claim. The frontier = open obligations of live decompositions = the measurable
+   campaign state.
+2. Attachment as admission: every conjecture names the frontier obligation it serves
+   via an implication edge; the edge is adversarially verified (subsumed edges
+   rejected — kills reformulation slop structurally). Every definition names its
+   intended use site. Unattached proposals go to the prospecting pool, not the graph.
+3. Zero-at-admission; five payout events only:
+   - CLOSE(O): tier-weight x realized hardness (measured prover effort, Elo-style).
+   - REDUCE(O -> O1..Ok): verified conditional decomposition, paid MOSTLY IN ESCROW —
+     fraction now, remainder when children close. Anti-theatre device: decomposition
+     inflation is THE gaming mode of goal-tree rewards; subtrees that only REDUCE and
+     never CLOSE freeze and their escrow expires.
+   - PRUNE: verified refutation of a conjecture/branch, paid positive with death
+     certificate (PRD already had this).
+   - REUSE: retroactive trickle credit up the dependency DAG — the ONLY way
+     definitions earn; minting is pure cost.
+   - COMPRESS: proof-shortening on re-derivation, >=2 distinct use sites required
+     (single-use-library caution).
+4. Hardness estimates are pre-registered predictions with a scoreboard: logged before
+   attempts, Brier-scored against realized cost, estimator weights follow calibration.
+   "LLM taste" is admitted as a prior that keeps score and loses its vote when
+   miscalibrated. Fits M4.0 pre-registration.
+5. Retroactive attachment (HER): prospecting output and accidental lemmas earn only
+   when they later attach to the frontier — useful wandering is eventually paid,
+   never in advance.
+6. Wandering budgeted, not forbidden: bandit arms = frontier obligations + ONE
+   prospecting arm under a hard quota (10-20%, tuned from shadow data); prospecting
+   yield (retroactive attachments per token) is itself measured.
+7. Wandering is an audit defect with named metrics for rk audit: pull rate (banked
+   events attached / all banked), frontier stagnation clock, drift trend,
+   concentration. AISM's wandering was invisible because activity metrics looked
+   healthy; here the ledger states it mechanically.
+8. Direction-shaped goals: an explicit milestone-question portfolio, each question
+   carrying a verified serves-the-direction rationale + subsumption check; competing
+   decompositions as a population (Nexus pattern); killing a bad decomposition is
+   paid work.
+
+Honest limits: a wrong initial decomposition is mitigated (population + paid PRUNE)
+but not eliminated; early-campaign calibration is noisy (first weeks are shadow-mode
+data collection); truly alien paths sit in prospecting longer than an insightful
+human would leave them — the quota is the pressure valve, set by evidence.
+
 ## 4. What this does NOT change
 
 D1-D8 stand. No runtime deps, no servers, pure core / thin edges. The entry gates are
