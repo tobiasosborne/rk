@@ -11,6 +11,41 @@ import { sourceId } from "../types";
 
 const TABLE_HEADER_MARKER = "| source-id |";
 
+/** The Source registry table's header + separator rows, verbatim in AISM's own column order
+ * (refs/manifest/SOURCES.md there). Exported so the seed document below and any future writer can
+ * never drift from what `parseManifestTable` reads back. */
+export const SOURCES_TABLE_HEADER = [
+  "| source-id | citation | locator | retrieved | local path | key file (sha256-16) | role |",
+  "|-----------|----------|---------|-----------|------------|----------------------|------|",
+];
+
+/** A fresh SOURCES.md with an EMPTY Source registry table — what `rk refs adopt` seeds in a repo
+ * that has no refs/manifest/ yet (rk-pk8o: the firewalled-librarian case, where the payload arrives
+ * before any manifest exists). Carries the ROLE/UPDATE-POLICY header CLAUDE.md rule 9 requires of
+ * every generated doc, and states the never-fabricate-a-hash policy AISM's own SOURCES.md states,
+ * because that policy is exactly what makes an adopted row trustworthy. */
+export function emptySourcesDocument(): string {
+  return [
+    "<!--",
+    "ROLE: catalogue of ground-truth reference sources for this repo — citation, local path, role,",
+    "integrity hash. Generated/appended by `rk refs add` and `rk refs adopt`; rows may be edited by",
+    "hand for citation/role prose only.",
+    "UPDATE POLICY: append a row when a source is added; never rewrite a hash without re-deriving it",
+    "from the bytes on disk. Authoritative hashes live in refs/manifest/checksums.sha256; the fetch",
+    "recipe (when one exists) in refs/manifest/sources.lock.json. A source is PINNED only once its",
+    "bytes exist locally and a real SHA256 was computed — never fabricate a hash.",
+    "TRIGGER: `rk refs add`, `rk refs adopt`.",
+    "-->",
+    "",
+    "# SOURCES — ground-truth reference registry",
+    "",
+    "## Source registry",
+    "",
+    ...SOURCES_TABLE_HEADER,
+    "",
+  ].join("\n");
+}
+
 /** Strips a single layer of backtick code-span markers from a cell, e.g. `` `foo` `` -> `foo`.
  * Cells that are not wrapped in backticks (free prose like the citation column) pass through
  * unchanged. */

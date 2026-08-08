@@ -20,6 +20,16 @@ export async function locateQuoteInRepo(
   pattern: string,
 ): Promise<QuoteResult | null> {
   const lockPath = join(repoRoot, "refs", "manifest", "sources.lock.json");
+  // rk-p1p4a: no manifest at all is still a FAILED quote (a byte-verifiable quote was asked for and
+  // cannot be produced) — but the reason an operator gets must be the actionable one, not the raw
+  // ENOENT string this line used to surface from `.text()`.
+  if (!(await Bun.file(lockPath).exists())) {
+    throw new Error(
+      `refs are not adopted in this repo — no refs/manifest/sources.lock.json, so no source-id ` +
+        `(including '${sourceId}') is registered. Run 'rk refs add <locator> --id <source-id>', or ` +
+        `'rk refs adopt <path-under-refs/> --source <locator>' for a payload already on disk.`,
+    );
+  }
   const lock = parseLockFile(await Bun.file(lockPath).text());
   const entries = lock.files.filter((f) => f.source_id === sourceId);
   if (entries.length === 0) {

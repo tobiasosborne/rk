@@ -126,3 +126,30 @@ export async function computeStatus(
   }
   return rows;
 }
+
+/** The repo-relative path every refs surface names when it talks about the lock file. */
+export const LOCK_REL_PATH = "refs/manifest/sources.lock.json";
+
+/** ADOPTED (a lock file exists and parses — carrying zero rows is a legitimate adopted state) vs
+ * NOT ADOPTED (no lock file at all). */
+export type StatusReport = { adopted: true; rows: StatusRow[] } | { adopted: false; lockPath: string };
+
+/** rk-p1p4a (window-1 campaign finding #4): a repo that has never adopted a refs source is a
+ * legitimate, presence-conditional state — `computeStatus` used to crash with a raw ENOENT stack
+ * trace on it, which reads to an operator as a broken tool rather than as "nothing to report".
+ *
+ * The three states stay THREE, never two: absent (no lock file — reported, exit 0), adopted (read
+ * for real), and CORRUPT — a lock file that exists but does not parse still THROWS, loudly. "Nothing
+ * was ever adopted" and "we cannot tell what was adopted" are opposite claims, and folding the
+ * second into the first is exactly the false-green this codebase refuses everywhere else (the
+ * retraction store's `corrupt` vs `absent` split, docs/gate-contracts.md's "green must never mean we
+ * couldn't look"). */
+export async function computeStatusReport(
+  repoRoot: string,
+  opts: ComputeStatusOptions = {},
+): Promise<StatusReport> {
+  if (!(await Bun.file(join(repoRoot, "refs", "manifest", "sources.lock.json")).exists())) {
+    return { adopted: false, lockPath: LOCK_REL_PATH };
+  }
+  return { adopted: true, rows: await computeStatus(repoRoot, opts) };
+}

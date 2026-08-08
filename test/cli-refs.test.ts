@@ -103,3 +103,96 @@ describe("rk refs status — rk-54a deprecation warning", () => {
     expect(remediation).not.toContain("EXTPROP_REFS_CACHE");
   });
 });
+
+// rk-p1p4a / rk-pk8o: the CLI surface of the two window-1 campaign findings.
+describe("rk refs status — a repo that has never adopted a source (rk-p1p4a)", () => {
+  test("reports 'not adopted' cleanly and exits 0, never an ENOENT stack trace", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-refs-bare-"));
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await refsDispatch(["status", "--root", root], out);
+    expect(code).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("not adopted");
+    expect(text).toContain("refs/manifest/sources.lock.json");
+    expect(text).not.toContain("ENOENT");
+    expect(text).toContain("rk refs adopt");
+  });
+
+  test("a lock file that exists but does not parse is a LOUD failure, exit 1 (corrupt is not absent)", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    writeFileSync(join(root, "refs", "manifest", "sources.lock.json"), "{not json");
+    const { out, lines } = capture();
+    const code = await refsDispatch(["status", "--root", root], out);
+    expect(code).toBe(1);
+    expect(lines.join("\n")).not.toContain("not adopted");
+  });
+});
+
+describe("rk refs adopt (rk-pk8o)", () => {
+  function repoWithPayload(text: string): string {
+    const root = mkdtempSync(join(tmpdir(), "rk-refs-adopt-cli-"));
+    dirs.push(root);
+    mkdirSync(join(root, "refs", "sources"), { recursive: true });
+    writeFileSync(join(root, "refs", "sources", "paper.txt"), text);
+    return root;
+  }
+
+  test("adopts an existing payload offline, then status reports it present and quote verifies it", async () => {
+    const root = repoWithPayload("A quotable sentence about idempotence.\n");
+    const { out, lines } = capture();
+    expect(await refsDispatch(["adopt", "refs/sources/paper.txt", "--source", "arxiv:1811.08017", "--root", root], out)).toBe(0);
+    expect(lines.join("\n")).toContain("adopted");
+
+    const s = capture();
+    expect(await refsDispatch(["status", "--root", root], s.out)).toBe(0);
+    expect(s.lines.join("\n")).toContain("sources/paper.txt");
+    expect(s.lines.join("\n")).toContain("present=1");
+
+    const q = capture();
+    expect(await refsDispatch(["quote", "paper", "quotable sentence about idempotence", "--root", root], q.out)).toBe(0);
+    expect(q.lines.join("\n")).toContain("refs/sources/paper.txt:1");
+  });
+
+  test("a --sha256 mismatch exits nonzero and names both hashes", async () => {
+    const root = repoWithPayload("bytes that will not match\n");
+    const { out, lines } = capture();
+    const code = await refsDispatch(
+      ["adopt", "refs/sources/paper.txt", "--source", "arxiv:1811.08017", "--sha256", "d".repeat(64), "--root", root],
+      out,
+    );
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("d".repeat(64));
+  });
+
+  test("usage (exit 2) when --source is missing", async () => {
+    const root = repoWithPayload("x\n");
+    const { out, lines } = capture();
+    expect(await refsDispatch(["adopt", "refs/sources/paper.txt", "--root", root], out)).toBe(2);
+    expect(lines.join("\n")).toContain("usage: rk refs adopt");
+  });
+
+  test("'rk refs' help lists adopt", async () => {
+    const { out, lines } = capture();
+    await refsDispatch([], out);
+    expect(lines.join("\n")).toContain("rk refs adopt");
+  });
+});
+
+// rk-p1p4a, same fault family as `refs status`: `rk refs quote` in a repo with no manifest printed a
+// raw ENOENT string. It must still FAIL (a quote request against no registry is a real failure, not
+// "nothing to report"), but with the actionable reason, not a syscall name.
+describe("rk refs quote — no manifest at all (rk-p1p4a)", () => {
+  test("exits 1 with an actionable 'not adopted' message, not an ENOENT string", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-refs-quote-bare-"));
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await refsDispatch(["quote", "some-id", "some pattern", "--root", root], out);
+    expect(code).toBe(1);
+    const text = lines.join("\n");
+    expect(text).not.toContain("ENOENT");
+    expect(text).toContain("not adopted");
+    expect(text).toContain("rk refs adopt");
+  });
+});

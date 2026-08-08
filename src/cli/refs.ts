@@ -3,8 +3,9 @@
 // import paths changed (one directory level up to reach src/refs/*, src/types).
 
 import { addSource } from "../refs/add";
+import { adoptSource } from "../refs/adopt";
 import {
-  computeStatus,
+  computeStatusReport,
   resolveRenamedEnv,
   RK_REFS_CACHE_ENV,
   RK_REFS_CACHE_ENV_DEPRECATED,
@@ -39,7 +40,22 @@ async function refsStatus(args: string[], out: Out): Promise<number> {
   const { root } = extractRoot(args);
   warnIfDeprecatedEnv(out, RK_REFS_CACHE_ENV, RK_REFS_CACHE_ENV_DEPRECATED);
   warnIfDeprecatedEnv(out, RK_REFS_CACHE_URL_ENV, RK_REFS_CACHE_URL_ENV_DEPRECATED);
-  const rows = await computeStatus(root);
+  let report;
+  try {
+    report = await computeStatusReport(root);
+  } catch (err) {
+    // A lock file that EXISTS but cannot be read/parsed is never "nothing adopted" (rk-p1p4a).
+    out.log(`rk refs status: ${err instanceof Error ? err.message : String(err)}`);
+    out.log("  the lock file exists but could not be read — this is a corrupt manifest, not an empty one.");
+    return 1;
+  }
+  if (!report.adopted) {
+    out.log(`rk refs status: not adopted — no ${report.lockPath} in this repo, so no source is registered.`);
+    out.log("  next: 'rk refs add <locator> --id <source-id>' to fetch one, or, for a payload already");
+    out.log("  on disk under refs/, 'rk refs adopt <path> --source <locator>' (offline, no network).");
+    return 0;
+  }
+  const rows = report.rows;
   for (const r of rows) {
     out.log(`  [${STATUS_MARK[r.status]}] ${r.path} (${r.sourceId})`);
   }
@@ -91,6 +107,49 @@ async function refsAdd(args: string[], out: Out): Promise<number> {
   }
 }
 
+/** rk-pk8o: register an already-downloaded payload, offline. Deliberately NOT folded into
+ * `refs add`: `add` acquires bytes and decides a fetch route, `adopt` claims neither — keeping them
+ * separate verbs is what keeps "rk fetched this" and "an operator handed rk these bytes"
+ * distinguishable in the manifest. */
+async function refsAdopt(args: string[], out: Out): Promise<number> {
+  const { rest: r1, root } = extractRoot(args);
+  const { rest: r2, value: source } = extractFlag(r1, "--source");
+  const { rest: r3, value: expectSha256 } = extractFlag(r2, "--sha256");
+  const { rest: r4, value: id } = extractFlag(r3, "--id");
+  const { rest: r5, value: citation } = extractFlag(r4, "--citation");
+  const { rest: pathArgs, value: role } = extractFlag(r5, "--role");
+  const path = pathArgs[0];
+  if (!path || !source) {
+    out.log("usage: rk refs adopt <path-under-refs/> --source <url-or-locator> [--sha256 <hex>]");
+    out.log("               [--id <source-id>] [--citation <text>] [--role <text>] [--root <path>]");
+    out.log("  registers an ALREADY-downloaded payload (e.g. one a firewalled librarian fetched) in");
+    out.log("  refs/manifest/. No network. The sha256 is computed from the bytes on disk; --sha256");
+    out.log("  verifies it against a hash you already hold, and a mismatch writes nothing.");
+    return 2;
+  }
+  try {
+    const result = await adoptSource(root, path, {
+      source,
+      ...(expectSha256 !== undefined ? { expectSha256 } : {}),
+      ...(id !== undefined ? { id } : {}),
+      ...(citation !== undefined ? { citation } : {}),
+      ...(role !== undefined ? { role } : {}),
+    });
+    if (result.alreadyAdopted) {
+      out.log(`already adopted '${result.sourceId}': ${result.path} (sha256 ${result.sha256}) — nothing changed.`);
+      return 0;
+    }
+    out.log(`adopted '${result.sourceId}': ${result.path} (sha256 ${result.sha256})`);
+    out.log("  updated refs/manifest/{checksums.sha256,sources.lock.json,SOURCES.md}.");
+    out.log("  fetch route recorded: none (rk did not fetch these bytes) — cache-only, per the locator in SOURCES.md.");
+    out.log(`  next: 'rk refs quote ${result.sourceId} <pattern>' to pull a byte-verbatim quote.`);
+    return 0;
+  } catch (err) {
+    out.log(`rk refs adopt: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+}
+
 async function refsQuote(args: string[], out: Out): Promise<number> {
   const { rest, root } = extractRoot(args);
   const [id, ...patternParts] = rest;
@@ -118,6 +177,7 @@ async function refsQuote(args: string[], out: Out): Promise<number> {
 const REFS_COMMANDS: Record<string, SubHandler> = {
   status: refsStatus,
   add: refsAdd,
+  adopt: refsAdopt,
   quote: refsQuote,
 };
 
@@ -125,6 +185,7 @@ export function refsHelp(out: Out): number {
   out.log("rk refs — ground-truth reference library (PRD C7)");
   out.log("  rk refs status              present/fetchable/cache/missing per source");
   out.log("  rk refs add <locator>       fetch/hash/install + update the manifest");
+  out.log("  rk refs adopt <path>        register an already-downloaded refs/ payload (offline)");
   out.log("  rk refs quote <id> <pat>    byte-verbatim quote with a path:line anchor");
   out.log("  next: run 'rk refs status' first on a fresh checkout.");
   return 0;

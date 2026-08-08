@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeStatus, resolveRenamedEnv } from "../../src/refs/status";
+import { computeStatus, computeStatusReport, resolveRenamedEnv } from "../../src/refs/status";
 import { sha256Bytes } from "../../src/refs/hash";
 
 function makeRepo(): string {
@@ -206,5 +206,36 @@ describe("computeStatus — RK_REFS_CACHE(_URL) env fallback, real end-to-end (r
     rmSync(root, { recursive: true, force: true });
     rmSync(newCacheDir, { recursive: true, force: true });
     rmSync(oldCacheDir, { recursive: true, force: true });
+  });
+});
+
+// rk-p1p4a: a repo with no refs/manifest/ at all is NOT-ADOPTED, a legitimate state — never an
+// ENOENT crash (window-1 campaign finding #4). A manifest that EXISTS but does not parse stays a
+// loud error: "nothing was ever adopted" and "we cannot tell what was adopted" are opposite claims
+// and must never be conflated (same three-state discipline the retraction store follows).
+describe("computeStatusReport — absent vs corrupt manifest (rk-p1p4a)", () => {
+  test("no refs/manifest/sources.lock.json: adopted=false, no throw", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-status-bare-"));
+    const report = await computeStatusReport(root);
+    expect(report.adopted).toBe(false);
+    if (!report.adopted) expect(report.lockPath).toBe("refs/manifest/sources.lock.json");
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a lock file that exists and parses: adopted=true with the rows", async () => {
+    const root = makeRepo();
+    writeFileSync(join(root, "refs", "present-src", "a.tex"), presentContent);
+    writeLock(root);
+    const report = await computeStatusReport(root);
+    expect(report.adopted).toBe(true);
+    if (report.adopted) expect(report.rows).toHaveLength(3);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a lock file that exists but is unparseable still THROWS (corrupt is not absent)", async () => {
+    const root = makeRepo();
+    writeFileSync(join(root, "refs", "manifest", "sources.lock.json"), "{not json");
+    await expect(computeStatusReport(root)).rejects.toThrow();
+    rmSync(root, { recursive: true, force: true });
   });
 });
