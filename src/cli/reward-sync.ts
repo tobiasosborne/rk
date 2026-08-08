@@ -37,9 +37,11 @@
 // settled first.
 
 import { loadDefIds } from "../gates/linker-defs";
+import { parseRegistry } from "../gates/linker-parse";
 import type { RegistryNode } from "../graph/types";
 import { structuralLossLines } from "../render/diagnostics-view";
 import { supportedCloseTier } from "../reward/tier";
+import { pmaBacked } from "../gates/reward";
 import type { RewardEvent } from "../reward/types";
 import { buildGraphDocument } from "../store/build-graph";
 import { appendRewardEvents, loadRewardLedger, REWARD_LEDGER_RELPATH } from "../store/reward-ledger";
@@ -74,6 +76,7 @@ export function planRewardSync(
   existing: readonly RewardEvent[],
   defIds: ReadonlySet<string>,
   withRound: boolean,
+  unbackedPmaIds: ReadonlySet<string> = new Set(),
 ): RewardSyncPlan {
   const closed = new Set(existing.filter((e) => e.type === "close").map((e) => e.nodeId));
   const pruned = new Set(existing.filter((e) => e.type === "prune").map((e) => e.nodeId));
@@ -86,7 +89,14 @@ export function planRewardSync(
 
   for (const node of [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
     const tier = supportedCloseTier(node);
-    if (tier !== undefined && !closed.has(node.id)) {
+    if (tier === "proved-mod-audit" && unbackedPmaIds.has(node.id) && !closed.has(node.id)) {
+      withheld += 1;
+      lines.push(
+        `  - close ${node.id} WITHHELD: status proved-mod-audit is backed by neither a fresh VALID ` +
+          `L5 verdict nor a provenance declaration (Gate 8 Check 4b would ERROR reward-tier-unbacked). ` +
+          `Record the backing, then re-run.`,
+      );
+    } else if (tier !== undefined && !closed.has(node.id)) {
       const citedDefs = node.defs.filter((d) => defIds.has(d));
       const citedLemmas = node.deps.filter((d) => registryIds.has(d));
       events.push({ type: "close", nodeId: node.id, tier, spentTokens: 0, citedDefs, citedLemmas });
@@ -158,7 +168,13 @@ export async function rewardSyncCommand(args: string[], out: Out, deps: GraphCom
     return 1;
   }
 
-  const plan = planRewardSync(doc.nodes, load.events, loadDefIds(loadSnapshot(root)), withRound);
+  const snap = loadSnapshot(root);
+  const unbackedPmaIds = new Set(
+    parseRegistry(snap).lemmas
+      .filter((l) => l.status === "proved-mod-audit" && l.af !== "validated" && !pmaBacked(snap, l))
+      .map((l) => l.id),
+  );
+  const plan = planRewardSync(doc.nodes, load.events, loadDefIds(snap), withRound, unbackedPmaIds);
   out.log(
     "rk reward sync (SHADOW — appends primitive events only; payouts stay derived, never stored):",
   );

@@ -1,0 +1,14 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unbacked"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "Window-1 live finding (rk-90so): a shard hand-authored at status proved-mod-audit, with no L5 verdict record and no provenance declaration, was bankable at 0.6. The tier mapping trusts the status axis; this check demands the status itself be BACKED — a fresh VALID L5 verdict or a non-empty provenance field — before a pma close pays. Scoped to Gate 8 (the banking site) deliberately: linker-level status semantics are unchanged, so live AISM repos with historical pma shards and no reward ledger see zero new findings."
+}

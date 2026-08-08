@@ -1,0 +1,9 @@
+{
+  "gate": "reward",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "Green twin of reward-06: same pma close, provenance field present and non-empty -> backed, banks at 0.6. (An L5-fresh-VALID verdict is the other accepted backing; covered by unit test rather than a fixture to keep the corpus lean.)"
+}

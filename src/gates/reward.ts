@@ -11,6 +11,10 @@ import type { RepoSnapshot } from "./snapshot";
 import { hasPath } from "./snapshot";
 import type { GateConfig } from "./config";
 import { loadDefIds, parseRegistry } from "./linker-parse";
+import type { Lemma } from "./linker-parse";
+import { fileSha256 } from "./snapshot";
+import { L5_STORE_PATH } from "./linker-l5";
+import { latestVerdictFor, parseL5Log } from "../drive/l5-store";
 import { parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
 import { computePayouts } from "../reward/engine";
 import { supportedCloseTier, TIER_RANK } from "../reward/tier";
@@ -32,6 +36,20 @@ function targetIds(ev: RewardEvent): string[] {
     case "predict": return [ev.obligation];
     default: return [];
   }
+}
+
+/** Check 4b's backing test: a fresh VALID L5 verdict for the shard (same hash domain and
+ * latest-by-ordinal rule as the linker's promotion machinery — src/drive/l5-store.ts), or a
+ * non-empty `provenance:` frontmatter declaration. VALID-WITH-CORRECTION does not back a bank
+ * (correction pending — mirrors linker-37's promotion stance); stale verdicts do not back. */
+export function pmaBacked(snapshot: RepoSnapshot, target: Lemma): boolean {
+  if ((target.provenance ?? "").trim().length > 0) return true;
+  const text = snapshot.get(L5_STORE_PATH);
+  if (text === undefined) return false;
+  const hash = fileSha256(snapshot, target.path);
+  if (hash === undefined) return false;
+  const latest = latestVerdictFor(parseL5Log(text).records, target.id, hash);
+  return latest !== undefined && latest.fresh && latest.verdict === "VALID";
 }
 
 export const rewardGate: Gate = {
@@ -94,6 +112,16 @@ export const rewardGate: Gate = {
             findings.push({
               severity: "ERROR", path, structural: true,
               message: `[reward-tier-unsupported] event ${seq} closes '${ev.nodeId}' at tier '${ev.tier}' but the registry supports ${supported === undefined ? "no close tier (status=" + String(target.status) + ", af=" + target.af + " — self-report never banks)" : `at most '${supported}'`}`,
+            });
+          } else if (ev.tier === "proved-mod-audit" && target.af !== "validated" && !pmaBacked(snapshot, target)) {
+            // Check 4b (window-1 finding rk-90so): pma-by-STATUS is itself a self-reportable
+            // axis — before it banks, the status must be BACKED by an external record: a fresh
+            // VALID L5 verdict for this shard, or a non-empty `provenance:` declaration naming
+            // the basis. Scoped here (the banking site), NOT the linker: live repos with
+            // historical pma shards and no reward ledger see zero new findings.
+            findings.push({
+              severity: "ERROR", path, structural: true,
+              message: `[reward-tier-unbacked] event ${seq} closes '${ev.nodeId}' at 'proved-mod-audit' but the status is backed by neither a fresh VALID L5 verdict nor a provenance declaration — an unbacked status axis never banks`,
             });
           }
         }

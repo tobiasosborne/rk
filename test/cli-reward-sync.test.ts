@@ -68,7 +68,7 @@ function syncRepo(): string {
   writeDef(root, "def-x");
   writeShard(root, "lem-validated", { af: "validated", status: "conjecture", defs: "def-x" });
   writeShard(root, "lem-selfreport", { status: "proved" }); // af: none — a CLAIM, banks nothing
-  writeShard(root, "lem-audit", { status: "proved-mod-audit", deps: "lem-validated" });
+  writeShard(root, "lem-audit", { status: "proved-mod-audit", deps: "lem-validated", provenance: "docs/review-record.md (hostile review)" });
   writeShard(root, "lem-num", { status: "numerical" });
   writeShard(root, "lem-open", { status: "open" });
   writeShard(root, "lem-dead", { status: "disproved" });
@@ -230,6 +230,39 @@ describe("rk reward sync — CLI wiring", () => {
     const result = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
     expect(result.findings).toEqual([]);
     expect(result.coverage[0]!.checked).toBeGreaterThan(0);
+  });
+
+  test("an UNBACKED pma close is withheld (Check 4b agreement), and the gate stays clean", async () => {
+    const root = syncRepo();
+    writeShard(root, "lem-unbacked-pma", { status: "proved-mod-audit" }); // no provenance, no L5 store
+    const { out, lines } = capture();
+    await rewardSyncCommand(["--root", root, "--round"], out, DEPS);
+    const text = lines.join("\n");
+    expect(text).toContain("close lem-unbacked-pma WITHHELD");
+    expect(text).toContain("reward-tier-unbacked");
+    const written = readFileSync(rewardLedgerPath(root), "utf8");
+    expect(written).not.toContain("lem-unbacked-pma");
+    const result = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toEqual([]);
+  });
+
+  test("a fresh VALID L5 verdict backs a pma close (the other Check 4b backing)", async () => {
+    const root = syncRepo();
+    writeShard(root, "lem-l5-backed", { status: "proved-mod-audit" }); // no provenance
+    const bytes = readFileSync(join(root, "argument", "lem-l5-backed.md"));
+    const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(
+      join(root, ".rk", "l5-verdicts.jsonl"),
+      JSON.stringify({ schemaVersion: "1", ordinal: 0, itemId: "lem-l5-backed", l5ContentHash: hash,
+        verdict: "VALID", justification: "test backing", verifierSeam: "test-seam" }) + "\n",
+      "utf8",
+    );
+    const { out, lines } = capture();
+    await rewardSyncCommand(["--root", root], out, DEPS);
+    expect(lines.join("\n")).toContain("close lem-l5-backed tier=proved-mod-audit");
+    const result = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toEqual([]);
   });
 
   test("registered as a reward subcommand, and in the reward help", async () => {

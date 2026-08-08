@@ -166,6 +166,8 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `reward-03` | reward | CLOSE naming a ghost id ⇒ structural ERROR `[reward-unknown-target]` — the ledger may not pay ghosts | **N2 (rk-5man)**, the reward-events-for-work-that-never-entered-the-graph gaming class. | landed |
 | `reward-04` | reward | golden pass: predict + round + close of a real shard citing a real definition ⇒ zero findings, exit 0 | **N2 (rk-5man)** no-false-positive guard. | landed |
 | `reward-05` | reward | CLOSE(tier=proved) on a self-reported `status: proved` / `af: none` shard ⇒ structural ERROR `[reward-tier-unsupported]` — self-report never banks | **S0 smoke finding S0-1** (rk-ptx0), transcribed same-day; the mapping lives in src/reward/tier.ts, shared with the shadow emitter so gate and writer cannot disagree. | landed |
+| `reward-06` | reward | pma close with NEITHER a fresh VALID L5 verdict NOR provenance ⇒ structural ERROR `[reward-tier-unbacked]` | **Window-1 live finding rk-90so**: hand-set proved-mod-audit banked at 0.6 with nothing behind it. Scoped to Gate 8 (banking site) — zero blast radius on live AISM repos. | landed |
+| `reward-07` | reward | green twin: same pma close, non-empty `provenance:` declaration ⇒ pass | **rk-90so** no-false-positive guard; L5-fresh-VALID backing covered in unit test. | landed |
 
 Totals: 5 config + 15 defs + 43 argument/linker + 11 refs + 20 provenance + 8 runs +
 15 report-shards + 11 freshness = **123 fixtures** across the eight gates named in

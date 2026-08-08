@@ -2359,6 +2359,13 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    status:proved-mod-audit -> proved-mod-audit; status:numerical -> numerical; everything else
    (including self-reported `status: proved` with `af: none`) supports nothing. Paying BELOW
    entitlement is allowed (conservative closes are honest); paying above is the laundering.
+   Check 4b `[reward-tier-unbacked]` (window-1 finding rk-90so): a pma-by-status bank
+   additionally requires the STATUS to be backed — a fresh VALID L5 verdict for the shard
+   (same hash domain and latest-by-ordinal rule as the linker's promotion machinery;
+   VALID-WITH-CORRECTION and stale verdicts do not back) or a non-empty `provenance:`
+   declaration. Deliberately scoped to Gate 8, the banking site, not the linker: historical
+   pma shards in repos with no reward ledger draw zero new findings. `numerical`-by-status
+   backing (run-bundle linkage) is a recorded v2 question.
 
 Red corpus: `corpus/reward/` — reward-01 (malformed line), reward-02 (duplicate close),
 reward-03 (ghost target), reward-04 (golden pass), reward-05 (self-report laundering, S0-1).
