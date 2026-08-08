@@ -1,0 +1,112 @@
+// ROLE: Gate 8 — reward (`.rk/reward-ledger.jsonl`). Contract: docs/gate-contracts.md
+// "Gate 8 — reward" (checks 1-3). NEW in N2 (rk-5man, PRD Amendment A1) — no AISM counterpart:
+// the goal-graph payout ledger did not exist before rk. The ledger is the dark factory's
+// account book; every fault here is STRUCTURAL (the LB5 stance on store-integrity: a corrupt or
+// self-inconsistent ledger is never phase-demotable — a wrong balance in exploration is exactly
+// as wrong as in consolidation).
+// PURITY: pure — no fs/network/clock (L3).
+
+import type { Gate, GateResult, Finding } from "./framework";
+import type { RepoSnapshot } from "./snapshot";
+import { hasPath } from "./snapshot";
+import type { GateConfig } from "./config";
+import { loadDefIds, parseRegistry } from "./linker-parse";
+import { parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
+import { computePayouts } from "../reward/engine";
+import type { RewardEvent } from "../reward/types";
+
+/** Engine diagnostic codes that are LEDGER FAULTS (writer-protocol violations -> ERROR).
+ * `escrow-expired` is deliberately absent: an expired escrow is the anti-decomposition-inflation
+ * economics WORKING (prereg §1), an outcome to report, not a defect to flag. */
+const FAULT_DIAGNOSTICS = new Set(["duplicate-close", "reduce-unpredicted", "prune-unpredicted", "compress-refused"]);
+
+/** Registry ids an event references, by event type. `citedDefs`/`citedLemmas` are checked
+ * separately (Check 3) so an unknown payout TARGET and an unknown reuse BENEFICIARY read as the
+ * distinct problems they are. */
+function targetIds(ev: RewardEvent): string[] {
+  switch (ev.type) {
+    case "close": return [ev.nodeId];
+    case "prune": return [ev.nodeId];
+    case "reduce": return [ev.obligation, ...ev.children];
+    case "predict": return [ev.obligation];
+    default: return [];
+  }
+}
+
+export const rewardGate: Gate = {
+  name: "reward",
+  run(snapshot: RepoSnapshot, _config: GateConfig): GateResult {
+    const findings: Finding[] = [];
+    const path = REWARD_LEDGER_RELPATH;
+
+    // A repo that has never banked an event is a legitimate day-1 state: clean pass, 0/0.
+    if (!hasPath(snapshot, path)) {
+      return { findings, coverage: [{ gate: "reward", unit: "ledger events", checked: 0, total: 0 }] };
+    }
+
+    const { events, malformed } = parseRewardLedger(snapshot.get(path) ?? "");
+
+    // Check 1 — every line parses as a reward event. Malformed lines are first-class ERRORs,
+    // one per line, with the loader's own diagnosis.
+    for (const m of malformed) {
+      findings.push({
+        severity: "ERROR", path, line: m.line, structural: true,
+        message: `[reward-malformed-line] ${m.error}`,
+      });
+    }
+
+    // Check 2 — the payout fold's own fault diagnostics (duplicate close, unpredicted
+    // reduce/prune, refused compress). Economic outcomes (escrow-expired) are not faults.
+    const result = computePayouts(events);
+    for (const d of result.diagnostics) {
+      if (!FAULT_DIAGNOSTICS.has(d.code)) continue;
+      findings.push({
+        severity: "ERROR", path, structural: true,
+        message: `[reward-${d.code}] event ${d.seq}${d.nodeId ? ` (${d.nodeId})` : ""}${d.detail ? `: ${d.detail}` : ""}`,
+      });
+    }
+
+    // Check 3 — referential integrity into the registry: every payout target must be a real
+    // registry id; every reuse beneficiary must be a registry id or a definition id. The ledger
+    // may not pay ghosts.
+    const { lemmas } = parseRegistry(snapshot);
+    const lemmaIds = new Set(lemmas.map((l) => l.id));
+    const defIds = loadDefIds(snapshot);
+    events.forEach((ev, seq) => {
+      for (const id of targetIds(ev)) {
+        if (!lemmaIds.has(id)) {
+          findings.push({
+            severity: "ERROR", path, structural: true,
+            message: `[reward-unknown-target] event ${seq} (${ev.type}) names '${id}', which is no argument/ shard id`,
+          });
+        }
+      }
+      if (ev.type === "close") {
+        for (const id of ev.citedDefs) {
+          if (!defIds.has(id)) {
+            findings.push({
+              severity: "ERROR", path, structural: true,
+              message: `[reward-unknown-citation] event ${seq} cites definition '${id}', which is no definitions/ shard id`,
+            });
+          }
+        }
+        for (const id of ev.citedLemmas) {
+          if (!lemmaIds.has(id)) {
+            findings.push({
+              severity: "ERROR", path, structural: true,
+              message: `[reward-unknown-citation] event ${seq} cites lemma '${id}', which is no argument/ shard id`,
+            });
+          }
+        }
+      }
+    });
+
+    return {
+      findings,
+      coverage: [{
+        gate: "reward", unit: "ledger events",
+        checked: events.length, total: events.length + malformed.length,
+      }],
+    };
+  },
+};

@@ -18,7 +18,7 @@ import { join } from "node:path";
  * and the fixture-id prefix (corpus/README.md: "<gate> is one of defs, linker, refs, provenance,
  * runs, shards"). `freshness` (M2.6, Gate 7, src/gates/freshness.ts) is the second synthetic
  * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. */
-export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards", "freshness"] as const;
+export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards", "freshness", "reward"] as const;
 export type GateDir = (typeof GATE_DIRS)[number];
 
 export function discoverFixtures(corpusRoot: string, gateDir: string): string[] {
@@ -162,4 +162,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * only `_configValidation.overriddenKeys` can tell the two apart — and without that distinction a
  * renamed status table leaves check 5 (OVERCLAIM, Gate 4's #1 guarded failure mode) verifying
  * nothing and reporting green. AISM incident (a), reproduced. */
-export const EXPECTED_FIXTURE_COUNT = 135;
+export const EXPECTED_FIXTURE_COUNT = 139;

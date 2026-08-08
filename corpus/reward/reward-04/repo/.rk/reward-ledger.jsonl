@@ -1,0 +1,3 @@
+{"type":"predict","obligation":"lem-y","estimator":"e1","p250k":1,"p1m":1}
+{"type":"round","n":1}
+{"type":"close","nodeId":"lem-y","tier":"proved","spentTokens":300000,"citedDefs":["def-z"],"citedLemmas":[]}

@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-malformed-line"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2); AISM has no payout concept.",
+  "notes": "A garbage line inside the account book. The loader keeps later well-formed lines readable but the gate reports every unreadable line as a structural ERROR with its 1-based line number — malformed lines are first-class data (L2), and a ledger you cannot fully read is a ledger you cannot trust."
+}

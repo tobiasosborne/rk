@@ -28,7 +28,12 @@ import { runsGate } from "./runs";
 import { provenanceGate } from "./provenance";
 import { shardsGate } from "./shards";
 import { freshnessGate } from "./freshness";
+import { rewardGate } from "./reward";
 
+// N2 (rk-5man): `rewardGate` (src/gates/reward.ts, docs/gate-contracts.md Gate 8) is a third
+// synthetic entry with no check-all.sh counterpart — the payout ledger is rk-only (PRD Amendment
+// A1). Placed after shards (it consults parseRegistry, so registry parse findings appear first)
+// and before freshness (which stays last per its own note above).
 export const GATES: readonly Gate[] = [
   configGate,
   defsGate,
@@ -37,5 +42,6 @@ export const GATES: readonly Gate[] = [
   runsGate,
   provenanceGate,
   shardsGate,
+  rewardGate,
   freshnessGate,
 ];

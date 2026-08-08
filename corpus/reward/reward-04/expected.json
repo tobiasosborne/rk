@@ -1,0 +1,9 @@
+{
+  "gate": "reward",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 3, "total": 3, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "Golden pass: a prediction, a round marker, and one close of a real shard citing a real definition. Proves the gate does not false-positive on a well-formed account book."
+}

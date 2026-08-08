@@ -161,6 +161,10 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `freshness-09` | freshness | manifest `schema_version: "2"` ⇒ loud manifest ERROR (a future incompatible manifest can never silently run under v1 semantics) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-10` | freshness | extra top-level manifest key ⇒ loud ERROR (`additionalProperties: false` enforced at runtime) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-11` | freshness | extra per-entry key ⇒ loud ERROR, entry never half-accepted | **M2 boundary review blocker 4** (613b304). | landed |
+| `reward-01` | reward | garbage line inside `.rk/reward-ledger.jsonl` ⇒ one structural ERROR per unreadable line, later lines stay checked | **N2 (rk-5man)**, distilled from the mip-re incident CLASS "every automated layer behaved correctly on a bad input" — the account book must be fully readable or loudly not. | landed |
+| `reward-02` | reward | duplicate CLOSE of one node ⇒ structural ERROR (the double-pay attempt; the fold ignores it, the gate names it) | **N2 (rk-5man)**. | landed |
+| `reward-03` | reward | CLOSE naming a ghost id ⇒ structural ERROR `[reward-unknown-target]` — the ledger may not pay ghosts | **N2 (rk-5man)**, the reward-events-for-work-that-never-entered-the-graph gaming class. | landed |
+| `reward-04` | reward | golden pass: predict + round + close of a real shard citing a real definition ⇒ zero findings, exit 0 | **N2 (rk-5man)** no-false-positive guard. | landed |
 
 Totals: 5 config + 15 defs + 43 argument/linker + 11 refs + 20 provenance + 8 runs +
 15 report-shards + 11 freshness = **123 fixtures** across the eight gates named in

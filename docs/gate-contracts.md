@@ -2326,3 +2326,33 @@ yet applied here since both files are out of this repair wave's scope):
 | `freshness-09` | **blocker #4** — manifest `schema_version: "2"` (wrong version) ⇒ ERROR naming both the actual and expected value |
 | `freshness-10` | **blocker #4** — manifest carries an extra top-level property ⇒ ERROR (`additionalProperties:false`) |
 | `freshness-11` | **blocker #4** — a manifest entry carries an extra property beyond `path`/`generator` ⇒ per-entry ERROR, entry dropped entirely (`checked=0/0`) |
+
+## Gate 8 — reward (`.rk/reward-ledger.jsonl`)
+
+NEW in N2 (PRD Amendment A1, rk-5man) — no AISM counterpart; the goal-graph payout ledger is
+rk-only. The ledger is the dark factory's account book: an append-only JSONL of reward events
+(`round | predict | reduce | close | prune | compress`, `schemas/` pending — the runtime
+contract is `src/reward/types.ts`, the pure validator `src/reward/parse.ts`). Balances are
+DERIVED by a pure fold (`src/reward/engine.ts`), never stored. Every finding this gate emits is
+STRUCTURAL (the LB5 store-integrity stance: a corrupt ledger is never phase-demotable).
+
+Inputs: `.rk/reward-ledger.jsonl` (absent = legitimate day-1 state, clean pass, coverage 0/0);
+the registry parse (`parseRegistry`) and definition ids (`loadDefIds`) for referential checks.
+
+1. **Malformed lines** `[reward-malformed-line]` — every line must parse as a known reward
+   event. Unparseable JSON, blank interior lines, unknown `type`, or a known type missing a
+   required field: one ERROR per line, 1-based line number, loader diagnosis in the message.
+   Later well-formed lines remain checked (malformed lines are first-class data, L2).
+2. **Fold faults** `[reward-duplicate-close]`, `[reward-reduce-unpredicted]`,
+   `[reward-prune-unpredicted]`, `[reward-compress-refused]` — the payout fold's writer-protocol
+   diagnostics are ERRORs. `escrow-expired` is deliberately NOT a finding: an expired escrow is
+   the anti-decomposition-inflation economics working (prereg §1), an outcome, not a defect.
+3. **Referential integrity** `[reward-unknown-target]`, `[reward-unknown-citation]` — every
+   payout target (close/prune node, reduce obligation + children, predict obligation) must be a
+   real `argument/` shard id; every close citation must be a real `argument/` or `definitions/`
+   id. The ledger may not pay ghosts.
+
+Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
+
+Red corpus: `corpus/reward/` — reward-01 (malformed line), reward-02 (duplicate close),
+reward-03 (ghost target), reward-04 (golden pass).

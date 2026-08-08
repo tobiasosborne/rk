@@ -1,0 +1,14 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-duplicate-close"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "The double-pay attempt. Balances are a pure fold, so the second close cannot actually pay twice — but a writer that emits one is broken, and the gate says so as a structural ERROR rather than letting the engine's silent-ignore be the only defense."
+}

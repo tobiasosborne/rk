@@ -1,0 +1,14 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-unknown-target"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "The ledger may not pay ghosts: a CLOSE naming an id that is no argument/ shard is a structural referential-integrity ERROR. Distilled from the class of gaming where reward events reference work that never entered the graph."
+}
