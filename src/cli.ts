@@ -17,6 +17,8 @@ import { upgradeCommand } from "./cli/upgrade";
 import { graphCommand } from "./cli/graph";
 import { renderCommand } from "./cli/render";
 import { verifyCommand } from "./cli/verify";
+import { frontierCommand } from "./cli/frontier";
+import { rewardDispatch, rewardHelp } from "./cli/reward";
 import type { Out } from "./cli/args";
 import { defaultOut, hasHelpFlag } from "./cli/args";
 
@@ -32,6 +34,8 @@ const COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = 
   graph: graphCommand,
   render: renderCommand,
   verify: verifyCommand,
+  frontier: frontierCommand,
+  reward: rewardDispatch,
 };
 
 // rk-1r6: `-h`/`--help` handling for every subcommand, kept independent of check.ts (out of
@@ -114,6 +118,17 @@ function renderHelp(out: Out): number {
   return 0;
 }
 
+function frontierHelp(out: Out): number {
+  out.log("rk frontier — the GOAL frontier: what open work the goal actually needs (S0, PRD A1)");
+  out.log("  usage: rk frontier <goal-id> [--root <dir>]");
+  out.log("  Prints every obligation reachable from <goal-id> with its actionable/dead-end flags,");
+  out.log("  the attached/unattached/satisfied counts, and every unattached id (the prospecting");
+  out.log("  pool — unattached open nodes are never obligations). Read-only: builds the same");
+  out.log("  GraphDocument 'rk graph' does and never writes. Exit 1 if <goal-id> names no node.");
+  out.log("  next: 'rk frontier <goal-id>' with a real registry id (see argument/**/*.md).");
+  return 0;
+}
+
 const HELP: Record<string, (out: Out) => number> = {
   refs: refsHelp,
   check: checkHelp,
@@ -124,6 +139,8 @@ const HELP: Record<string, (out: Out) => number> = {
   graph: graphHelp,
   render: renderHelp,
   verify: verifyHelp,
+  frontier: frontierHelp,
+  reward: rewardHelp,
 };
 
 function topHelp(out: Out): number {
@@ -137,6 +154,8 @@ function topHelp(out: Out): number {
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
   out.log("  rk verify --af <id> [--dry-run]  hard-tier verification driver over an af workspace (M3.6, PRD C9)");
+  out.log("  rk frontier <goal-id>      the GOAL frontier: obligations, dead-ends, prospecting pool (S0)");
+  out.log("  rk reward report [--strict]  fold .rk/reward-ledger.jsonl into shadow payouts (S0, prereg v1)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  every subcommand accepts -h/--help for its own usage (side-effect-free, exits 0).");
   out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");

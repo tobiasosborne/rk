@@ -35,6 +35,12 @@ does the bookkeeping.
   families), with content-hash-bound verdicts, campaign token caps,
   churn/balloon guards, and a full usage/accounting report (`rk verify
   --report --baseline`).
+- `rk frontier` / `rk reward report` — the autonomy slice (S0, shadow only):
+  the goal frontier (obligations, dead-ends, and the attached/unattached
+  admission boundary) and a deterministic fold of the append-only reward event
+  ledger (`.rk/reward-ledger.jsonl`) into derived balances, escrows, and
+  diagnostics. Payouts are computed and printed, never allocated; `--strict`
+  exits 1 on any diagnostic or unreadable ledger line.
 
 ## Status
 
