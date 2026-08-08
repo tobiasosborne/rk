@@ -131,8 +131,16 @@ describe("rk reward report — CLI wiring and exit codes", () => {
   });
 
   test("--strict on a clean ledger still exits 0", async () => {
+    // "Clean" now includes Gate 8: the close's target and citation must exist and support the
+    // tier (report runs the gate unconditionally since the f5b6b7c review, blocker 1).
+    const root = repo(ledger(CLOSE_A));
+    mkdirSync(join(root, "argument"), { recursive: true });
+    writeFileSync(join(root, "argument", "lem-a.md"),
+      "---\nid: lem-a\nkind: lemma\nstatus: proved\naf: validated\ncontract: a.\n---\n\na.\n", "utf8");
+    mkdirSync(join(root, "definitions"), { recursive: true });
+    writeFileSync(join(root, "definitions", "def-x.md"), "---\nid: def-x\n---\n\nx.\n", "utf8");
     const { out } = capture();
-    expect(await rewardDispatch(["report", "--strict", "--root", repo(ledger(CLOSE_A))], out)).toBe(0);
+    expect(await rewardDispatch(["report", "--strict", "--root", root], out)).toBe(0);
   });
 
   test("--strict exits 1 when the engine raised a diagnostic", async () => {
