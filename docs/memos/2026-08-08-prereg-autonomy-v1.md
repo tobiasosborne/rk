@@ -124,3 +124,15 @@ a post-cutoff arXiv paper's question, campaign firewalled from the answer.
   model generation (rolling benchmark; the time series is the deliverable).
 - Asymmetry disclosure (fixed framing): "can the orchestration reach a known frontier
   point unaided" — never a head-to-head with the authors.
+
+## Appended 2026-08-08 (TJO amendment): builder-examiner unification for candidate A
+
+TJO directive, same session: the tool-builder (this orchestrator session) reads the
+paper and acts as examiner — gates/librarian/tripwire must be built around the real
+target. The blindness requirement MOVES to the runtime campaign: a FRESH orchestrator
+context runs the campaign and receives only ../rk-bench/paper-A/public/. Candidate A
+sealed 2026-08-08: envelope sha256 f393ae3f... (statement) / ae50bfb2... (tripwire
+terms), D_CUTOFF = 2026-05-31, paper v1 2026-07-22. Tripwire terms are PROVENANCE
+fingerprints only; the bound formula and hard-instance idea are the rediscovery target
+and are deliberately not tripwire terms. Canary preflight running at time of append;
+go/no-go per its verdict.
