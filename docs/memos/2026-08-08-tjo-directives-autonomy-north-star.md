@@ -48,3 +48,15 @@ VALUABLE results on the way.
 
 TJO suspects rk has become process-heavy relative to this north star. An assessment
 was commissioned same day (process-heaviness inventory + evaluation + plan).
+
+## Ratification state (appended 2026-08-08, same session)
+
+TJO accepted the assessment and the goal-graph payout design ("I very much like the
+payouts"), added one requirement — a SMALL chaos element admitting alien technology —
+and directed full implementation in rk. TJO also directed that the design itself is
+the orchestrator's own work, not delegated (subagents gather evidence only). The
+worked plan (wildcard arm spec, N0-N5 milestones, decision points Q1-Q4 including the
+D5/Lean calibration question) is at
+`../research-workflows/NOTES-2026-08-08-autonomy-implementation-plan.md` (that dir is
+not a git repo; the file banks by existing). Formal ratification of Q1-Q4 and the PRD
+amendment text remains open under rk-23pr; N0 gates on it.
