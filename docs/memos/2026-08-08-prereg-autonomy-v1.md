@@ -158,3 +158,13 @@ Varies the N5.1 rig to the QUESTION-FINDING tier (previously excluded by design)
   literature-grounding, portfolio discipline) improve question quality over the bare
   model; (ii) can EITHER arm find the question a real research group found. Scoring
   before answering: the campaign never attempts the questions in this window.
+
+## Appended 2026-08-09 (TJO scoring correction, candidate B): the hit metric is an anchor, not the bar
+
+TJO: "I don't think it is bad if the sealed question isn't there. It is open-ended
+research." Registered before launch: PRIMARY outcome = blinded portfolio-value
+grading (TJO, arm A bare-model vs arm B campaign) + gating quality (non-triviality,
+non-subsumption rigor, answerability of what-counts-as-an-answer sections). The
+sealed-question hit/near-miss/miss is an ANCHOR DATUM — informative about overlap
+with what one real research group chose, never pass/fail. A portfolio judged better
+than the control arm with no sealed hit is a POSITIVE harness result.
