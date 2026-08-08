@@ -2,7 +2,7 @@
 id: lem-y
 kind: lemma
 status: proved
-af: none
+af: validated
 contract: The y-claim, closed once, honestly.
 ---
 

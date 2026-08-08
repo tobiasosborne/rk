@@ -2354,5 +2354,11 @@ the registry parse (`parseRegistry`) and definition ids (`loadDefIds`) for refer
 
 Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
 
+4. **Close-tier consistency** `[reward-tier-unsupported]` (S0-1) — a CLOSE may bank at most
+   the tier the node's registry state supports (`src/reward/tier.ts`): af:validated -> proved;
+   status:proved-mod-audit -> proved-mod-audit; status:numerical -> numerical; everything else
+   (including self-reported `status: proved` with `af: none`) supports nothing. Paying BELOW
+   entitlement is allowed (conservative closes are honest); paying above is the laundering.
+
 Red corpus: `corpus/reward/` — reward-01 (malformed line), reward-02 (duplicate close),
-reward-03 (ghost target), reward-04 (golden pass).
+reward-03 (ghost target), reward-04 (golden pass), reward-05 (self-report laundering, S0-1).

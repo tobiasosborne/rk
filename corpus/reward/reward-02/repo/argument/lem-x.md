@@ -2,7 +2,7 @@
 id: lem-x
 kind: lemma
 status: proved
-af: none
+af: validated
 contract: The x-claim closes exactly once.
 ---
 

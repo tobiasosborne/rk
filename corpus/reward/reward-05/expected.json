@@ -1,0 +1,14 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unsupported"
+    }
+  ],
+  "exit_code": 1,
+  "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
+  "notes": "S0 smoke finding S0-1, transcribed same-day: the toy run banked CLOSE(tier=proved) for a node whose registry state was self-reported `status: proved` with `af: none`. Trust is monotone — self-report never banks; a close may pay at most the tier the node's external evidence supports (src/reward/tier.ts). Caught by the prototype, not by review."
+}

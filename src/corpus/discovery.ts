@@ -162,4 +162,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * only `_configValidation.overriddenKeys` can tell the two apart — and without that distinction a
  * renamed status table leaves check 5 (OVERCLAIM, Gate 4's #1 guarded failure mode) verifying
  * nothing and reporting green. AISM incident (a), reproduced. */
-export const EXPECTED_FIXTURE_COUNT = 139;
+export const EXPECTED_FIXTURE_COUNT = 140;

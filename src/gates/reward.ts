@@ -1,5 +1,5 @@
 // ROLE: Gate 8 — reward (`.rk/reward-ledger.jsonl`). Contract: docs/gate-contracts.md
-// "Gate 8 — reward" (checks 1-3). NEW in N2 (rk-5man, PRD Amendment A1) — no AISM counterpart:
+// "Gate 8 — reward" (checks 1-4). NEW in N2 (rk-5man, PRD Amendment A1) — no AISM counterpart:
 // the goal-graph payout ledger did not exist before rk. The ledger is the dark factory's
 // account book; every fault here is STRUCTURAL (the LB5 stance on store-integrity: a corrupt or
 // self-inconsistent ledger is never phase-demotable — a wrong balance in exploration is exactly
@@ -13,6 +13,7 @@ import type { GateConfig } from "./config";
 import { loadDefIds, parseRegistry } from "./linker-parse";
 import { parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
 import { computePayouts } from "../reward/engine";
+import { supportedCloseTier, TIER_RANK } from "../reward/tier";
 import type { RewardEvent } from "../reward/types";
 
 /** Engine diagnostic codes that are LEDGER FAULTS (writer-protocol violations -> ERROR).
@@ -70,7 +71,8 @@ export const rewardGate: Gate = {
     // registry id; every reuse beneficiary must be a registry id or a definition id. The ledger
     // may not pay ghosts.
     const { lemmas } = parseRegistry(snapshot);
-    const lemmaIds = new Set(lemmas.map((l) => l.id));
+    const lemmaById = new Map(lemmas.map((l) => [l.id, l]));
+    const lemmaIds = new Set(lemmaById.keys());
     const defIds = loadDefIds(snapshot);
     events.forEach((ev, seq) => {
       for (const id of targetIds(ev)) {
@@ -79,6 +81,21 @@ export const rewardGate: Gate = {
             severity: "ERROR", path, structural: true,
             message: `[reward-unknown-target] event ${seq} (${ev.type}) names '${id}', which is no argument/ shard id`,
           });
+        }
+      }
+      // Check 4 (S0-1) — close-tier consistency: a CLOSE may bank at most the tier the node's
+      // registry state supports (src/reward/tier.ts). Self-reported `status: proved` with
+      // `af: none` supports NOTHING — the exact laundering class S0's smoke run caught live.
+      if (ev.type === "close") {
+        const target = lemmaById.get(ev.nodeId);
+        if (target !== undefined) {
+          const supported = supportedCloseTier(target);
+          if (supported === undefined || TIER_RANK[ev.tier] > TIER_RANK[supported]) {
+            findings.push({
+              severity: "ERROR", path, structural: true,
+              message: `[reward-tier-unsupported] event ${seq} closes '${ev.nodeId}' at tier '${ev.tier}' but the registry supports ${supported === undefined ? "no close tier (status=" + String(target.status) + ", af=" + target.af + " — self-report never banks)" : `at most '${supported}'`}`,
+            });
+          }
         }
       }
       if (ev.type === "close") {
