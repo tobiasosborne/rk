@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-a","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"nodeId":"lem-b","reason":"This pointer resolves to the wrong node.","evidenceRef":".rk/refuting-verdict.json","priorStatus":"proved","priorAf":"validated","resultingStatus":"stated","resultingAf":"none"}

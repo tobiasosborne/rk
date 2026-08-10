@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-selfrep","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"nodeId":"lem-selfrep","reason":"Copy the current state and claim repair.","evidenceRef":".rk/refuting-verdict.json","priorStatus":"proved","priorAf":"none","resultingStatus":"proved","resultingAf":"none"}

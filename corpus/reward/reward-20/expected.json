@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-tier-unbacked"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "Reviewer A/B R3's same-model loophole: the nominal reviewer changes only sessionId while retaining the claim prover's modelFamily, backend, and model. Decoded identity comparison treats that as the same model and refuses the backing; process-session novelty is not independent review."
+}

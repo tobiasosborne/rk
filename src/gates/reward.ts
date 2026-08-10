@@ -26,6 +26,7 @@ export { pmaBacked } from "../reward/pma-backing";
 const FAULT_DIAGNOSTICS = new Set([
   "duplicate-close",
   "demote-unbanked-close",
+  "demote-target-mismatch",
   "reduce-unpredicted",
   "prune-unpredicted",
   "compress-refused",

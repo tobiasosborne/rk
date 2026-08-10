@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-self-evidence","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"nodeId":"lem-self-evidence","reason":"The event improperly cites its own target shard.","evidenceRef":"argument/lem-self-evidence.md","priorStatus":"proved","priorAf":"validated","resultingStatus":"stated","resultingAf":"none"}

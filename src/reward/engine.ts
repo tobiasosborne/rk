@@ -168,6 +168,15 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
           });
           break;
         }
+        if (applied.nodeId !== ev.nodeId) {
+          diagnostics.push({
+            seq,
+            code: "demote-target-mismatch",
+            nodeId: ev.nodeId,
+            detail: `event ${ev.targetCloseSeq} banks '${applied.nodeId}', not recorded demotion node '${ev.nodeId}'`,
+          });
+          break;
+        }
         applied.active = false;
         for (const [id, amount] of applied.credits) credit(id, -amount);
         for (const e of escrows) {

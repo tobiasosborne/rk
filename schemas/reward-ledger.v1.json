@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rk.tools/schemas/reward-ledger.v1.json",
   "title": "rk reward-ledger record family (current record version 2)",
-  "description": "One schema-v2 line of .rk/reward-ledger.jsonl. The family filename remains stable under rk's schema convention; schemaVersion is the compat version. Version 2 adds the demote compensation event. The runtime reader also accepts legacy v1 lines, which were the six pre-demotion variants with schemaVersion absent (or explicitly '1'); writers emit only v2. Balances remain a deterministic append-only fold and no event edits prior history.",
+  "description": "One schema-v2 line of .rk/reward-ledger.jsonl. The family filename remains stable under rk's schema convention; schemaVersion is the compat version. Version 2 adds the demote compensation event. Its current-session shape records nodeId plus prior/current registry state so positional retargeting and never-legal closes fail closed. The runtime reader also accepts legacy v1 lines, which were the six pre-demotion variants with schemaVersion absent (or explicitly '1'); writers emit only v2. Balances remain a deterministic append-only fold and no event edits prior history.",
   "oneOf": [
     { "$ref": "#/$defs/round" },
     { "$ref": "#/$defs/predict" },
@@ -82,8 +82,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "type", "targetCloseSeq", "reason", "evidenceRef",
-        "resultingStatus", "resultingAf"
+        "schemaVersion", "type", "targetCloseSeq", "nodeId", "reason", "evidenceRef",
+        "priorStatus", "priorAf", "resultingStatus", "resultingAf"
       ],
       "properties": {
         "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
@@ -93,10 +93,22 @@
           "minimum": 0,
           "description": "Zero-based position of the earlier applied close in the canonical parsed event stream. Gate 8 rejects nonexistent, later, duplicate, or otherwise never-banked targets."
         },
+        "nodeId": {
+          "$ref": "#/$defs/nonBlank",
+          "description": "Identity of the target close's node. Gate 8 requires agreement with the close resolved at targetCloseSeq so an unreadable earlier line cannot silently retarget compensation."
+        },
         "reason": { "$ref": "#/$defs/nonBlank" },
         "evidenceRef": {
           "$ref": "#/$defs/nonBlank",
-          "description": "Repo-relative path of the refuting verdict or record; Gate 8 requires it to exist."
+          "description": "Repo-relative path of the refuting verdict or record; Gate 8 requires a separate, readable snapshot text record and refuses the target shard or reward ledger itself."
+        },
+        "priorStatus": {
+          "$ref": "#/$defs/status",
+          "description": "Writer-supplied status the close was banked against. Gate 8 requires this prior state to support at least the close tier; the field is recorded and falsifiable, not authenticated."
+        },
+        "priorAf": {
+          "$ref": "#/$defs/af",
+          "description": "Writer-supplied af state the close was banked against; interpreted with priorStatus under the same recorded-and-checkable, unauthenticated stance."
         },
         "resultingStatus": { "$ref": "#/$defs/status" },
         "resultingAf": { "$ref": "#/$defs/af" }

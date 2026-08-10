@@ -57,7 +57,7 @@ export function computeCalibration(events: readonly RewardEvent[]): CalibrationR
       outcomes.set(ev.nodeId, { y250: 0, y1m: 0 });
     } else if (ev.type === "demote") {
       const target = appliedCloseBySeq.get(ev.targetCloseSeq);
-      if (target !== undefined) outcomes.set(target, { y250: 0, y1m: 0 });
+      if (target !== undefined && target === ev.nodeId) outcomes.set(target, { y250: 0, y1m: 0 });
     }
   });
 

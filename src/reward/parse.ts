@@ -102,8 +102,15 @@ export function coerceRewardEvent(value: unknown): Coerced {
         return { ok: false, error: `demote event: field 'schemaVersion' must be '${REWARD_LEDGER_SCHEMA_VERSION}'` };
       }
       if (!isNonNegativeInt(o.targetCloseSeq)) return bad("targetCloseSeq", "a non-negative integer");
+      if (!isNonBlankStr(o.nodeId)) return bad("nodeId", "a non-blank string");
       if (!isNonBlankStr(o.reason)) return bad("reason", "a non-blank string");
       if (!isNonBlankStr(o.evidenceRef)) return bad("evidenceRef", "a non-blank string");
+      if (!isStr(o.priorStatus) || !RIGOUR_STATUSES.includes(o.priorStatus as never)) {
+        return bad("priorStatus", `one of the registry statuses (${RIGOUR_STATUSES.join(", ")})`);
+      }
+      if (!isStr(o.priorAf) || !AF_FLAGS.includes(o.priorAf as never)) {
+        return bad("priorAf", `one of the registry af states (${AF_FLAGS.join(", ")})`);
+      }
       if (!isStr(o.resultingStatus) || !RIGOUR_STATUSES.includes(o.resultingStatus as never)) {
         return bad("resultingStatus", `one of the registry statuses (${RIGOUR_STATUSES.join(", ")})`);
       }
@@ -115,8 +122,11 @@ export function coerceRewardEvent(value: unknown): Coerced {
         event: {
           type: "demote",
           targetCloseSeq: o.targetCloseSeq,
+          nodeId: o.nodeId,
           reason: o.reason,
           evidenceRef: o.evidenceRef,
+          priorStatus: o.priorStatus as (typeof RIGOUR_STATUSES)[number],
+          priorAf: o.priorAf as (typeof AF_FLAGS)[number],
           resultingStatus: o.resultingStatus as (typeof RIGOUR_STATUSES)[number],
           resultingAf: o.resultingAf as (typeof AF_FLAGS)[number],
         },

@@ -1,0 +1,20 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-demote-never-legal"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unsupported"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "Reviewer A's real CLI exploit path verbatim: reward-05's self-reported proved/none shard and illegal proved close gain one demote line copying that same current state. Before this repair the vacuous current-state downgrade condition treated the demotion as complete and erased reward-tier-unsupported. The recorded prior state proves the close was never legal, so demotion cannot launder it."
+}

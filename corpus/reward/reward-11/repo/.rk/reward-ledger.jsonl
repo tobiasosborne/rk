@@ -1,2 +1,2 @@
-{"type":"close","nodeId":"lem-demoted","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
-{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"reason":"Independent replay refuted the proof.","evidenceRef":".rk/refuting-verdict.json","resultingStatus":"stated","resultingAf":"none"}
+{"type":"close","nodeId":"lem-demoted","tier":"proved-mod-audit","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"nodeId":"lem-demoted","reason":"Independent replay refuted the proof.","evidenceRef":".rk/refuting-verdict.json","priorStatus":"proved-mod-audit","priorAf":"none","resultingStatus":"stated","resultingAf":"none"}

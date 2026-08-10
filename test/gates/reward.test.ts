@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { pmaBacked } from "../../src/gates/reward";
+import { pmaBackingDecision } from "../../src/reward/pma-backing";
 import type { Lemma } from "../../src/gates/linker-parse";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 
@@ -60,6 +61,35 @@ describe("Gate 8 Check 4b v2 — provenance-record independence", () => {
       [RECORD_PATH]: record({ author: PROVER }),
     });
     expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("same recorded identity seam");
+  });
+
+  test("the same model with a different session remains self-review and never backs", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record({ author: "claude|claude|claude-opus-4-8|review-session" }),
+    });
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  test("case-shifting backend/model components cannot disguise the same model", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record({ author: "claude|CLAUDE|CLAUDE-OPUS-4-8|review-session" }),
+    });
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  test("leading or trailing whitespace makes a recorded seam non-canonical", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record({ author: "gpt| codex|gpt-5.6-sol|review-session" }),
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("leading or trailing whitespace");
   });
 
   test("an authorless record never backs its proved-mod-audit close", () => {
@@ -76,5 +106,21 @@ describe("Gate 8 Check 4b v2 — provenance-record independence", () => {
       [RECORD_PATH]: record(),
     });
     expect(pmaBacked(snapshot, claim(), [claim()])).toBe(true);
+  });
+
+  test("a hash-visible out-of-tree record names the canonical text-record location", () => {
+    const outside = "docs/worker-output/review.json";
+    const target = { ...claim(), provenance: outside };
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard().replace(`provenance: ${RECORD_PATH}`, `provenance: ${outside}`),
+      [outside]: record(),
+    });
+    (snapshot as Map<string, string>).delete(outside);
+    const decision = pmaBackingDecision(snapshot, target, [target]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) {
+      expect(decision.reason).toContain("outside the snapshot text-record boundary");
+      expect(decision.reason).toContain(".rk/<name>.json");
+    }
   });
 });

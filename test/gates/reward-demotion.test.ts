@@ -26,8 +26,11 @@ function demote(overrides: Record<string, unknown> = {}): Record<string, unknown
     schemaVersion: "2",
     type: "demote",
     targetCloseSeq: 0,
+    nodeId: "lem-a",
     reason: "A later independent verdict refuted the proof.",
     evidenceRef: EVIDENCE,
+    priorStatus: "proved",
+    priorAf: "validated",
     resultingStatus: "stated",
     resultingAf: "none",
     ...overrides,
@@ -67,6 +70,25 @@ describe("Gate 8 honest demotion", () => {
     expect(result.findings.some((f) => f.message.includes("reward-demotion-without-downgrade"))).toBe(true);
   });
 
+  test("a close that was never legal against the recorded prior state cannot be repaired by demotion", () => {
+    const result = run("proved", "none", [
+      close(), demote({
+        priorStatus: "proved",
+        priorAf: "none",
+        resultingStatus: "proved",
+        resultingAf: "none",
+      }),
+    ]);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-never-legal"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
+  test("targetCloseSeq cannot be silently retargeted to a close for another node", () => {
+    const result = run("stated", "none", [close(), demote({ nodeId: "lem-other" })]);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-target-mismatch"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
   test("the recorded resulting state must exactly match the shard's current state", () => {
     const result = run("stated", "none", [close(), demote({ resultingStatus: "open" })]);
     expect(result.findings.some((f) => f.message.includes("reward-demotion-without-downgrade"))).toBe(true);
@@ -76,6 +98,44 @@ describe("Gate 8 honest demotion", () => {
   test("an evidence path that does not exist is red and cannot neutralize the close", () => {
     const result = run("stated", "none", [close(), demote()], false);
     expect(result.findings.some((f) => f.message.includes("reward-demote-evidence-missing"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
+  test("the target shard cannot cite itself as demotion evidence", () => {
+    const result = run("stated", "none", [close(), demote({ evidenceRef: "argument/lem-a.md" })]);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-evidence-self-reference"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
+  test("the reward ledger cannot cite itself as demotion evidence", () => {
+    const result = run("stated", "none", [close(), demote({ evidenceRef: LEDGER })]);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-evidence-self-reference"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
+  test("hash-visible but non-text-loaded evidence is not a readable demotion record", () => {
+    const evidenceRef = "docs/worker-output/refutation.json";
+    const snapshot = snapshotFromFiles({
+      "argument/lem-a.md": shard("stated", "none"),
+      [LEDGER]: [close(), demote({ evidenceRef })].map((event) => JSON.stringify(event)).join("\n") + "\n",
+      [evidenceRef]: JSON.stringify({ verdict: "INVALID", itemId: "lem-a" }),
+    });
+    // Models the real loader's out-of-tree state: every present file is hash-visible, while only
+    // declared input classes are text-loaded for the pure gate.
+    (snapshot as Map<string, string>).delete(evidenceRef);
+    const result = rewardGate.run(snapshot, DEFAULT_GATE_CONFIG);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-evidence-unreadable"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
+  });
+
+  test("blank text is readable bytes but not a demotion evidence record", () => {
+    const result = rewardGate.run(snapshotFromFiles({
+      "argument/lem-a.md": shard("stated", "none"),
+      [LEDGER]: [close(), demote()].map((event) => JSON.stringify(event)).join("\n") + "\n",
+      [EVIDENCE]: "  \n",
+    }), DEFAULT_GATE_CONFIG);
+    expect(result.findings.some((f) => f.message.includes("reward-demote-evidence-unreadable"))).toBe(true);
+    expect(result.findings.some((f) => f.message.includes("blank, not a text record"))).toBe(true);
     expect(result.findings.some((f) => f.message.includes("reward-tier-unsupported"))).toBe(true);
   });
 });

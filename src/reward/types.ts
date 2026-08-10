@@ -49,10 +49,12 @@ export type RewardEvent =
   | { type: "close"; nodeId: string; tier: CloseTier; spentTokens: number;
       citedDefs: string[]; citedLemmas: string[]; wildcard?: boolean }
   | { /** Append-only compensation for an earlier applied close. `targetCloseSeq` is the
-       * zero-based event position in the canonical parsed event stream. The evidence and exact
-       * resulting registry state are checked by Gate 8; the graph-independent fold reverses the
-       * target close's credits without editing its historical line. */
-      type: "demote"; targetCloseSeq: number; reason: string; evidenceRef: string;
+       * zero-based event position in the canonical parsed event stream; `nodeId` makes that
+       * positional reference fail closed if a malformed earlier line retargets it. The recorded
+       * prior/current states and evidence are checked by Gate 8; the graph-independent fold
+       * reverses only a close whose node identity also agrees. */
+      type: "demote"; targetCloseSeq: number; nodeId: string; reason: string; evidenceRef: string;
+      priorStatus: RigourStatus; priorAf: AfFlag;
       resultingStatus: RigourStatus; resultingAf: AfFlag }
   | { /** Verified refutation; `certRef` names the death certificate (refutation record). */
       type: "prune"; nodeId: string; certRef: string; wildcard?: boolean }
@@ -64,6 +66,7 @@ export interface RewardDiagnostic {
   code:
     | "duplicate-close"
     | "demote-unbanked-close"
+    | "demote-target-mismatch"
     | "reduce-unpredicted"
     | "prune-unpredicted"
     | "compress-refused"

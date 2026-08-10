@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-demote-target-mismatch"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "Reviewer B-LB4's parsed-stream retargeting class: targetCloseSeq resolves to lem-a while the demote identifies lem-b. A malformed or removed earlier line must not silently turn compensation for one node into compensation for another; nodeId is the stable cross-check and mismatch fails closed."
+}

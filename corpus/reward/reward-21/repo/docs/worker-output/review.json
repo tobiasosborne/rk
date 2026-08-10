@@ -1,0 +1,1 @@
+{"schema_version":"1","claimId":"lem-out-of-tree","author":"gpt|codex|gpt-5.6-sol|review-session","role":"verifier","verdict":"VALID","reason":"Well-formed but outside the snapshot text include-set."}

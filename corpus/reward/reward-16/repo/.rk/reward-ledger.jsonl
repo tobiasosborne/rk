@@ -1,2 +1,2 @@
 {"type":"close","nodeId":"lem-ghost-evidence","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
-{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"reason":"The path is intentionally absent.","evidenceRef":".rk/does-not-exist.json","resultingStatus":"stated","resultingAf":"none"}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"nodeId":"lem-ghost-evidence","reason":"The path is intentionally absent.","evidenceRef":".rk/does-not-exist.json","priorStatus":"proved","priorAf":"validated","resultingStatus":"stated","resultingAf":"none"}

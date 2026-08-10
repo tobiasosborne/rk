@@ -1,0 +1,1 @@
+{"schema_version":"1","claimId":"lem-same-model","author":"claude|claude|claude-opus-4-8|review-session","role":"verifier","verdict":"VALID","reason":"Only the session identifier differs from the prover."}

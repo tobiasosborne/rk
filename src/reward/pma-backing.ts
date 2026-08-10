@@ -18,11 +18,41 @@ export type PmaBackingDecision =
 
 const BACKING_ROLES = new Set(["verifier", "reviewer"]);
 
+interface CanonicalIdentity {
+  seam: string;
+  modelFamily: string;
+  backend: string;
+  model: string;
+}
+
 function plainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function claimProver(snapshot: RepoSnapshot, target: Lemma): { ok: true; seam: string } | { ok: false; reason: string } {
+function canonicalIdentity(seam: string): { ok: true; identity: CanonicalIdentity } | { ok: false; reason: string } {
+  const decoded = decodeVerifierSeam(seam);
+  if (!decoded.ok) return decoded;
+  const values = [
+    decoded.identity.modelFamily,
+    decoded.identity.backend,
+    decoded.identity.model,
+    decoded.identity.sessionId,
+  ];
+  if (values.some((value) => value !== value.trim())) {
+    return { ok: false, reason: "identity seam components must not carry leading or trailing whitespace" };
+  }
+  return {
+    ok: true,
+    identity: {
+      seam,
+      modelFamily: decoded.identity.modelFamily.toLowerCase(),
+      backend: decoded.identity.backend.toLowerCase(),
+      model: decoded.identity.model.toLowerCase(),
+    },
+  };
+}
+
+function claimProver(snapshot: RepoSnapshot, target: Lemma): { ok: true; identity: CanonicalIdentity } | { ok: false; reason: string } {
   const identity = target.workspace === undefined
     ? null
     : introspectRootIdentity(snapshot, target.workspace);
@@ -31,11 +61,11 @@ function claimProver(snapshot: RepoSnapshot, target: Lemma): { ok: true; seam: s
   if (seam === undefined || seam.trim().length === 0) {
     return { ok: false, reason: `claim '${target.id}' has no recoverable prover-of-record (record af proof authorship or a canonical 'prover:' seam)` };
   }
-  const decoded = decodeVerifierSeam(seam);
+  const decoded = canonicalIdentity(seam);
   if (!decoded.ok) {
     return { ok: false, reason: `claim '${target.id}' prover-of-record is not a canonical driver identity seam: ${decoded.reason}` };
   }
-  return { ok: true, seam };
+  return { ok: true, identity: decoded.identity };
 }
 
 function provenanceDecision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDecision {
@@ -50,7 +80,14 @@ function provenanceDecision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDe
   // Direct `.rk/*.json` records satisfy the current loader contract. A merely hash-visible file
   // is anonymous to the pure core and therefore cannot establish independence.
   const text = snapshot.get(path);
-  if (text === undefined) return { backed: false, reason: `provenance path '${path}' exists but no authorship record is readable` };
+  if (text === undefined) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' exists but is outside the snapshot text-record boundary; ` +
+        `move the record to canonical '.rk/<name>.json' (directly under .rk/)`,
+    };
+  }
 
   let value: unknown;
   try {
@@ -67,15 +104,29 @@ function provenanceDecision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDe
   if (typeof value.author !== "string" || value.author.trim().length === 0) {
     return { backed: false, reason: `provenance path '${path}' has no recoverable author` };
   }
-  const author = decodeVerifierSeam(value.author);
+  const author = canonicalIdentity(value.author);
   if (!author.ok) {
     return { backed: false, reason: `provenance path '${path}' author is not a canonical driver identity seam: ${author.reason}` };
   }
 
   const prover = claimProver(snapshot, target);
   if (!prover.ok) return { backed: false, reason: prover.reason };
-  if (value.author === prover.seam) {
-    return { backed: false, reason: `provenance path '${path}' is authored by claim '${target.id}'s own prover-of-record — self-report never banks` };
+  if (value.author === prover.identity.seam) {
+    return {
+      backed: false,
+      reason: `provenance path '${path}' carries the same recorded identity seam as claim '${target.id}'s prover-of-record — self-report never banks`,
+    };
+  }
+  const sameModel = author.identity.modelFamily === prover.identity.modelFamily
+    && author.identity.backend === prover.identity.backend
+    && author.identity.model === prover.identity.model;
+  if (sameModel) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' is authored by the same decoded model as claim '${target.id}'s prover-of-record ` +
+        `(modelFamily/backend/model comparison is case-normalized; changing sessionId never establishes independence)`,
+    };
   }
   return { backed: true, route: "provenance" };
 }

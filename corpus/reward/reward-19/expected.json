@@ -1,0 +1,20 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-demote-evidence-self-reference"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unsupported"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "Reviewer B-LB3's measured self-evidence path: the demote cites the target shard itself. Existence and readability are insufficient when the alleged refuting record is the claim being withdrawn; self-reference cannot complete compensation and the original tier finding remains active."
+}

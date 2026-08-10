@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "outside the snapshot text-record boundary; move the record to canonical '.rk/<name>.json'"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "Reviewer C R9's live campaign-A path: a well-formed authorship record under docs/worker-output exists and is hash-visible, but the snapshot text loader cannot read it. The finding distinguishes this placement constraint from a broken/anonymous record and names direct .rk/<name>.json as the canonical readable location; the include set is deliberately not widened."
+}
