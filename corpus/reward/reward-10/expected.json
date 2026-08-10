@@ -1,0 +1,9 @@
+{
+  "gate": "reward",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "Golden case for Check 4b v2: the claim records its prover and the backing record identifies a different verifier-role author. The comparison is mechanically checkable driver-supplied provenance; it makes no authentication or adversary-proof claim."
+}

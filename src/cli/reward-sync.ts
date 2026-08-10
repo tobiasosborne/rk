@@ -41,7 +41,7 @@ import { parseRegistry } from "../gates/linker-parse";
 import type { RegistryNode } from "../graph/types";
 import { structuralLossLines } from "../render/diagnostics-view";
 import { supportedCloseTier } from "../reward/tier";
-import { pmaBacked } from "../gates/reward";
+import { pmaBacked } from "../reward/pma-backing";
 import type { RewardEvent } from "../reward/types";
 import { buildGraphDocument } from "../store/build-graph";
 import { appendRewardEvents, loadRewardLedger, REWARD_LEDGER_RELPATH } from "../store/reward-ledger";

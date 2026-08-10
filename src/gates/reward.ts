@@ -9,17 +9,15 @@
 import type { Gate, GateResult, Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { hasPath } from "./snapshot";
-import { readRetractionFacts } from "./linker-retraction";
 import type { GateConfig } from "./config";
 import { loadDefIds, parseRegistry } from "./linker-parse";
-import type { Lemma } from "./linker-parse";
-import { fileSha256 } from "./snapshot";
-import { L5_STORE_PATH } from "./linker-l5";
-import { l5StoreHealthy, latestVerdictFor, parseL5Log } from "../drive/l5-store";
 import { parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
 import { computePayouts } from "../reward/engine";
 import { supportedCloseTier, TIER_RANK } from "../reward/tier";
 import type { RewardEvent } from "../reward/types";
+import { pmaBacked, pmaBackingDecision } from "../reward/pma-backing";
+
+export { pmaBacked } from "../reward/pma-backing";
 
 /** Engine diagnostic codes that are LEDGER FAULTS (writer-protocol violations -> ERROR).
  * `escrow-expired` is deliberately absent: an expired escrow is the anti-decomposition-inflation
@@ -37,42 +35,6 @@ function targetIds(ev: RewardEvent): string[] {
     case "predict": return [ev.obligation];
     default: return [];
   }
-}
-
-/** Check 4b's backing test (hardened per the Tier A review of f5b6b7c, all four findings):
- * (a) PROVENANCE backs only if its FIRST whitespace-token resolves to an existing repo file
- *     that is not the shard itself — arbitrary prose, a nonexistent path, self-reference, and
- *     the M3.8 `legacy-same-family` marker (which asserts the OPPOSITE of verification) never
- *     back. Review finding: the escape was self-authenticating.
- * (b) An L5 verdict backs only from a HEALTHY store (zero parse issues, intact ordinal chain —
- *     l5StoreHealthy, the same poisoning stance as linker promotion; review reproduced an
- *     earlier-VALID resurrection on linker-41's truncated store),
- * (c) with a healthy retraction ledger and NO live retraction for the shard in EITHER hash
- *     domain (a withdrawn verdict must not back a permanent close; review reproduced on
- *     linker-44), and
- * (d) the latest-by-ordinal verdict fresh against current shard bytes and exactly VALID
- *     (VALID-WITH-CORRECTION and stale never back — linker-37 stance). */
-export function pmaBacked(snapshot: RepoSnapshot, target: Lemma, lemmas: readonly Lemma[]): boolean {
-  const prov = (target.provenance ?? "").trim();
-  if (prov.length > 0) {
-    const token = prov.split(/\s+/)[0]!;
-    // Existence via the sha256 facts map, which covers EVERY file on disk (snapshot-load.ts:
-    // "a provenance source row naming ANY present path is verified") — the text map's bounded
-    // include set is irrelevant here; only existence is asserted, content is the auditor's job.
-    if (token !== target.path && fileSha256(snapshot, token) !== undefined) return true;
-    // unresolvable provenance is NOT backing; fall through to the L5 route
-  }
-  const text = snapshot.get(L5_STORE_PATH);
-  if (text === undefined) return false;
-  const parsed = parseL5Log(text);
-  if (!l5StoreHealthy(parsed).healthy) return false;
-  const retractions = readRetractionFacts(snapshot, lemmas);
-  if (!retractions.healthy) return false;
-  if (retractions.liveL5.has(target.id) || retractions.liveAf.has(target.id)) return false;
-  const hash = fileSha256(snapshot, target.path);
-  if (hash === undefined) return false;
-  const latest = latestVerdictFor(parsed.records, target.id, hash);
-  return latest !== undefined && latest.fresh && latest.verdict === "VALID";
 }
 
 export const rewardGate: Gate = {
@@ -142,9 +104,10 @@ export const rewardGate: Gate = {
             // VALID L5 verdict for this shard, or a non-empty `provenance:` declaration naming
             // the basis. Scoped here (the banking site), NOT the linker: live repos with
             // historical pma shards and no reward ledger see zero new findings.
+            const backing = pmaBackingDecision(snapshot, target, lemmas);
             findings.push({
               severity: "ERROR", path, structural: true,
-              message: `[reward-tier-unbacked] event ${seq} closes '${ev.nodeId}' at 'proved-mod-audit' but the status is backed by neither a fresh VALID L5 verdict nor a provenance declaration — an unbacked status axis never banks`,
+              message: `[reward-tier-unbacked] event ${seq} closes '${ev.nodeId}' at 'proved-mod-audit' without independent backing: ${backing.backed ? "internal backing disagreement" : backing.reason} — an unbacked status axis never banks`,
             });
           }
         }

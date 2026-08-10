@@ -68,13 +68,27 @@ function syncRepo(): string {
   writeDef(root, "def-x");
   writeShard(root, "lem-validated", { af: "validated", status: "conjecture", defs: "def-x" });
   writeShard(root, "lem-selfreport", { status: "proved" }); // af: none — a CLAIM, banks nothing
-  writeShard(root, "lem-audit", { status: "proved-mod-audit", deps: "lem-validated", provenance: "docs/review-record.md (hostile review)" });
+  writeShard(root, "lem-audit", {
+    status: "proved-mod-audit",
+    deps: "lem-validated",
+    prover: "claude|claude|claude-opus-4-8|claim-prover",
+    provenance: ".rk/provenance-lem-audit.json (hostile review)",
+  });
   writeShard(root, "lem-num", { status: "numerical" });
   writeShard(root, "lem-open", { status: "open" });
   writeShard(root, "lem-dead", { status: "disproved" });
   writeShard(root, "lem-obs", { status: "obstruction" });
-  mkdirSync(join(root, "docs"), { recursive: true });
-  writeFileSync(join(root, "docs", "review-record.md"), "# hostile review record (test)\n", "utf8");
+  mkdirSync(join(root, ".rk"), { recursive: true });
+  writeFileSync(
+    join(root, ".rk", "provenance-lem-audit.json"),
+    JSON.stringify({
+      schema_version: "1",
+      claimId: "lem-audit",
+      author: "gpt|codex|gpt-5.6-sol|claim-verifier",
+      role: "verifier",
+    }),
+    "utf8",
+  );
   return root;
 }
 

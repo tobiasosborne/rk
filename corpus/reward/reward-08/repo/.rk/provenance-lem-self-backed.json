@@ -1,0 +1,1 @@
+{"schema_version":"1","claimId":"lem-self-backed","author":"claude|claude|claude-opus-4-8|claim-session","role":"verifier","verdict":"VALID","reason":"The same worker identity wrote the claim and this nominal review."}

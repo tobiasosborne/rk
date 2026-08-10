@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unbacked"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "Campaign A window 2's declined loophole, transcribed directly: the proved-mod-audit claim points at an existing report authored by its own prover-of-record. Recorded role labels are driver-supplied provenance, not authentication; nevertheless the recorded equality is mechanically checkable, and self-report never banks."
+}
