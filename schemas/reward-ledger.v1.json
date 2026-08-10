@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/reward-ledger.v1.json",
+  "title": "rk reward-ledger record family (current record version 2)",
+  "description": "One schema-v2 line of .rk/reward-ledger.jsonl. The family filename remains stable under rk's schema convention; schemaVersion is the compat version. Version 2 adds the demote compensation event. The runtime reader also accepts legacy v1 lines, which were the six pre-demotion variants with schemaVersion absent (or explicitly '1'); writers emit only v2. Balances remain a deterministic append-only fold and no event edits prior history.",
+  "oneOf": [
+    { "$ref": "#/$defs/round" },
+    { "$ref": "#/$defs/predict" },
+    { "$ref": "#/$defs/reduce" },
+    { "$ref": "#/$defs/close" },
+    { "$ref": "#/$defs/demote" },
+    { "$ref": "#/$defs/prune" },
+    { "$ref": "#/$defs/compress" }
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2",
+      "description": "Bumped from the legacy v1 shape by rk-4317. Consumers must reject an unsupported version rather than silently miss compensation events."
+    }
+  },
+  "$defs": {
+    "schemaVersion": { "const": "2" },
+    "nonBlank": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "stringArray": { "type": "array", "items": { "type": "string" } },
+    "status": {
+      "enum": [
+        "cited", "proved", "consensus", "proved-mod-audit", "stated", "conjecture",
+        "heuristic", "numerical", "open", "obstruction", "disproved"
+      ]
+    },
+    "af": { "enum": ["none", "seeded", "validated"] },
+    "round": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "n"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "round" },
+        "n": { "type": "number" }
+      }
+    },
+    "predict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "obligation", "estimator", "p250k", "p1m"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "predict" },
+        "obligation": { "type": "string" },
+        "estimator": { "type": "string" },
+        "p250k": { "type": "number" },
+        "p1m": { "type": "number" }
+      }
+    },
+    "reduce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "obligation", "children"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "reduce" },
+        "obligation": { "type": "string" },
+        "children": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "close": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "nodeId", "tier", "spentTokens", "citedDefs", "citedLemmas"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "close" },
+        "nodeId": { "type": "string" },
+        "tier": { "enum": ["proved", "proved-mod-audit", "numerical"] },
+        "spentTokens": { "type": "number" },
+        "citedDefs": { "$ref": "#/$defs/stringArray" },
+        "citedLemmas": { "$ref": "#/$defs/stringArray" },
+        "wildcard": { "type": "boolean" }
+      }
+    },
+    "demote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "type", "targetCloseSeq", "reason", "evidenceRef",
+        "resultingStatus", "resultingAf"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "demote" },
+        "targetCloseSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based position of the earlier applied close in the canonical parsed event stream. Gate 8 rejects nonexistent, later, duplicate, or otherwise never-banked targets."
+        },
+        "reason": { "$ref": "#/$defs/nonBlank" },
+        "evidenceRef": {
+          "$ref": "#/$defs/nonBlank",
+          "description": "Repo-relative path of the refuting verdict or record; Gate 8 requires it to exist."
+        },
+        "resultingStatus": { "$ref": "#/$defs/status" },
+        "resultingAf": { "$ref": "#/$defs/af" }
+      }
+    },
+    "prune": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "nodeId", "certRef"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "prune" },
+        "nodeId": { "type": "string" },
+        "certRef": { "type": "string" },
+        "wildcard": { "type": "boolean" }
+      }
+    },
+    "compress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "type", "nodeId", "useSites"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "type": { "const": "compress" },
+        "nodeId": { "type": "string" },
+        "useSites": { "$ref": "#/$defs/stringArray" }
+      }
+    }
+  }
+}

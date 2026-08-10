@@ -70,7 +70,7 @@ export function formatRewardReport(load: RewardLedgerLoad, result: PayoutResult)
 
   const t = result.totals;
   lines.push(
-    `totals: closes=${t.closes} reduces=${t.reduces} prunes=${t.prunes} ` +
+    `totals: closes=${t.closes} demotions=${t.demotions} reduces=${t.reduces} prunes=${t.prunes} ` +
       `wildcardCloses=${t.wildcardCloses} wildcardPrunes=${t.wildcardPrunes}`,
   );
 
@@ -108,7 +108,7 @@ const REWARD_COMMANDS: Record<string, (args: string[], out: Out) => Promise<numb
 };
 
 export function rewardHelp(out: Out): number {
-  out.log("rk reward — the append-only reward event ledger (.rk/reward-ledger.jsonl, prereg v1)");
+  out.log("rk reward — the append-only reward event ledger (.rk/reward-ledger.jsonl, schema v2; payout prereg v1)");
   out.log("  usage: rk reward report [--strict] [--root <dir>]");
   out.log("  Folds the ledger through the payout engine and prints balances, escrows, EVERY");
   out.log("  diagnostic, the totals, and every malformed ledger line. Shadow only: computes and");

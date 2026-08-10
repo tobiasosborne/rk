@@ -7,6 +7,8 @@
 // so double-pay is structurally impossible. No timestamps anywhere (same determinism stance as
 // schemas/graph.v1.json).
 
+import type { AfFlag, RigourStatus } from "../graph/types";
+
 /** Tiers that can bank a CLOSE, with their pre-registered payout weights (prereg §1).
  * `numerical` is the ceiling rung (PRD §5) — it earns, weakly, but never promotes. */
 export const CLOSE_TIER_WEIGHTS = {
@@ -46,6 +48,12 @@ export type RewardEvent =
       type: "reduce"; obligation: string; children: string[] }
   | { type: "close"; nodeId: string; tier: CloseTier; spentTokens: number;
       citedDefs: string[]; citedLemmas: string[]; wildcard?: boolean }
+  | { /** Append-only compensation for an earlier applied close. `targetCloseSeq` is the
+       * zero-based event position in the canonical parsed event stream. The evidence and exact
+       * resulting registry state are checked by Gate 8; the graph-independent fold reverses the
+       * target close's credits without editing its historical line. */
+      type: "demote"; targetCloseSeq: number; reason: string; evidenceRef: string;
+      resultingStatus: RigourStatus; resultingAf: AfFlag }
   | { /** Verified refutation; `certRef` names the death certificate (refutation record). */
       type: "prune"; nodeId: string; certRef: string; wildcard?: boolean }
   | { type: "compress"; nodeId: string; useSites: string[] };
@@ -55,6 +63,7 @@ export interface RewardDiagnostic {
   seq: number;
   code:
     | "duplicate-close"
+    | "demote-unbanked-close"
     | "reduce-unpredicted"
     | "prune-unpredicted"
     | "compress-refused"
@@ -79,5 +88,12 @@ export interface PayoutResult {
   escrows: EscrowState[];
   diagnostics: RewardDiagnostic[];
   /** Event passthrough counts, for audit/chaos-yield reporting. */
-  totals: { closes: number; reduces: number; prunes: number; wildcardCloses: number; wildcardPrunes: number };
+  totals: {
+    closes: number;
+    demotions: number;
+    reduces: number;
+    prunes: number;
+    wildcardCloses: number;
+    wildcardPrunes: number;
+  };
 }

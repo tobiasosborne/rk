@@ -35,18 +35,31 @@ export interface CalibrationResult {
 type Outcome = { y250: 0 | 1; y1m: 0 | 1 };
 
 export function computeCalibration(events: readonly RewardEvent[]): CalibrationResult {
-  // First pass: outcomes. First close/prune of a node decides it (duplicates are Gate 8 faults).
+  // First pass: outcomes. A demotion overrides its applied close with false: the prediction was
+  // that a bankable close would survive, and validity review established that it did not.
   const outcomes = new Map<string, Outcome>();
-  for (const ev of events) {
+  const closed = new Set<string>();
+  const appliedCloseBySeq = new Map<number, string>();
+  events.forEach((ev, seq) => {
     if (ev.type === "close" && !outcomes.has(ev.nodeId)) {
+      closed.add(ev.nodeId);
+      appliedCloseBySeq.set(seq, ev.nodeId);
       outcomes.set(ev.nodeId, {
         y250: ev.spentTokens <= HORIZON_250K ? 1 : 0,
         y1m: ev.spentTokens <= HORIZON_1M ? 1 : 0,
       });
+    } else if (ev.type === "close" && !closed.has(ev.nodeId)) {
+      // A prior PRUNE may already have fixed the outcome false, but this close still has an
+      // engine-applied identity for a later demote to reference. Gate 8 reports the conflict.
+      closed.add(ev.nodeId);
+      appliedCloseBySeq.set(seq, ev.nodeId);
     } else if (ev.type === "prune" && !outcomes.has(ev.nodeId)) {
       outcomes.set(ev.nodeId, { y250: 0, y1m: 0 });
+    } else if (ev.type === "demote") {
+      const target = appliedCloseBySeq.get(ev.targetCloseSeq);
+      if (target !== undefined) outcomes.set(target, { y250: 0, y1m: 0 });
     }
-  }
+  });
 
   // Second pass: score every prediction whose obligation resolved.
   const perEstimator = new Map<string, { sum: number; n: number }>();

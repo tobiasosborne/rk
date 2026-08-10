@@ -16,13 +16,20 @@ import { computePayouts } from "../reward/engine";
 import { supportedCloseTier, TIER_RANK } from "../reward/tier";
 import type { RewardEvent } from "../reward/types";
 import { pmaBacked, pmaBackingDecision } from "../reward/pma-backing";
+import { checkRewardDemotions } from "./reward-demotion";
 
 export { pmaBacked } from "../reward/pma-backing";
 
 /** Engine diagnostic codes that are LEDGER FAULTS (writer-protocol violations -> ERROR).
  * `escrow-expired` is deliberately absent: an expired escrow is the anti-decomposition-inflation
  * economics WORKING (prereg §1), an outcome to report, not a defect to flag. */
-const FAULT_DIAGNOSTICS = new Set(["duplicate-close", "reduce-unpredicted", "prune-unpredicted", "compress-refused"]);
+const FAULT_DIAGNOSTICS = new Set([
+  "duplicate-close",
+  "demote-unbanked-close",
+  "reduce-unpredicted",
+  "prune-unpredicted",
+  "compress-refused",
+]);
 
 /** Registry ids an event references, by event type. `citedDefs`/`citedLemmas` are checked
  * separately (Check 3) so an unknown payout TARGET and an unknown reuse BENEFICIARY read as the
@@ -59,8 +66,8 @@ export const rewardGate: Gate = {
       });
     }
 
-    // Check 2 — the payout fold's own fault diagnostics (duplicate close, unpredicted
-    // reduce/prune, refused compress). Economic outcomes (escrow-expired) are not faults.
+    // Check 2 — the payout fold's own fault diagnostics (duplicate close, invalid demotion,
+    // unpredicted reduce/prune, refused compress). Economic outcomes are not faults.
     const result = computePayouts(events);
     for (const d of result.diagnostics) {
       if (!FAULT_DIAGNOSTICS.has(d.code)) continue;
@@ -77,6 +84,10 @@ export const rewardGate: Gate = {
     const lemmaById = new Map(lemmas.map((l) => [l.id, l]));
     const lemmaIds = new Set(lemmaById.keys());
     const defIds = loadDefIds(snapshot);
+    // Check 5 — a demotion is complete only when the evidence exists and the exact recorded
+    // resulting state matches a strictly lower current registry entitlement.
+    const demotions = checkRewardDemotions(snapshot, events, lemmaById);
+    findings.push(...demotions.findings);
     events.forEach((ev, seq) => {
       for (const id of targetIds(ev)) {
         if (!lemmaIds.has(id)) {
@@ -89,7 +100,7 @@ export const rewardGate: Gate = {
       // Check 4 (S0-1) — close-tier consistency: a CLOSE may bank at most the tier the node's
       // registry state supports (src/reward/tier.ts). Self-reported `status: proved` with
       // `af: none` supports NOTHING — the exact laundering class S0's smoke run caught live.
-      if (ev.type === "close") {
+      if (ev.type === "close" && !demotions.compensatedCloseSeqs.has(seq)) {
         const target = lemmaById.get(ev.nodeId);
         if (target !== undefined) {
           const supported = supportedCloseTier(target);

@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-demote-unbanked-close"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "A demote must point to an earlier close that the fold actually banked. Event 99 does not exist, so no compensation is applied and Gate 8 fails structurally rather than allowing a negative or invented balance."
+}

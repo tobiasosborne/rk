@@ -10,9 +10,14 @@
 
 import { CLOSE_TIER_WEIGHTS } from "./types";
 import type { CloseTier, RewardEvent } from "./types";
+import { AF_FLAGS, RIGOUR_STATUSES } from "../graph/types";
 
 /** The ledger's fixed campaign-repo-relative path — also the gate's snapshot key. */
 export const REWARD_LEDGER_RELPATH = ".rk/reward-ledger.jsonl";
+/** Current on-disk record version. Legacy v1 records carried no version field (or an explicit
+ * `"1"`) and remain readable; every new writer emits `schemaVersion:"2"`. The demote variant is
+ * v2-only because an old consumer would otherwise mistake a compensation for an unknown no-op. */
+export const REWARD_LEDGER_SCHEMA_VERSION = "2";
 
 export interface MalformedLedgerLine {
   /** 1-based line number in `.rk/reward-ledger.jsonl`. */
@@ -30,7 +35,9 @@ export interface RewardLedgerLoad {
 type Coerced = { ok: true; event: RewardEvent } | { ok: false; error: string };
 
 const isStr = (v: unknown): v is string => typeof v === "string";
+const isNonBlankStr = (v: unknown): v is string => isStr(v) && v.trim().length > 0;
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isNonNegativeInt = (v: unknown): v is number => isNum(v) && Number.isInteger(v) && v >= 0;
 const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr);
 
 /** Validates one already-JSON-parsed value against the `RewardEvent` union and returns the
@@ -48,6 +55,9 @@ export function coerceRewardEvent(value: unknown): Coerced {
     ok: false,
     error: `${String(t)} event: field '${field}' ${field in o ? `is not ${want}` : `is missing (expected ${want})`}`,
   });
+  if (o.schemaVersion !== undefined && o.schemaVersion !== "1" && o.schemaVersion !== REWARD_LEDGER_SCHEMA_VERSION) {
+    return bad("schemaVersion", `'1' or '${REWARD_LEDGER_SCHEMA_VERSION}'`);
+  }
   const wildcard = (): Record<string, boolean> => (o.wildcard === undefined ? {} : { wildcard: o.wildcard as boolean });
 
   switch (t) {
@@ -87,6 +97,31 @@ export function coerceRewardEvent(value: unknown): Coerced {
         },
       };
     }
+    case "demote": {
+      if (o.schemaVersion !== REWARD_LEDGER_SCHEMA_VERSION) {
+        return { ok: false, error: `demote event: field 'schemaVersion' must be '${REWARD_LEDGER_SCHEMA_VERSION}'` };
+      }
+      if (!isNonNegativeInt(o.targetCloseSeq)) return bad("targetCloseSeq", "a non-negative integer");
+      if (!isNonBlankStr(o.reason)) return bad("reason", "a non-blank string");
+      if (!isNonBlankStr(o.evidenceRef)) return bad("evidenceRef", "a non-blank string");
+      if (!isStr(o.resultingStatus) || !RIGOUR_STATUSES.includes(o.resultingStatus as never)) {
+        return bad("resultingStatus", `one of the registry statuses (${RIGOUR_STATUSES.join(", ")})`);
+      }
+      if (!isStr(o.resultingAf) || !AF_FLAGS.includes(o.resultingAf as never)) {
+        return bad("resultingAf", `one of the registry af states (${AF_FLAGS.join(", ")})`);
+      }
+      return {
+        ok: true,
+        event: {
+          type: "demote",
+          targetCloseSeq: o.targetCloseSeq,
+          reason: o.reason,
+          evidenceRef: o.evidenceRef,
+          resultingStatus: o.resultingStatus as (typeof RIGOUR_STATUSES)[number],
+          resultingAf: o.resultingAf as (typeof AF_FLAGS)[number],
+        },
+      };
+    }
     case "prune": {
       if (!isStr(o.nodeId)) return bad("nodeId", "a string");
       if (!isStr(o.certRef)) return bad("certRef", "a string (the death certificate's ref)");
@@ -103,7 +138,7 @@ export function coerceRewardEvent(value: unknown): Coerced {
         ok: false,
         error: t === undefined
           ? "no 'type' field — not a reward event"
-          : `unknown event type '${String(t)}' (expected round|predict|reduce|close|prune|compress)`,
+          : `unknown event type '${String(t)}' (expected round|predict|reduce|close|demote|prune|compress)`,
       };
   }
 }

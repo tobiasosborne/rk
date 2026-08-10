@@ -23,7 +23,12 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { coerceRewardEvent, parseRewardLedger, REWARD_LEDGER_RELPATH } from "../reward/parse";
+import {
+  coerceRewardEvent,
+  parseRewardLedger,
+  REWARD_LEDGER_RELPATH,
+  REWARD_LEDGER_SCHEMA_VERSION,
+} from "../reward/parse";
 import type { RewardEvent } from "../reward/types";
 import type { RewardLedgerLoad } from "../reward/parse";
 
@@ -49,9 +54,10 @@ export function loadRewardLedger(root: string): RewardLedgerLoad {
  * survive a reload — a write that the loader would report as malformed is a defect at the writer,
  * not a line to put on an append-only log. */
 export function serializeRewardEvent(event: RewardEvent): string {
-  const coerced = coerceRewardEvent(event);
+  const versioned = { schemaVersion: REWARD_LEDGER_SCHEMA_VERSION, ...event };
+  const coerced = coerceRewardEvent(versioned);
   if (!coerced.ok) throw new Error(`refusing to append an unreadable reward event: ${coerced.error}`);
-  return JSON.stringify(coerced.event);
+  return JSON.stringify({ schemaVersion: REWARD_LEDGER_SCHEMA_VERSION, ...coerced.event });
 }
 
 /** Appends every event as one write call (one `appendFileSync` carrying every line, each

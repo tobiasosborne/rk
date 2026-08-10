@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-demote-evidence-missing"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "A non-empty evidenceRef string is not sufficient if the refuting record is absent. Gate 8 consumes the snapshot's every-file hash facts and fails closed; the invalid demote cannot suppress the original tier finding."
+}

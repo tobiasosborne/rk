@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-no-evidence","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"reason":"No evidenceRef field is present.","resultingStatus":"stated","resultingAf":"none"}

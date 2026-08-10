@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-still-banked","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":0,"reason":"The event says demote, but the shard was never downgraded.","evidenceRef":".rk/refuting-verdict.json","resultingStatus":"proved","resultingAf":"validated"}

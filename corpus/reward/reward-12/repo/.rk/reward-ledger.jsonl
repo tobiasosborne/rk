@@ -1,0 +1,2 @@
+{"type":"close","nodeId":"lem-dangling","tier":"proved","spentTokens":300000,"citedDefs":[],"citedLemmas":[]}
+{"schemaVersion":"2","type":"demote","targetCloseSeq":99,"reason":"This pointer is intentionally dangling.","evidenceRef":".rk/refuting-verdict.json","resultingStatus":"stated","resultingAf":"none"}

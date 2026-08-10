@@ -1,0 +1,9 @@
+{
+  "gate": "reward",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "Golden demotion: an append-only v1 close is followed by a schema-v2 compensating demote pointing to the close, a real refuting record, and the exact downgraded registry state. The fold reverses the close payout; Gate 8 suppresses the historical overclaim only because the compensation is complete and the shard is honest now."
+}

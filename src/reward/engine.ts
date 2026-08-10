@@ -26,6 +26,19 @@ interface EscrowInternal extends EscrowState {
   shares: Map<string, number>;
   /** Round of the last CLOSE/PRUNE among the children (grant round initially). */
   lastActivityRound: number;
+  grantRound: number;
+  /** Activity events retained by sequence so a later demote can remove only its target close. */
+  activities: Map<number, number>;
+}
+
+interface AppliedClose {
+  nodeId: string;
+  spentTokens: number;
+  active: boolean;
+  /** Every balance credit causally minted by this close, including REUSE/escrow/COMPRESS. */
+  credits: Map<string, number>;
+  /** Escrow shares this close vested; restored when still live, otherwise already void. */
+  escrowVests: { escrow: EscrowInternal; share: number }[];
 }
 
 export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
@@ -34,12 +47,17 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
   const escrows: EscrowInternal[] = [];
   /** obligation -> mean expected tokens over all predictions seen so far (order is meaning). */
   const predictions = new Map<string, { sumE: number; count: number }>();
-  const closed = new Map<string, number>(); // node -> spentTokens of its (single) close
+  const closed = new Map<string, AppliedClose>();
+  const appliedCloseBySeq = new Map<number, AppliedClose>();
   const compressed = new Set<string>();
   let currentRound = 0;
 
-  const credit = (id: string, amount: number) => {
-    if (amount !== 0) balances.set(id, (balances.get(id) ?? 0) + amount);
+  const credit = (id: string, amount: number, journal?: Map<string, number>) => {
+    if (amount === 0) return;
+    const next = (balances.get(id) ?? 0) + amount;
+    if (Math.abs(next) < 1e-12) balances.delete(id);
+    else balances.set(id, next);
+    if (journal) journal.set(id, (journal.get(id) ?? 0) + amount);
   };
   const hPred = (id: string): number | undefined => {
     const p = predictions.get(id);
@@ -48,12 +66,12 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
   const childActivity = (nodeId: string, seq: number) => {
     for (const e of escrows) {
       if (e.expired || !e.shares.has(nodeId)) continue;
+      e.activities.set(seq, currentRound);
       e.lastActivityRound = currentRound;
-      void seq;
     }
   };
 
-  const totals = { closes: 0, reduces: 0, prunes: 0, wildcardCloses: 0, wildcardPrunes: 0 };
+  const totals = { closes: 0, demotions: 0, reduces: 0, prunes: 0, wildcardCloses: 0, wildcardPrunes: 0 };
 
   events.forEach((ev, seq) => {
     switch (ev.type) {
@@ -101,6 +119,7 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
         escrows.push({
           obligation: ev.obligation, grantSeq: seq, total: escrowTotal,
           remaining: escrowTotal, expired: false, shares, lastActivityRound: currentRound,
+          grantRound: currentRound, activities: new Map(),
         });
         break;
       }
@@ -111,20 +130,65 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
           diagnostics.push({ seq, code: "duplicate-close", nodeId: ev.nodeId });
           break;
         }
-        closed.set(ev.nodeId, ev.spentTokens);
+        const applied: AppliedClose = {
+          nodeId: ev.nodeId,
+          spentTokens: ev.spentTokens,
+          active: true,
+          credits: new Map(),
+          escrowVests: [],
+        };
+        closed.set(ev.nodeId, applied);
+        appliedCloseBySeq.set(seq, applied);
         const payout = CLOSE_TIER_WEIGHTS[ev.tier] * hardnessReal(ev.spentTokens);
-        credit(ev.nodeId, payout);
+        credit(ev.nodeId, payout, applied.credits);
         const cited = [...ev.citedDefs, ...ev.citedLemmas];
-        for (const c of cited) credit(c, (REUSE_RATE * payout) / cited.length);
+        for (const c of cited) credit(c, (REUSE_RATE * payout) / cited.length, applied.credits);
         // Vest this node's share in every live escrow that named it a child.
         for (const e of escrows) {
           if (e.expired) continue;
           const share = e.shares.get(ev.nodeId);
           if (share === undefined) continue;
+          e.activities.set(seq, currentRound);
           e.shares.delete(ev.nodeId);
           e.remaining -= share;
           e.lastActivityRound = currentRound; // vesting IS child activity — before the delete above ate the evidence
-          credit(e.obligation, share);
+          applied.escrowVests.push({ escrow: e, share });
+          credit(e.obligation, share, applied.credits);
+        }
+        break;
+      }
+      case "demote": {
+        totals.demotions += 1;
+        const applied = appliedCloseBySeq.get(ev.targetCloseSeq);
+        if (applied === undefined || !applied.active) {
+          diagnostics.push({
+            seq,
+            code: "demote-unbanked-close",
+            detail: `event ${ev.targetCloseSeq} is not an earlier, still-banked close`,
+          });
+          break;
+        }
+        applied.active = false;
+        for (const [id, amount] of applied.credits) credit(id, -amount);
+        for (const e of escrows) {
+          if (!e.activities.delete(ev.targetCloseSeq)) continue;
+          e.lastActivityRound = Math.max(e.grantRound, ...e.activities.values());
+        }
+        for (const { escrow: e, share } of applied.escrowVests) {
+          if (e.expired) continue;
+          e.shares.set(applied.nodeId, share);
+          e.remaining += share;
+          if (currentRound - e.lastActivityRound >= ESCROW_EXPIRY_ROUNDS) {
+            e.expired = true;
+            diagnostics.push({
+              seq,
+              code: "escrow-expired",
+              nodeId: e.obligation,
+              detail: `restored escrow from reduce@${e.grantSeq} voided after demotion exposed ${ESCROW_EXPIRY_ROUNDS} inactive rounds`,
+            });
+            e.remaining = 0;
+            e.shares.clear();
+          }
         }
         break;
       }
@@ -143,16 +207,17 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
       }
       case "compress": {
         const distinct = new Set(ev.useSites).size;
-        const spent = closed.get(ev.nodeId);
-        if (distinct < 2 || compressed.has(ev.nodeId) || spent === undefined) {
+        const close = closed.get(ev.nodeId);
+        if (distinct < 2 || compressed.has(ev.nodeId) || close === undefined || !close.active) {
           diagnostics.push({ seq, code: "compress-refused", nodeId: ev.nodeId,
-            detail: spent === undefined ? "node never closed"
+            detail: close === undefined ? "node never closed"
+              : !close.active ? "node close was demoted"
               : compressed.has(ev.nodeId) ? "already compressed once"
               : `needs >= 2 distinct use sites, got ${distinct}` });
           break;
         }
         compressed.add(ev.nodeId);
-        credit(ev.nodeId, COMPRESS_RATE * hardnessReal(spent));
+        credit(ev.nodeId, COMPRESS_RATE * hardnessReal(close.spentTokens), close.credits);
         break;
       }
     }
@@ -164,7 +229,7 @@ export function computePayouts(events: readonly RewardEvent[]): PayoutResult {
   }
   return {
     balances: sortedBalances,
-    escrows: escrows.map(({ shares: _s, lastActivityRound: _r, ...pub }) => pub),
+    escrows: escrows.map(({ shares: _s, lastActivityRound: _r, grantRound: _g, activities: _a, ...pub }) => pub),
     diagnostics,
     totals,
   };

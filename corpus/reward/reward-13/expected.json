@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-demotion-without-downgrade"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "Demotion-without-downgrade is a lying record: the event mirrors status proved / af validated, so the registry still supports the original proved close. A compensation may neutralize an old overclaim only after the shard's current state is strictly below the banked tier."
+}

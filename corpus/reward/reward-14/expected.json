@@ -1,0 +1,13 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": ".rk/reward-ledger.jsonl",
+    "message_pattern": "reward-malformed-line"
+  }],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and demotion event are rk-only (PRD Amendment A1, N2).",
+  "notes": "A demote with no non-blank reason is not an auditable event. The shared parser rejects it as a malformed v2 line; the earlier v1 close remains readable and counted."
+}

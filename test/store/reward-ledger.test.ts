@@ -78,6 +78,8 @@ describe("reward ledger — append/load round trip", () => {
       { type: "predict", obligation: "lem-a", estimator: "worker-1", p250k: 0.3, p1m: 0.7 },
       { type: "reduce", obligation: "lem-a", children: ["lem-b", "lem-c"] },
       CLOSE,
+      { type: "demote", targetCloseSeq: 3, reason: "refuted", evidenceRef: ".rk/refutation.json",
+        resultingStatus: "stated", resultingAf: "none" },
       { type: "prune", nodeId: "lem-c", certRef: "cert-1", wildcard: true },
       { type: "compress", nodeId: "lem-a", useSites: ["lem-d", "lem-e"] },
     ];
@@ -96,7 +98,9 @@ describe("reward ledger — append/load round trip", () => {
     const root = repo();
     appendRewardEvent(root, { ...CLOSE, extra: "nope", timestamp: "2026-08-08" } as unknown as RewardEvent);
     const parsed = JSON.parse(readFileSync(rewardLedgerPath(root), "utf8").trim()) as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toEqual(["citedDefs", "citedLemmas", "nodeId", "spentTokens", "tier", "type"]);
+    expect(Object.keys(parsed).sort()).toEqual([
+      "citedDefs", "citedLemmas", "nodeId", "schemaVersion", "spentTokens", "tier", "type",
+    ]);
   });
 
   test("appending an event that would not survive a reload is refused, not written", () => {
