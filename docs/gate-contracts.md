@@ -101,13 +101,28 @@ CLI convenience surface (e.g. argument.py's `--show <id>` on an unknown id) may 
 for usage errors; those are CLI ergonomics, not gate verdicts, and are out of this contract's
 scope.
 
-**Composition (`rk check`).** All six gates run unconditionally in one invocation; `rk check`
-exits 1 if any gate found ≥1 ERROR, and prints all six coverage lines regardless of earlier
+**Composition (`rk check`).** Every registered gate and the graph contract-join pass run
+unconditionally in one invocation; `rk check` exits 1 if either surface emits ≥1 ERROR, and
+prints every coverage line regardless of earlier
 failures. This is a **deviation** from `scripts/check-all.sh`, which short-circuits at the first
 failing script (`fail() { ...; exit 1; }`, check-all.sh:7, invoked at lines 10,13,16,19,20,28,31,36).
 Justification: L2's coverage-reporting mandate is only meaningful if every gate actually runs
 every time; a fix-one-rerun loop hides how many gates are broken at once. No individual gate's
 internal logic changes — only the wrapper's control flow.
+
+**Graph contract joins (rk-45dj).** After the registered gates, `rk check` builds the same
+`GraphDocument` consumed by `rk graph` and consumes its pure `computeExpectedConflicts`
+result; the CLI MUST NOT duplicate the contract-mismatch predicate. Every resolved af edge
+whose byte-exact `contractMatch` is `false` produces one non-structural `graph contract
+mismatch` finding, regardless of the registry node's declared status. It is ERROR in
+consolidation and WARN in exploration, with the standard phase-demotion suffix. The pass
+always emits `checked graph-conflicts: <resolved af edges>/<all af edges> contract joins
+(<E> errors, <W> warnings)`, so unresolved joins remain visible in the denominator. Failure
+to build the graph is a structural ERROR with fail-closed coverage, never a green `0/0`.
+Gate 2 Check 9's historical whitespace-normalized comparison remains unchanged; this
+byte-exact graph pass is additive and authoritative for `contractMatch`. (Campaign-A
+window-5 incident: a byte-level contract mismatch on a `proved-mod-audit` shard was visible
+only to `rk graph`, which nobody is obliged to run, for three windows.)
 
 **Snapshot loading** (round-3 landing-blocker 3). `rk check` builds the in-memory `RepoSnapshot`
 (`src/store/snapshot-load.ts`) once, BEFORE the per-gate exception boundary. Two rules keep that
@@ -298,7 +313,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
 | **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id), **Check 14's STORE-INTEGRITY half** (a corrupt `.rk/l5-verdicts.jsonl`) and **Check 16's STORE-INTEGRITY half** (a corrupt `.rk/retractions.jsonl`) — including the `proved-mod-audit`-unconfirmable ERROR that exists only as a consequence of either [LB5] | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), **Check 14's PROMOTION semantics** (promotable WARN, promoted-but-unsupported ERROR over a READABLE store), **Check 16's RETRACTION-STATUS semantics** (the unconditional veto itself, over a READABLE ledger) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and the two ledger checks' STATUS semantics are likewise consolidation-weight validity concerns over a claim. **The split inside Checks 14/16 [LB5]**: a ledger that cannot be PARSED is the same class as a shard that cannot be parsed — the Phase matrix's own "parse errors" bullet — and demoting it would let `rk check` print OK on a corrupt validity ledger in exploration while `rk render` refuses the same tree, with the stamped pre-commit hook running the permissive surface. What a READABLE ledger MEANS for a declared status is a different question, and stays demotable |
-| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all" |
+| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all". Checks 8-9 (rk-uqxh: argument-shard source/hash/locus/quote verification and its zero-coverage guard) join the same non-structural column |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
@@ -324,6 +339,48 @@ must be paired with the corresponding `structural` flag flip in the gate source 
 in `src/gates/phase.ts`) AND the classification tests in `test/gates/phase-classification.test.ts`
 updated in the same commit; a bare doc edit with no code change (or vice versa) is incomplete work
 per Rule 7.
+
+### Verifier-brief fence barrier (rk-fs8v; drive-layer validity barrier)
+
+This is a drive-layer dispatch check, not an `rk check` `Finding[]` gate. A verifier brief may
+narrow scrutiny only through a structured declaration `assumedVerified: [{claimId, verdictRef}]`.
+Ordinary dependency content, an epistemic-state label such as `validated`, and free text such as
+"already verified," "assume verified," or "do not re-litigate" do not establish a fence.
+Free-text fencing is a contract violation, but rk does not claim to detect it with a regular
+expression: natural-language instructions cannot be reliably distinguished from quotations,
+incident descriptions, or mathematical prose. Mechanical enforcement is at the structured layer
+plus the verifier obligation below.
+
+Before dispatch, every declaration is checked against healthy `.rk/l5-verdicts.jsonl` and
+`.rk/retractions.jsonl` stores and the SHA-256 of the driver-supplied current raw claim bytes.
+`verdictRef` must have the exact form `.rk/l5-verdicts.jsonl#ordinal=N`, resolve to the named
+`claimId`, identify that claim's latest fresh plain-`VALID` verdict, and have no live
+`l5-shard-bytes` retraction. Missing or malformed references, missing current bytes, wrong-claim
+records, stale or superseded records, `INVALID`, `VALID-WITH-CORRECTION`, live retractions, and
+unhealthy stores refuse the target item before a worker session opens. One refused declaration
+refuses the whole target item.
+
+Coverage is total over supplied declarations: every batch returns `{checked, total, confirmed,
+refused}` with `checked == total` and `confirmed + refused == total`. Refusals appear as
+`verifier-fence-refused` dispatch outcomes and as `verifier-fence` driver-log records carrying
+per-entry reasons. A silent skip is forbidden.
+
+An admitted entry is enriched with its confirmed `contentHash`, JSONL `locus`, and
+`verdict: "VALID"` and delivered to the verifier as structured evidence. Before honoring the
+fence, the verifier MUST independently confirm the claim id, verdict reference, hash, locus, and
+verdict. If confirmation is unavailable or disagrees, it MUST re-litigate the input and state
+that fact in its per-item `justification`.
+
+Claim identities, current bytes, repository root, and store view are driver-supplied and
+therefore mechanically checkable but not adversary-proof. The response schema is unchanged:
+fence confirmation uses the existing `justification`, whose substantive truth is not
+mechanically established beyond the existing non-blank structural check.
+
+**Corpus fixture required:** `corpus/drive/verifier-fence-citable-record`, exercised by
+`test/drive/verifier-fence.test.ts` and `test/drive/l5-dispatch-fence.test.ts`. (Campaign-A
+window-3 incident: a brief fenced an unverified input with "already survived cross-vendor
+passes; do NOT re-litigate"; the campaign's own diagnosis was that no mathematical check
+catches the class — the structured layer does.)
 
 ---
 
@@ -1120,9 +1177,11 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 
 ## Gate 3 — refs (`proofs/<ws>/externals/*.json`)
 
-**Purpose.** Byte-verify every externally-claimed VERBATIM quote against its local `refs/`
-source, so an af prover cannot fabricate a quote attributed to a locus where those words do not
-appear (check-refs.py:6-9).
+**Purpose.** Byte-verify every externally-claimed VERBATIM quote and every citation quote
+embedded in an `argument/**/*.md` shard against its hash-pinned local `refs/` source, so
+neither an af prover nor a shard author can retain cited status after the source, locus, or
+quoted bytes drift (check-refs.py:6-9 for the externals half; Checks 8-9, rk-uqxh, for the
+shard half).
 
 **Failure mode guarded — THE 19/19 false-green.** Before the `aism-dbq` "UN-VACUUM" fix,
 an external whose claimed `refs/` payload was absent locally (e.g. gitignored, not yet fetched
@@ -1175,6 +1234,17 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   a single `.search`, not a global/`findall` scan — a `source` string naming two or more `refs/`
   loci is checked against the first one only; any later locus in the same string is invisible to
   this gate.
+- **Argument-shard citation inputs** (rk-uqxh). Glob: `argument/**/*.md`, recursively,
+  excluding `README.md`, `INDEX.md`, and `DAG.md` at any depth, matching Gate 2's shard
+  discovery boundary. The recognized citation grammar is the two adjacent standalone lines
+  emitted by `rk refs quote` and embedded in Markdown, allowing surrounding indentation:
+  `refs/<safe-relative-path>:<positive-1-indexed-line>` followed immediately by
+  `"<byte-verbatim quote>"`. Every recognizable pair is checked regardless of the shard's
+  declared status. A shard declaring `status: cited` MUST carry at least one recognizable
+  pair; freeform `provenance:` text is not itself a second citation grammar. Hash authority:
+  `refs/manifest/sources.lock.json` — the citation's `refs/<path>` must resolve to exactly
+  one lock entry whose `path` is refs-relative and whose `sha256` is a full 64-hex digest
+  matching the snapshot's raw-byte hash for the payload.
 
 **Checks.**
 1. **Classification** (check-refs.py:108-133):
@@ -1234,6 +1304,26 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    `no-quote-skipped`. An external whose `source` names **no** `refs/` locus (numerical evidence,
    an import, prose notes — nothing was ever claimed to be quoted) keeps check 1's WARN
    `skip_noquote` unchanged; that boundary is exactly the one `refs-05` and `refs-10` pin.
+8. **Argument-shard citation verification** (rk-uqxh, campaign-A incident: the cited rung was
+   reachable but ungated for four windows — Gate 3 reported `checked 0/0 externals` on a repo
+   with adopted sources and a cited shard). For every recognized citation pair:
+   - an unsafe path, absent/non-positive/non-numeric line locus, or missing adjacent quoted
+     line ⇒ **ERROR**;
+   - an absent payload ⇒ **ERROR**;
+   - an absent, unparseable, malformed, duplicate/ambiguous, or non-64-hex lock pin ⇒ **ERROR**;
+   - a payload whose raw-byte SHA-256 differs from its adopted pin ⇒ **ERROR**;
+   - the raw quoted text must occur as an exact, case-sensitive substring of the recorded raw
+     source line, with no normalization and no locus tolerance (`grep -F` semantics) ⇒
+     **ERROR** otherwise.
+   Every passing pair increments the shard-citation checked count. A non-`cited` shard carrying
+   a recognizable pair is checked identically; carrying a quote pointer is itself a
+   verification claim. Implementation: `src/gates/refs-shard-citations.ts` (called once by
+   `src/gates/refs.ts`).
+9. **Cited-shard zero-coverage guard** (rk-uqxh). A shard declaring `status: cited` with no
+   recognizable citation pair ⇒ **ERROR** and contributes one expected-but-unchecked citation
+   unit. If any cited shards exist and zero shard citations pass Check 8, emit a further
+   **ERROR** `zero byte-verified shard citations`; a run may never be green merely because no
+   citation was recognizable.
 
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
@@ -1319,8 +1409,12 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   FAIL, and only via checks 6-7. Zero AISM externals are affected in either direction (zero
   refs-quote externals have ever existed there — see the zero-cost evidence in the entry above);
   the affected population is future rk repos, which is the point.
-- **[message-only]** Coverage line reports a four-way breakdown: `checked refs: <P>/<T>
-  externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped` — instead of
+- **[message-only]** The single Gate 3 coverage line retains the four-way external breakdown
+  and appends `; checked <C>/<K> shard citations` (rk-uqxh), rendering: `checked refs: <P>/<T>
+  externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped; checked
+  <C>/<K> shard citations`. `K` is the number of recognized citation pairs plus one for every
+  `status: cited` shard carrying none; `C` is the number passing source, hash, locus, and
+  exact-byte verification. The externals half replaces
   AISM's `<total> externals, <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which
   conflates two different skip reasons into one number. CLAUDE.md L2, "a skip is always visible
   with a count" — the historical incident was specifically about *which* skip reason dominated
@@ -1348,6 +1442,9 @@ changed across AISM's history at time of reading.
 | `refs-09` | **wrong-passage citation** [P2/rk-wkzh, AISM incident I2] — quote bytes genuine but 83 lines outside the claimed `:<lines>` window under both counting conventions ⇒ check 6 ERROR (PASSed before this bead; the strict acceptance-shrink case) |
 | `refs-10` | **no-quote escape** [P2/rk-wkzh, AISM incident I3] — `source` names a `refs/` locus and carries no double-quoted run ⇒ check 7 ERROR (was WARN `skip_noquote`) |
 | `refs-11` | **form-feed locus ambiguity** [P2/rk-wkzh, AISM incident I4] — pdftotext payload with real `\x0c` bytes; the locus is plausible under `\n`+`\x0c` counting and off under `\n`-only ⇒ PASS via the either-convention rule (`config_override` pins the tolerance to 5 so the conventions are discriminating at fixture scale) |
+| `refs-12` | **cited-shard quote drift** [rk-uqxh] — cited argument shard whose quote no longer matches the hash-pinned source at its recorded locus ⇒ Check 8 ERROR, coverage `checked 0/1 shard citations` |
+| `refs-13` | **cited-shard absent source** [rk-uqxh] — cited argument shard naming an absent/unhashed refs payload ⇒ Check 8 ERROR, never an unchecked cited green |
+| `refs-14` | **intact citation golden case** [rk-uqxh] — adopted SHA-256 matches and the exact quote occurs at the recorded line ⇒ PASS, `checked 1/1 shard citations` |
 
 ---
 
@@ -2331,9 +2428,13 @@ yet applied here since both files are out of this repair wave's scope):
 
 NEW in N2 (PRD Amendment A1, rk-5man) — no AISM counterpart; the goal-graph payout ledger is
 rk-only. The ledger is the dark factory's account book: an append-only JSONL of reward events
-(`round | predict | reduce | close | prune | compress`, `schemas/` pending — the runtime
-contract is `src/reward/types.ts`, the pure validator `src/reward/parse.ts`). Balances are
-DERIVED by a pure fold (`src/reward/engine.ts`), never stored. Every finding this gate emits is
+(`round | predict | reduce | close | demote | prune | compress`). The current record schema is
+`schemas/reward-ledger.v1.json`, whose filename identifies the schema family and whose
+`schemaVersion: "2"` identifies the current record version. Legacy v1 records — the six
+pre-demotion variants with `schemaVersion` absent or explicitly `"1"` — remain readable; every
+new writer emits v2, and `demote` is v2-only. The runtime contract is `src/reward/types.ts`,
+the pure validator `src/reward/parse.ts`. Balances are DERIVED by a pure fold
+(`src/reward/engine.ts`), never stored. Every finding this gate emits is
 STRUCTURAL (the LB5 store-integrity stance: a corrupt ledger is never phase-demotable).
 
 Inputs: `.rk/reward-ledger.jsonl` (absent = legitimate day-1 state, clean pass, coverage 0/0);
@@ -2343,10 +2444,13 @@ the registry parse (`parseRegistry`) and definition ids (`loadDefIds`) for refer
    event. Unparseable JSON, blank interior lines, unknown `type`, or a known type missing a
    required field: one ERROR per line, 1-based line number, loader diagnosis in the message.
    Later well-formed lines remain checked (malformed lines are first-class data, L2).
-2. **Fold faults** `[reward-duplicate-close]`, `[reward-reduce-unpredicted]`,
-   `[reward-prune-unpredicted]`, `[reward-compress-refused]` — the payout fold's writer-protocol
-   diagnostics are ERRORs. `escrow-expired` is deliberately NOT a finding: an expired escrow is
-   the anti-decomposition-inflation economics working (prereg §1), an outcome, not a defect.
+2. **Fold faults** `[reward-duplicate-close]`, `[reward-demote-unbanked-close]`,
+   `[reward-reduce-unpredicted]`, `[reward-prune-unpredicted]`,
+   `[reward-compress-refused]` — the payout fold's writer-protocol diagnostics are ERRORs.
+   A demote target must be an earlier close the fold actually banked and which has not already
+   been demoted; nonexistent, later, duplicate/never-banked, and repeated targets are faults.
+   `escrow-expired` is deliberately NOT a finding: an expired escrow is the
+   anti-decomposition-inflation economics working (prereg §1), an outcome, not a defect.
 3. **Referential integrity** `[reward-unknown-target]`, `[reward-unknown-citation]` — every
    payout target (close/prune node, reduce obligation + children, predict obligation) must be a
    real `argument/` shard id; every close citation must be a real `argument/` or `definitions/`
@@ -2360,18 +2464,70 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    (including self-reported `status: proved` with `af: none`) supports nothing. Paying BELOW
    entitlement is allowed (conservative closes are honest); paying above is the laundering.
    Check 4b `[reward-tier-unbacked]` (window-1 finding rk-90so; hardened per the Tier A
-   review of f5b6b7c): a pma-by-status bank additionally requires the STATUS to be backed.
-   Backing routes, both fail-closed: (i) a `provenance:` declaration whose FIRST
-   whitespace-token names an EXISTING repo file (existence via the every-file sha256 facts
-   map) other than the shard itself — prose, nonexistent paths, self-reference, and the
-   M3.8 `legacy-same-family` marker never back; (ii) a fresh VALID L5 verdict from a
-   HEALTHY store (zero parse issues, intact ordinal chain — the linker's poisoning stance),
-   with a healthy retraction ledger and no live retraction for the shard in either hash
-   domain; VALID-WITH-CORRECTION and stale verdicts never back. `rk reward report` runs
+   review of f5b6b7c; INDEPENDENCE added per rk-ne3a, campaign-A window-2 finding): a
+   pma-by-status bank additionally requires the STATUS to be backed, and backing to be
+   RECORDED-INDEPENDENT of the claim's prover. Backing routes, both fail-closed:
+   (i) a `provenance:` declaration whose FIRST whitespace-token names a readable JSON
+   provenance record. The record MUST carry `schema_version: "1"`, the target `claimId`, a
+   canonical driver identity seam in `author`, and `role: "verifier"` or `role: "reviewer"`.
+   The claim's prover-of-record MUST be recoverable from af `proof_author`/`author` metadata
+   or a canonical shard `prover:` seam, and the backing record's `author` MUST differ from
+   that prover-of-record. Missing, malformed, unreadable, anonymous, wrong-claim, wrong-role,
+   or self-authored records do not back the close — prose, nonexistent paths, self-reference,
+   and the M3.8 `legacy-same-family` marker never back;
+   (ii) a fresh VALID L5 verdict from a HEALTHY store (zero parse issues, intact ordinal
+   chain — the linker's poisoning stance), with a healthy retraction ledger and no live
+   retraction for the shard in either hash domain; VALID-WITH-CORRECTION and stale verdicts
+   never back. A deficient provenance record does not suppress an independently sufficient
+   fresh VALID L5 verdict. This check establishes recorded-and-checkable role separation
+   only: driver-supplied identity seams are not authenticated, and this clause makes no
+   adversary-resistance claim — the trust anchor remains driver-enforced role separation
+   (the V1/V2 honesty stance). `rk reward report` runs
    this gate unconditionally and refuses to present unbankable balances silently;
    `--strict` turns findings into exit 1. Deliberately scoped to Gate 8, the banking site,
    not the linker: historical pma shards in repos with no reward ledger draw zero new
    findings. `numerical`-by-status backing (run-bundle linkage) is a recorded v2 question.
+5. **Append-only close demotion** `[reward-demote-evidence-missing]`,
+   `[reward-demotion-without-downgrade]` (rk-4317, campaign-A window-5 finding) — a banked
+   close is never edited or deleted. Its only sanctioned validity repair is a schema-v2
+   `demote` event carrying: `targetCloseSeq`, the zero-based position of an earlier successfully
+   banked close in the canonical parsed event stream; a nonblank `reason`; a nonblank
+   repo-relative `evidenceRef`; and the exact `resultingStatus` / `resultingAf`. Missing or blank
+   audit fields make the line malformed. The evidence path must exist in the snapshot; v2
+   establishes path existence, not authentication of the record's substantive truth.
+
+   The resulting status and af MUST exactly equal the target shard's current registry state,
+   and `supportedCloseTier` for that state MUST be strictly below the original close tier.
+   Equality is not demotion. A missing shard remains an independent Check-3 unknown-target
+   fault. Only a complete demotion neutralizes the target close's historical Checks 4/4b
+   findings; malformed, dangling, evidence-less, state-mismatched, or non-downgrading events
+   leave those findings active.
+
+   The deterministic fold implements demotion as negative compensation: it reverses every
+   credit causally minted by the target close — direct CLOSE payout, REUSE citations, escrow
+   vesting, and any subsequent COMPRESS credit — without modifying prior ledger lines. A
+   still-live escrow share is restored; an already-expired share remains void. An invalid or
+   repeated demotion never creates negative credit.
+
+   Calibration scores a successfully demoted close as false (`y250=0`, `y1m=0`): the original
+   prediction was that a bankable close would survive validity review, and the demotion records
+   that it did not. The demoted close receives no automatic lower-tier repricing; the original
+   payout is fully reversed, and any later honest reward requires a separately specified
+   protocol rather than an inferred payment.
 
 Red corpus: `corpus/reward/` — reward-01 (malformed line), reward-02 (duplicate close),
-reward-03 (ghost target), reward-04 (golden pass), reward-05 (self-report laundering, S0-1).
+reward-03 (ghost target), reward-04 (golden pass), reward-05 (self-report laundering, S0-1),
+reward-08 (self-authored backing record ⇒ ERROR, rk-ne3a), reward-09 (authorless backing
+record ⇒ ERROR, rk-ne3a), reward-10 (independent-verifier backing record ⇒ PASS, rk-ne3a),
+reward-11 (valid append-only demotion ⇒ PASS, rk-4317), reward-12 (dangling close reference
+⇒ ERROR), reward-13 (demotion without shard downgrade ⇒ ERROR), reward-14 (missing reason
+⇒ malformed ERROR), reward-15 (missing evidence reference ⇒ malformed ERROR), reward-16
+(absent referenced evidence ⇒ ERROR).
+
+**Reward-ledger schema compatibility (rk-4317).** The reward-ledger record family is now
+version 2; the stable family filename remains `schemas/reward-ledger.v1.json`, following the
+same filename-versus-version convention as `schemas/graph.v1.json`. Version 2 adds the
+append-only `demote` variant. Readers accept legacy pre-demotion events with `schemaVersion`
+absent or `"1"` and accept v2 records; writers emit only `"2"`. A `demote` without
+`schemaVersion: "2"` is malformed so an older consumer can never silently treat compensation
+as an unknown no-op.
