@@ -191,6 +191,13 @@ WorkerRequest {
     itemId:      string
     content:     string
     contentHash: string                                  // PINNED hash domain — see below
+    assumedVerified?: [{                                 // verifier-only; admitted form, (b.1)
+      claimId: string
+      verdictRef: string
+      contentHash: string
+      locus: string
+      verdict: "VALID"
+    }]
   }
   outputSchema: string
   timeout:      number                                   // seconds
@@ -217,6 +224,51 @@ TypeScript types are the request-shape contract — but Q4 also ruled that types
 insufficient for the session/claim ISOLATION invariant specifically, which is why
 `src/drive/session.ts`'s runtime `validateSessionRequest` and its property-test suite exist
 (see "(a) Dispatch model" above).
+
+## (b.1) Verifier fences require a citable verdict record (rk-fs8v)
+
+A brief may narrow a verifier's scrutiny only through a structured declaration
+`assumedVerified: [{claimId, verdictRef}]`. Ordinary dependency content, an af epistemic-state
+label such as `validated`, and prose such as “already survived review,” “assume verified,” or “do
+not re-litigate” do **not** establish a fence. Free-text fencing language is a contract violation
+by definition. The driver deliberately does not claim to detect it with a regular expression:
+natural-language instructions cannot be reliably distinguished from quotations, incident
+descriptions, or mathematical prose. Mechanical enforcement is at the structured layer, backed
+by the verifier obligation below; prose review remains an audit responsibility.
+
+Before dispatch, `src/drive/verifier-fence-dispatch.ts` reads the L5 verdict and retraction stores
+and passes their parsed state plus driver-supplied current claim bytes to the pure validator in
+`src/drive/verifier-fence.ts`. Every declaration is checked, with explicit `checked N/N`
+coverage. A declaration is admitted only when all of these hold:
+
+1. both append-only stores are healthy;
+2. `verdictRef` has the canonical `.rk/l5-verdicts.jsonl#ordinal=N` form and resolves to a record
+   whose `itemId` exactly equals the declared `claimId`;
+3. the record is the latest verdict for that claim, its `l5ContentHash` equals the SHA-256 of the
+   driver's current raw claim bytes, and its verdict is plain `VALID` (not `INVALID` or
+   `VALID-WITH-CORRECTION`); and
+4. no live `l5-shard-bytes` retraction binds to those bytes.
+
+The check reuses `promotionStateFor`, including its latest-by-ordinal, hash-staleness,
+correction-pending, and retraction semantics. A missing, malformed, stale, superseded, retracted,
+wrong-claim, non-VALID, or store-unhealthy reference refuses the target item before a worker
+session opens. The refusal appears in `L5DispatchOutcome.rejected` with stage
+`verifier-fence-refused`; every planned batch also carries `fenceCoverage` and emits a
+`verifier-fence` driver-log record with the same counts and per-entry refusal reasons. A silent
+skip is forbidden.
+
+Only admitted declarations reach a verifier. The driver enriches each one with the confirmed
+record's current `contentHash`, citable JSONL `locus`, and `verdict: "VALID"`, exposes that array as
+`TurnItem.assumedVerified`, and renders the same structured entries into the worker-visible brief.
+The verifier MUST independently confirm the named claim, reference, hash, locus, and verdict
+before honoring the fence. If any confirmation is unavailable or disagrees, the verifier MUST
+re-litigate that input and say so in its per-item `justification`.
+
+This mechanism is driver-supplied evidence, not adversary-proof identity: the driver supplies the
+claim ids, current bytes, repository root, and store view, just as it supplies verdict identity in
+section (e). The response schema is unchanged. Fence confirmation is acknowledged in the existing
+`justification`; as the honesty limit below states, rk mechanically proves only that the field is
+non-blank, not that the verifier performed the promised independent check.
 
 ## (c) Response envelope and the buffered apply pipeline
 

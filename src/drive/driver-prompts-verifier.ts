@@ -18,6 +18,7 @@
 
 import type { Tier } from "./vocab";
 import type { RawIssue } from "./verdict-raw";
+import { renderConfirmedVerifierFences, type ConfirmedVerifierFence } from "./verifier-fence";
 import { renderRepairPrompt } from "./driver-prompts-shared";
 
 // --- Verifier turn prompt (item 2..N content only) ------------------------------------------------
@@ -46,6 +47,9 @@ export interface VerifierItemInput {
    * verified. Empty for a node with no recorded dependencies. */
   deps: readonly VerifierDep[];
   tier: Tier;
+  /** Fences already admitted by the pure store validator. Unvalidated claim/ref pairs never reach
+   * this builder; ordinary dependency metadata is not a fence. */
+  assumedVerified?: readonly ConfirmedVerifierFence[];
   /** rk-jit (STOP-4): true iff this node has a statement but NO recorded proof body (no children,
    * no dependencies) — src/drive/driver-plan.ts's `isProoflessNode`, computed at the edge
    * (src/drive/driver-live-dispatch.ts's `verifierItemFor`). When set, the prompt HARD-FORBIDS an
@@ -156,13 +160,10 @@ const L5_VERDICT_INSTRUCTIONS = [
   'Keep the "justification" (and any correction "description") string CONCISE: at most 3 sentences (~400 characters). State only the essential finding. A long explanation risks being truncated mid-string, which produces invalid JSON and FAILS.',
 ].join("\n");
 
-/** GAP 10: renders the "Dependencies (already established)" section — each declared dependency's id,
- * validated-or-not flag, and STATEMENT (the content the verifier judges the node's step against). The
- * verifier uses these as given; the scope line below forbids re-deriving them. A node with no recorded
- * dependencies renders an honest "(none)", never a blank section. */
+/** GAP 10: dependency content remains available as evidence, but metadata alone does not fence it. */
 function renderVerifierDeps(deps: readonly VerifierDep[]): string {
   const lines: string[] = [];
-  lines.push(`Dependencies (already established) (${deps.length}):`);
+  lines.push(`Dependencies supplied for scrutiny (${deps.length}):`);
   if (deps.length === 0) {
     lines.push("(none)");
     return lines.join("\n");
@@ -188,15 +189,17 @@ export function buildVerifierTurnPrompt(item: VerifierItemInput): string {
   lines.push("");
   lines.push(renderVerifierDeps(item.deps));
   lines.push("");
+  lines.push(renderConfirmedVerifierFences(item.assumedVerified ?? []));
+  lines.push("");
   if (item.proofless === true) {
     // rk-jit (STOP-4): a proofless node gets the HARD RULE in place of the normal verification
     // scope — there is no inference to judge, only a missing proof to demand.
     lines.push(prooflessVerdictRule(item.tier));
   } else {
     lines.push(
-      "Scope: judge whether this node's OWN inference is validly established GIVEN the dependencies " +
-        "listed above (with their statements) as already correct — do not re-derive, re-prove, or " +
-        "re-verify the dependencies themselves, only this node's step from them.",
+      "Scope: judge whether this node's OWN inference is validly established from the supplied evidence. " +
+        "You may scrutinize any dependency; only a structured entry in Assumed verified can narrow " +
+        "scrutiny, and only after your independent confirmation above.",
     );
   }
   lines.push("");

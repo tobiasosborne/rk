@@ -28,6 +28,8 @@ import type { L5DispatchPlan } from "./l5-dispatch-plan";
 import { deriveBatchId } from "./batch-composer";
 import { sha256Bytes } from "../refs/hash";
 import { appendL5Verdicts, type AppendL5Result } from "./l5-store-io";
+import { screenVerifierFences } from "./verifier-fence-dispatch";
+import { renderConfirmedVerifierFences, type AssumedVerified, type ConfirmedVerifierFence, type VerifierFenceCoverage } from "./verifier-fence";
 import { resolveTurn, type TurnFailureIssue, type TurnFailureStage, type WorkerResult } from "./worker-result";
 import type { VerdictDocument } from "./verdict-schema";
 import type { WorkerBackend, SessionSpec, TurnItem } from "./backend-types";
@@ -58,6 +60,9 @@ export interface L5DispatchDeps {
   /** Sent ONCE per batch, on the session's first turn — the tier's checklist/rubric text (PRD C9:
    * "batch dispatch of fresh hostile verifiers"). Never re-sent on a resume turn (contract (b)). */
   sharedContext: string;
+  /** Structured fences keyed by the item whose verifier brief would honor them. Each claim named
+   * here must also have current raw bytes in `content`, so the edge can derive its hash. */
+  assumedVerified?: ReadonlyMap<string, readonly AssumedVerified[]>;
   timeoutMs?: number;
   maxOutputTokens?: number;
   nowIso?: () => string;
@@ -76,7 +81,7 @@ export interface L5DispatchDeps {
 
 export interface L5DispatchRejection {
   itemId: string;
-  stage: TurnFailureStage | "no-content-supplied" | "content-hash-mismatch";
+  stage: TurnFailureStage | "no-content-supplied" | "content-hash-mismatch" | "verifier-fence-refused";
   issues: TurnFailureIssue[];
 }
 
@@ -94,6 +99,8 @@ export interface L5DispatchOutcome {
   claimId?: string;
   applied: AppendL5Result["appended"];
   rejected: L5DispatchRejection[];
+  /** Loud per-entry accounting for the structured validity fence: always checked N/N. */
+  fenceCoverage: VerifierFenceCoverage;
 }
 
 /** Dispatches every batch in `plan`, appending every accepted verdict to the `root` campaign
@@ -119,6 +126,26 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     const rejected: L5DispatchRejection[] = [];
     const documents: VerdictDocument[] = [];
 
+    const fenceScreen = screenVerifierFences(root, batch.members, deps.content, deps.assumedVerified);
+    for (const item of fenceScreen.refusals) {
+      rejected.push({
+        itemId: item.itemId,
+        stage: "verifier-fence-refused",
+        issues: item.refusals.map((r, i) => ({
+          path: `$.assumedVerified[${i}]`,
+          message: `${r.claimId}: ${r.reason} (${r.verdictRef || "blank verdictRef"})`,
+        })),
+      });
+    }
+    deps.appendLog?.(JSON.stringify({
+      kind: "verifier-fence",
+      at: nowIso(),
+      plannedBatchId: batch.batchId,
+      ...fenceScreen.coverage,
+      refusals: fenceScreen.refusals.flatMap((item) =>
+        item.refusals.map((r) => ({ itemId: item.itemId, claimId: r.claimId, verdictRef: r.verdictRef, reason: r.reason }))),
+    }));
+
     // rk-74o PRE-FLIGHT (was inside the dispatch loop below). Both discard stages here — no content
     // supplied, and M3 blocker 1's hash binding — are knowable BEFORE a session exists and spend no
     // tokens. Running them first is what lets the batch id name the set that actually shared the
@@ -132,8 +159,8 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     // be sent are `deps.content`. If they disagree, the plan is stale or the wrong bytes were
     // supplied — dispatching them would judge one payload while recording another's hash. The hash
     // recorded downstream is the one PROVED from the dispatched bytes, never the caller's claim.
-    const dispatchable: { itemId: string; content: string; dispatchedHash: string }[] = [];
-    for (const member of batch.members) {
+    const dispatchable: { itemId: string; content: string; dispatchedHash: string; confirmedFences: ConfirmedVerifierFence[] }[] = [];
+    for (const { member, confirmedFences } of fenceScreen.admitted) {
       const content = deps.content.get(member.itemId);
       if (content === undefined) {
         rejected.push({ itemId: member.itemId, stage: "no-content-supplied", issues: [{ path: "$.content", message: `no shard content supplied for '${member.itemId}'` }] });
@@ -144,13 +171,13 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
         rejected.push({ itemId: member.itemId, stage: "content-hash-mismatch", issues: [{ path: "$.content", message: `dispatched content hashes to ${dispatchedHash} but the plan recorded ${member.contentHash} — stale plan or wrong bytes; discarded before dispatch` }] });
         continue;
       }
-      dispatchable.push({ itemId: member.itemId, content, dispatchedHash });
+      dispatchable.push({ itemId: member.itemId, content, dispatchedHash, confirmedFences });
     }
 
     if (dispatchable.length === 0) {
       // Nothing to verify: no session is opened (no tokens spent) and no batch id is minted, because
       // there is no dispatched set for one to describe.
-      outcomes.push({ plannedBatchId: batch.batchId, applied: [], rejected });
+      outcomes.push({ plannedBatchId: batch.batchId, applied: [], rejected, fenceCoverage: fenceScreen.coverage });
       continue;
     }
 
@@ -175,7 +202,10 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
       const turnItem: TurnItem = {
         itemId: member.itemId,
         turnId: `${claimId}:${member.itemId}`,
-        content: member.content,
+        content: member.confirmedFences.length === 0
+          ? member.content
+          : `${member.content}\n\n${renderConfirmedVerifierFences(member.confirmedFences)}`,
+        assumedVerified: member.confirmedFences,
         outputSchemaRef: "verdict-raw-l5",
         timeoutMs,
         maxOutputTokens,
@@ -203,7 +233,7 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     for (const r of appendResult.rejected) {
       rejected.push({ itemId: r.document.verdicts[0]?.itemId ?? "unknown", stage: "binding", issues: [{ path: "$", message: r.reason }] });
     }
-    outcomes.push({ plannedBatchId: batch.batchId, batchId, claimId, applied: appendResult.appended, rejected });
+    outcomes.push({ plannedBatchId: batch.batchId, batchId, claimId, applied: appendResult.appended, rejected, fenceCoverage: fenceScreen.coverage });
   }
 
   return outcomes;

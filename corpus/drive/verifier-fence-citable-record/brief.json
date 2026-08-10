@@ -1,0 +1,9 @@
+{
+  "assumedVerified": [
+    {"claimId": "lem-unverified", "verdictRef": ".rk/l5-verdicts.jsonl#ordinal=99"},
+    {"claimId": "lem-stale", "verdictRef": ".rk/l5-verdicts.jsonl#ordinal=0"},
+    {"claimId": "lem-retracted", "verdictRef": ".rk/l5-verdicts.jsonl#ordinal=1"},
+    {"claimId": "lem-covered", "verdictRef": ".rk/l5-verdicts.jsonl#ordinal=2"},
+    {"claimId": "lem-valid", "verdictRef": ".rk/l5-verdicts.jsonl#ordinal=3"}
+  ]
+}

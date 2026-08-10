@@ -96,8 +96,9 @@ export interface RecordProofFailedLogRecord { kind: "record-proof-failed"; at: s
  * from `verdicts.applied` (which is the af-side outcome), so a reader can see "N turns needed a
  * repair" as its own honest number, docs/worker-contract.md's "Bounded schema repair" section. */
 export interface VerdictRepairLogRecord { kind: "verdict-repair"; at: string; node : string; role: Role; outcome: "repaired" | "failed"; issues: { path: string; message: string }[]; repairIssues?: { path: string; message: string }[]; }
+export interface VerifierFenceLogRecord { kind: "verifier-fence"; at: string; plannedBatchId: string; checked: number; total: number; confirmed: number; refused: number; refusals: Array<{ itemId: string; claimId: string; verdictRef: string; reason: string }>; }
 
-export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | VerdictRepairLogRecord | OtherDriverLogRecord;
+export type DriverLogRecord = UsageLogRecord | VerdictOutcomeLogRecord | BalloonLogRecord | BalloonUnclassifiedLogRecord | DiscardLogRecord | BindFailedLogRecord | ParseFailedLogRecord | RecordProofFailedLogRecord | VerdictRepairLogRecord | VerifierFenceLogRecord | OtherDriverLogRecord;
 const OTHER_KINDS = new Set(["balloon-mark-skipped", "balloon-bd-skipped", "prover-overreach", "node-skipped", "proof-recorded", "churn-cap", "prover-body-invalid"]);
 
 export interface DriverLogIssue { line: number; message: string; }
@@ -105,6 +106,7 @@ export interface DriverLogParseResult { records: DriverLogRecord[]; issues: Driv
 
 function isPlainObject(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null && !Array.isArray(v); }
 function isNumber(v: unknown): v is number { return typeof v === "number" && Number.isFinite(v); }
+function isCount(v: unknown): v is number { return isNumber(v) && Number.isInteger(v) && v >= 0; }
 function isUsage(v: unknown): v is WorkerUsage {
   return isPlainObject(v) && isNumber(v.input) && isNumber(v.output) && isNumber(v.cache_read) && isNumber(v.cache_creation);
 }
@@ -186,6 +188,18 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
       if (parsed.outcome === "repaired" && parsed.repairIssues !== undefined) return fail("verdict-repair record: outcome 'repaired' must not carry 'repairIssues'");
       if (parsed.outcome === "failed" && parsed.repairIssues === undefined) return fail("verdict-repair record: outcome 'failed' must carry 'repairIssues'");
       return { ok: true, record: parsed as unknown as VerdictRepairLogRecord };
+    case "verifier-fence": {
+      if (!isNonBlankString(parsed.plannedBatchId)) return fail("verifier-fence record: missing/mistyped 'plannedBatchId'");
+      if (!isCount(parsed.checked) || !isCount(parsed.total) || !isCount(parsed.confirmed) || !isCount(parsed.refused)) return fail("verifier-fence record: coverage fields must be non-negative integers");
+      if (parsed.checked !== parsed.total || parsed.confirmed + parsed.refused !== parsed.total) return fail("verifier-fence record: contradictory coverage totals");
+      if (!Array.isArray(parsed.refusals) || !parsed.refusals.every((r) =>
+        isPlainObject(r) && isNonBlankString(r.itemId) && typeof r.claimId === "string" &&
+        typeof r.verdictRef === "string" && isNonBlankString(r.reason))) {
+        return fail("verifier-fence record: 'refusals' must carry itemId/claimId/verdictRef/reason strings");
+      }
+      if (parsed.refusals.length !== parsed.refused) return fail("verifier-fence record: refusal detail count does not match 'refused'");
+      return { ok: true, record: parsed as unknown as VerifierFenceLogRecord };
+    }
     default:
       if (typeof parsed.kind === "string" && OTHER_KINDS.has(parsed.kind)) return { ok: true, record: parsed as unknown as OtherDriverLogRecord };
       return fail(`unrecognized 'kind': ${JSON.stringify(parsed.kind)}`);

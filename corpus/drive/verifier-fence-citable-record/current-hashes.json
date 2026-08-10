@@ -1,0 +1,7 @@
+{
+  "lem-unverified": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "lem-stale": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "lem-retracted": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "lem-covered": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "lem-valid": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}

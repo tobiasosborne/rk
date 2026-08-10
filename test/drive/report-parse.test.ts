@@ -66,6 +66,34 @@ describe("parseDriverLogLine", () => {
     expect(r.ok).toBe(true);
   });
 
+  test("the driver's 'verifier-fence' coverage/refusal evidence is recognized", () => {
+    const r = parseDriverLogLine(JSON.stringify({
+      kind: "verifier-fence",
+      at: "t",
+      plannedBatchId: "batch",
+      checked: 1,
+      total: 1,
+      confirmed: 0,
+      refused: 1,
+      refusals: [{ itemId: "target", claimId: "premise", verdictRef: ".rk/l5-verdicts.jsonl#ordinal=0", reason: "stale" }],
+    }), 1);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a contradictory 'verifier-fence' checked/total record is a loud issue", () => {
+    const r = parseDriverLogLine(JSON.stringify({
+      kind: "verifier-fence",
+      at: "t",
+      plannedBatchId: "batch",
+      checked: 0,
+      total: 1,
+      confirmed: 1,
+      refused: 0,
+      refusals: [],
+    }), 1);
+    expect(r.ok).toBe(false);
+  });
+
   // rk-xfzg: the driver writes 'prover-body-invalid' whenever an exit-0 prover turn's body fails
   // validateRawProverOutput (src/drive/driver-prove-node.ts); it must be recognized like its siblings.
   test("the driver's own 'prover-body-invalid' kind is recognized, never 'unrecognized'", () => {

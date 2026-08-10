@@ -24,6 +24,7 @@
 
 import type { ModelFamily, Role, Tier } from "./vocab";
 import type { WorkerResult, WorkerUsage } from "./worker-result";
+import type { ConfirmedVerifierFence } from "./verifier-fence";
 
 /** What `createSession` needs: the shared context to send once, and enough of the isolation tuple
  * (docs/worker-contract.md section (a)) for a backend to log/attribute the session correctly.
@@ -49,6 +50,9 @@ export interface TurnItem {
   itemId: string;
   turnId: string;
   content: string;
+  /** Structured, store-confirmed evidence for the only inputs this verifier turn may treat as
+   * already verified. The rendered content repeats it for the worker process; prose cannot add. */
+  assumedVerified?: readonly ConfirmedVerifierFence[];
   outputSchemaRef: string;
   timeoutMs: number;
   maxOutputTokens: number;

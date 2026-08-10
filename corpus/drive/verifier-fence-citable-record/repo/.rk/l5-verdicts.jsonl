@@ -1,0 +1,4 @@
+{"schemaVersion":"1","ordinal":0,"itemId":"lem-stale","l5ContentHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","verdict":"VALID","justification":"checked old bytes","verifierSeam":"gpt|codex|gpt-5.6-sol|s0"}
+{"schemaVersion":"1","ordinal":1,"itemId":"lem-retracted","l5ContentHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","verdict":"VALID","justification":"later withdrawn","verifierSeam":"gpt|codex|gpt-5.6-sol|s1"}
+{"schemaVersion":"1","ordinal":2,"itemId":"lem-other","l5ContentHash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","verdict":"VALID","justification":"covers another claim","verifierSeam":"gpt|codex|gpt-5.6-sol|s2"}
+{"schemaVersion":"1","ordinal":3,"itemId":"lem-valid","l5ContentHash":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","verdict":"VALID","justification":"fresh and unretracted","verifierSeam":"gpt|codex|gpt-5.6-sol|s3"}

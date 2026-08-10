@@ -45,7 +45,7 @@ describe("buildVerifierTurnPrompt — shared-prefix-first, item-only turns", () 
     const turn = buildVerifierTurnPrompt({ nodeId: "1", statement: "S", deps: [{ id: "1.1", statement: "lemma one", epistemicState: "validated" }, { id: "1.2", statement: "lemma two", epistemicState: "validated" }], tier: "hard" });
     expect(turn).toContain('"outcome": "accept"');
     expect(turn).toContain('"outcome": "challenge"');
-    expect(turn).toContain("Dependencies (already established) (2):");
+    expect(turn).toContain("Dependencies supplied for scrutiny (2):");
     expect(turn).not.toContain("VALID");
   });
 
@@ -64,7 +64,7 @@ describe("buildVerifierTurnPrompt — shared-prefix-first, item-only turns", () 
       ],
       tier: "hard",
     });
-    expect(turn).toContain("Dependencies (already established) (3):");
+    expect(turn).toContain("Dependencies supplied for scrutiny (3):");
     // each dependency's id AND its STATEMENT (the content the fix provides)
     expect(turn).toContain("### 1.4 [validated]");
     expect(turn).toContain("each n_i >= min_j n_j");
@@ -73,9 +73,11 @@ describe("buildVerifierTurnPrompt — shared-prefix-first, item-only turns", () 
     // a not-yet-validated dep is flagged truthfully, never presented as settled
     expect(turn).toContain("### 1.6 [not yet validated — state: pending]");
     expect(turn).toContain("p_i >= 0 for all i");
-    // the scope line uses the deps but must NOT invite re-validating them (validity fence)
-    expect(turn.toLowerCase()).toContain("do not re-derive");
-    expect(turn.toLowerCase()).toContain("re-verify the dependencies");
+    // Ordinary dependency state is context, not a fence. Only the separate structured section may
+    // narrow scrutiny after the verifier independently confirms its citable evidence.
+    expect(turn).not.toContain("already correct");
+    expect(turn.toLowerCase()).not.toContain("do not re-derive");
+    expect(turn).toContain("may scrutinize any dependency");
   });
 
   test("hard-tier verifier prompt requires the challenge target to be a QUOTED JSON STRING, with a concrete example (rk-qxp)", () => {
@@ -92,8 +94,31 @@ describe("buildVerifierTurnPrompt — shared-prefix-first, item-only turns", () 
     expect(turn).toContain("VALID-WITH-CORRECTION");
     expect(turn).toContain('"INVALID"');
     expect(turn).toContain("justification");
-    expect(turn).toContain("Dependencies (already established) (0):");
+    expect(turn).toContain("Dependencies supplied for scrutiny (0):");
     expect(turn).toContain("(none)");
+  });
+
+  test("a structured fence carries the confirmed claim/ref/hash/locus and obliges independent confirmation", () => {
+    const turn = buildVerifierTurnPrompt({
+      nodeId: "1",
+      statement: "S",
+      deps: [],
+      tier: "l5",
+      assumedVerified: [{
+        claimId: "lem-a",
+        verdictRef: ".rk/l5-verdicts.jsonl#ordinal=0",
+        contentHash: "a".repeat(64),
+        locus: ".rk/l5-verdicts.jsonl:1",
+        verdict: "VALID",
+      }],
+    });
+    expect(turn).toContain("Assumed verified (structured, driver-confirmed) (1):");
+    expect(turn).toContain('"claimId":"lem-a"');
+    expect(turn).toContain('"verdictRef":".rk/l5-verdicts.jsonl#ordinal=0"');
+    expect(turn).toContain('"contentHash":"' + "a".repeat(64) + '"');
+    expect(turn).toContain('"locus":".rk/l5-verdicts.jsonl:1"');
+    expect(turn).toContain("independently confirm");
+    expect(turn).toContain("re-litigate");
   });
 
   // GAP 7(c): both verifier tiers instruct a BARE JSON object — no fences, no prose — the prompt-side
