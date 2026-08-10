@@ -1,0 +1,10 @@
+{
+  "files": [
+    {
+      "path": "sources/paper.txt",
+      "sha256": "c6dc8bff2e6e618a6f788c0acd79d2feb07c960ab8b76c40dcde6a240e715af9",
+      "source_id": "paper",
+      "fetch": null
+    }
+  ]
+}

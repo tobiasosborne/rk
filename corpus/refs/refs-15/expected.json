@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-degenerate.md",
+      "message_pattern": "not followed by a recognizable double-quoted byte-verbatim line"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 0/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "Repair finding R2: a status=cited shard carries a single-space quote. Before the repair the raw quote was non-empty and String.includes found an ordinary separator space in the source line, so Gate 3 returned no findings at checked 1/1. The shared normalizeQuoteText rule makes the quote degenerate and rk now ERRORs. Triage: rk-stricter-intended; a normalized-empty quote supplies no byte-verifiable evidence."
+}

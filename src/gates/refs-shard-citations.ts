@@ -6,6 +6,7 @@
 
 import type { Finding } from "./framework";
 import { fileSha256, parseFrontmatter, type RepoSnapshot } from "./snapshot";
+import { normalizeQuoteText } from "../refs/quote";
 
 const LOCK_PATH = "refs/manifest/sources.lock.json";
 const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
@@ -28,6 +29,7 @@ interface CitationClaim {
   sourcePath: string;
   locusText?: string;
   quote?: string;
+  decorated?: boolean;
 }
 
 export interface ShardCitationResult {
@@ -53,18 +55,42 @@ function quotedLine(line: string | undefined): string | undefined {
   return trimmed.slice(1, -1);
 }
 
+/** Removes only the Markdown/path decorations named by Gate 3 Check 8's permissive detector.
+ * The result must still match POINTER_RE as a whole line; arbitrary prose containing `refs/`
+ * therefore does not become a citation unit. Four-space indentation remains strict grammar. */
+function stripCitationDecorations(line: string): string {
+  let candidate = line.trim();
+  while (true) {
+    const before = candidate;
+    if (/^>\s*/.test(candidate)) candidate = candidate.replace(/^>\s*/, "").trim();
+    else if (/^[-*]\s+/.test(candidate)) candidate = candidate.replace(/^[-*]\s+/, "").trim();
+    else if (candidate.startsWith("./")) candidate = candidate.slice(2).trim();
+    else if (candidate.startsWith("**") && candidate.endsWith("**")) candidate = candidate.slice(2, -2).trim();
+    else {
+      const backticks = /^(`+)(.*)\1$/.exec(candidate);
+      if (backticks) candidate = backticks[2]!.trim();
+      else if (candidate.startsWith("(") && candidate.endsWith(")")) candidate = candidate.slice(1, -1).trim();
+    }
+    if (candidate === before) return candidate;
+  }
+}
+
 function claimsInShard(shardPath: string, content: string): CitationClaim[] {
   const lines = content.split(/\r?\n/);
   const claims: CitationClaim[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const pointer = POINTER_RE.exec(lines[i]!);
-    if (!pointer) continue;
+    const rawLine = lines[i]!;
+    const pointer = POINTER_RE.exec(rawLine);
+    const permissivePointer = pointer ?? POINTER_RE.exec(stripCitationDecorations(rawLine));
+    if (!permissivePointer) continue;
+    const decorated = pointer === null;
     claims.push({
       shardPath,
       line: i + 1,
-      sourcePath: pointer[1]!,
-      ...(pointer[2] !== undefined ? { locusText: pointer[2] } : {}),
-      ...(quotedLine(lines[i + 1]) !== undefined ? { quote: quotedLine(lines[i + 1]) } : {}),
+      sourcePath: permissivePointer[1]!,
+      ...(permissivePointer[2] !== undefined ? { locusText: permissivePointer[2] } : {}),
+      ...(decorated ? { decorated: true } : {}),
+      ...(!decorated && quotedLine(lines[i + 1]) !== undefined ? { quote: quotedLine(lines[i + 1]) } : {}),
     });
   }
   return claims;
@@ -106,13 +132,19 @@ function claimError(claim: CitationClaim, message: string): Finding {
 
 function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFacts): Finding | undefined {
   const label = `shard citation ${claim.sourcePath}${claim.locusText ? `:${claim.locusText}` : ""}`;
+  if (claim.decorated) {
+    return claimError(
+      claim,
+      `${label} is a citation-shaped refs pointer outside the strict standalone path:line grammar and cannot be byte-verified; use the two-line output of rk refs quote without Markdown or ./ decoration`,
+    );
+  }
   if (!safeSourcePath(claim.sourcePath)) return claimError(claim, `${label} has an unsafe/unresolvable refs source path`);
   if (claim.locusText === undefined || !/^[1-9]\d*$/.test(claim.locusText)) {
     return claimError(claim, `${label} has no resolvable positive line locus (rk refs quote emits path:line)`);
   }
   const recordedLine = Number(claim.locusText);
   if (!Number.isSafeInteger(recordedLine)) return claimError(claim, `${label} has an unresolvable line locus`);
-  if (claim.quote === undefined || claim.quote.length === 0) {
+  if (claim.quote === undefined || normalizeQuoteText(claim.quote) === "") {
     return claimError(claim, `${label} is not followed by a recognizable double-quoted byte-verbatim line`);
   }
 

@@ -276,4 +276,31 @@ describe("Gate 3 (refs) structural classification", () => {
     expect(findings).toHaveLength(1);
     expect(structuralOf(findings, "no double-quoted verbatim text")).toBeFalsy();
   });
+
+  test("check 8 (drifted argument-shard quote) is NON-structural", () => {
+    const source = "heading\nThe cited sentence is byte-verbatim.\n";
+    const snap = linkerSnap({
+      "argument/lem-cited.md":
+        "---\nid: lem-cited\nkind: lemma\nstatus: cited\naf: none\ncontract: c\n---\n\n" +
+        'refs/sources/paper.txt:2\n"The drifted sentence is fabricated."\n',
+      "refs/sources/paper.txt": source,
+      "refs/manifest/sources.lock.json": JSON.stringify({ files: [{
+        path: "sources/paper.txt",
+        sha256: sha256Hex(new TextEncoder().encode(source)),
+      }] }),
+    });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expectPresent(findings, "NOT found byte-for-byte at recorded locus");
+    expect(structuralOf(findings, "NOT found byte-for-byte at recorded locus")).toBeFalsy();
+  });
+
+  test("check 9 (cited-shard zero-coverage guard) is NON-structural", () => {
+    const snap = linkerSnap({
+      "argument/lem-cited.md":
+        "---\nid: lem-cited\nkind: lemma\nstatus: cited\naf: none\ncontract: c\n---\n\nNo citation pair.\n",
+    });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expectPresent(findings, "zero byte-verified shard citations");
+    expect(structuralOf(findings, "zero byte-verified shard citations")).toBeFalsy();
+  });
 });

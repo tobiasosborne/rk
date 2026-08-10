@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-decorated.md",
+      "message_pattern": "citation-shaped refs pointer"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 1/2 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "Repair finding R7, reviewer-B p1b.ts repro: a cited shard has one genuine strict citation and one blockquoted fabricated citation. Before the repair the blockquoted pointer was invisible to both numerator and denominator, so Gate 3 returned green at checked 1/1. A permissive citation-shape detector now counts the decorated claim and ERRORs because the strict grammar cannot byte-verify it, yielding checked 1/2. Triage: rk-stricter-intended; citation-shaped text cannot silently exempt itself through Markdown decoration."
+}

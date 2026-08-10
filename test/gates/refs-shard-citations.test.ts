@@ -64,6 +64,44 @@ describe("Gate 3 — argument-shard citation byte verification", () => {
     expect(formatCoverageLine(result.coverage[0]!)).toContain("checked 0/1 shard citations");
   });
 
+  test("quotes whose normalized text is empty are ERROR and checked 0/1", () => {
+    for (const [quote, source] of [[" ", SOURCE_TEXT], ["***", "heading\n*** formatting\ntrailer\n"]]) {
+      const result = refsGate.run(snap(
+        `    ${SOURCE_PATH}:2\n    "${quote}"`,
+        {
+          [SOURCE_PATH]: source,
+          "refs/manifest/sources.lock.json": lockFor(SOURCE_PATH, source),
+        },
+      ), DEFAULT_GATE_CONFIG);
+
+      expect(errors(result).some((m) => m.includes("not followed by a recognizable double-quoted byte-verbatim line"))).toBe(true);
+      expect(formatCoverageLine(result.coverage[0]!)).toContain("checked 0/1 shard citations");
+    }
+  });
+
+  for (const [name, decoratedPointer] of [
+    ["blockquote", `> ${SOURCE_PATH}:3`],
+    ["dash list", `- ${SOURCE_PATH}:3`],
+    ["star list", `* ${SOURCE_PATH}:3`],
+    ["backticks", `\`${SOURCE_PATH}:3\``],
+    ["bold", `**${SOURCE_PATH}:3**`],
+    ["parentheses", `(${SOURCE_PATH}:3)`],
+    ["leading ./", `./${SOURCE_PATH}:3`],
+  ]) {
+    test(`citation-shaped ${name} pointer cannot disappear from coverage`, () => {
+      const result = refsGate.run(snap(
+        `    ${SOURCE_PATH}:2\n    "The cited sentence is byte-verbatim."\n\n${decoratedPointer}\n"FABRICATED"`,
+        {
+          [SOURCE_PATH]: SOURCE_TEXT,
+          "refs/manifest/sources.lock.json": lockFor(SOURCE_PATH, SOURCE_TEXT),
+        },
+      ), DEFAULT_GATE_CONFIG);
+
+      expect(errors(result).some((m) => m.includes("citation-shaped refs pointer") && m.includes("cannot be byte-verified"))).toBe(true);
+      expect(formatCoverageLine(result.coverage[0]!)).toContain("checked 1/2 shard citations");
+    });
+  }
+
   test("a quote found elsewhere but not on its recorded line is an unresolvable-locus ERROR", () => {
     const result = refsGate.run(snap(
       `    ${SOURCE_PATH}:3\n    "The cited sentence is byte-verbatim."`,
@@ -157,7 +195,7 @@ describe("Gate 3 — argument-shard citation byte verification", () => {
 
 describe("Gate 3 shard-citation corpus fixtures", () => {
   const corpusRoot = join(import.meta.dir, "..", "..", "corpus");
-  for (const id of ["refs-12", "refs-13", "refs-14"]) {
+  for (const id of ["refs-12", "refs-13", "refs-14", "refs-15", "refs-16"]) {
     test(id, async () => {
       const result = await runFixture(corpusRoot, "refs", id);
       expect(result.errors).toEqual([]);
