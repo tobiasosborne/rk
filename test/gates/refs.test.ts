@@ -313,7 +313,7 @@ describe("refsGate — checks 1-5", () => {
     const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
     expect(result.coverage).toHaveLength(1);
     expect(formatCoverageLine(result.coverage[0]!)).toBe(
-      "checked refs: 0/2 externals byte-verified, 1 failed, 1 import-skipped, 0 no-quote-skipped",
+      "checked refs: 0/2 externals byte-verified, 1 failed, 1 import-skipped, 0 no-quote-skipped; checked 0/0 shard citations",
     );
   });
 
@@ -509,7 +509,7 @@ describe("refsGate — check 7 (the closed no-quote escape, I3)", () => {
     expect(result.findings[0]!.message).toContain("no double-quoted verbatim text");
     // Counted as a failure, and NOT as a no-quote skip.
     expect(formatCoverageLine(result.coverage[0]!)).toBe(
-      "checked refs: 0/1 externals byte-verified, 1 failed, 0 import-skipped, 0 no-quote-skipped",
+      "checked refs: 0/1 externals byte-verified, 1 failed, 0 import-skipped, 0 no-quote-skipped; checked 0/0 shard citations",
     );
   });
 
@@ -525,7 +525,7 @@ describe("refsGate — check 7 (the closed no-quote escape, I3)", () => {
     expect(result.findings[0]!.severity).toBe("WARN");
     expect(result.findings[0]!.message).toContain("no refs/ locus");
     expect(formatCoverageLine(result.coverage[0]!)).toBe(
-      "checked refs: 0/1 externals byte-verified, 0 failed, 0 import-skipped, 1 no-quote-skipped",
+      "checked refs: 0/1 externals byte-verified, 0 failed, 0 import-skipped, 1 no-quote-skipped; checked 0/0 shard citations",
     );
   });
 
@@ -564,7 +564,7 @@ describe("refsGate — coverage line (four-way split, never merged)", () => {
     const result = refsGate.run(snap({}), DEFAULT_GATE_CONFIG);
     expect(result.coverage).toHaveLength(1);
     expect(formatCoverageLine(result.coverage[0]!)).toBe(
-      "checked refs: 0/0 externals byte-verified, 0 failed, 0 import-skipped, 0 no-quote-skipped",
+      "checked refs: 0/0 externals byte-verified, 0 failed, 0 import-skipped, 0 no-quote-skipped; checked 0/0 shard citations",
     );
   });
 
@@ -594,7 +594,7 @@ describe("refsGate — coverage line (four-way split, never merged)", () => {
     expect(c.checked).toBe(1); // exactly one PASS
     expect(c.total).toBe(4); // all four externals counted
     expect(formatCoverageLine(c)).toBe(
-      "checked refs: 1/4 externals byte-verified, 1 failed, 1 import-skipped, 1 no-quote-skipped",
+      "checked refs: 1/4 externals byte-verified, 1 failed, 1 import-skipped, 1 no-quote-skipped; checked 0/0 shard citations",
     );
   });
 });

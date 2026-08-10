@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-missing.md",
+      "message_pattern": "source payload refs/sources/missing.txt ABSENT"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 0/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "rk-uqxh: a status=cited argument shard carries rk refs quote's path:line + quoted-text grammar, but its named payload is absent and no adoption hash can be checked. Pre-fix Gate 3 never scans argument shards and exits 0 at checked 0/0 externals. rk ERRORs rather than treating missing/unhashed bytes as an unchecked cited fact. Triage: rk-stricter-intended; this is the shard-side counterpart of the canonical 19/19-skipped refs incident."
+}

@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-mismatch.md",
+      "message_pattern": "NOT found byte-for-byte at recorded locus line 2"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 0/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "rk-uqxh / campaign-A standing finding: a status=cited argument shard embeds the two-line output grammar emitted by `rk refs quote`, but the quoted bytes were edited after authoring and no longer occur at the recorded locus. Pre-fix Gate 3 scans only proofs/<ws>/externals/*.json and reports checked 0/0 externals with exit 0. rk now ERRORs and reports checked 0/1 shard citations. Triage: rk-stricter-intended; the cited rung normatively means byte-matched to a hashed local source on every run."
+}

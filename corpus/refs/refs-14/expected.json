@@ -1,0 +1,9 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 1/1 shard citations"] },
+  "aism_behavior": "same",
+  "notes": "rk-uqxh green control: a status=cited argument shard embeds exactly the adjacent path:line and quoted-text pair emitted by `rk refs quote`; the payload exists, its raw-byte sha256 matches sources.lock.json, and the exact quote is a substring of recorded line 2. Gate 3 reports checked 1/1 shard citations with no finding. AISM has no argument-shard counterpart, so 'same' here means no old-gate failure on a clean input; the new positive assertion is rk-only."
+}

@@ -15,6 +15,7 @@ import type { RepoSnapshot } from "./snapshot";
 import type { GateConfig } from "./config";
 import { normalizeQuoteText, wholeQuoteMatch } from "../refs/quote";
 import { checkQuoteAtLocus } from "./refs-locus";
+import { checkShardCitations } from "./refs-shard-citations";
 
 /** check-refs.py:44 — a refs/ locus embedded in freeform source text, e.g.
  * "refs/hos/joa-m.md:2300" or "refs/kitaev-2405.02434/approximate_algebras.tex:503-532". No
@@ -120,6 +121,7 @@ export const refsGate: Gate = {
   name: "refs",
   run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const externals = collectExternals(snapshot);
+    const shardCitations = checkShardCitations(snapshot);
     const findings: Finding[] = [];
 
     let passed = 0;
@@ -256,6 +258,7 @@ export const refsGate: Gate = {
       }
     }
 
+    findings.push(...shardCitations.findings);
     const total = externals.length;
     return {
       findings,
@@ -264,7 +267,7 @@ export const refsGate: Gate = {
           gate: "refs",
           checked: passed,
           total,
-          unit: `externals byte-verified, ${failed} failed, ${importSkipped} import-skipped, ${noQuoteSkipped} no-quote-skipped`,
+          unit: `externals byte-verified, ${failed} failed, ${importSkipped} import-skipped, ${noQuoteSkipped} no-quote-skipped; checked ${shardCitations.checked}/${shardCitations.total} shard citations`,
         },
       ],
     };

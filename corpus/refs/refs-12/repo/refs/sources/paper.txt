@@ -1,0 +1,3 @@
+heading
+The cited sentence is byte-verbatim.
+trailer
