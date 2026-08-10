@@ -14,6 +14,9 @@ import { loadSnapshot } from "../src/store/snapshot-load";
 const FIXTURE = join(import.meta.dir, "..", "corpus", "graph", "contract-match-check-escape");
 const REPO = join(FIXTURE, "repo");
 const AF_COMMAND = ["bash", join(FIXTURE, "fake-af")];
+const BROKEN_FIXTURE = join(import.meta.dir, "..", "corpus", "graph", "contract-join-af-broken");
+const BROKEN_REPO = join(BROKEN_FIXTURE, "repo");
+const BROKEN_AF_COMMAND = ["bash", join(BROKEN_FIXTURE, "fake-af")];
 const FR_ABSENT = ["definitely-not-a-real-binary-rk-45dj"];
 
 function capture() {
@@ -47,7 +50,7 @@ describe("rk-45dj — graph contract conflicts on rk check", () => {
 
   test("consolidation: rk check emits the graph conflict, reports 1/1 contract joins, and exits 1", async () => {
     const { out, lines } = capture();
-    const code = await checkCommand(["--root", REPO], out, loadSnapshot, {
+    const code = await checkCommand(["--root", BROKEN_REPO], out, loadSnapshot, {
       afCommand: AF_COMMAND,
       frCommand: FR_ABSENT,
     });
@@ -65,7 +68,7 @@ describe("rk-45dj — graph contract conflicts on rk check", () => {
   test("exploration: the same conflict stays visible as WARN, coverage stays 1/1, and exit remains 0", async () => {
     const root = mkdtempSync(join(tmpdir(), "rk-45dj-exploration-"));
     tempRoots.push(root);
-    cpSync(REPO, root, { recursive: true });
+    cpSync(BROKEN_REPO, root, { recursive: true });
     mkdirSync(join(root, ".rk"), { recursive: true });
     writeFileSync(join(root, ".rk", "config.json"), '{"phase":"exploration"}\n');
 
@@ -82,5 +85,42 @@ describe("rk-45dj — graph contract conflicts on rk check", () => {
     );
     expect(text).toContain("[advisory in exploration phase -- would ERROR in consolidation]");
     expect(text).toContain("checked graph-conflicts: 1/1 contract joins (0 errors, 1 warnings)");
+  });
+
+  test("an answering but unparseable af export is a structural ERROR with fail-closed 0/1 coverage", async () => {
+    const { out, lines } = capture();
+    const code = await checkCommand(["--root", REPO], out, loadSnapshot, {
+      afCommand: BROKEN_AF_COMMAND,
+      frCommand: FR_ABSENT,
+    });
+    const text = lines.join("\n");
+
+    expect(code).toBe(1);
+    expect(text).toContain(
+      "ERROR argument/thm-k-part-ceiling.md:1 graph contract join unresolved: 'thm-k-part-ceiling'",
+    );
+    expect(text).toContain("af export produced unparseable JSON");
+    expect(text).toContain("checked graph-conflicts: 0/1 contract joins (1 errors, 0 warnings)");
+    expect(text).not.toContain("rk check: OK");
+  });
+
+  test("the unresolved af join remains a blocking ERROR in exploration", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-45dj-unresolved-exploration-"));
+    tempRoots.push(root);
+    cpSync(REPO, root, { recursive: true });
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "config.json"), '{"phase":"exploration"}\n');
+
+    const { out, lines } = capture();
+    const code = await checkCommand(["--root", root], out, loadSnapshot, {
+      afCommand: BROKEN_AF_COMMAND,
+      frCommand: FR_ABSENT,
+    });
+    const text = lines.join("\n");
+
+    expect(code).toBe(1);
+    expect(text).toContain("ERROR argument/thm-k-part-ceiling.md:1 graph contract join unresolved");
+    expect(text).not.toContain("[advisory in exploration phase -- would ERROR in consolidation]");
+    expect(text).toContain("checked graph-conflicts: 0/1 contract joins (1 errors, 0 warnings)");
   });
 });

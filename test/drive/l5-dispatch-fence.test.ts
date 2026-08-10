@@ -143,4 +143,31 @@ describe("dispatchL5Plan — structured verifier fences", () => {
     expect(outcome!.applied[0]!.l5ContentHash).toBe(hashOf(TARGET));
     expect(logs).toContainEqual(expect.objectContaining({ kind: "verifier-fence", checked: 1, total: 1, confirmed: 1, refused: 0 }));
   });
+
+  test("a declaration keyed to an item outside the batch is counted and refused as unknown", async () => {
+    const root = rootWithVerdict(hashOf(PREMISE));
+    const worker = backend();
+    const logs: Record<string, unknown>[] = [];
+    const dispatchDeps = deps(worker.value, PREMISE, logs);
+    dispatchDeps.assumedVerified = new Map([["ghost", [{
+      claimId: "premise",
+      verdictRef: ".rk/l5-verdicts.jsonl#ordinal=0",
+    }]]]);
+    const [outcome] = await dispatchL5Plan(root, plan(), dispatchDeps);
+
+    expect(outcome!.fenceCoverage).toEqual({ checked: 1, total: 1, confirmed: 0, refused: 1 });
+    expect(outcome!.rejected).toContainEqual(expect.objectContaining({
+      itemId: "ghost",
+      stage: "verifier-fence-refused",
+      issues: [expect.objectContaining({ message: expect.stringContaining("unknown item") })],
+    }));
+    expect(logs).toContainEqual(expect.objectContaining({
+      kind: "verifier-fence",
+      checked: 1,
+      total: 1,
+      confirmed: 0,
+      refused: 1,
+      refusals: [expect.objectContaining({ itemId: "ghost", reason: "unknown item" })],
+    }));
+  });
 });

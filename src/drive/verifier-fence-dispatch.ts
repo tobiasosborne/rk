@@ -41,7 +41,7 @@ export function screenVerifierFences<T extends FenceDispatchMember>(
   content: ReadonlyMap<string, string>,
   assumedVerified: ReadonlyMap<string, readonly AssumedVerified[]> = new Map(),
 ): FenceDispatchScreen<T> {
-  const total = members.reduce((sum, member) => sum + (assumedVerified.get(member.itemId)?.length ?? 0), 0);
+  const total = [...assumedVerified.values()].reduce((sum, entries) => sum + entries.length, 0);
   if (total === 0) {
     return {
       admitted: members.map((member) => ({ member, confirmedFences: [] })),
@@ -59,6 +59,17 @@ export function screenVerifierFences<T extends FenceDispatchMember>(
   const refusals: FenceDispatchRefusal[] = [];
   let confirmed = 0;
   let refused = 0;
+  const memberIds = new Set(members.map((member) => member.itemId));
+  for (const [itemId, entries] of assumedVerified) {
+    if (memberIds.has(itemId) || entries.length === 0) continue;
+    const itemRefusals = entries.map((entry) => ({
+      claimId: typeof entry?.claimId === "string" ? entry.claimId : "",
+      verdictRef: typeof entry?.verdictRef === "string" ? entry.verdictRef : "",
+      reason: "unknown item" as const,
+    }));
+    refusals.push({ itemId, refusals: itemRefusals });
+    refused += itemRefusals.length;
+  }
   for (const member of members) {
     const result = validateVerifierFences(assumedVerified.get(member.itemId) ?? [], state);
     confirmed += result.coverage.confirmed;

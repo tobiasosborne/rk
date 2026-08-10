@@ -55,15 +55,29 @@ export function emitGraphContractConflicts(
           `byte-match the af root statement; update one side so the join agrees`,
       };
     });
+  for (const unresolved of built.doc.unresolved) {
+    if (unresolved.edge !== "af") continue;
+    const id = unresolved.nodeId ?? "(unknown)";
+    const owner = unresolved.nodeId === undefined ? undefined : nodeById.get(unresolved.nodeId);
+    findings.push({
+      severity: "ERROR",
+      path: owner?.path ?? "<graph-conflicts>",
+      structural: true,
+      message:
+        `graph contract join unresolved: '${id}' for af workspace '${unresolved.ref}' — ` +
+        `${unresolved.reason}; the join cannot be reasoned about`,
+    });
+  }
 
   const effective = applyPhase(findings, phase);
   for (const finding of effective) out.log(formatFinding(finding));
   const errors = effective.filter((finding) => finding.severity === "ERROR").length;
   const warnings = effective.length - errors;
   const checked = built.doc.edges.af.filter((edge) => edge.workspaceResolved).length;
+  const total = built.doc.edges.af.length;
   out.log(
-    `checked ${PASS_NAME}: ${checked}/${built.doc.edges.af.length} contract joins ` +
+    `checked ${PASS_NAME}: ${checked}/${total} contract joins ` +
       `(${errors} errors, ${warnings} warnings)`,
   );
-  return errors > 0;
+  return errors > 0 || checked < total;
 }

@@ -33,6 +33,8 @@ export interface ConfirmedVerifierFence extends AssumedVerified {
 }
 
 export type VerifierFenceRefusalReason =
+  | "malformed entry"
+  | "unknown item"
   | "verdict-ref-missing"
   | "claim-not-covered"
   | "current-hash-missing"
@@ -83,11 +85,15 @@ function refusal(entry: AssumedVerified, reason: VerifierFenceRefusalReason): Ve
   return { claimId: entry.claimId, verdictRef: entry.verdictRef, reason };
 }
 
-function normalizedEntry(entry: AssumedVerified): AssumedVerified {
-  const raw = entry as Partial<AssumedVerified>;
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizedEntry(entry: unknown): AssumedVerified | undefined {
+  if (!plainObject(entry)) return undefined;
   return {
-    claimId: typeof raw.claimId === "string" ? raw.claimId : "",
-    verdictRef: typeof raw.verdictRef === "string" ? raw.verdictRef : "",
+    claimId: typeof entry.claimId === "string" ? entry.claimId : "",
+    verdictRef: typeof entry.verdictRef === "string" ? entry.verdictRef : "",
   };
 }
 
@@ -101,7 +107,7 @@ function recordAtRef(records: readonly L5StoredVerdict[], verdictRef: string): L
 /** Fail-closed validation of every declared fence. Coverage is per entry, including malformed
  * entries: a supplied but unusable fence is a refusal, never an omitted optional value. */
 export function validateVerifierFences(
-  entries: readonly AssumedVerified[],
+  entries: readonly unknown[],
   state: VerifierFenceStoreState,
 ): VerifierFenceValidation {
   const confirmed: ConfirmedVerifierFence[] = [];
@@ -114,6 +120,10 @@ export function validateVerifierFences(
   const retractionHealth = retractionStoreHealthy(state.retractions);
   for (const rawEntry of entries) {
     const entry = normalizedEntry(rawEntry);
+    if (entry === undefined) {
+      refusals.push(refusal({ claimId: "", verdictRef: "" }, "malformed entry"));
+      continue;
+    }
     if (!l5Health.healthy) {
       refusals.push(refusal(entry, "l5-store-unhealthy"));
       continue;

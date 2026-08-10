@@ -83,6 +83,20 @@ describe("validateVerifierFences", () => {
     expect(missingClaim.refusals[0]).toMatchObject({ claimId: "", reason: "claim-not-covered" });
   });
 
+  test("non-object entries are refused as malformed instead of throwing", () => {
+    const malformed = [null, undefined, "not an object", []] as unknown as AssumedVerified[];
+    const result = validateVerifierFences(malformed, state());
+
+    expect(result.coverage).toEqual({ checked: 4, total: 4, confirmed: 0, refused: 4 });
+    expect(result.confirmed).toEqual([]);
+    expect(result.refusals).toEqual([
+      { claimId: "", verdictRef: "", reason: "malformed entry" },
+      { claimId: "", verdictRef: "", reason: "malformed entry" },
+      { claimId: "", verdictRef: "", reason: "malformed entry" },
+      { claimId: "", verdictRef: "", reason: "malformed entry" },
+    ]);
+  });
+
   test("a superseded cited record is refused even when its own hash still matches", () => {
     const older = record({ ordinal: 0 });
     const latest = record({ ordinal: 1, verdict: "INVALID" });

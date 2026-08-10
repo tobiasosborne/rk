@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Reviewer-B R4 repro: af answers (so ledger fallback is not eligible) but its export cannot be
+# parsed. The resulting unresolved contract join must be a structural rk-check ERROR, never 0/1 OK.
+printf '%s\n' 'NOT-JSON'
