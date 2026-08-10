@@ -4,13 +4,14 @@
 // conflicts so missing, duplicate, or inconsistent conflict records are errors." Split out of
 // validate.ts to stay clear of CLAUDE.md's 280-line shard cap.
 //
-// SCOPE (stated honestly, not over-claimed): this is the MINIMAL recomputation the review's own
-// red fixture requires — not M2.3's full conflict-detection feature (M2.3 is still the WP that
-// builds out a richer detector against real repo/af/fr data). Two triggers are recomputed here:
-//   1. `status: "proved"` nodes (PRD §5: "proved | yes | af-validated (root validated, taint
-//      clean)") checked against their (blocker-1-mandatory) af edge: `af !== "validated"` or a
-//      workspace that never resolved, `contractMatch`, `epistemicState`, `taintState`.
-//   2. fr edges with `outcome === "banked"` (../knowledge-frontier's `Outcome`) checked against
+// SCOPE (stated honestly, not over-claimed): three triggers are recomputed here:
+//   1. EVERY resolved af edge is checked for `contractMatch` — a byte-mismatched registry/root
+//      join is a validity defect whatever rung the shard currently declares (rk-45dj; the campaign
+//      incident was `proved-mod-audit` + `af: seeded`, so gating this on `status: proved` hid it).
+//   2. `status: "proved"` nodes (PRD §5: "proved | yes | af-validated (root validated, taint
+//      clean)") are additionally checked against their af flag, workspace resolution,
+//      `epistemicState`, and `taintState`.
+//   3. fr edges with `outcome === "banked"` (../knowledge-frontier's `Outcome`) checked against
 //      `verdict`/`verdictFresh` — fr's own bank-gate ("▣ banked needs an audit verdict from an
 //      oracle other than the author", ../knowledge-frontier/docs/concepts.md).
 // Any OTHER status/state combination (e.g. an `open` node with a `validated` af edge) is a real
@@ -45,8 +46,23 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
   const afByNode = new Map(doc.edges.af.map((e) => [e.nodeId, e]));
 
   for (const n of doc.nodes) {
-    if (n.status !== "proved") continue;
     const e = afByNode.get(n.id);
+    // rk-45dj: contract agreement belongs to the JOIN, not to the `proved` rung. `rk graph --focus`
+    // already printed contractMatch=false for a `proved-mod-audit`/seeded campaign shard, while
+    // conflict recomputation skipped it here and the obligatory `rk check` surface stayed green.
+    // Keep the established registryValue vocabulary (the node's declared status), using "unset"
+    // for the genuinely absent state rather than fabricating a rung.
+    if (e?.workspaceResolved && !e.contractMatch) {
+      out.push({
+        kind: "contract-mismatch",
+        edge: "af",
+        nodeId: n.id,
+        registryValue: n.status ?? "unset",
+        otherValue: "contractMatch:false",
+      });
+    }
+
+    if (n.status !== "proved") continue;
     if (n.af !== "validated" || !e) {
       out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: n.af });
       continue;
@@ -54,9 +70,6 @@ export function computeExpectedConflicts(doc: GraphDocument): ExpectedConflict[]
     if (!e.workspaceResolved) {
       out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: "workspace-unresolved" });
       continue;
-    }
-    if (!e.contractMatch) {
-      out.push({ kind: "contract-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: "contractMatch:false" });
     }
     if (e.epistemicState !== "validated") {
       out.push({ kind: "status-mismatch", edge: "af", nodeId: n.id, registryValue: "proved", otherValue: e.epistemicState });

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Deterministic af export for rk-45dj. The root statement has one space where the registry shard
+# has two: Gate 2's historical normalized comparison treats them as equal, while the graph's
+# normative byte-exact join records contractMatch=false.
+printf '%s\n' '{"schema_version":"1","nodes":[{"id":"1","statement":"The verified sensitivity ceiling holds.","epistemic_state":"pending","taint_state":"unresolved"}],"validation":{"total_nodes":1}}'

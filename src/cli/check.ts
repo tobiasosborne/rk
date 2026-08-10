@@ -45,6 +45,7 @@ import { formatCorpusRunReport } from "../corpus/report";
 import { discoverAllFixtures, EXPECTED_FIXTURE_COUNT, GATE_DIRS } from "../corpus/discovery";
 import type { Out } from "./args";
 import { extractRoot } from "./args";
+import { emitGraphContractConflicts } from "./check-graph-conflicts";
 
 /** Re-exported from its new home (src/cli/check-regen.ts): it is part of `checkCommand`'s own
  * signature, so a consumer importing it from here must keep working across the shard split. */
@@ -251,6 +252,7 @@ export async function checkCommand(
     }
     if (errors > 0) anyError = true;
   }
+  if (emitGraphContractConflicts(root, out, config.phase, buildDeps)) anyError = true;
 
   out.log("");
   if (anyError) {
