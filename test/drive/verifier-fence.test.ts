@@ -77,6 +77,10 @@ describe("validateVerifierFences", () => {
     expect(result.refusals[0]?.reason).toBe("verdict-ref-missing");
     const padded = validateVerifierFences([{ claimId: "lem-a", verdictRef: ` ${verdictRefFor(record())}` }], state());
     expect(padded.refusals[0]?.reason).toBe("verdict-ref-missing");
+    const missingRef = validateVerifierFences([{ claimId: "lem-a" } as AssumedVerified], state());
+    expect(missingRef.refusals[0]).toMatchObject({ claimId: "lem-a", verdictRef: "", reason: "verdict-ref-missing" });
+    const missingClaim = validateVerifierFences([{ verdictRef: verdictRefFor(record()) } as AssumedVerified], state());
+    expect(missingClaim.refusals[0]).toMatchObject({ claimId: "", reason: "claim-not-covered" });
   });
 
   test("a superseded cited record is refused even when its own hash still matches", () => {

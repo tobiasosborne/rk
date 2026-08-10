@@ -83,6 +83,14 @@ function refusal(entry: AssumedVerified, reason: VerifierFenceRefusalReason): Ve
   return { claimId: entry.claimId, verdictRef: entry.verdictRef, reason };
 }
 
+function normalizedEntry(entry: AssumedVerified): AssumedVerified {
+  const raw = entry as Partial<AssumedVerified>;
+  return {
+    claimId: typeof raw.claimId === "string" ? raw.claimId : "",
+    verdictRef: typeof raw.verdictRef === "string" ? raw.verdictRef : "",
+  };
+}
+
 function recordAtRef(records: readonly L5StoredVerdict[], verdictRef: string): L5StoredVerdict | undefined {
   const match = VERDICT_REF.exec(verdictRef);
   if (match === null) return undefined;
@@ -104,7 +112,8 @@ export function validateVerifierFences(
 
   const l5Health = l5StoreHealthy(state.l5);
   const retractionHealth = retractionStoreHealthy(state.retractions);
-  for (const entry of entries) {
+  for (const rawEntry of entries) {
+    const entry = normalizedEntry(rawEntry);
     if (!l5Health.healthy) {
       refusals.push(refusal(entry, "l5-store-unhealthy"));
       continue;
