@@ -124,6 +124,13 @@ byte-exact graph pass is additive and authoritative for `contractMatch`. (Campai
 window-5 incident: a byte-level contract mismatch on a `proved-mod-audit` shard was visible
 only to `rk graph`, which nobody is obliged to run, for three windows.)
 
+Every `GraphDocument.unresolved` entry with `edge: "af"` produces one structural ERROR
+naming the registry shard, workspace, and unresolved reason; because the join cannot be
+reasoned about, it is never phase-demoted, and `checked < total` always makes the pass
+fail (R4, 2026-08-10 review: an af that ANSWERS but emits garbage gets no ledger fallback
+and previously vanished from the numerator with no finding — `rk check` exited 0 with the
+incident mismatch entirely unchecked).
+
 **Snapshot loading** (round-3 landing-blocker 3). `rk check` builds the in-memory `RepoSnapshot`
 (`src/store/snapshot-load.ts`) once, BEFORE the per-gate exception boundary. Two rules keep that
 precondition from silently defeating composition:
@@ -363,7 +370,11 @@ refuses the whole target item.
 Coverage is total over supplied declarations: every batch returns `{checked, total, confirmed,
 refused}` with `checked == total` and `confirmed + refused == total`. Refusals appear as
 `verifier-fence-refused` dispatch outcomes and as `verifier-fence` driver-log records carrying
-per-entry reasons. A silent skip is forbidden.
+per-entry reasons. A silent skip is forbidden. Any supplied `assumedVerified` value that is
+not a plain object (`null`, `undefined`, a string, or an array) is counted and refused with
+reason `malformed entry`, never thrown. A declaration keyed to an `itemId` that is not a
+member of the batch is counted in `total` and refused with reason `unknown item`; it is never
+silently dropped.
 
 An admitted entry is enriched with its confirmed `contentHash`, JSONL `locus`, and
 `verdict: "VALID"` and delivered to the verifier as structured evidence. Before honoring the
@@ -381,6 +392,12 @@ mechanically established beyond the existing non-blank structural check.
 window-3 incident: a brief fenced an unverified input with "already survived cross-vendor
 passes; do NOT re-litigate"; the campaign's own diagnosis was that no mathematical check
 catches the class — the structured layer does.)
+
+**Deployment status (honesty note, 2026-08-10 review):** no current dispatch path supplies
+fences — `dispatchL5Plan` has no production caller and the live hard-tier path never sets
+`assumedVerified`, so every real brief today renders "(none; no input is fenced from
+scrutiny)". That is the strictest possible state; the barrier above is the contract the
+first production fence supplier must satisfy (rk-tracked productionization bead).
 
 ---
 
@@ -1245,6 +1262,17 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   `refs/manifest/sources.lock.json` — the citation's `refs/<path>` must resolve to exactly
   one lock entry whose `path` is refs-relative and whose `sha256` is a full 64-hex digest
   matching the snapshot's raw-byte hash for the payload.
+- **Permissive citation-shape detector (repair R7, 2026-08-10 review).** Every argument-shard
+  line is also tested for a whole-line `refs/<path>:<line>` shape after repeatedly removing
+  only these Markdown/path decorations: a leading blockquote marker `>`, a leading list marker
+  `-` or `*`, matching backtick wrappers, matching `**...**` wrappers, matching parentheses,
+  and a leading `./`. Arbitrary prose containing `refs/` is not a hit: after decoration
+  removal the entire line must match the pointer grammar. Four-space indentation remains part
+  of the strict grammar and is therefore treated as a real citation claim, including when
+  Markdown would render it as a code-block example. Every permissive hit not already
+  recognized by the strict grammar contributes one shard-citation denominator unit and
+  produces an ERROR: citation-shaped text that the strict adjacent two-line grammar did not
+  byte-verify is a silent exemption. Such a hit never increments the checked numerator.
 
 **Checks.**
 1. **Classification** (check-refs.py:108-133):
@@ -1309,6 +1337,11 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    with adopted sources and a cited shard). For every recognized citation pair:
    - an unsafe path, absent/non-positive/non-numeric line locus, or missing adjacent quoted
      line ⇒ **ERROR**;
+   - an adjacent quote for which `normalizeQuoteText(rawQuote) === ""` (including `""`,
+     `"***"`, and whitespace-only text) ⇒ **ERROR** before any source-line substring check
+     runs (repair R2: a raw `.includes()` re-derivation had dropped this documented guard).
+     The gate MUST call `src/refs/quote.ts`'s existing `normalizeQuoteText` helper rather
+     than re-derive its normalization rule;
    - an absent payload ⇒ **ERROR**;
    - an absent, unparseable, malformed, duplicate/ambiguous, or non-64-hex lock pin ⇒ **ERROR**;
    - a payload whose raw-byte SHA-256 differs from its adopted pin ⇒ **ERROR**;
@@ -1412,9 +1445,11 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
 - **[message-only]** The single Gate 3 coverage line retains the four-way external breakdown
   and appends `; checked <C>/<K> shard citations` (rk-uqxh), rendering: `checked refs: <P>/<T>
   externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped; checked
-  <C>/<K> shard citations`. `K` is the number of recognized citation pairs plus one for every
-  `status: cited` shard carrying none; `C` is the number passing source, hash, locus, and
-  exact-byte verification. The externals half replaces
+  <C>/<K> shard citations`. `K` is the number of strict pointer hits, plus permissive
+  citation-shaped hits not already counted by the strict scan, plus one for every
+  `status: cited` shard carrying neither kind of hit; `C` is the number of strict claims
+  passing source, hash, locus, non-degenerate-quote, and exact-byte verification. A
+  permissive-only hit can contribute to `K` but never to `C`. The externals half replaces
   AISM's `<total> externals, <fail> failed, <skip> skipped` (check-refs.py:185-186, 206), which
   conflates two different skip reasons into one number. CLAUDE.md L2, "a skip is always visible
   with a count" — the historical incident was specifically about *which* skip reason dominated
@@ -1445,6 +1480,8 @@ changed across AISM's history at time of reading.
 | `refs-12` | **cited-shard quote drift** [rk-uqxh] — cited argument shard whose quote no longer matches the hash-pinned source at its recorded locus ⇒ Check 8 ERROR, coverage `checked 0/1 shard citations` |
 | `refs-13` | **cited-shard absent source** [rk-uqxh] — cited argument shard naming an absent/unhashed refs payload ⇒ Check 8 ERROR, never an unchecked cited green |
 | `refs-14` | **intact citation golden case** [rk-uqxh] — adopted SHA-256 matches and the exact quote occurs at the recorded line ⇒ PASS, `checked 1/1 shard citations` |
+| `refs-15` | **normalized-empty shard quote** [rk-uqxh repair R2] — single-space quote on a cited shard ⇒ Check 8 ERROR, coverage `checked 0/1 shard citations` |
+| `refs-16` | **decorated citation silent exemption** [rk-uqxh repair R7] — one genuine citation plus one blockquoted fabricated citation ⇒ ERROR, coverage `checked 1/2 shard citations` |
 
 ---
 
@@ -2468,11 +2505,24 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    pma-by-status bank additionally requires the STATUS to be backed, and backing to be
    RECORDED-INDEPENDENT of the claim's prover. Backing routes, both fail-closed:
    (i) a `provenance:` declaration whose FIRST whitespace-token names a readable JSON
-   provenance record. The record MUST carry `schema_version: "1"`, the target `claimId`, a
+   provenance record. The current snapshot edge text-loads provenance records only when they
+   are JSON files directly under `.rk/`; a path that exists and is hash-visible but lies
+   outside that text-record boundary does not back the close and MUST report that placement
+   constraint distinctly, naming `.rk/<name>.json` as the canonical location (R9, 2026-08-10
+   review). The include-set is not widened by this rule. The record MUST carry
+   `schema_version: "1"`, the target `claimId`, a
    canonical driver identity seam in `author`, and `role: "verifier"` or `role: "reviewer"`.
    The claim's prover-of-record MUST be recoverable from af `proof_author`/`author` metadata
-   or a canonical shard `prover:` seam, and the backing record's `author` MUST differ from
-   that prover-of-record. Missing, malformed, unreadable, anonymous, wrong-claim, wrong-role,
+   or a canonical shard `prover:` seam. Both the record author and the prover-of-record MUST
+   decode as canonical identity seams; no decoded component may carry leading or trailing
+   whitespace (whitespace is rejected, not trimmed into acceptability). Exact full-seam
+   equality is an independent refusal, and `modelFamily`, `backend`, and `model` are compared
+   after case normalization: equality of all three is same-model self-review and refuses
+   backing regardless of `sessionId` (R3, 2026-08-10 review — two reviewers independently
+   defeated the prior full-seam string comparison via a sessionId edit). Only a decoded
+   identity differing on at least one of those three fields satisfies this recorded
+   independence check; identities remain driver-supplied and unauthenticated.
+   Missing, malformed, unreadable, anonymous, wrong-claim, wrong-role,
    or self-authored records do not back the close — prose, nonexistent paths, self-reference,
    and the M3.8 `legacy-same-family` marker never back;
    (ii) a fresh VALID L5 verdict from a HEALTHY store (zero parse issues, intact ordinal
@@ -2487,31 +2537,54 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    `--strict` turns findings into exit 1. Deliberately scoped to Gate 8, the banking site,
    not the linker: historical pma shards in repos with no reward ledger draw zero new
    findings. `numerical`-by-status backing (run-bundle linkage) is a recorded v2 question.
-5. **Append-only close demotion** `[reward-demote-evidence-missing]`,
-   `[reward-demotion-without-downgrade]` (rk-4317, campaign-A window-5 finding) — a banked
+5. **Append-only close demotion** `[reward-demote-target-mismatch]`,
+   `[reward-demote-never-legal]`, `[reward-demote-evidence-missing]`,
+   `[reward-demote-evidence-self-reference]`, `[reward-demote-evidence-unreadable]`,
+   `[reward-demotion-without-downgrade]` (rk-4317, campaign-A window-5 finding; hardened per
+   the 2026-08-10 review R1) — a banked
    close is never edited or deleted. Its only sanctioned validity repair is a schema-v2
    `demote` event carrying: `targetCloseSeq`, the zero-based position of an earlier successfully
-   banked close in the canonical parsed event stream; a nonblank `reason`; a nonblank
-   repo-relative `evidenceRef`; and the exact `resultingStatus` / `resultingAf`. Missing or blank
-   audit fields make the line malformed. The evidence path must exist in the snapshot; v2
-   establishes path existence, not authentication of the record's substantive truth.
+   banked close in the canonical parsed event stream; `nodeId`; a nonblank `reason`; a nonblank
+   repo-relative `evidenceRef`; `priorStatus` / `priorAf`; and exact
+   `resultingStatus` / `resultingAf`. Missing or blank audit fields make the line malformed.
 
-   The resulting status and af MUST exactly equal the target shard's current registry state,
-   and `supportedCloseTier` for that state MUST be strictly below the original close tier.
-   Equality is not demotion. A missing shard remains an independent Check-3 unknown-target
-   fault. Only a complete demotion neutralizes the target close's historical Checks 4/4b
-   findings; malformed, dangling, evidence-less, state-mismatched, or non-downgrading events
-   leave those findings active.
+   A demotion is complete only when ALL of the following hold:
+   1. `targetCloseSeq` resolves to an earlier, still-banked close and the close's node id
+      exactly equals the demotion's `nodeId`. A mismatch is structural ERROR and cannot
+      reverse payout, neutralize findings, or score another node as demoted (one unreadable
+      earlier line must never silently retarget a demotion).
+   2. `supportedCloseTier({status: priorStatus, af: priorAf})` exists and is at least the
+      target close's tier. A close that was never legal against its recorded prior state
+      cannot be repaired by demotion (`[reward-demote-never-legal]` — the anti-laundering
+      half: the prior downgrade predicate was provably vacuous). `priorStatus`/`priorAf` are
+      writer-supplied and unauthenticated: this is a recorded-and-checkable stance, not an
+      authentication claim; laundering therefore requires an explicit, falsifiable lie in
+      the ledger rather than honest-looking bookkeeping.
+   3. `evidenceRef` names a separate, nonblank, readable snapshot text record. The target
+      shard and `.rk/reward-ledger.jsonl` itself are forbidden self-references. A merely
+      hash-visible path is unreadable evidence; an absent path remains
+      `[reward-demote-evidence-missing]`. This establishes readable recorded evidence, not
+      authentication of its substantive truth.
+   4. `resultingStatus` and `resultingAf` exactly equal the target shard's current registry
+      state, and that state's supported tier is strictly below the original close tier.
+      Equality is not demotion. A missing shard remains an independent Check-3
+      unknown-target fault.
+
+   Only a complete demotion neutralizes the target close's historical Checks 4/4b findings;
+   any malformed, dangling, identity-mismatched, never-legal, self-referential, unreadable,
+   state-mismatched, or non-downgrading demotion leaves those findings active.
 
    The deterministic fold implements demotion as negative compensation: it reverses every
    credit causally minted by the target close — direct CLOSE payout, REUSE citations, escrow
-   vesting, and any subsequent COMPRESS credit — without modifying prior ledger lines. A
+   vesting, and any subsequent COMPRESS credit — without modifying prior ledger lines, and
+   only after the positional target and `nodeId` agree. A
    still-live escrow share is restored; an already-expired share remains void. An invalid or
    repeated demotion never creates negative credit.
 
    Calibration scores a successfully demoted close as false (`y250=0`, `y1m=0`): the original
    prediction was that a bankable close would survive validity review, and the demotion records
-   that it did not. The demoted close receives no automatic lower-tier repricing; the original
+   that it did not; calibration likewise changes only the matching target's outcome. The
+   demoted close receives no automatic lower-tier repricing; the original
    payout is fully reversed, and any later honest reward requires a separately specified
    protocol rather than an inferred payment.
 
@@ -2522,7 +2595,11 @@ record ⇒ ERROR, rk-ne3a), reward-10 (independent-verifier backing record ⇒ P
 reward-11 (valid append-only demotion ⇒ PASS, rk-4317), reward-12 (dangling close reference
 ⇒ ERROR), reward-13 (demotion without shard downgrade ⇒ ERROR), reward-14 (missing reason
 ⇒ malformed ERROR), reward-15 (missing evidence reference ⇒ malformed ERROR), reward-16
-(absent referenced evidence ⇒ ERROR).
+(absent referenced evidence ⇒ ERROR), reward-17 (never-legal prior state cannot launder ⇒
+ERROR, repair R1), reward-18 (nodeId/positional-target mismatch ⇒ ERROR, repair R1),
+reward-19 (evidence self-reference ⇒ ERROR, repair R1), reward-20 (same-model
+different-session backing ⇒ ERROR, repair R3), reward-21 (out-of-tree provenance record ⇒
+ERROR with placement reason, repair R9).
 
 **Reward-ledger schema compatibility (rk-4317).** The reward-ledger record family is now
 version 2; the stable family filename remains `schemas/reward-ledger.v1.json`, following the
@@ -2530,4 +2607,6 @@ same filename-versus-version convention as `schemas/graph.v1.json`. Version 2 ad
 append-only `demote` variant. Readers accept legacy pre-demotion events with `schemaVersion`
 absent or `"1"` and accept v2 records; writers emit only `"2"`. A `demote` without
 `schemaVersion: "2"` is malformed so an older consumer can never silently treat compensation
-as an unknown no-op.
+as an unknown no-op. The current schema-v2 demote shape additionally requires `nodeId`,
+`priorStatus`, and `priorAf` (2026-08-10 review R1). This is an in-session amendment of the
+unpushed v2 demote compatibility event, not a new record version.
