@@ -37,15 +37,17 @@ import type { WorkerBackend, SessionSpec, TurnItem } from "./backend-types";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_000;
 
-/** Sentinel `nodeId` for a "usage" driver-log record (src/drive/report.ts) that attributes a
- * session's OPENING cost — e.g. `ClaudeBackend.createSession`'s real `claude -p sharedContext`
- * call — rather than any one member's turn. Never a real af/registry node id (parens are not a
- * legal id character in this codebase's id grammars), so it can never collide with, or be mistaken
- * for, an actual proof node in the report. report.ts's existing per-session cache_creation pooling
- * (attributeTokens) treats every "usage" record in a session uniformly, so this sentinel correctly
- * shares in the fair-share pool its own cache_creation contributes — the input/output tokens of
- * OPENING the session stay attributed here, in full, never smeared over a real node's cost. */
-export const L5_SESSION_OPEN_NODE_ID = "(session-open)";
+// The "(session-open)" sentinel this module stamps on a session-opening usage record moved to
+// src/drive/report-parse.ts (the pure wire-shape home) so pure readers can name it without
+// importing this edge (rk-0ree); re-exported here so existing importers keep their path.
+// report.ts's per-session cache_creation pooling (attributeTokens) treats every "usage" record in
+// a session uniformly, so the sentinel correctly shares in the fair-share pool its own
+// cache_creation contributes — the input/output tokens of OPENING the session stay attributed to
+// the sentinel in the SC4 report, never smeared over a real node's cost there. (The reward-side
+// spentTokens rule, src/reward/attribution.ts, deliberately differs: it splits the open cost
+// across the session's members — see attribution rule v1 in the prereg memo.)
+export { L5_SESSION_OPEN_NODE_ID } from "./report-parse";
+import { L5_SESSION_OPEN_NODE_ID } from "./report-parse";
 
 export interface L5DispatchDeps {
   backend: WorkerBackend;
@@ -81,7 +83,7 @@ export interface L5DispatchDeps {
 
 export interface L5DispatchRejection {
   itemId: string;
-  stage: TurnFailureStage | "no-content-supplied" | "content-hash-mismatch" | "verifier-fence-refused";
+  stage: TurnFailureStage | "no-content-supplied" | "content-hash-mismatch" | "verifier-fence-refused" | "reserved-item-id";
   issues: TurnFailureIssue[];
 }
 
@@ -161,6 +163,15 @@ export async function dispatchL5Plan(root: string, plan: L5DispatchPlan, deps: L
     // recorded downstream is the one PROVED from the dispatched bytes, never the caller's claim.
     const dispatchable: { itemId: string; content: string; dispatchedHash: string; confirmedFences: ConfirmedVerifierFence[] }[] = [];
     for (const { member, confirmedFences } of fenceScreen.admitted) {
+      // rk-0ree review P2: "(session-open)" is THIS module's sentinel for a session's opening-cost
+      // usage record. A member so named would log member turns indistinguishable from session
+      // overhead, and downstream spend attribution (src/reward/attribution.ts) would misassign its
+      // tokens — no gate enforces an id grammar that excludes it, so the writer refuses it here,
+      // before any session exists. Rename the shard; the id is reserved.
+      if (member.itemId === L5_SESSION_OPEN_NODE_ID) {
+        rejected.push({ itemId: member.itemId, stage: "reserved-item-id", issues: [{ path: "$.itemId", message: `'${L5_SESSION_OPEN_NODE_ID}' is the reserved session-open sentinel nodeId — a member so named would corrupt per-node spend attribution; rename the shard` }] });
+        continue;
+      }
       const content = deps.content.get(member.itemId);
       if (content === undefined) {
         rejected.push({ itemId: member.itemId, stage: "no-content-supplied", issues: [{ path: "$.content", message: `no shard content supplied for '${member.itemId}'` }] });

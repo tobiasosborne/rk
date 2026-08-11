@@ -49,6 +49,16 @@ describe("parseDriverLogLine", () => {
     expect(r.ok).toBe(false);
   });
 
+  test("a 'usage' record with a NEGATIVE usage field is rejected (rk-0ree: a negative token count is corrupt evidence — banked into spentTokens it would drive H_real = log2(1 + spent/T0) toward log2 of a negative number, a NaN payout)", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "usage", at: "t", contractId: "c", claimId: "cl", nodeId: "n", role: "verifier", sessionId: "s", usage: { input: -200_000, output: 0, cache_read: 0, cache_creation: 0 } }), 1);
+    expect(r.ok).toBe(false);
+  });
+
+  test("a 'usage' record with a FRACTIONAL usage field is rejected (rk-0ree review P2: fairShares(0.5, 1) = [1] would MINT tokens — attribution's conservation rule requires integral counts)", () => {
+    const r = parseDriverLogLine(JSON.stringify({ kind: "usage", at: "t", contractId: "c", claimId: "cl", nodeId: "n", role: "verifier", sessionId: "s", usage: { input: 0.5, output: 0, cache_read: 0, cache_creation: 0 } }), 1);
+    expect(r.ok).toBe(false);
+  });
+
   test("a diagnostic-only kind (node-skipped) needs no more than a valid object + recognized kind", () => {
     const r = parseDriverLogLine(JSON.stringify({ kind: "node-skipped", at: "t", node: "1.1", reason: "no worker" }), 1);
     expect(r.ok).toBe(true);

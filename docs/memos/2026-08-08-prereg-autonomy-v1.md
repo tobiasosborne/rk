@@ -168,3 +168,47 @@ non-subsumption rigor, answerability of what-counts-as-an-answer sections). The
 sealed-question hit/near-miss/miss is an ANCHOR DATUM — informative about overlap
 with what one real research group chose, never pass/fail. A portfolio judged better
 than the control arm with no sealed hit is a POSITIVE harness result.
+
+## Appended 2026-08-11 (rk-0ree, S0-2 re-registration point): spent_tokens attribution rule v1
+
+§1 defines CLOSE payout over spent_tokens(O) but S0 shipped `rk reward sync` with
+spentTokens=0 on every close (the driver log names registry nodes under two different
+conventions and no composition rule existed; window-1 evidence: the zero inverted the
+shadow economics — prunes paid ~1.3, real pma closes paid 0.0). This append settles the
+rule; re-registration is legitimate here per §7(a): S0 proved the mechanic broken.
+
+spent_tokens(O) for a close on registry node O = the sum over well-formed `usage`
+records in `.rk/driver-log.jsonl` at sync time, where tokens(u) = input + output +
+cache_read + cache_creation (the campaign budget guard's own all-in definition —
+one token definition everywhere):
+
+1. A hard-tier record (claimId not starting "l5:") attributes tokens(u) in full to
+   its `contractId`. One af workspace exists to close one contract, so every turn in
+   it — prover, verifier, repair, applied or discarded — is spend toward O; the
+   af-internal nodeId is never read as a registry id.
+2. An L5 record (claimId starting "l5:", the shape only l5-dispatch writes)
+   attributes a member turn's tokens(u) in full to its `nodeId` (the registry item
+   id). "(session-open)" sentinel records pool per session and split integer-fair
+   (floor + remainder to earliest, first-appearance order) across the distinct
+   members dispatched in that session; a session-open with no member turns is
+   reported unattributable overhead, attributed to no node.
+3. Conservation: attributed + reported-unattributable = the log's total usage tokens.
+4. The figure is at-sync-time; later spend on an already-banked close is never
+   retroactive (the ledger is append-only; a close banks once).
+5. `rk reward sync` fails closed on driver-log lines it cannot read (they may hide
+   spend); `unrecognized 'kind'` lines cannot be usage records and warn only.
+   Well-formed requires token components to be NON-NEGATIVE INTEGERS: a fractional
+   count would let the integer-fair split mint tokens (fairShares(0.5,1)=[1]),
+   a negative one drives H_real toward log2 of a negative number (NaN payout).
+6. A node with no attributable records banks spentTokens=0, noted per event (the
+   pre-S0-2 floor, now the exception).
+7. The id "(session-open)" is RESERVED (Tier A review finding, same day): no gate
+   enforces an id grammar excluding it, so L5 dispatch refuses a member so named
+   before any session opens, and sync withholds a close for a registry node so
+   named — its records are indistinguishable from session overhead.
+
+Implementation: src/reward/attribution.ts (pure rule) + src/cli/reward-sync.ts
+(fail-closed edge); property/mutation tests in test/reward/attribution.test.ts and
+test/cli-reward-sync.test.ts. Reviewed per L6 before landing (codex gpt-5.6-sol
+xhigh, 2026-08-11): two P2 validity findings, both repaired and probe-verified
+same-session (clauses 5 and 7 above are the repairs).

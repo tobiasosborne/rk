@@ -13,6 +13,15 @@
 import { isNonBlankString, ROLES, type Role } from "./vocab";
 import type { WorkerUsage } from "./worker-result";
 
+/** Sentinel `nodeId` for a "usage" record that attributes an L5 verifier session's OPENING cost —
+ * e.g. `ClaudeBackend.createSession`'s real `claude -p sharedContext` call — rather than any one
+ * member's turn (src/drive/l5-dispatch.ts is the one writer). Never a real af/registry node id
+ * (parens are not a legal id character in this codebase's id grammars), so it can never collide
+ * with, or be mistaken for, an actual proof node. Lives HERE (the wire-shape home, pure) so that
+ * pure readers — src/reward/attribution.ts's spentTokens rule, report.ts's aggregation — can name
+ * it without importing the fs/subprocess edge that writes it (rk-0ree). */
+export const L5_SESSION_OPEN_NODE_ID = "(session-open)";
+
 // --- Driver-log record shapes (read-only view; driver-run.ts/driver-balloon.ts construct them) --
 
 // rk-xxp (GAP 11): `repair` is OPTIONAL — set `true` only on the usage record for a repair turn's
@@ -107,8 +116,14 @@ export interface DriverLogParseResult { records: DriverLogRecord[]; issues: Driv
 function isPlainObject(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null && !Array.isArray(v); }
 function isNumber(v: unknown): v is number { return typeof v === "number" && Number.isFinite(v); }
 function isCount(v: unknown): v is number { return isNumber(v) && Number.isInteger(v) && v >= 0; }
+/** rk-0ree (+ review P2): components must be NON-NEGATIVE INTEGERS, not merely finite numbers — a
+ * negative token count is corrupt evidence (no backend can un-spend tokens) whose banked
+ * spentTokens would drive H_real = log2(1 + spent/T0) toward log2 of a negative number (a NaN
+ * payout in the append-only reward ledger); a FRACTIONAL count would let the integer-fair split
+ * MINT tokens (fairShares(0.5, 1) = [1]), violating attribution's conservation rule. Rejected at
+ * parse so every reader (SC4 report, budget guard, attribution) shares the guarantee. */
 function isUsage(v: unknown): v is WorkerUsage {
-  return isPlainObject(v) && isNumber(v.input) && isNumber(v.output) && isNumber(v.cache_read) && isNumber(v.cache_creation);
+  return isPlainObject(v) && isCount(v.input) && isCount(v.output) && isCount(v.cache_read) && isCount(v.cache_creation);
 }
 /** rk-xxp: each `{path, message}` pair inside a 'verdict-repair' record's `issues`/`repairIssues`
  * (mirrors src/drive/verdict-raw.ts's `RawIssue`) — every element checked, not just array-ness, so
@@ -136,7 +151,7 @@ export function parseDriverLogLine(raw: string, line: number): { ok: true; recor
     case "usage":
       if (!isNonBlankString(parsed.contractId) || !isNonBlankString(parsed.claimId) || !isNonBlankString(parsed.nodeId) || !isNonBlankString(parsed.sessionId)) return fail("usage record: missing/mistyped id field(s)");
       if (typeof parsed.role !== "string" || !ROLES.has(parsed.role as Role)) return fail(`usage record: 'role' must be one of ${[...ROLES].join(", ")}`);
-      if (!isUsage(parsed.usage)) return fail("usage record: 'usage' must have finite numeric input/output/cache_read/cache_creation");
+      if (!isUsage(parsed.usage)) return fail("usage record: 'usage' must have NON-NEGATIVE INTEGER input/output/cache_read/cache_creation");
       // rk-xxp: 'repair', when present, flags a repair turn's OWN spend (see UsageLogRecord's doc
       // comment) — OPTIONAL and lenient like ParseFailedLogRecord's diagnosability fields, so an
       // ordinary usage record (no 'repair' key at all) stays recognized unchanged.

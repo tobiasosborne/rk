@@ -22,22 +22,28 @@
 //     would be exactly the laundering this command exists to prevent. It says so, loudly, and
 //     leaves the ledger alone.
 //
-// spentTokens IS 0, DELIBERATELY, WITH A PER-EVENT NOTE. Investigated (rk-ptx0): per-node token
-// accounting is NOT cheaply recoverable today, because `.rk/driver-log.jsonl`'s `usage` records
-// name the registry node under TWO different conventions — the hard-tier driver
-// (src/drive/driver-{prove,verify}-node.ts) puts the registry shard id in `contractId` and an af
-// workspace-internal node id ("1.2.3") in `nodeId`, while the L5 batch dispatcher
-// (src/drive/l5-dispatch.ts) puts the registry item id in `nodeId` and an `l5:<batchId>` claim in
-// `contractId`. Composing those into one per-registry-node figure means inventing a new
-// attribution rule, which is new accounting infrastructure and a validity-semantics decision
-// (H_real = log2(1 + spent/T0) turns a wrong figure straight into a wrong payout) — and the
-// ledger is APPEND-ONLY, so a wrong number written here can never be corrected, whereas a 0 can
-// be superseded once real accounting lands. So: 0, and a note per event saying the payout is zero
-// until then. Do not "improve" this into a partial sum without the attribution rule being
-// settled first.
+// spentTokens COMES FROM ATTRIBUTION RULE v1 (rk-0ree, settled 2026-08-11 — dated append to
+// docs/memos/2026-08-08-prereg-autonomy-v1.md; the rule itself lives in
+// src/reward/attribution.ts, pure, with its clause-by-clause doc). This edge's obligations:
+//   - it reads `.rk/driver-log.jsonl` ONCE per run and FAILS CLOSED on any line that cannot be
+//     read as a record (bad JSON, blank, malformed known kind): an unreadable line may hide
+//     spend, the banked figure must be a deterministic function of a fully-read log, and the
+//     ledger is APPEND-ONLY so a wrong number written here can never be corrected. The ONE
+//     exception: an `unrecognized 'kind'` issue cannot conceal a usage record (a line with
+//     kind:"usage" is validated as one), so it is warned loudly and does not block — a log
+//     written by a newer rk must not brick sync for no validity reason.
+//   - the figure is AT-SYNC-TIME: the log's attribution total when the close is banked. Later
+//     spend on an already-closed node is never retroactive — a close banks once.
+//   - a node with no attributable records banks spentTokens=0 with a per-event note (the
+//     pre-S0-2 floor semantics, now the exception instead of the rule); L5 session-open cost
+//     with no dispatched member to share it is reported and attributed to no node.
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { loadDefIds } from "../gates/linker-defs";
 import { parseRegistry } from "../gates/linker-parse";
+import { L5_SESSION_OPEN_NODE_ID, parseDriverLog, type UsageLogRecord } from "../drive/report-parse";
+import { attributeSpentTokens } from "../reward/attribution";
 import type { RegistryNode } from "../graph/types";
 import { structuralLossLines } from "../render/diagnostics-view";
 import { supportedCloseTier } from "../reward/tier";
@@ -77,6 +83,9 @@ export function planRewardSync(
   defIds: ReadonlySet<string>,
   withRound: boolean,
   unbackedPmaIds: ReadonlySet<string> = new Set(),
+  /** Per-node spentTokens from attribution rule v1 (src/reward/attribution.ts) over the driver
+   * log as read by the edge below. Absent id -> 0 (the pre-S0-2 floor), noted per event. */
+  spentByNode: ReadonlyMap<string, number> = new Map(),
 ): RewardSyncPlan {
   const closed = new Set(existing.filter((e) => e.type === "close").map((e) => e.nodeId));
   const pruned = new Set(existing.filter((e) => e.type === "prune").map((e) => e.nodeId));
@@ -96,16 +105,31 @@ export function planRewardSync(
           `L5 verdict nor a provenance declaration (Gate 8 Check 4b would ERROR reward-tier-unbacked). ` +
           `Record the backing, then re-run.`,
       );
+    } else if (tier !== undefined && node.id === L5_SESSION_OPEN_NODE_ID && !closed.has(node.id)) {
+      // rk-0ree review P2: no gate enforces an id grammar that excludes the L5 session-open
+      // sentinel, so a registry node with the reserved id CAN exist — but its driver-log records
+      // are indistinguishable from session overhead, so any figure banked for it is untrustworthy.
+      withheld += 1;
+      lines.push(
+        `  - close ${node.id} WITHHELD: '${L5_SESSION_OPEN_NODE_ID}' is the reserved L5 session-open ` +
+          `sentinel id — spend attribution cannot distinguish this node's turns from session ` +
+          `overhead. Rename the shard, then re-run.`,
+      );
     } else if (tier !== undefined && !closed.has(node.id)) {
       const citedDefs = node.defs.filter((d) => defIds.has(d));
       const citedLemmas = node.deps.filter((d) => registryIds.has(d));
-      events.push({ type: "close", nodeId: node.id, tier, spentTokens: 0, citedDefs, citedLemmas });
+      const spentTokens = spentByNode.get(node.id) ?? 0;
+      events.push({ type: "close", nodeId: node.id, tier, spentTokens, citedDefs, citedLemmas });
       lines.push(
         `  + close ${node.id} tier=${tier} (from the registry mapping: status=${node.status ?? "unset"}, ` +
-          `af=${node.af} — never the shard's self-report) spentTokens=0 ` +
+          `af=${node.af} — never the shard's self-report) spentTokens=${spentTokens} ` +
           `citedDefs=${fmtList(citedDefs)} citedLemmas=${fmtList(citedLemmas)}`,
       );
-      lines.push(`      note: spentTokens unknown -> 0; payout will be zero until accounting lands.`);
+      lines.push(
+        spentTokens > 0
+          ? `      note: spentTokens from attribution rule v1 over .rk/driver-log.jsonl at sync time (hard-tier contract turns + L5 item turns + fair-share of L5 session-open).`
+          : `      note: no driver-log usage attributes to this node -> spentTokens=0; this close pays zero.`,
+      );
       const droppedDefs = node.defs.filter((d) => !defIds.has(d));
       const droppedLemmas = node.deps.filter((d) => !registryIds.has(d));
       if (droppedDefs.length > 0) {
@@ -141,6 +165,33 @@ export function planRewardSync(
   return { events, lines, withheld };
 }
 
+const DRIVER_LOG_RELPATH = ".rk/driver-log.jsonl";
+/** An `unrecognized 'kind'` line cannot conceal a usage record — any line with kind:"usage" is
+ * validated as one by parseDriverLogLine — so it warns instead of blocking (file header). Every
+ * OTHER issue (bad JSON, blank line, malformed known kind) may hide spend and fails closed. */
+const NONBLOCKING_ISSUE = /^unrecognized 'kind'/;
+
+interface DriverLogRead {
+  usageRecords: UsageLogRecord[];
+  /** Issues that refuse the sync (printed, nothing written) — empty when the read is clean. */
+  blocking: { line: number; message: string }[];
+  /** Issues printed as warnings only. */
+  warnings: { line: number; message: string }[];
+  exists: boolean;
+}
+
+function readDriverLogForSync(root: string): DriverLogRead {
+  const path = join(root, ".rk", "driver-log.jsonl");
+  if (!existsSync(path)) return { usageRecords: [], blocking: [], warnings: [], exists: false };
+  const { records, issues } = parseDriverLog(readFileSync(path, "utf8"));
+  return {
+    usageRecords: records.filter((r): r is UsageLogRecord => r.kind === "usage"),
+    blocking: issues.filter((i) => !NONBLOCKING_ISSUE.test(i.message)),
+    warnings: issues.filter((i) => NONBLOCKING_ISSUE.test(i.message)),
+    exists: true,
+  };
+}
+
 export async function rewardSyncCommand(args: string[], out: Out, deps: GraphCommandDeps = {}): Promise<number> {
   const { rest, root } = extractRoot(args);
   const dryRun = rest.includes("--dry-run");
@@ -168,16 +219,37 @@ export async function rewardSyncCommand(args: string[], out: Out, deps: GraphCom
     return 1;
   }
 
+  // rk-0ree: read the driver log ONCE and fail closed on unreadable lines — an unreadable line may
+  // hide spend, and the figure banked below is permanent (file header). Unrecognized kinds warn.
+  const driverLog = readDriverLogForSync(root);
+  if (driverLog.blocking.length > 0) {
+    out.log(`rk reward sync: refusing to append -- ${driverLog.blocking.length} unreadable line(s) in ${DRIVER_LOG_RELPATH}:`);
+    for (const i of driverLog.blocking) out.log(`  line ${i.line}: ${i.message}`);
+    out.log("  an unreadable line may hide token spend, and a banked spentTokens figure is permanent (append-only");
+    out.log("  ledger). Repair the driver log (or move it aside deliberately), then re-run. NOTHING was written.");
+    return 1;
+  }
+  const attribution = attributeSpentTokens(driverLog.usageRecords);
+
   const snap = loadSnapshot(root);
   const unbackedPmaIds = new Set(
     parseRegistry(snap).lemmas
       .filter((l, _i, all) => l.status === "proved-mod-audit" && l.af !== "validated" && !pmaBacked(snap, l, all))
       .map((l) => l.id),
   );
-  const plan = planRewardSync(doc.nodes, load.events, loadDefIds(snap), withRound, unbackedPmaIds);
+  const plan = planRewardSync(doc.nodes, load.events, loadDefIds(snap), withRound, unbackedPmaIds, attribution.spentByNode);
   out.log(
     "rk reward sync (SHADOW — appends primitive events only; payouts stay derived, never stored):",
   );
+  if (!driverLog.exists) {
+    out.log(`  note: no ${DRIVER_LOG_RELPATH} -- every close below carries spentTokens=0.`);
+  }
+  for (const w of driverLog.warnings) {
+    out.log(`  warning: driver-log line ${w.line}: ${w.message} -- cannot be a usage record; ignored for attribution.`);
+  }
+  for (const u of attribution.unattributedSessionOpen) {
+    out.log(`  note: ${u.tokens} token(s) of L5 session-open cost in session '${u.sessionId}' had no dispatched member to share them -- attributed to no node.`);
+  }
   for (const line of plan.lines) out.log(line);
 
   if (plan.events.length === 0) {

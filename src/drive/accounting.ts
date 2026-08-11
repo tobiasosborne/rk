@@ -93,6 +93,18 @@ export function grandTotal(state: AccountingState): AccountingTotals {
   return total;
 }
 
+/** Integer-fair split of `total` across `n` shares: each gets `floor(total/n)`, and the first
+ * `total % n` (caller's own order) get one extra — exact and deterministic, `sum(shares)===total`.
+ * Moved here from src/drive/report.ts (rk-0ree) so BOTH per-session pooling rules — report.ts's
+ * cache_creation attribution and src/reward/attribution.ts's L5 session-open split — share the ONE
+ * split formula instead of drifting apart. */
+export function fairShares(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(total / n);
+  const remainder = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
 /** Token-weighted cache-read fraction, per the M3.0 spike's own definition (see file header):
  * cache_read / (input + cache_read + cache_creation). Returns 0 (not NaN) when the denominator is
  * 0 — an empty/not-yet-dispatched bucket is a legitimate state, not a division error. */

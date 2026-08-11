@@ -280,6 +280,10 @@ non-blank, not that the verifier performed the promised independent check.
 WorkerResult {                          // src/drive/worker-result.ts — the PROCESS-level wrapper
   exit:  number                         // the backend process's own exit code — AUTHORITATIVE
   usage: { input, output, cache_read, cache_creation }
+                                        // each a NON-NEGATIVE INTEGER token count (rk-0ree): the
+                                        // driver-log reader rejects anything else — a fractional
+                                        // count would let reward attribution's integer-fair split
+                                        // mint tokens; a negative one would drive H_real to NaN
   rawText?: string                      // what the process printed; absent iff nothing usable was
                                         // produced (killed, crashed, true timeout)
   dispatchModel?: "session" | "flat"    // adapter-set (M3.2), mirrors capabilities.sessionResume;

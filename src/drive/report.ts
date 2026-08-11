@@ -28,7 +28,7 @@
 // records DO carry `contractId`, and a claim's contractId is established unambiguously by its own
 // `usage` records, so balloon events ARE safely attributed per claim.
 
-import { allKeys, cacheFraction, emptyAccountingState, grandTotal, recordTurn, totalsFor, type AccountingTotals } from "./accounting";
+import { allKeys, cacheFraction, emptyAccountingState, fairShares, grandTotal, recordTurn, totalsFor, type AccountingTotals } from "./accounting";
 import type { DriverLogIssue, DriverLogRecord, UsageLogRecord } from "./report-parse";
 
 export {
@@ -111,15 +111,6 @@ export interface CampaignReport {
 const ZERO_TOTALS: AccountingTotals = { input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0 };
 function addTotals(a: AccountingTotals, b: AccountingTotals): AccountingTotals {
   return { input: a.input + b.input, output: a.output + b.output, cache_read: a.cache_read + b.cache_read, cache_creation: a.cache_creation + b.cache_creation, turns: a.turns + b.turns };
-}
-
-/** Integer-fair split of `total` across `n` shares: each gets `floor(total/n)`, and the first
- * `total % n` (caller's own order) get one extra — exact and deterministic, `sum(shares)===total`. */
-function fairShares(total: number, n: number): number[] {
-  if (n <= 0) return [];
-  const base = Math.floor(total / n);
-  const remainder = total - base * n;
-  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
 function attributeTokens(usageRecords: readonly UsageLogRecord[]): Map<string, number> {

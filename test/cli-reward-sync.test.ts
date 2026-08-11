@@ -177,11 +177,14 @@ describe("rk reward sync — CLI wiring", () => {
     expect(events.filter((e) => e.type === "prune").length).toBe(2);
   });
 
-  test("spentTokens is 0 with a loud per-event note, never a fabricated figure", async () => {
+  test("with no driver log, spentTokens is 0 with a loud per-event note, never a fabricated figure", async () => {
     const root = syncRepo();
     const { out, lines } = capture();
     await rewardSyncCommand(["--root", root], out, DEPS);
-    expect(lines.join("\n")).toContain("spentTokens unknown -> 0");
+    const text = lines.join("\n");
+    expect(text).toContain("no .rk/driver-log.jsonl");
+    expect(text).toContain("spentTokens=0");
+    expect(text).toContain("pays zero");
     const closes = loadRewardLedger(root).events.filter((e) => e.type === "close");
     expect(closes.every((e) => (e as { spentTokens: number }).spentTokens === 0)).toBe(true);
   });
@@ -333,5 +336,129 @@ describe("rk reward sync — CLI wiring", () => {
     const helpCap = capture();
     expect(await run(["reward", "--help"], { out: helpCap.out })).toBe(0);
     expect(helpCap.lines.join("\n")).toContain("rk reward sync");
+  });
+});
+
+// rk-0ree: attribution rule v1 wired through `rk reward sync` — the driver log's two usage-record
+// conventions composed into per-node spentTokens (src/reward/attribution.ts holds the pure rule and
+// its own tests; these tests assert the SYNC-side obligations: figures reach the banked close
+// events, an unreadable log refuses to bank, and every decision is printed, never silent).
+function driverLogPath(root: string): string {
+  return join(root, ".rk", "driver-log.jsonl");
+}
+function writeDriverLog(root: string, ...entries: (object | string)[]): void {
+  mkdirSync(join(root, ".rk"), { recursive: true });
+  writeFileSync(
+    driverLogPath(root),
+    entries.map((e) => (typeof e === "string" ? e : JSON.stringify(e))).join("\n") + "\n",
+    "utf8",
+  );
+}
+const AT = "2026-08-11T00:00:00Z";
+function closesById(root: string): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const e of loadRewardLedger(root).events) {
+    if (e.type === "close") m.set(e.nodeId, e.spentTokens);
+  }
+  return m;
+}
+
+describe("rk reward sync — attribution rule v1 (rk-0ree)", () => {
+  test("planRewardSync writes the supplied per-node figure into the close and names the rule", () => {
+    const spent = new Map([["lem-x", 250_000]]);
+    const plan = planRewardSync([node("lem-x", { af: "validated" })], [], new Set(), false, new Set(), spent);
+    expect(plan.events).toEqual([
+      { type: "close", nodeId: "lem-x", tier: "proved", spentTokens: 250_000, citedDefs: [], citedLemmas: [] },
+    ]);
+    expect(plan.lines.join("\n")).toContain("attribution rule v1");
+  });
+
+  test("hard-tier and L5 records compose into the banked figures, session-open split included", async () => {
+    const root = syncRepo();
+    seedLedger(root, PREDICT_DEAD, PREDICT_OBS);
+    writeDriverLog(
+      root,
+      // Hard tier: two turns (verifier + prover) on lem-validated's workspace -> 100k total.
+      { kind: "usage", at: AT, contractId: "lem-validated", claimId: "claim-lem-validated", nodeId: "1", role: "verifier", sessionId: "s-v", usage: { input: 60_000, output: 10_000, cache_read: 20_000, cache_creation: 4_000 } },
+      { kind: "usage", at: AT, contractId: "lem-validated", claimId: "claim-lem-validated-prover", nodeId: "1.2", role: "prover", sessionId: "s-p", usage: { input: 5_000, output: 1_000, cache_read: 0, cache_creation: 0 } },
+      // L5 batch: session-open 500 shared by lem-audit and lem-num, plus their own turns.
+      { kind: "usage", at: AT, contractId: "l5:b1", claimId: "l5:b1", nodeId: "(session-open)", role: "verifier", sessionId: "sess-1", usage: { input: 500, output: 0, cache_read: 0, cache_creation: 0 } },
+      { kind: "usage", at: AT, contractId: "l5:b1", claimId: "l5:b1", nodeId: "lem-audit", role: "verifier", sessionId: "sess-1", usage: { input: 1_000, output: 0, cache_read: 0, cache_creation: 0 } },
+      { kind: "usage", at: AT, contractId: "l5:b1", claimId: "l5:b1", nodeId: "lem-num", role: "verifier", sessionId: "sess-1", usage: { input: 100, output: 0, cache_read: 0, cache_creation: 0 } },
+    );
+    const { out, lines } = capture();
+    expect(await rewardSyncCommand(["--root", root], out, DEPS)).toBe(0);
+    const closes = closesById(root);
+    expect(closes.get("lem-validated")).toBe(100_000);
+    expect(closes.get("lem-audit")).toBe(1_250);
+    expect(closes.get("lem-num")).toBe(350);
+    expect(lines.join("\n")).toContain("spentTokens=100000");
+    // The emitter and Gate 8 still agree by construction.
+    const result = rewardGate.run(loadSnapshot(root), DEFAULT_GATE_CONFIG);
+    expect(result.findings).toEqual([]);
+  });
+
+  test("an unreadable driver-log line makes sync REFUSE and write NOTHING (hidden spend fails closed)", async () => {
+    const root = syncRepo();
+    writeDriverLog(root, "not json at all");
+    const { out, lines } = capture();
+    expect(await rewardSyncCommand(["--root", root], out, DEPS)).toBe(1);
+    const text = lines.join("\n");
+    expect(text).toContain("driver-log");
+    expect(text).toContain("line 1");
+    expect(text).toContain("NOTHING was written");
+    expect(existsSync(rewardLedgerPath(root))).toBe(false);
+  });
+
+  test("a malformed usage record also fails closed — its spend cannot be read, so nothing banks", async () => {
+    const root = syncRepo();
+    writeDriverLog(root, { kind: "usage", at: AT, contractId: "lem-validated" }); // missing fields
+    const { out } = capture();
+    expect(await rewardSyncCommand(["--root", root], out, DEPS)).toBe(1);
+    expect(existsSync(rewardLedgerPath(root))).toBe(false);
+  });
+
+  test("an unrecognized record kind cannot hide spend: warned loudly, sync proceeds", async () => {
+    const root = syncRepo();
+    writeDriverLog(root, { kind: "some-future-kind", at: AT, detail: "written by a newer rk" });
+    const { out, lines } = capture();
+    expect(await rewardSyncCommand(["--root", root], out, DEPS)).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("unrecognized");
+    expect(loadRewardLedger(root).events.filter((e) => e.type === "close").length).toBe(3);
+  });
+
+  test("session-open cost with no dispatched member is reported, attributed to no node", async () => {
+    const root = syncRepo();
+    writeDriverLog(
+      root,
+      { kind: "usage", at: AT, contractId: "l5:dead", claimId: "l5:dead", nodeId: "(session-open)", role: "verifier", sessionId: "sess-dead", usage: { input: 123, output: 0, cache_read: 0, cache_creation: 0 } },
+    );
+    const { out, lines } = capture();
+    expect(await rewardSyncCommand(["--root", root], out, DEPS)).toBe(0);
+    const text = lines.join("\n");
+    expect(text).toContain("sess-dead");
+    expect(text).toContain("attributed to no node");
+    const closes = closesById(root);
+    expect([...closes.values()].every((v) => v === 0)).toBe(true);
+  });
+
+  test("review P2: a bankable node named '(session-open)' is WITHHELD — the reserved id would collide with the L5 sentinel and misattribute spend", () => {
+    const plan = planRewardSync([node("(session-open)", { af: "validated" })], [], new Set(), false, new Set(), new Map());
+    expect(plan.events).toEqual([]);
+    expect(plan.withheld).toBe(1);
+    expect(plan.lines.join("\n")).toContain("reserved");
+  });
+
+  test("--dry-run shows the attributed figures and still writes NOTHING", async () => {
+    const root = syncRepo();
+    writeDriverLog(
+      root,
+      { kind: "usage", at: AT, contractId: "lem-num", claimId: "claim-lem-num", nodeId: "1", role: "verifier", sessionId: "s", usage: { input: 42, output: 0, cache_read: 0, cache_creation: 0 } },
+    );
+    const { out, lines } = capture();
+    expect(await rewardSyncCommand(["--dry-run", "--root", root], out, DEPS)).toBe(0);
+    expect(lines.join("\n")).toContain("spentTokens=42");
+    expect(existsSync(rewardLedgerPath(root))).toBe(false);
   });
 });

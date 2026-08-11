@@ -155,6 +155,26 @@ describe("dispatchL5Plan — rejection paths never silently drop a member", () =
     expect(outcomes[0]!.rejected.map((r) => r.itemId)).toEqual(["b"]);
   });
 
+  // rk-0ree review P2: "(session-open)" is the sentinel nodeId this module stamps on a session's
+  // opening-cost usage record. A MEMBER with that itemId would write member turns indistinguishable
+  // from session overhead, so downstream spend attribution (src/reward/attribution.ts) would
+  // misassign its tokens — the reserved id is refused before dispatch, loudly.
+  test("a member whose itemId is the reserved '(session-open)' sentinel is refused before dispatch", async () => {
+    const openContent = "reserved-id shard content";
+    const { backend, turns } = fakeBackend({ "(session-open)": { verdict: "VALID", justification: "j" }, b: { verdict: "VALID", justification: "j" } });
+    const root = tmpRoot();
+    const batchId = deriveBatchId("z", ["(session-open)", "b"]);
+    const reservedPlan: L5DispatchPlan = {
+      northStarId: "z", cap: 10, excluded: [],
+      batches: [{ batchId, composedBatchId: batchId, claimId: `l5:${batchId}`, members: [{ itemId: "(session-open)", order: 0, contentHash: hashOf(openContent) }, { itemId: "b", order: 1, contentHash: HASH_B }], score: 0 }],
+    };
+    const outcomes = await dispatchL5Plan(root, reservedPlan, deps(backend, { "(session-open)": openContent, b: CONTENT_B }));
+    expect(turns.map((t) => t.itemId)).toEqual(["b"]); // the reserved id never reaches the backend
+    const rej = outcomes[0]!.rejected.find((r) => r.itemId === "(session-open)");
+    expect(rej?.stage).toBe("reserved-item-id");
+    expect(readL5Store(root).records.map((r) => r.itemId)).toEqual(["b"]);
+  });
+
   // M3 blocker 1: dispatching deps.content while recording an unrelated member.contentHash would
   // validate bytes no one reviewed — the plan's hash must match the actually-dispatched bytes.
   test("a member whose supplied bytes do not hash to the plan's contentHash is discarded before dispatch, never recorded", async () => {

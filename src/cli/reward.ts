@@ -118,9 +118,12 @@ export function rewardHelp(out: Out): number {
   out.log("  Reconciles registry ground truth into the ledger: appends the MISSING close events");
   out.log("  (tier taken from src/reward/tier.ts's one mapping — a self-reported 'proved' with");
   out.log("  af: none banks nothing) and the missing prune events for refuted nodes. spentTokens");
-  out.log("  is 0 until per-node accounting lands, noted per event. Idempotent; --dry-run writes");
-  out.log("  nothing; --round also appends the next allocation-round marker. Refuses and writes");
-  out.log("  NOTHING on a structurally incomplete build or an unreadable ledger line.");
+  out.log("  comes from attribution rule v1 over .rk/driver-log.jsonl (hard-tier turns to their");
+  out.log("  contract, L5 turns to their item, session-open split fair-share; 0 when no usage");
+  out.log("  attributes, noted per event). Idempotent; --dry-run writes nothing; --round also");
+  out.log("  appends the next allocation-round marker. Refuses and writes NOTHING on a");
+  out.log("  structurally incomplete build, an unreadable ledger line, or an unreadable");
+  out.log("  driver-log line (hidden spend fails closed).");
   out.log("  next: 'rk reward sync --dry-run' in a campaign repo, then without --dry-run.");
   return 0;
 }
