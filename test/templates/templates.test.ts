@@ -253,8 +253,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.5.0 for the .gitignore stamp + two-vendor precondition prose", () => {
-    expect(manifest.template_version).toBe("1.5.0");
+  test("template_version was bumped to 1.6.0 for the provenance-record subsection (rk-tlwb)", () => {
+    expect(manifest.template_version).toBe("1.6.0");
   });
 
   // A version bump whose changes are INVISIBLE to a per-file diff (a brand-new stamped path, a new
@@ -389,6 +389,24 @@ describe("templates / (f) constitution truthfulness (rk-huq, rk-19i)", () => {
   // this binary" and never named `rk verify`/`graph`/`refs`/`doctor` — text written before M2.4
   // shipped. A constitution that understates its own tool sends the researcher to hand-roll
   // subsystems the binary already ships (generality audit 2026-07-25, finding M2).
+  // rk-tlwb: Check 4b v2 requires a JSON provenance record before a proved-mod-audit close banks,
+  // and for two days no rk subcommand wrote one and no template said the record existed —
+  // campaign A drew 12 [reward-tier-unbacked] errors, one per pma close, for recording real
+  // cross-vendor verification as prose. A stamped campaign must be told the shape, the location,
+  // and the timing (the author seam is only recoverable while the worker's transcript is open).
+  test("the constitution tells a campaign how and when to produce provenance records (rk-tlwb)", () => {
+    const section = claude.slice(claude.indexOf("### Recording an independent verification"), claude.indexOf("## 6."));
+    expect(section.length).toBeGreaterThan(0);
+    expect(section).toContain("rk reward attest");
+    // The three facts a campaign cannot reconstruct from the error message alone.
+    expect(section).toContain(".rk/provenance-<shard-id>.json");
+    expect(section).toContain("sha256");
+    // The campaign-A incident itself: real verification, recorded as prose, banked nothing.
+    expect(section.replace(/\s+/g, " ")).toContain("A prose report is not a record");
+    // Honesty stance: recorded and checkable, never authenticated.
+    expect(section.replace(/\s+/g, " ")).toContain("recorded and checkable, never authenticated");
+  });
+
   test("the constitution names every shipped command and no longer hedges rk render", () => {
     for (const cmd of ["rk check", "rk phase", "rk graph", "rk render", "rk refs", "rk verify", "rk doctor", "rk upgrade"]) {
       expect(claude).toContain(cmd);

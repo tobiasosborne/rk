@@ -176,6 +176,9 @@ rk graph --focus <id> | --critical-path | --blocks | --taint [<id>]   # terminal
 rk render                # generate build/site/index.html — dashboard, AND/OR DAG, provenance drill-down
 rk refs status|add|quote # the ground-truth reference library behind L1
 rk verify --af <id> [--dry-run|--live]       # hard-tier verification driver over an af workspace
+rk reward attest --claim <id> --author <seam> --role verifier|reviewer --reason <text>
+                         # record a hand-run independent verification (see below; required before
+                         # a proved-mod-audit close can bank)
 rk doctor                # check the af/fr/bd binaries this repo depends on, against pinned versions
 rk upgrade               # compare this repo's template_version against the installed rk
 fr board                 # exploration portfolio + frontier (run at session start)
@@ -211,6 +214,59 @@ Not stamped — add it when you first dispatch a worker:
 Other keys (`shardsMaxLines`, `provenanceStatusTableFile`, `refsMinRunReportingLength`) configure
 the report-tree gates and keep their defaults until this campaign has a `report/` tree.
 `rk check`'s config gate validates every key and rejects unknown ones loudly.
+
+### Recording an independent verification (before a `proved-mod-audit` close can bank)
+
+`status: proved-mod-audit` is a SELF-REPORTED axis: the shard says it, so the shard cannot also
+be the evidence for it. A close at that tier banks only when the status is backed by a record
+written by someone other than the claim's prover-of-record, by exactly one of two routes:
+
+- **The driver wrote it.** `rk verify --live` records its own worker turns as L5 verdicts in
+  `.rk/l5-verdicts.jsonl`, hash-pinned to the shard bytes. Nothing further is needed.
+- **You ran the verification by hand** — a `codex exec` hostile pass, a second CLI in a separate
+  context, a human reviewer. Then the verification event exists only in that worker's transcript,
+  and you record it:
+
+```
+rk reward attest --claim <shard-id> \
+  --author '<family>|<backend>|<model>|<session id>' \
+  --role verifier --reason '<what was actually checked>' \
+  --source docs/worker-output/<that worker's transcript>
+```
+
+Then add the record to the claim shard's frontmatter — the command prints the exact line:
+
+```
+provenance: .rk/provenance-<shard-id>.json — <one line: what was verified, by whom>
+```
+
+Four things about this are load-bearing, each of them a way a real campaign has lost a close:
+
+1. **Do it while the verification is happening, not at window close.** `--author` is the worker's
+   own identity seam, and the session id lives in its transcript header (`codex exec` prints
+   `model:` / `provider:` / `session id:`; capture the worker's output to a file and keep it). A
+   day later the model is a guess and the session id is gone, and a seam you cannot substantiate
+   must not be typed: a record with an invented author is strictly worse than no record, because
+   it converts "unbacked" into "backed by a reviewer who never existed".
+2. **A prose report is not a record.** Writing the verifier's findings to
+   `docs/worker-output/*.md` and pointing `provenance:` at it does not back the close, and not
+   because the report is worthless — `rk check` cannot read an author identity out of prose, and
+   the file is outside the boundary the gate reads at all. Keep the report; cite it as
+   `--source`; the record is the thing the gate reads.
+3. **The record must live directly under `.rk/`**, as `.rk/<name>.json`. One level, no
+   subdirectory. `rk reward attest` puts it there; if you write one by hand and place it
+   elsewhere, `rk check` names this exact constraint in the error.
+4. **The record binds to the bytes reviewed.** It carries the shard's sha256 at attestation time,
+   so revising the shard after the endorsement lands makes the record stale and the close
+   unbacked — deliberately. Re-attest against the final bytes after applying a verifier's
+   requested revisions; that is one command, and it is the difference between "an endorsement of
+   what is now in the file" and "an endorsement of something".
+
+The verifier's own independence is checked, not assumed: a record whose author decodes to the
+same model family, backend, and model as the claim's prover does not back the close, however
+many separate sessions were used. That is the same cross-vendor rule as § 4, applied at the
+banking site. Identities here are recorded and checkable, never authenticated — the tool proves
+that a claim of independence was written down, not that it was true.
 
 ## 6. Session close ("landing the plane")
 
