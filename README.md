@@ -94,6 +94,12 @@ make test selftest        # green before you touch anything
 The `.beads/issues.jsonl` snapshot in-repo is the durable export of the issue
 tracker; `bd` rebuilds its local state from the repo on first `bd prime`.
 
+The full test suite additionally expects `../vibefeld` (af's repo, which has
+its own remote) cloned as a sibling: two D6 seam tests byte-check rk against
+its docs and Go schema, and hard-fail — by design, not skip — when it is
+absent. Fresh-clone acceptance (2026-08-12): clone + bootstrap +
+restore-siblings + vibefeld sibling = 2860 pass, selftest 166/166.
+
 ### The three sibling binaries
 
 rk orchestrates a campaign but does not implement proof verification, the

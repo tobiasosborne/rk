@@ -83,6 +83,12 @@ window 2 are unaffected: the protocol is now stamped in the constitution.
 
 ## Key facts for the next session
 
+- **Repo is self-contained for dev since fed740c (rk-he3r)**: design record at
+  `docs/design/` (read-order gate updated), stranded siblings in `vendor/`
+  (campaign bundles + evidence copies), `make bootstrap` / `restore-siblings` /
+  `refresh-bundles` (§6 item 5 keeps bundles fresh). Fresh-clone acceptance
+  passed. Full suite still needs `../vibefeld` cloned (2 seam tests, by design).
+
 - dist/rk is CURRENT as of cea76bc+410317a. Campaign-A's pre-commit will now FAIL
   rk check (12 waived-in-prose errors are live findings to the new binary) — that
   campaign is wound down; use the waiver doc if a commit is ever needed there.
