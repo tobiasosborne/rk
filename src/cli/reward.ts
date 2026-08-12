@@ -26,6 +26,7 @@ import { loadRewardLedger, type RewardLedgerLoad } from "../store/reward-ledger"
 import type { Out } from "./args";
 import { extractRoot } from "./args";
 import { rewardSyncCommand } from "./reward-sync";
+import { rewardAttestCommand } from "./reward-attest";
 
 /** Fixed 6-decimal rendering: payouts are log2-scaled reals, and a rounded-to-2 balance hides the
  * difference between "earned nothing" and "earned a sliver of a reuse share". */
@@ -105,6 +106,7 @@ async function rewardReport(args: string[], out: Out): Promise<number> {
 const REWARD_COMMANDS: Record<string, (args: string[], out: Out) => Promise<number>> = {
   report: rewardReport,
   sync: rewardSyncCommand,
+  attest: rewardAttestCommand,
 };
 
 export function rewardHelp(out: Out): number {
@@ -124,6 +126,12 @@ export function rewardHelp(out: Out): number {
   out.log("  appends the next allocation-round marker. Refuses and writes NOTHING on a");
   out.log("  structurally incomplete build, an unreadable ledger line, or an unreadable");
   out.log("  driver-log line (hidden spend fails closed).");
+  out.log("  usage: rk reward attest --claim <id> --author <seam> --role verifier|reviewer --reason <text>");
+  out.log("  Records an INDEPENDENT verification as the .rk/<name>.json provenance record Gate 8");
+  out.log("  Check 4b reads, so a hand-dispatched hostile verification can back a proved-mod-audit");
+  out.log("  close instead of leaving it unbacked. The author seam is never invented or defaulted:");
+  out.log("  it comes from the worker's own transcript. Writes one file, edits no shard, then prints");
+  out.log("  the gate's real backing decision — including when the answer is 'this does not back'.");
   out.log("  next: 'rk reward sync --dry-run' in a campaign repo, then without --dry-run.");
   return 0;
 }

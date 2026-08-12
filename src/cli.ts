@@ -157,6 +157,7 @@ function topHelp(out: Out): number {
   out.log("  rk frontier <goal-id>      the GOAL frontier: obligations, dead-ends, prospecting pool (S0)");
   out.log("  rk reward report [--strict]  fold .rk/reward-ledger.jsonl into shadow payouts (S0, prereg v1)");
   out.log("  rk reward sync [--dry-run] [--round]  append the reward events the registry implies (S0)");
+  out.log("  rk reward attest --claim <id> --author <seam> --role <r>  record an independent verification (Check 4b)");
   out.log("  rk doctor [--override]     verify af/fr/bd binaries against rk.compat.json (D6)");
   out.log("  every subcommand accepts -h/--help for its own usage (side-effect-free, exits 0).");
   out.log("  next: 'rk init \"<north-star>\"' to stamp a fresh repo, or 'rk refs status' in an existing one.");
