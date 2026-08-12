@@ -253,8 +253,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.6.0 for the provenance-record subsection (rk-tlwb)", () => {
-    expect(manifest.template_version).toBe("1.6.0");
+  test("template_version was bumped to 1.7.0 for the reward-protocol and probe/brief/hostile/lifecycle sections (rk-6cmx, rk-oeal)", () => {
+    expect(manifest.template_version).toBe("1.7.0");
   });
 
   // A version bump whose changes are INVISIBLE to a per-file diff (a brand-new stamped path, a new
@@ -507,5 +507,89 @@ describe("templates / (g) the seeded north-star shard parses as a Gate 2 registr
 
   test("no unfilled slot survives substitution", () => {
     expect(stamped).not.toContain("{{RK_SLOT_");
+  });
+});
+
+// rk-6cmx / rk-oeal (remediation wave 2, 2026-08-12): campaign C ran a full research window with
+// its reward ledger at exactly zero because the stamped constitution had no reward/predict
+// section at all, and separately the template carried NONE of the probe/brief/hostile-seat/
+// worker-lifecycle protocol three campaigns had already proven out — each was hand-ported per
+// campaign, and hand-porting had already failed once (the reward-ledger gap itself). These tests
+// assert `rk init` now stamps every one of those sections, each with its own scar citation, and
+// that the §5 provenance-attestation ordering fix (declare in frontmatter BEFORE attesting, never
+// after) landed too.
+describe("templates / (h) reward/predict + probe/brief/hostile/worker-lifecycle protocol (rk-6cmx, rk-oeal)", () => {
+  const claude = read("CLAUDE.md.tmpl");
+
+  test("§4a: predict-before-attempt, rk reward sync cadence, escrow, and the zero-ledger scar", () => {
+    const section = claude.slice(claude.indexOf("## 4a."), claude.indexOf("## 4b."));
+    expect(section.length).toBeGreaterThan(0);
+    expect(section.toLowerCase()).toContain("predict-before-attempt");
+    expect(section).toContain("Brier");
+    expect(section).toContain("rk reward sync");
+    expect(section).toContain("--round");
+    expect(section.toLowerCase()).toContain("escrow");
+    expect(section.toLowerCase()).toContain("vests pro-rata");
+    // the motivating scar: a full window, zero reward events, because the section didn't exist
+    expect(section).toContain("closes, no reduces, no prunes");
+    expect(section).toContain("rk reward attest");
+  });
+
+  test("§4b: boundary-probe protocol I.1-I.3, each amendment present with its scar", () => {
+    const section = claude.slice(claude.indexOf("## 4b."), claude.indexOf("## 4c."));
+    expect(section.length).toBeGreaterThan(0);
+    expect(section).toContain("(I.1)");
+    expect(section).toContain("(I.2)");
+    expect(section).toContain("(I.3)");
+    expect(section).toContain("NEGATIVE CONTROL");
+    expect(section).toContain("PROBE DEBT");
+    expect(section.toLowerCase()).toContain("do not re-litigate");
+    expect(section.toLowerCase()).toContain("orphaning a hash");
+  });
+
+  test("§4c: brief format (obligation+model+records+failure-modes, STOP) and the hostile seat, each measured", () => {
+    const section = claude.slice(claude.indexOf("## 4c."), claude.indexOf("## 4d."));
+    expect(section.length).toBeGreaterThan(0);
+    expect(section.toLowerCase()).toContain("do not steer technique");
+    expect(section).toContain("STOPS");
+    expect(section).toContain("three times in four");
+    expect(section).toContain("all eleven");
+    expect(section.toLowerCase()).toContain("hostile seat");
+  });
+
+  test("§4d: worker lifecycle — pattern-kill, wake-on-completion, run-unique paths, stdin redirect", () => {
+    const section = claude.slice(claude.indexOf("## 4d."), claude.indexOf("## 5."));
+    expect(section.length).toBeGreaterThan(0);
+    expect(section.toLowerCase()).toContain("no pattern-kill");
+    // the one deliberately-marked bead id exception (task instructions: pending ratification only)
+    expect(section).toContain("rk-7the");
+    expect(section.toLowerCase()).toContain("pending upstream ratification");
+    expect(section.toLowerCase()).toContain("lossy signal");
+    expect(section).toContain("one in three");
+    expect(section.toLowerCase()).toContain("run-unique");
+    expect(section).toContain("/dev/null");
+  });
+
+  test("no bead id other than the deliberately pending-ratification one appears in the stamped constitution", () => {
+    // A domain expert stamping a fresh campaign must find no rk-repo-specific residue: bead ids
+    // are internal bookkeeping for THIS repo and meaningless elsewhere, so only the one clause
+    // task instructions marked as a deliberate pending-ratification exception may carry one.
+    const beadIds = claude.match(/\brk-[a-z0-9]{4}\b/g) ?? [];
+    expect(new Set(beadIds)).toEqual(new Set(["rk-7the"]));
+  });
+
+  test("§5 provenance subsection: declare-then-attest ordering, not attest-then-declare", () => {
+    const section = claude.slice(
+      claude.indexOf("### Recording an independent verification"),
+      claude.indexOf("## 6."),
+    );
+    const declareIdx = section.indexOf("Declare first");
+    const attestIdx = section.indexOf("Then attest");
+    expect(declareIdx).toBeGreaterThan(0);
+    expect(attestIdx).toBeGreaterThan(declareIdx);
+    // the stale post-hoc phrasing this replaced must be fully gone, not just reworded around
+    expect(section).not.toContain("Then add the record to the claim shard's frontmatter — the command prints the exact line");
+    // the reordering rationale itself must be stated, not just implied by example ordering
+    expect(section.toLowerCase()).toContain("declare before you attest");
   });
 });

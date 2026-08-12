@@ -167,6 +167,155 @@ accepts are permitted and recorded as such (PRD C9). This file does not pick a v
 choice is `workers.assignments.verifier.hard.backend` in § 5, and every value it could hold names
 one; nothing here defaults it.
 
+## 4a. Predict-before-attempt and the reward ledger (S0)
+
+**The scar this section exists to prevent.** A real research campaign once ran an entire window —
+six banked results and nine kill certificates — against a reward ledger that stayed at exactly
+zero (no closes, no reduces, no prunes recorded) for the whole window. The cause was not agent
+behavior: the stamped constitution simply had no section describing the reward protocol, so the
+orchestrator followed it faithfully and never ran the one command that would have populated the
+ledger. Every payout figure, stuckness meter, and prediction-calibration record for that window's
+entire yield is permanently unrecoverable. The fix is this section existing in every stamped repo
+from the start, not hand-porting it into one campaign after the loss is already final.
+
+**Predict-before-attempt.** Before the FIRST attempt on any obligation, append a hardness
+prediction: at minimum, the probability the obligation CLOSEs within a near-term compute budget
+and within an extended one. Predictions are immutable once appended — do not revise one after
+seeing how the attempt goes, and do not backfill one for an obligation already underway. On
+resolution (close, prune, or freeze at budget) the prediction is Brier-scored against the outcome;
+an unresolved prediction scores nothing. This is the only source of calibration data the campaign
+will ever have for that obligation — attempted without a pre-registered prediction, it contributes
+no calibration signal, permanently, no matter how the attempt turns out.
+
+**The reward ledger and `rk reward sync`.** `.rk/reward-ledger.jsonl` is an append-only event log
+(close, reduce, prune, compress, demote) that the payout model folds into balances; it is never
+maintained by hand. `rk reward sync [--dry-run] [--round]` reconciles the registry's own ground
+truth into it — appending the close events banked results imply and the prune events refuted
+branches imply — and is idempotent, so running it repeatedly is always safe. Run it at least once
+per allocation round; `--round` additionally stamps the round marker the escrow-expiry clock
+reads. `--dry-run` previews the same reconciliation without writing anything. `rk reward sync`
+fails CLOSED on anything it cannot read (a malformed ledger line, an unreadable spend record)
+rather than silently under- or over-crediting — a refusal here means something needs a human look,
+never a flag to suppress.
+
+**Escrow, briefly.** A REDUCE (decomposing one obligation into several sub-obligations) pays a
+fraction of its value immediately, on verification that the decomposition is sound; the remainder
+is held in escrow and vests pro-rata as each child obligation CLOSEs. Escrow on a subtree that
+goes untouched — no CLOSE or PRUNE anywhere in it for a registered number of allocation rounds —
+EXPIRES, voiding the unvested remainder; this is the anti-decomposition-inflation design working
+as intended, not a bug to route around. A superseded or pruned decomposition also voids its own
+unvested escrow. Across every campaign this protocol has run so far, REDUCE events remain rare —
+decomposing and predicting a sub-obligation has a real entry cost, and campaigns that never pay it
+never exercise escrow at all. Do not mistake an empty escrow ledger for validation that
+decomposition is unneeded; it more often means the on-ramp was never taken.
+
+**Independent verification records — `rk reward attest`.** A `proved-mod-audit` close only banks
+its reward tier when the status is backed by a record from someone other than the claim's own
+prover. See "Recording an independent verification" under § 5 below for the full protocol,
+including the mandatory ordering: declare the record's path in the shard's frontmatter FIRST,
+run `rk reward attest` SECOND.
+
+## 4b. Boundary-probe protocol (I.1–I.3)
+
+Institutionalized directly from a proven campaign's own findings, after the dominant defect class
+across several review rounds turned out to be the same shape every time: "a bound never evaluated
+at the boundary of its own quantifiers" — three of five defects in one review round, none needing
+deep mathematics, all mechanically catchable by evaluating the claim at its own extreme admissible
+values before a human or a verifier ever sees it. Once this protocol ran, the next reviewed claim
+in that campaign dropped from the campaign's stable ~3-of-5 refutation rate to 1-of-6.
+
+1. **Boundary probes before review (I.1).** Every candidate claim with quantified parameters
+   ships to its verifier WITH a numeric boundary-probe record: the claimed inequality or property
+   evaluated at the extreme admissible values of every quantifier (range endpoints, degenerate
+   cases, the claim's own stated thresholds), as a small script plus its output. A claim without a
+   probe record is not ready for review. Probes are themselves quantified claims and are held to
+   the same standard: each carries at least one NEGATIVE CONTROL (a case the probe should catch),
+   uses relative tolerances, and respects its own numeric domain — probes that assert absolute
+   tolerances at the wrong scale, or evaluate outside their own domain, have failed at their own
+   boundaries on first use in more than one campaign, caught only by actually running them.
+   Symbolic review of a probe is not a substitute for executing it. A verifier who spot-checks a
+   probe and finds an untested extreme records it as PROBE DEBT rather than silently ignoring it;
+   reviewers are expected to extend probes as standard practice, and probe records should carry
+   measured margins, not just pass/fail verdicts — a margin near the boundary is itself a finding.
+2. **No fencing a claim from scrutiny without a citable record (I.2).** A brief may assert that an
+   input has "already survived review" or is otherwise pre-verified ONLY by citing the record that
+   verified it (a review-record path, a verdict-store entry). A reviewer or verifier receiving such
+   a fence MUST independently confirm the cited record exists and says what the fence claims before
+   honoring it — a fence without a checkable record is itself a reportable defect, not a
+   convenience. (Scar: a campaign's own orchestrator once told a verifier an unverified input had
+   "already survived cross-vendor passes; do not re-litigate" — no such record existed. The
+   campaign's own repair, adopted here as the rule, requires independent confirmation against the
+   record store before any fence is honored.)
+3. **Probes must be RUN, through one sanctioned, ledgered channel (I.3).** Numeric probe records
+   are produced by a single execution channel — bounded, single-threaded where relevant, its
+   output files kept — that appends a hash-bound entry to an append-only probe ledger, so a shard
+   can cite its probe by result path. A re-run of the same probe must NEVER overwrite the previous
+   result: archive every result immutably under its own content-addressed name. (Scar: in one
+   campaign a probe re-run overwrote its own result file, orphaning a hash a shard had already
+   cited — silently invalidating a citation that still looked fine on the surface.) An ad-hoc
+   numeric check a worker runs purely for its own feedback needs no ledger entry; the moment a
+   claim CITES a numeric fact, that fact goes through the sanctioned channel.
+
+## 4c. Briefs and hostile verification
+
+**Brief format (measured: orchestrator technical steers were wrong roughly three times in four).**
+A worker brief states the obligation, the relevant model/definitions, the established results with
+their record paths, and known failure modes — and STOPS. Do not steer technique. Across a proven
+campaign's own tracking, orchestrator-level technique suggestions were wrong about three of every
+four times a worker's own engagement with the problem could check them; briefs that stopped at the
+obligation measurably out-performed briefs that also prescribed a method. A brief should disclose
+the orchestrator's own measured unreliability where relevant — broadcasting "my technical steers
+have been wrong roughly three times in four; weigh accordingly" is not a hedge, it is calibration
+information the worker needs.
+
+**Hostile verification seat (measured: a maximally hostile reviewer was right on all eleven
+disagreements it had with a gentler co-reviewer).** Any multi-seat verification, review, or triage
+panel includes at least one deliberately, maximally hostile seat, and any disagreement between
+seats is resolved toward the evidence, not toward the panel median or majority. In one campaign,
+two triage reviewers ran side by side on the same candidate set: they disagreed on eleven items,
+and the more aggressive reviewer was correct on every one of the eleven. A single gentler reviewer
+alone would have shipped eleven wrong verdicts. A panel without a hostile seat is not a panel; it
+is consensus theater with extra steps.
+
+## 4d. Worker lifecycle
+
+**No pattern-kill.** Never terminate a process by name or pattern (`pkill -f <pattern>`,
+`killall`, or equivalent) anywhere on the host. Track every spawned worker by its own handle and
+stop, or wait on, that handle alone. (Scar: a campaign's own machine-wide pattern-kill nearly took
+out unrelated live work running in a sibling repository on the same host — over twenty concurrent
+worker processes were live host-wide at the time, and the kill pattern could not tell them apart.)
+STATUS IN THIS RELEASE: this clause is pending upstream ratification (tracked as rk-7the) — treat
+it as binding practice regardless; the incident behind it is real and on record, and "not yet
+ratified" describes the paperwork, not the risk.
+
+**Wake-on-completion is a lossy signal, never a contract.** Do not end an orchestrating turn
+assuming a live worker's completion will reliably wake you. Measured across a real campaign
+window, wake-on-completion missed roughly one in three genuine completions — workers finished
+cleanly and sat uncollected for tens of minutes before a human noticed. Two mitigations, both
+required: POLL tracked handles before ending a turn rather than trusting the wake alone, and on
+resume, HARVEST EVERY completed handle, not just the one that (maybe) woke you. A cheap
+watchdog-side backstop — comparing the newest worker log's mtime against the orchestrator's own
+transcript mtime and alerting on an inversion — catches what turn-end polling cannot: a worker
+that finishes strictly after the turn already ended.
+
+**Never kill a live worker just because a turn is ending.** Ending an orchestrating turn must not
+kill workers still mid-flight: wait on them in-turn, or hold them as tracked background handles
+and collect every one before the turn closes. One campaign got this wrong and watched a turn
+boundary kill live workers outright; the re-dispatch that followed then raced a fresh worker
+against the dead one for the identical output path.
+
+**Run-unique output paths; workers own their report paths.** Every worker's output path must
+carry a run-unique identifier — two dispatches must never be able to race on the same file. When a
+spawned CLI's own output-capture flag is used (e.g. `codex exec -o <file>`), point it at a SCRATCH
+path, never at the worker's actual report file: a capture flag silently overwriting a
+worker-authored report is a real, observed failure mode, and the fix is a naming convention, not a
+warning nobody reads. The worker itself writes its report, to its own run-unique path; the capture
+flag is a transcript convenience, never the report's storage location.
+
+**`< /dev/null` on every spawned headless CLI.** Some backends hang indefinitely waiting on stdin
+that will never arrive when spawned non-interactively. Redirect stdin from `/dev/null` on every
+headless CLI invocation as a matter of course, not only after a hang is first observed.
+
 ## 5. The tool: commands and configuration
 
 ```
@@ -225,7 +374,19 @@ written by someone other than the claim's prover-of-record, by exactly one of tw
   `.rk/l5-verdicts.jsonl`, hash-pinned to the shard bytes. Nothing further is needed.
 - **You ran the verification by hand** — a `codex exec` hostile pass, a second CLI in a separate
   context, a human reviewer. Then the verification event exists only in that worker's transcript,
-  and you record it:
+  and you record it in two steps, IN THIS ORDER — the declaration must exist BEFORE the command
+  runs, never after:
+
+  1. **Declare first.** Add the `provenance:` line to the claim shard's frontmatter yourself,
+     naming the record path you are about to create:
+
+```
+provenance: .rk/provenance-<shard-id>.json — <one line: what was verified, by whom>
+```
+
+  2. **Then attest.** Run the command below. It reads that declaration, hashes the shard bytes
+     AS THEY NOW STAND — the `provenance:` line you just added included — and refuses, naming the
+     exact line to add, if the declaration is still missing:
 
 ```
 rk reward attest --claim <shard-id> \
@@ -234,29 +395,29 @@ rk reward attest --claim <shard-id> \
   --source docs/worker-output/<that worker's transcript>
 ```
 
-Then add the record to the claim shard's frontmatter — the command prints the exact line:
+Five things about this are load-bearing, each of them a way a real campaign has lost a close:
 
-```
-provenance: .rk/provenance-<shard-id>.json — <one line: what was verified, by whom>
-```
-
-Four things about this are load-bearing, each of them a way a real campaign has lost a close:
-
-1. **Do it while the verification is happening, not at window close.** `--author` is the worker's
+1. **Declare before you attest, never the reverse.** The `provenance:` line lives in the shard's
+   raw bytes, which is exactly what the record binds — a record written first and declared
+   afterward is stale the instant the line is added. The command enforces the order for you: it
+   refuses to hash or write anything until the declaration is already there.
+2. **Do it while the verification is happening, not at window close.** `--author` is the worker's
    own identity seam, and the session id lives in its transcript header (`codex exec` prints
    `model:` / `provider:` / `session id:`; capture the worker's output to a file and keep it). A
    day later the model is a guess and the session id is gone, and a seam you cannot substantiate
    must not be typed: a record with an invented author is strictly worse than no record, because
    it converts "unbacked" into "backed by a reviewer who never existed".
-2. **A prose report is not a record.** Writing the verifier's findings to
+3. **A prose report is not a record.** Writing the verifier's findings to
    `docs/worker-output/*.md` and pointing `provenance:` at it does not back the close, and not
    because the report is worthless — `rk check` cannot read an author identity out of prose, and
    the file is outside the boundary the gate reads at all. Keep the report; cite it as
    `--source`; the record is the thing the gate reads.
-3. **The record must live directly under `.rk/`**, as `.rk/<name>.json`. One level, no
-   subdirectory. `rk reward attest` puts it there; if you write one by hand and place it
-   elsewhere, `rk check` names this exact constraint in the error.
-4. **The record binds to the bytes reviewed.** It carries the shard's sha256 at attestation time,
+4. **The record must live directly under `.rk/`**, as `.rk/provenance-<name>.json`. One level,
+   no subdirectory, inside the reserved `provenance-` namespace so an attestation can never land
+   on top of one of `rk`'s own control files. `rk reward attest` puts it there and refuses any
+   other location; if you write one by hand and place it elsewhere, `rk check` names this exact
+   constraint in the error.
+5. **The record binds to the bytes reviewed.** It carries the shard's sha256 at attestation time,
    so revising the shard after the endorsement lands makes the record stale and the close
    unbacked — deliberately. Re-attest against the final bytes after applying a verifier's
    requested revisions; that is one command, and it is the difference between "an endorsement of

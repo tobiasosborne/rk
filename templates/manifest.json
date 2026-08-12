@@ -1,5 +1,5 @@
 {
-  "template_version": "1.6.0",
+  "template_version": "1.7.0",
   "slot_syntax": "{{RK_SLOT_<NAME>}}",
   "unfilled_slot_grep": "\\{\\{RK_SLOT_",
   "note": "rk init (M1.2) stamps every `stamped` entry: for entries with a non-null `template`, the file templates/<template> is read, every {{RK_SLOT_...}} is substituted, and the result is written byte-identical to `path`. Entries with template=null are directories created empty. Unfilled slots are detected by grepping the stamped tree for `unfilled_slot_grep`; a match means a slot was missed. Layout is PRD.md:79-85 exactly: no report/ tree, no LEARNINGS.md, no SHARD_CATALOG.md, no argument/INDEX.md or DAG.md mirrors, no repo-root INDEX.md (those are prior-tool residue or M2.4/M2.6 generated outputs, not stamped structure). The ONE addition to that layout is argument/thm-north-star.md: PRD.md:79-85 fixes the DIRECTORIES, and this is content, not structure — the single registry result whose contract is already known at stamp time (it is `rk init`'s own argument), seeded so PRD C2's critical-path provenance guarantee has a resolvable root from day one instead of an empty path it reports as satisfied (generality audit 2026-07-25, finding M3).",
@@ -46,6 +46,13 @@
   ],
   "changelog_note": "One entry per template_version, NEWEST FIRST. `rk upgrade` prints every entry strictly newer than the repo's own .rk/template-version. This exists because the interesting part of a bump is often invisible to the per-file diff `rk upgrade` otherwise prints: a brand-new stamped path does not exist in the old repo to diff against, and a new .rk/config.json key is not a stamped file at all. Each `changes` string must be self-contained and say what to DO.",
   "changelog": [
+    {
+      "version": "1.7.0",
+      "changes": [
+        "CLAUDE.md / AGENTS.md gain four new sections between § 4 and § 5: '4a. Predict-before-attempt and the reward ledger', '4b. Boundary-probe protocol (I.1-I.3)', '4c. Briefs and hostile verification', '4d. Worker lifecycle'. No diff of an existing constitution shows these as anything but new text — read them directly. Root cause: a real campaign ran a full research window with its reward ledger at exactly zero (closes=0, reduces=0, prunes=0 against six banked results) because the stamped constitution never described the reward protocol at all, and separately, every other proven campaign convention (boundary probes, brief format, hostile verification seats, worker-lifecycle rules) had only ever been hand-ported per campaign — and hand-porting already failed once, which is how the reward-ledger gap happened in the first place. TO ADOPT IN AN EXISTING CAMPAIGN: append the four sections to CLAUDE.md/AGENTS.md by hand (rewritten-whole means `rk upgrade` will not do this for you); then run `rk reward sync --dry-run` to see what the registry's ground truth implies for the ledger you never populated, and apply it if the output is sane.",
+        "CLAUDE.md / AGENTS.md § 5's 'Recording an independent verification' subsection is REORDERED: the shard's `provenance:` frontmatter line must now be declared BEFORE `rk reward attest` runs, not after. `rk reward attest` itself changed to enforce this (it refuses to hash or write until the declaration already exists), because the declaration line is part of the bytes the record binds — writing the record first and declaring it second made the record stale on arrival. `--out` is also now confined to the reserved '.rk/provenance-<name>.json' namespace. A pre-1.7.0 constitution's text describes the OLD, now-wrong order and will walk a researcher into a command that refuses; rewrite that subsection from this version's text, do not just patch the example command."
+      ]
+    },
     {
       "version": "1.6.0",
       "changes": [
