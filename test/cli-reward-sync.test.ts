@@ -25,6 +25,7 @@ import { loadSnapshot } from "../src/store/snapshot-load";
 import { loadRewardLedger, rewardLedgerPath } from "../src/store/reward-ledger";
 import type { RewardEvent } from "../src/reward/types";
 import type { RegistryNode } from "../src/graph/types";
+import { sha256Hex } from "../src/gates/sha256";
 
 const ABSENT = ["definitely-not-a-real-binary-xyz"];
 const DEPS = { afCommand: ABSENT, frCommand: ABSENT };
@@ -84,6 +85,11 @@ function syncRepo(): string {
     JSON.stringify({
       schema_version: "1",
       claimId: "lem-audit",
+      // Gate 8 Check 4b(i) content binding (rk-io5l): the record backs only the bytes it names,
+      // so an honest writer hashes the shard AFTER its final revision lands. Read from disk here
+      // for the same reason the edge does it — a hand-copied constant would rot on any edit to
+      // `writeShard`'s frontmatter layout.
+      claimSha256: sha256Hex(readFileSync(join(root, "argument", "lem-audit.md"))),
       author: "gpt|codex|gpt-5.6-sol|claim-verifier",
       role: "verifier",
     }),

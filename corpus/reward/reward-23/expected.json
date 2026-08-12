@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "is stale: it was recorded against claim bytes 15b1547f98a4"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "rk-io5l. The incident shape both campaigns produced: an endorsement is recorded, then revisions land on the shard ('ENDORSE WITH REVISIONS applied', campaign C window 1 rounds 3 and 5) — and campaign A window 5's verifier finding, where a re-run orphaned a ledgered hash so the record no longer resolved to any local content (../rk-campaign-C/scripts/probe-runner.sh:35-40 carries that fix). The record here is byte-honest about revision 1: its claimSha256 is the real sha256 of the shard WITHOUT the revision-2 paragraph. It must not back the current bytes. Same rule route (ii) has enforced since M3.7 via l5ContentHash freshness."
+}

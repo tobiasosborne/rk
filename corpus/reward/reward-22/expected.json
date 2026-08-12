@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "must record 'claimSha256'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "rk-io5l, ported from campaign C's record-integrity oracle (../rk-campaign-C/scripts/oracle-record-integrity.py:45-55, which required a banked claim to name a hash-bound record). Everything about this record is independent and well formed EXCEPT that it binds to no bytes: it therefore backs every future revision of the shard as strongly as the one actually reviewed, and can never be shown stale. Route (ii) — the L5 verdict store — has bound verdicts to shard bytes since M3.7; this is route (i) reaching the same bar."
+}

@@ -5,5 +5,5 @@
   "exit_code": 0,
   "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
   "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
-  "notes": "Golden case for Check 4b v2: the claim records its prover and the backing record identifies a different verifier-role author. The comparison is mechanically checkable driver-supplied provenance; it makes no authentication or adversary-proof claim."
+  "notes": "Golden case for Check 4b v2: the claim records its prover and the backing record identifies a different verifier-role author. The comparison is mechanically checkable driver-supplied provenance; it makes no authentication or adversary-proof claim. rk-io5l added the record's `claimSha256`, which is the REAL sha256 of repo/argument/lem-independent-backed.md's bytes — editing that shard by so much as a newline flips this fixture to reward-23's stale-record ERROR, which is the semantics, not a fixture defect: recompute the hash when the shard changes."
 }

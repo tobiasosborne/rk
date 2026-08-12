@@ -18,6 +18,11 @@ export type PmaBackingDecision =
 
 const BACKING_ROLES = new Set(["verifier", "reviewer"]);
 
+/** A full sha256 in hex. Case-insensitive to match the identity comparison's case-normalization
+ * stance (a writer using an uppercase-hex hasher is not a validity event); every other shape —
+ * short prefix, padded, non-hex, non-string — is refused rather than coerced. */
+const CLAIM_SHA256_RE = /^[0-9a-fA-F]{64}$/;
+
 interface CanonicalIdentity {
   seam: string;
   modelFamily: string;
@@ -126,6 +131,51 @@ function provenanceDecision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDe
       reason:
         `provenance path '${path}' is authored by the same decoded model as claim '${target.id}'s prover-of-record ` +
         `(modelFamily/backend/model comparison is case-normalized; changing sessionId never establishes independence)`,
+    };
+  }
+  return contentBinding(snapshot, target, path, value);
+}
+
+/** Check 4b(i)'s CONTENT BINDING (rk-io5l, ported from campaign C's record-integrity oracle,
+ * ../rk-campaign-C/scripts/oracle-record-integrity.py:45-55). Route (ii) has bound a verdict to
+ * the exact reviewed bytes since M3.7 — `latestVerdictFor` calls a verdict fresh iff the shard
+ * still hashes to its `l5ContentHash` — while route (i) checked only WHO wrote the record and for
+ * WHICH id, so a record survived arbitrary later rewrites of the claim it endorsed. This closes
+ * that asymmetry with the same rule: a record backs only the bytes it names.
+ *
+ * Recorded-and-checkable, not authentication (the V1/V2 honesty stance, as everywhere else in
+ * this module): a writer who copies the shard's current hash into a record it never read is not
+ * detected here. What IS detected is staleness — the edit-after-endorsement case the campaigns
+ * actually produce ("ENDORSE WITH REVISIONS applied") — and it fails closed, so an endorsement
+ * has to be re-recorded against the final bytes rather than silently inherited.
+ *
+ * Deliberately LAST in the provenance route: it changes no other clause's verdict (a record that
+ * already fails independence still reports independence), only the reason a reader is handed. */
+function contentBinding(
+  snapshot: RepoSnapshot,
+  target: Lemma,
+  path: string,
+  record: Record<string, unknown>,
+): PmaBackingDecision {
+  const bound = record.claimSha256;
+  if (typeof bound !== "string" || !CLAIM_SHA256_RE.test(bound)) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' must record 'claimSha256', the 64-hex sha256 of the claim-shard ` +
+        `bytes it reviewed — a record naming no reviewed bytes can never be shown stale`,
+    };
+  }
+  const current = fileSha256(snapshot, target.path);
+  if (current === undefined) {
+    return { backed: false, reason: `claim shard '${target.path}' has no current byte hash` };
+  }
+  if (bound.toLowerCase() !== current.toLowerCase()) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' is stale: it was recorded against claim bytes ${bound.slice(0, 12).toLowerCase()} ` +
+        `but '${target.path}' now hashes to ${current.slice(0, 12)} — re-record the endorsement against the current bytes`,
     };
   }
   return { backed: true, route: "provenance" };

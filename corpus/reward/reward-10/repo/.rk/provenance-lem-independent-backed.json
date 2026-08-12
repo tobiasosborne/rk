@@ -1,1 +1,1 @@
-{"schema_version":"1","claimId":"lem-independent-backed","author":"gpt|codex|gpt-5.6-sol|review-session","role":"verifier","verdict":"VALID","reason":"Independent hostile verification survived."}
+{"schema_version":"1","claimId":"lem-independent-backed","claimSha256":"aca27b578358aad54a9262cb59a1458408167249ec6ff82c6f5ded9e412466cd","author":"gpt|codex|gpt-5.6-sol|review-session","role":"verifier","verdict":"VALID","reason":"Independent hostile verification survived."}

@@ -5,5 +5,5 @@
   "exit_code": 0,
   "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
   "aism_behavior": "n/a — the reward ledger is rk-only (PRD Amendment A1, N2).",
-  "notes": "Green twin of reward-06: same pma close, but the claim records its prover and the provenance path resolves to a record authored under a different verifier identity, so it banks at 0.6. (An L5-fresh-VALID verdict is the other accepted backing.)"
+  "notes": "Green twin of reward-06: same pma close, but the claim records its prover and the provenance path resolves to a record authored under a different verifier identity, so it banks at 0.6. (An L5-fresh-VALID verdict is the other accepted backing.) rk-io5l: the record's `claimSha256` is the real sha256 of repo/argument/lem-reviewed.md — editing that shard without re-recording the endorsement correctly flips this fixture to reward-23's stale-record ERROR."
 }

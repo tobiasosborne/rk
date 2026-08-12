@@ -1,1 +1,1 @@
-{"schema_version":"1","claimId":"lem-reviewed","author":"gpt|codex|gpt-5.6-sol|window-1-verifier","role":"verifier","verdict":"VALID","reason":"Cross-vendor hostile verification survived."}
+{"schema_version":"1","claimId":"lem-reviewed","claimSha256":"47f774dcb874914d275bacc8fbdf952e88f802ded937389d05bfbca1b330a3bf","author":"gpt|codex|gpt-5.6-sol|window-1-verifier","role":"verifier","verdict":"VALID","reason":"Cross-vendor hostile verification survived."}
