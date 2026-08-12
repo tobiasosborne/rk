@@ -2512,6 +2512,15 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    review). The include-set is not widened by this rule. The record MUST carry
    `schema_version: "1"`, the target `claimId`, a
    canonical driver identity seam in `author`, and `role: "verifier"` or `role: "reviewer"`.
+   The record's normative shape is `schemas/provenance-record.v1.json` (rule 10: versioned
+   file plus a fixture), `src/reward/provenance-record.ts` is its pure validator, and
+   `rk reward attest` (`src/cli/reward-attest.ts`) is the one tool that writes it — a check
+   whose artifact no tool produces is a check every honest campaign fails, which is exactly
+   what happened to campaign A for two days. The schema is `additionalProperties:false` and
+   additionally requires a non-blank `reason` and `verdict: "VALID"` (a refutation is
+   recorded by a `demote` event's `evidenceRef`, never by an attestation). This check reads
+   neither `verdict` nor `reason` today; that divergence is recorded as rk-xrgn rather than
+   silently tolerated, and the unknown-key direction as rk-fddu.
    The claim's prover-of-record MUST be recoverable from af `proof_author`/`author` metadata
    or a canonical shard `prover:` seam. Both the record author and the prover-of-record MUST
    decode as canonical identity seams; no decoded component may carry leading or trailing
@@ -2524,7 +2533,19 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    independence check; identities remain driver-supplied and unauthenticated.
    Missing, malformed, unreadable, anonymous, wrong-claim, wrong-role,
    or self-authored records do not back the close — prose, nonexistent paths, self-reference,
-   and the M3.8 `legacy-same-family` marker never back;
+   and the M3.8 `legacy-same-family` marker never back.
+   The record MUST additionally carry `claimSha256`, the 64-hex sha256 of the CLAIM-SHARD
+   BYTES its author reviewed, and that value MUST equal the shard's current raw-byte hash
+   (rk-io5l, ported from campaign C's record-integrity oracle,
+   `../rk-campaign-C/scripts/oracle-record-integrity.py:45-55`). A record naming no reviewed
+   bytes, naming a value that is not a full 64-hex digest, or naming bytes the shard no
+   longer has is STALE and does not back — the identical staleness rule route (ii) has
+   enforced since M3.7 through `l5ContentHash`, and which route (i) previously lacked, so an
+   endorsement silently survived every later rewrite of the claim it endorsed. Hex case is
+   normalized on comparison; nothing else is coerced. Like every other clause here this is
+   recorded-and-checkable, not authentication: a writer that copies the current hash into a
+   record it never read is not detected; staleness is. `rk reward attest` computes the field
+   from the claim shard at write time;
    (ii) a fresh VALID L5 verdict from a HEALTHY store (zero parse issues, intact ordinal
    chain — the linker's poisoning stance), with a healthy retraction ledger and no live
    retraction for the shard in either hash domain; VALID-WITH-CORRECTION and stale verdicts
@@ -2599,7 +2620,10 @@ reward-11 (valid append-only demotion ⇒ PASS, rk-4317), reward-12 (dangling cl
 ERROR, repair R1), reward-18 (nodeId/positional-target mismatch ⇒ ERROR, repair R1),
 reward-19 (evidence self-reference ⇒ ERROR, repair R1), reward-20 (same-model
 different-session backing ⇒ ERROR, repair R3), reward-21 (out-of-tree provenance record ⇒
-ERROR with placement reason, repair R9).
+ERROR with placement reason, repair R9), reward-22 (backing record naming no reviewed bytes
+⇒ ERROR, rk-io5l), reward-23 (record recorded against superseded claim bytes ⇒ ERROR,
+rk-io5l), reward-24 (hand-authored record with numeric `schema_version` ⇒ ERROR, rk-tlwb),
+reward-25 (producer-written record ⇒ PASS, rk-tlwb).
 
 **Reward-ledger schema compatibility (rk-4317).** The reward-ledger record family is now
 version 2; the stable family filename remains `schemas/reward-ledger.v1.json`, following the
