@@ -1,0 +1,9 @@
+{
+  "settled_statement_sha256": "f393ae3f35d4988a6b38b50a19a9b51eb8f55248e1a4870ceccbba67276f39e8",
+  "fingerprint_terms_sha256": "ae50bfb25db1b4af47496a29de21e89b2a8d2060c2687626e40138753155afd9",
+  "paper": "arXiv:2607.19852v1",
+  "v1_date": "2026-07-22",
+  "d_cutoff": "2026-05-31",
+  "sealed_on": "2026-08-08",
+  "examiner": "fable-session-builder (TJO-authorized contaminated builder role)"
+}

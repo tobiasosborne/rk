@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:05:56.390362855Z","node_id":"1.7.4","note":"Since n_k is independent of i, sum_i p_i * n_k = n_k * sum_i p_i, which equals n_k by dependency 1.7.3.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

@@ -1,0 +1,23 @@
+{
+  "phase": "consolidation",
+  "northStarId": "lem-starvation-completion-obstruction",
+  "workers": {
+    "assignments": {
+      "prover": {
+        "hard": {
+          "backend": "claude",
+          "model": "claude-opus-4-8",
+          "fallbacks": []
+        }
+      },
+      "verifier": {
+        "hard": {
+          "backend": "claude",
+          "model": "claude-opus-4-8",
+          "fallbacks": []
+        }
+      }
+    },
+    "turnTimeoutMs": 300000
+  }
+}

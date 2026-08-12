@@ -1,0 +1,24 @@
+rk verify --af lem-starvation-completion-obstruction --live: preflight
+  backend resolved: verifier/hard -> 'claude' (model 'claude-opus-4-8', family 'claude')
+  backend resolved: prover/hard -> 'codex' (model 'gpt-5.6-sol', family 'gpt')
+  critical-path membership: LOAD-BEARING ('lem-starvation-completion-obstruction' is on the critical path to north star 'lem-starvation-completion-obstruction' (1 node(s) on the path)) — every accept requires a verifier of a different model family than the prover (PRD C9).
+  cross-vendor: prover family 'gpt' != verifier family 'claude' — accepts on this claim can satisfy PRD C9.
+  session plan: ONE shared verifier session for claim 'claim-lem-starvation-completion-obstruction' + ONE prover session 'claim-lem-starvation-completion-obstruction-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)
+  workspace: proofs/lem-starvation-completion-obstruction (1 node(s) total)
+  estimated turn count: <= 1 (bounded by --max-turns 30 and --max-nodes 20)
+  campaign token cap: 1500000 total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve 8000).
+  no worker has been called yet -- the next line, if any, is the first real call.
+rk verify --af lem-starvation-completion-obstruction --live: aborted -- no verdict progress in 3 consecutive dispatch round(s) (cap 3) — claim declared stuck — dominant cause: prover worker exit 10 ×2
+  applied 0 node(s): none
+
+rk verify --af lem-starvation-completion-obstruction --live: final accounting (rk verify --report)
+rk verify --report: campaign '/home/tobiasosborne/Projects/rk-m3.5-baseline/lem-starvation-completion-obstruction'
+  totals: input=2 output=223 cache_read=34991 cache_creation=3318 turns=3
+  cache fraction: 0.9133
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=1 applied=1 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0 record-proof-failed=0
+  claim claim-lem-starvation-completion-obstruction (contract lem-starvation-completion-obstruction): turns=3 attributed-tokens=38534 cache-fraction=0.9133 balloons=0
+    node 1: turns=3 attributed-tokens=38534 cache-fraction=0.9133
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).
+EXIT=4

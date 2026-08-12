@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "entries": [
+    {"claimId": "claim-lem-mass-split", "lemma": "1", "tokens": 81844, "calls": 3},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.1", "tokens": 24481, "calls": 1},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.2", "tokens": 26499, "calls": 1},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.3", "tokens": 24507, "calls": 1},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.4", "tokens": 24548, "calls": 1},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.5", "tokens": 24468, "calls": 1},
+    {"claimId": "claim-lem-mass-split", "lemma": "1.6", "tokens": 24447, "calls": 1}
+  ]
+}

@@ -1,0 +1,62 @@
+launch 18:54:23
+rk verify --af lem-starvation-completion-obstruction --live: preflight
+  backend resolved: verifier/hard -> 'codex' (model 'gpt-5.6-sol')
+  backend resolved: prover/hard -> 'claude' (model 'claude-opus-4-8')
+  session plan: ONE shared verifier session for claim 'claim-lem-starvation-completion-obstruction' + ONE prover session 'claim-lem-starvation-completion-obstruction-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)
+  workspace: proofs/lem-starvation-completion-obstruction (1 node(s) total)
+  estimated turn count: <= 1 (bounded by --max-turns 80 and --max-nodes 45)
+  campaign token cap: 1500000 total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve 8000).
+  no worker has been called yet -- the next line, if any, is the first real call.
+rk verify --af lem-starvation-completion-obstruction --live: aborted -- no verdict progress in 3 consecutive dispatch round(s) (cap 3) — claim declared stuck — dominant cause: repeated challenge on node '1.10' (incorrect) ×1
+  applied 36 node(s): 1.1, 1.11, 1.12, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.9.1, 1.9.2, 1.9.3, 1.9.4, 1.9.5, 1.9.6, 1.9.7, 1.10.10, 1.10.11, 1.10.12, 1.10.7, 1.10.8, 1.10.9, 1.9.10, 1.9.11, 1.9.12, 1.9.13, 1.9.14, 1.9.8, 1.9.9
+
+rk verify --af lem-starvation-completion-obstruction --live: final accounting (rk verify --report)
+rk verify --report: campaign 'lem-starvation-completion-obstruction'
+  totals: input=625775 output=27753 cache_read=691260 cache_creation=22691 turns=49
+  cache fraction: 0.5160
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=43 applied=43 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0 record-proof-failed=0
+  claim claim-lem-starvation-completion-obstruction (contract lem-starvation-completion-obstruction): turns=49 attributed-tokens=1367479 cache-fraction=0.5160 balloons=0
+    node 1: turns=3 attributed-tokens=63036 cache-fraction=0.6267
+    node 1.1: turns=1 attributed-tokens=25397 cache-fraction=0.4088
+    node 1.10: turns=5 attributed-tokens=178604 cache-fraction=0.7184
+    node 1.11: turns=1 attributed-tokens=26467 cache-fraction=0.3178
+    node 1.12: turns=1 attributed-tokens=25366 cache-fraction=0.4052
+    node 1.2: turns=1 attributed-tokens=24956 cache-fraction=0.4098
+    node 1.3: turns=1 attributed-tokens=25518 cache-fraction=0.4051
+    node 1.4: turns=1 attributed-tokens=25090 cache-fraction=0.4096
+    node 1.5: turns=1 attributed-tokens=25386 cache-fraction=0.4058
+    node 1.6: turns=1 attributed-tokens=25239 cache-fraction=0.4081
+    node 1.7: turns=1 attributed-tokens=28419 cache-fraction=0.4536
+    node 1.8: turns=1 attributed-tokens=25458 cache-fraction=0.4059
+    node 1.9: turns=5 attributed-tokens=187741 cache-fraction=0.7371
+    node 1.10.1: turns=1 attributed-tokens=27147 cache-fraction=0.4541
+    node 1.10.2: turns=1 attributed-tokens=25149 cache-fraction=0.4095
+    node 1.10.3: turns=1 attributed-tokens=25209 cache-fraction=0.4066
+    node 1.10.4: turns=1 attributed-tokens=27252 cache-fraction=0.4537
+    node 1.10.5: turns=1 attributed-tokens=25098 cache-fraction=0.4063
+    node 1.10.6: turns=1 attributed-tokens=25076 cache-fraction=0.4072
+    node 1.9.1: turns=1 attributed-tokens=24872 cache-fraction=0.4098
+    node 1.9.2: turns=1 attributed-tokens=27594 cache-fraction=0.4527
+    node 1.9.3: turns=1 attributed-tokens=27158 cache-fraction=0.4520
+    node 1.9.4: turns=1 attributed-tokens=27173 cache-fraction=0.4516
+    node 1.9.5: turns=1 attributed-tokens=27191 cache-fraction=0.4515
+    node 1.9.6: turns=1 attributed-tokens=25393 cache-fraction=0.4067
+    node 1.9.7: turns=1 attributed-tokens=27764 cache-fraction=0.4533
+    node 1.10.10: turns=1 attributed-tokens=25247 cache-fraction=0.4079
+    node 1.10.11: turns=1 attributed-tokens=25383 cache-fraction=0.4059
+    node 1.10.12: turns=1 attributed-tokens=25399 cache-fraction=0.4062
+    node 1.10.7: turns=1 attributed-tokens=25087 cache-fraction=0.4083
+    node 1.10.8: turns=1 attributed-tokens=27096 cache-fraction=0.4552
+    node 1.10.9: turns=1 attributed-tokens=27330 cache-fraction=0.4521
+    node 1.9.10: turns=1 attributed-tokens=27172 cache-fraction=0.4520
+    node 1.9.11: turns=1 attributed-tokens=25122 cache-fraction=0.4060
+    node 1.9.12: turns=1 attributed-tokens=27179 cache-fraction=0.4516
+    node 1.9.13: turns=1 attributed-tokens=25288 cache-fraction=0.4068
+    node 1.9.14: turns=1 attributed-tokens=27865 cache-fraction=0.4530
+    node 1.9.8: turns=1 attributed-tokens=24868 cache-fraction=0.4099
+    node 1.9.9: turns=1 attributed-tokens=25690 cache-fraction=0.4070
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).
+EXIT=4
+done 19:08:56

@@ -1,0 +1,9 @@
+rk verify --report: campaign '../rk-m3.5-baseline/lem-weighted-min'
+  totals: input=6 output=1276 cache_read=84785 cache_creation=3803 turns=3
+  cache fraction: 0.9570
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=0 applied=0 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=3 attributed-tokens=89870 cache-fraction=0.9570 balloons=0
+    node 1: turns=3 attributed-tokens=89870 cache-fraction=0.9570
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).

@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.740829404Z","node_id":"1.2","note":"Given that {1, ..., m} is nonempty, the finite nonempty collection of real numbers {n_i : i in {1, ..., m}} has a minimum, and that minimum is attained by at least one index k.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

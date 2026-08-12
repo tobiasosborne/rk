@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "entries": [
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.1", "tokens": 26492, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.2", "tokens": 26434, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.3", "tokens": 26368, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.4", "tokens": 26506, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.5", "tokens": 26332, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.6", "tokens": 26369, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.7", "tokens": 31503, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.8", "tokens": 26411, "calls": 1}
+  ]
+}

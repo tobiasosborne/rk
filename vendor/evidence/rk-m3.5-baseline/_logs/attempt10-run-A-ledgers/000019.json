@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.771594046Z","node_id":"1.5","note":"Summing the componentwise inequalities p_i n_i \u003e= p_i mu from dependency 1.4 over all i preserves the inequality and yields the stated result.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

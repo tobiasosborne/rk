@@ -1,0 +1,26 @@
+{"kind":"usage","at":"2026-07-20T14:23:17.543Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16283,"output":77,"cache_read":9984,"cache_creation":0}}
+{"kind":"verdict-outcome","at":"2026-07-20T14:23:17.561Z","node":"1","verdict":"challenge","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-20T14:23:53.142Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"prover","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":2,"output":520,"cache_read":26809,"cache_creation":1837}}
+{"kind":"proof-recorded","at":"2026-07-20T14:23:53.177Z","node":"1","children":8}
+{"kind":"usage","at":"2026-07-20T14:24:03.643Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.1","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16118,"output":237,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:10.519Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.2","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16094,"output":203,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:17.301Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.3","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16100,"output":131,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:26.242Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.4","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16094,"output":275,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:34.654Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.5","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16091,"output":104,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:42.518Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.6","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16093,"output":139,"cache_read":9984,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:51.398Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.7","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16093,"output":153,"cache_read":15104,"cache_creation":0}}
+{"kind":"usage","at":"2026-07-20T14:24:59.111Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1.8","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16108,"output":166,"cache_read":9984,"cache_creation":0}}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.132Z","node":"1.1","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.146Z","node":"1.2","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.156Z","node":"1.3","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.167Z","node":"1.4","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.179Z","node":"1.5","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.190Z","node":"1.6","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.204Z","node":"1.7","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-20T14:24:59.215Z","node":"1.8","verdict":"accept","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-20T14:25:09.156Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16135,"output":304,"cache_read":9984,"cache_creation":0}}
+{"kind":"cross-vendor-rejected","at":"2026-07-20T14:25:09.157Z","node":"1","reason":"identity-unparseable"}
+{"kind":"node-skipped","at":"2026-07-20T14:25:09.157Z","node":"1","reason":"cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=gpt) — fails closed, never conflated with a confirmed same-family violation"}
+{"kind":"usage","at":"2026-07-20T14:25:16.905Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-8db17b44-9b16-400a-b8de-a5a59576c7e6","usage":{"input":16135,"output":254,"cache_read":9984,"cache_creation":0}}
+{"kind":"cross-vendor-rejected","at":"2026-07-20T14:25:16.905Z","node":"1","reason":"identity-unparseable"}
+{"kind":"node-skipped","at":"2026-07-20T14:25:16.905Z","node":"1","reason":"cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=gpt) — fails closed, never conflated with a confirmed same-family violation"}

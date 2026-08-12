@@ -1,0 +1,28 @@
+rk verify --report: campaign 'lem-weighted-min'
+  totals: input=144273 output=2036 cache_read=134826 cache_creation=2214 turns=12
+  cache fraction: 0.4793
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=11 applied=11 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0 record-proof-failed=0
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=12 attributed-tokens=283349 cache-fraction=0.4793 balloons=0
+    node 1: turns=3 attributed-tokens=68897 cache-fraction=0.5871
+    node 1.1: turns=1 attributed-tokens=23472 cache-fraction=0.4334
+    node 1.2: turns=1 attributed-tokens=23437 cache-fraction=0.4325
+    node 1.3: turns=1 attributed-tokens=23307 cache-fraction=0.4327
+    node 1.4: turns=1 attributed-tokens=23374 cache-fraction=0.4329
+    node 1.5: turns=1 attributed-tokens=25346 cache-fraction=0.4791
+    node 1.6: turns=1 attributed-tokens=25355 cache-fraction=0.4798
+    node 1.7: turns=1 attributed-tokens=23446 cache-fraction=0.4335
+    node 1.8: turns=1 attributed-tokens=23322 cache-fraction=0.4326
+    node 1.9: turns=1 attributed-tokens=23393 cache-fraction=0.4316
+  SC4 baseline comparison -- SC4 (IMPLEMENTATION_PLAN.md M3.9): >=3x improvement over the M3.5 baseline, or an honest miss with analysis.
+    claim-lem-weighted-min/1: baseline=68897tok/3call current=68897tok/3call ratio=1.00x
+    claim-lem-weighted-min/1.1: baseline=23472tok/1call current=23472tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.2: baseline=23437tok/1call current=23437tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.3: baseline=23307tok/1call current=23307tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.4: baseline=23374tok/1call current=23374tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.5: baseline=25346tok/1call current=25346tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.6: baseline=25355tok/1call current=25355tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7: baseline=23446tok/1call current=23446tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.8: baseline=23322tok/1call current=23322tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.9: baseline=23393tok/1call current=23393tok/1call ratio=1.00x

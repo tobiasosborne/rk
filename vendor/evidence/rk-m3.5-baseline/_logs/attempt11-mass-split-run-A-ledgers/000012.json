@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T16:48:34.150974272Z","node_id":"1.1","note":"For any real a_j, if a_j≥0 then a_j^+=a_j and a_j^-=0, while if a_j\u003c0 then a_j^+=0 and a_j^-=-a_j; hence a_j=a_j^+-a_j^- in both cases.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ab867876-f40c-466a-adf8-8903f888141e"}

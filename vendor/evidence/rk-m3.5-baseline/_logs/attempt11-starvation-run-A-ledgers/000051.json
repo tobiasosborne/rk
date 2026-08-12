@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T17:04:59.202845506Z","node_id":"1.10.5","note":"From 1.10.4, the sum equals A*(t-a*(tau+t)); applying the identity a*(tau+t)=t from 1.3 makes the parenthetical factor zero, so the sum is 0.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ed3a1716-fb14-4fef-ba65-ff9ac2c5e70a"}

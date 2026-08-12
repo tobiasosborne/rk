@@ -1,0 +1,32 @@
+=== TURN ===
+**Verdict: CORRECT**
+
+## The claim
+
+For positive reals $p_1,\dots,p_m$ with $\sum_i p_i = 1$ and reals $n_1,\dots,n_m$:
+$$\min_i n_i \le \sum_i p_i n_i$$
+
+## Verification
+
+Let $\mu = \min_{1\le i\le m} n_i$. This is well-defined: the index set is nonempty, since $\sum_i p_i = 1 \ne 0$ forces $m \ge 1$ (an empty sum would be $0$). Finiteness of the set guarantees the minimum is attained.
+
+For each $i$ we have $n_i \ge \mu$, and $p_i > 0$, so $p_i n_i \ge p_i \mu$. Summing over $i$:
+$$\sum_i p_i n_i \ \ge\ \sum_i p_i \mu \ =\ \mu \sum_i p_i \ =\ \mu \cdot 1 \ =\ \mu.$$
+
+That is exactly the claim. $\blacksquare$
+
+## Notes on hypotheses
+
+- **Positivity is stronger than needed.** The argument only uses $p_i \ge 0$; multiplying $n_i \ge \mu$ by a nonnegative scalar preserves the inequality. So the statement holds under the weaker hypothesis, and the stated hypothesis is therefore safe.
+- **No sign or boundedness condition on the $n_i$ is required** — they may be negative or mixed. The proof never divides or takes absolute values.
+- **Nonemptiness is not an extra assumption** but a consequence of $\sum_i p_i = 1$, so the node is self-contained and does not silently depend on an unstated $m \ge 1$.
+- **The inequality is non-strict, correctly.** Equality holds iff $n_i = \mu$ for every $i$ (given all $p_i > 0$), e.g. all $n_i$ equal — so $\le$ cannot be strengthened to $<$.
+- The notation reuses $m$ for both the number of weights and the number of $n_i$'s; these are the same index set, and the statement reads consistently.
+
+The node cites no definitions and no prior results, and none are needed — the proof uses only ordered-field arithmetic. It stands on its own.
+=== TURN ===
+{"verdict": {"outcome": "challenge", "target": 1, "severity": "critical", "reason": "No proof or derivation has been recorded for this node. The node carries only a statement: it has no sub-steps or children, and cites no dependencies, so there is no written reasoning whose validity could be checked. The apparent truth of the inequality is not itself a proof. A derivation must be produced first — e.g. setting mu = min_i n_i (well-defined since sum_i p_i = 1 forces a nonempty finite index set), noting n_i >= mu and p_i > 0 gives p_i n_i >= p_i mu for each i, and summing to obtain sum_i p_i n_i >= mu sum_i p_i = mu — and recorded as this node's proof body before it can be verified.", "category": "missing"}, "justification": "The node consists of a statement with an empty proof body: zero sub-steps, zero children, zero cited dependencies. Verification is an act of checking recorded reasoning, and here none exists, so there is nothing to check. My own earlier reconstruction of a proof does not remedy this — a verifier supplying the missing argument would be certifying its own work rather than the node's, and would let an unproven node pass on the strength of the checker's private reasoning. Accepting would therefore certify a verification that did not occur. The correct outcome is a challenge against node 1 itself under category 'missing'. Severity is critical rather than major because the absence is total: not a gap within an argument, but the complete absence of one, which blocks any downstream node that would rely on this result."}
+=== TURN ===
+{"verdict": {"outcome": "challenge", "target": 1, "severity": "critical", "reason": "NO proof or derivation has been recorded for this statement, and one must be produced first. The node carries only its statement: it has no proof body, no sub-steps or children, and cites no dependencies, so no reasoning exists whose validity could be checked. The statement's apparent truth is not a substitute for a recorded proof. A derivation must be written down and attached to this node before it can be verified — for instance: let mu = min_i n_i, which is well-defined because sum_i p_i = 1 forces the index set to be nonempty and finite; for each i, n_i >= mu and p_i > 0 give p_i * n_i >= p_i * mu; summing over i yields sum_i p_i * n_i >= mu * sum_i p_i = mu.", "category": "missing"}, "justification": "The node's proof body is empty: zero sub-steps, zero children, zero cited dependencies. Verification means checking recorded reasoning, and there is none here, so there is nothing to check. Any proof I could reconstruct myself would be my own work, not the node's; accepting on that basis would certify a verification that never took place and would let an unproven node pass on the strength of the checker's private reasoning rather than the record. Hence a challenge against node 1 itself, category 'missing'. Severity is critical rather than major because this is not a gap inside an argument but the total absence of one, which leaves the node unestablished and blocks anything downstream that would depend on it."}
+=== TURN ===
+{"verdict": {"outcome": "challenge", "target": 1, "severity": "critical", "reason": "NO proof or derivation has been recorded for this statement, and one must be produced before the node can be verified. The node carries its statement alone: there is no proof body, no sub-steps or children, and no cited dependencies, so no written reasoning exists whose validity could be checked. The apparent truth of the inequality is not itself a proof. A derivation must be written down and attached to this node — for example: set mu = min_i n_i, well-defined because sum_i p_i = 1 forces the index set to be nonempty and finite; for each i, n_i >= mu together with p_i > 0 gives p_i * n_i >= p_i * mu; summing over i yields sum_i p_i * n_i >= mu * sum_i p_i = mu, which is the claim.", "category": "missing"}, "justification": "The node has an empty proof body: zero sub-steps, zero children, zero cited dependencies. Verification consists of checking recorded reasoning, and none is present, so there is nothing to check. A proof I reconstruct myself is my work, not the node's; accepting on that basis would certify a verification that never occurred and would let an unproven node pass on the checker's private reasoning rather than on the record. The correct response is a challenge against node 1 itself, category 'missing'. Severity is critical rather than major because this is not a gap within an argument but the complete absence of one, leaving the node unestablished and blocking any downstream result that would rely on it."}

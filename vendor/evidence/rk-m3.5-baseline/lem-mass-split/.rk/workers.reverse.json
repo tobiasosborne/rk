@@ -1,0 +1,22 @@
+{
+  "phase": "consolidation",
+  "northStarId": "lem-mass-split",
+  "workers": {
+    "assignments": {
+      "prover": {
+        "hard": {
+          "backend": "codex",
+          "fallbacks": [],
+          "model": "gpt-5.6-sol"
+        }
+      },
+      "verifier": {
+        "hard": {
+          "backend": "claude",
+          "model": "claude-opus-4-8",
+          "fallbacks": []
+        }
+      }
+    }
+  }
+}

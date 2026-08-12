@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T16:48:34.176262129Z","node_id":"1.3","note":"The stated equality follows directly by summing the dependency's pointwise identity a_j = a_j^+ - a_j^- over the finite index set and using linearity of finite sums.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ab867876-f40c-466a-adf8-8903f888141e"}

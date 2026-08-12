@@ -1,0 +1,22 @@
+{
+  "phase": "consolidation",
+  "northStarId": "lem-weighted-min",
+  "workers": {
+    "assignments": {
+      "prover": {
+        "hard": {
+          "backend": "claude",
+          "model": "claude-opus-4-8",
+          "fallbacks": []
+        }
+      },
+      "verifier": {
+        "hard": {
+          "backend": "codex",
+          "fallbacks": [],
+          "model": "gpt-5.6-sol"
+        }
+      }
+    }
+  }
+}

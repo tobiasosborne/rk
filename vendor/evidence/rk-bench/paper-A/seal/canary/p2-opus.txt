@@ -1,0 +1,8 @@
+I don't know it. I have no reliable recollection of a paper titled "Optimal Lower Bounds for Hamiltonian Simulation" by Zlokapa, Allen, and Harrow, so I can't state its main theorem or proof technique without inventing them.
+
+Two things I can say honestly around it:
+
+- The authors are real and plausibly co-authors (Alexander Zlokapa and Aram Harrow have published together; Harrow is at MIT). That plausibility is exactly why I won't guess at contents — a fabricated theorem here would look credible.
+- There is genuine prior literature on optimality/lower bounds for Hamiltonian simulation (the no-fast-forwarding theorem and the additive-`log(1/ε)/loglog(1/ε)` query lower bound from Berry–Childs–Cleve–Kothari–Somma and follow-ups). If the paper you name exists, it presumably sharpens something in that line — but I'd be reconstructing a guess, not recalling the paper.
+
+My knowledge cutoff is May 2026, so a 2026 arXiv posting may simply postdate it, or the title may not exist. I can search arXiv/the web to check and report what's actually there — say the word.

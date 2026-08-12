@@ -1,0 +1,41 @@
+# Five new research directions: contextuality as computational resource
+
+## 1. Contextuality cost of magic-state cultivation protocols
+
+**Question.** Does the contextual fraction (or sheaf-cohomological obstruction) of the local Pauli measurement records used in magic-state cultivation circuits give a tight lower bound on the space-time volume overhead of the protocol, in the way robustness of magic bounds classical simulation cost for distillation?
+
+**Why now.** Gidney, Shutty, and Jones's 2024 magic-state cultivation results collapsed the overhead of producing a single logical |T⟩ state by an order of magnitude relative to standard distillation, using local, low-latency decoding rather than long-range distillation networks. The resource-theoretic account of *why* this works is still ad hoc — it's justified empirically via simulation, not derived from a contextuality/magic monotone. Since cultivation is becoming the default near-term route to fault-tolerant non-Clifford gates (Google, PsiQuantum-adjacent groups are already building on it), a monotone-based lower bound would tell hardware groups whether further overhead reduction is architecture-limited or fundamentally near-optimal.
+
+**Complete answer.** A monotone (or bounded family) defined on the sub-circuit's measurement statistics that (a) provably lower-bounds cultivation space-time volume for the known protocols within a constant factor, (b) is efficiently computable for realistic patch sizes, and (c) is tested against at least two independently developed cultivation variants to confirm it isn't an artifact of one construction.
+
+## 2. Wigner-negativity/contextuality equivalence for GKP-encoded continuous-variable computation
+
+**Question.** For Gaussian-operation-restricted GKP/CV architectures, does contextuality of the finite measurement statistics coincide exactly with Wigner-function negativity of the GKP magic states, the way Howard–Wallman–Veitch–Emerson established for odd-prime-dimensional stabilizer QM — and if so, does the resulting equivalence yield a tight achievable rate for CV magic-state distillation?
+
+**Why now.** GKP-based photonic fault tolerance (Xanadu's roadmap, PsiQuantum's fusion-based approach with bosonic ancillas) has moved from proposal to near-term engineering target since 2023–2025, but the DV contextuality-resource-theory machinery has not been ported to the CV/GKP setting with the same rigor — existing CV negativity results (Veitch et al. 2012) predate GKP-specific stabilizer structure and don't close the loop back to contextuality. This is the CV analogue of the single most cited result in DV magic-state theory, and it's currently missing at exactly the moment CV fault tolerance needs it.
+
+**Complete answer.** A proof (or sharp counterexample) of the equivalence for the GKP stabilizer formalism under Gaussian operations plus finite-energy corrections, together with an explicit distillation protocol whose yield matches the monotone's bound up to a stated additive/multiplicative gap, benchmarked against at least one existing GKP magic-state distillation scheme.
+
+## 3. Contextuality as a predictor of barren-plateau severity in variational circuits
+
+**Question.** Is there a quantitative relationship — ideally a closed-form inequality — between the contextual fraction of the observable/ansatz pair measured in a VQE- or QAOA-type circuit and the exponent governing gradient-variance decay with system size?
+
+**Why now.** Barren plateaus remain the central obstacle to near-term variational quantum advantage, and the existing diagnostic toolkit (Lie-algebra dimension, entangling-power measures, expressibility) doesn't include contextuality despite contextuality being the more direct measure of "how classically explicable" the measured statistics are. If contextuality tracks trainability, it would give algorithm designers a cheap, circuit-structure-level screening test — computable before any training run — rather than requiring empirical gradient-variance scans. This connects a mature formal resource theory to a problem the NISQ community currently treats mostly empirically.
+
+**Complete answer.** Either (a) a proven inequality bounding gradient variance in terms of a contextuality monotone of the ansatz-observable pair, with matching tightness examples, or (b) a rigorous negative result showing contextuality and trainability are provably decoupled (e.g., a family of low-contextuality ansätze that still exhibit barren plateaus, or vice versa) — settling the question rather than leaving it as a correlation observed only in simulation.
+
+## 4. Automated, certified discovery of new state-independent contextuality proofs via search-guided AI
+
+**Question.** Can reinforcement-learning or LLM-guided combinatorial search discover new state-independent noncontextuality inequalities (KS-colorable-obstruction structures) requiring strictly fewer measurement contexts or lower Hilbert-space dimension than the known minimal constructions (Peres–Mermin, Yu–Oh, etc.), with tightness certified automatically via integer-programming or SAT solvers embedded in the search loop?
+
+**Why now.** AI-guided discovery has just produced genuinely new results in adjacent areas — RL- and symbolic-regression-discovered Bell inequalities, and LLM-assisted search for extremal combinatorial structures — showing the method generalizes beyond toy cases. The KS/contextuality inequality landscape is exactly the kind of large, structured, but sparse discrete search space (small hypergraphs of contexts) these methods are suited to, and it hasn't yet been systematically attacked this way; existing minimal constructions are still the ones found by hand decades ago.
+
+**Complete answer.** At least one new state-independent contextuality proof beating a known dimension/context-count record, with a machine-checked (SAT/LP) certificate of tightness and an experimentally realizable measurement scheme, plus a reusable open search pipeline (search heuristic + certifier) documented well enough for others to extend it.
+
+## 5. Contextuality-only proof of classical-simulation hardness for near-term sampling tasks
+
+**Question.** Can the classical hardness of sampling from random circuit sampling or analogous near-term quantum-advantage tasks be derived as a direct consequence of the contextuality of the underlying measurement statistics — extending the Bermejo-Vega/Delfosse/Okay/Raussendorf contextuality-implies-hardness line beyond restricted computational models (mod-p linear function computation) to genuine sampling-complexity quantum-advantage claims — thereby giving a hardness argument that doesn't route through average-case #P-hardness and non-collapse-of-PH conjectures?
+
+**Why now.** Current quantum-advantage claims (random circuit sampling, boson sampling variants) rest on complexity-theoretic conjectures (polynomial-hierarchy non-collapse, anti-concentration) that are themselves unproven and have been repeatedly challenged by improved classical spoofing algorithms. A contextuality-based argument would be a structurally different, operationally grounded hardness certificate — tied to the measurement statistics actually realized rather than to worst-case-to-average-case reductions — and the toolkit (sheaf-theoretic obstruction theory) needed to attempt it now exists but has never been pointed at this target.
+
+**Complete answer.** Either a theorem showing contextuality of the sampled distribution implies classical hardness for a sampling task under a complexity assumption strictly weaker than current PH-based ones (with the assumption stated precisely and compared to the literature), or a proof that no such route exists for a stated class of circuits — either outcome resolves a real structural question about where quantum-advantage hardness actually comes from.

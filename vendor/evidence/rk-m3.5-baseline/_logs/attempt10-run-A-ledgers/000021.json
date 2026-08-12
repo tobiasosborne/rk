@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.79231215Z","node_id":"1.7","note":"By the standing assumption that the weights satisfy sum_i p_i = 1, substitution gives mu * sum_i p_i = mu * 1, and the multiplicative identity gives mu * 1 = mu.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

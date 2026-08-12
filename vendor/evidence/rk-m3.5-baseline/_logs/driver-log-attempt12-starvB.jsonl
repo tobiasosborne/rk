@@ -1,0 +1,6 @@
+{"kind":"usage","at":"2026-07-31T18:40:13.282Z","contractId":"lem-starvation-completion-obstruction","claimId":"claim-lem-starvation-completion-obstruction","nodeId":"1","role":"verifier","sessionId":"cf40e829-9e86-4373-9d38-e07b0447410d","usage":{"input":2,"output":223,"cache_read":34991,"cache_creation":3318}}
+{"kind":"verdict-outcome","at":"2026-07-31T18:40:13.297Z","node":"1","verdict":"challenge","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-31T18:42:13.387Z","contractId":"lem-starvation-completion-obstruction","claimId":"claim-lem-starvation-completion-obstruction","nodeId":"1","role":"prover","sessionId":"cf40e829-9e86-4373-9d38-e07b0447410d","usage":{"input":0,"output":0,"cache_read":0,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-31T18:42:13.387Z","node":"1","reason":"prover worker exit 10"}
+{"kind":"usage","at":"2026-07-31T18:44:13.444Z","contractId":"lem-starvation-completion-obstruction","claimId":"claim-lem-starvation-completion-obstruction","nodeId":"1","role":"prover","sessionId":"cf40e829-9e86-4373-9d38-e07b0447410d","usage":{"input":0,"output":0,"cache_read":0,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-31T18:44:13.444Z","node":"1","reason":"prover worker exit 10"}

@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T16:48:43.771426942Z","node_id":"1","note":"Since P is an exact signed idempotent, P1=1, so the entries of row v satisfy sum_j a_j=1. As a_j=a_j^+-a_j^- for every j, summing gives 1=sum_j a_j^+-sum_j a_j^-=sum_j a_j^+-nu_v, hence sum_j a_j^+=1+nu_v.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ab867876-f40c-466a-adf8-8903f888141e"}

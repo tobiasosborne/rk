@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T14:24:59.211334532Z","node_id":"1.8","note":"Given dependencies 1.4 and 1.7, the identification of the finite minimum with mu and the inequality mu \u003c= sum_i p_i * n_i combine directly to establish the stated chain.","verified_by":"gpt|codex|gpt-5.6-sol|flat-8db17b44-9b16-400a-b8de-a5a59576c7e6"}

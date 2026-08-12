@@ -1,0 +1,6 @@
+{"kind":"usage","at":"2026-07-20T11:28:51.993Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-aeb9d758-555d-4398-ac3b-d92a0e0b1543","usage":{"input":0,"output":0,"cache_read":0,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-20T11:28:51.993Z","node":"1","reason":"worker exit 13"}
+{"kind":"usage","at":"2026-07-20T11:28:54.988Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-aeb9d758-555d-4398-ac3b-d92a0e0b1543","usage":{"input":0,"output":0,"cache_read":0,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-20T11:28:54.988Z","node":"1","reason":"worker exit 13"}
+{"kind":"usage","at":"2026-07-20T11:28:58.228Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"flat-aeb9d758-555d-4398-ac3b-d92a0e0b1543","usage":{"input":0,"output":0,"cache_read":0,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-20T11:28:58.228Z","node":"1","reason":"worker exit 13"}

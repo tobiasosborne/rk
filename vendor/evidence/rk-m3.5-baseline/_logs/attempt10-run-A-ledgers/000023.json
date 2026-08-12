@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.813154965Z","node_id":"1.9","note":"Let mu be the minimum from 1.2. By 1.5, the weighted sum is at least sum_i p_i mu, and by 1.8 this equals mu. Hence mu \u003c= sum_i p_i n_i, which is exactly the stated claim.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

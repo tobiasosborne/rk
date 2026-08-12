@@ -1,0 +1,50 @@
+Answering from internal knowledge as asked (no retrieval; note also that the claude.ai connectors — Google Drive, alphaXiv, Gmail, Calendar — are unauthorized in this non-interactive session, so I couldn't verify bibliographic details even if you wanted me to). Volume/page numbers below are from memory and are the part most likely to be slightly off; the theorem statements I'm confident about.
+
+## Setup
+
+$H=\sum_{j=1}^L a_j h_j$, $\|h_j\|=1$, $\lambda=\sum_j|a_j|$, target $\|\mathcal{E}-e^{-iHt}\cdot e^{iHt}\|_\diamond\le\varepsilon$ (or trace distance on a fixed input, which is weaker — this matters below). Cost = two-qubit gate count.
+
+## What is actually proved as a lower bound
+
+There are only four independent sources of lower bound, and none of them sees the coefficient profile.
+
+**LB1 — No fast-forwarding: $\Omega(\|H\|t)$.** Berry, Ahokas, Cleve, Sanders, *Efficient quantum algorithms for simulating sparse Hamiltonians*, Commun. Math. Phys. 270, 359 (2007). There is a family of 2-sparse Hamiltonians with $\|H\|_{\max}\le1$ for which simulating to constant error needs $\Omega(t)$ oracle queries, via the $\Omega(N)$ bounded-error query complexity of PARITY (Beals–Buhrman–Cleve–Mosca–de Wolf). Extended to dense/non-sparse access by Childs & Kothari, *Limitations on the simulation of non-sparse Hamiltonians*, QIC 10, 669 (2010).
+
+**LB2 — Precision: $\Omega\!\big(\log(1/\varepsilon)/\log\log(1/\varepsilon)\big)$, additive.** Berry, Childs, Cleve, Kothari, Somma, STOC 2014 / *Exponential improvement in precision for simulating sparse Hamiltonians*, Forum of Mathematics Sigma (2017). Combined: $\Omega\big(\tau+\log(1/\varepsilon)/\log\log(1/\varepsilon)\big)$ with $\tau$ the normalized evolution amount. Matched to within the $\log\log$ by qubitization/QSP: Low & Chuang, *Hamiltonian simulation by qubitization*, Quantum 3, 163 (2019), which achieves $\Theta(\lambda t+\log(1/\varepsilon))$ **queries to a block-encoding**.
+
+**LB3 — Geometrically local lattices, genuine gate complexity: $\Omega(nt)$.** Haah, Hastings, Kothari, Low, *Quantum algorithm for simulating real time evolution of lattice Hamiltonians*, FOCS 2018 (journal version SICOMP). Upper $O(nt\,\mathrm{polylog}(nt/\varepsilon))$, lower $\Omega(nt)$. Plus $\Omega(t)$ **depth** from the Lieb–Robinson light cone. This is the one setting where upper and lower bounds nearly meet in the gate model.
+
+**LB4 — Counting.** A generic $n$-qubit unitary needs $\Omega(4^n/\log n)$ two-qubit gates (Knill; Nielsen–Chuang §4.5.4). Bites only when $L$ is exponential in $n$.
+
+**Not lower bounds on the problem** (but often misread as such): the tightness of qDRIFT's $\lambda^2t^2/\varepsilon$ *for the qDRIFT channel* (Campbell, PRL 123, 070503 (2019), anticommuting-pair instance) and the matching analysis for random product formulas (Chen, Huang, Kueng, Tropp, *Concentration for random product formulas*, PRX Quantum 2, 040305 (2021)). These bound the method, not the task.
+
+**Conspicuously absent from the literature:** any lower bound that is (a) superlinear in $t$, (b) $1/\varepsilon$ rather than $\log(1/\varepsilon)$, (c) sensitive to $\{a_j\}$ beyond $\lambda\ge\|H\|$, or (d) applicable to an explicit (non-oracular) $H$ in the plain gate model outside LB3/LB4.
+
+## Is composite qDRIFT / Trotter-plus-randomized-tail optimal per profile?
+
+No — and it is not merely "unproven," it is **provably not optimal** in several regimes. Four distinct reasons:
+
+**1. The complexity is not a function of $\{a_j\},t,\varepsilon$ at all.** Take $a_j=1$ for all $j$. If $h_j=Z_j$, the evolution is exact with $L$ single-qubit rotations and *zero* two-qubit gates for every $t$, $\varepsilon=0$. If $h_j$ are random Paulis on $\log L$ qubits, LB4 forces $\Omega(L/\log L)$. Same profile, complexities separated by everything. So "optimal for every coefficient profile" is only well-posed as *worst case over $\{h_j\}$ given the profile* — and in that reading nothing is proved either.
+
+**2. Asymptotic domination by qubitization.** Gate cost of QSP/qubitization is $\big(\lambda t+\log(1/\varepsilon)\big)\cdot C_{\mathrm{BE}}$ with $C_{\mathrm{BE}}$ independent of $t$ and $\varepsilon$ — $\tilde O(\sqrt L)$ via QROM-style PREPARE (Babbush et al., *Encoding electronic spectra in quantum circuits with linear T complexity*, PRX 8, 041015 (2018); Low, Kliuchnikov, Schaeffer), or $O(\mathrm{polylog}\,L)$ for structured coefficient oracles. Any $\lambda_B^2t^2/\varepsilon$ tail is therefore beaten once $\lambda_B t/\varepsilon\gtrsim C_{\mathrm{BE}}$. The composite bound can be optimal at most inside a bounded window $\lambda t/\varepsilon\lesssim C_{\mathrm{BE}}$ — exactly the window Campbell identified as qDRIFT's niche.
+
+**3. Even within the randomized family the $1/\varepsilon$ is not intrinsic.** Higher-order randomized compilers improve the $\varepsilon$-dependence at essentially fixed $\lambda^2t^2$: Nakaji, Bagherimehrab, Wiebe, *qSWIFT: high-order randomized compiler for Hamiltonian simulation*, PRX Quantum (2024). So the specific composite bound of Hagan & Wiebe, *Composite quantum simulations*, Quantum 7, 1181 (2023) — and the related Ouyang, White, Campbell, *Compilation by stochastic Hamiltonian sparsification*, Quantum 4, 235 (2020), Kiss–Grossi–Roggero importance sampling, Rajput–Roggero–Wiebe interaction-picture hybridization (Quantum 6, 780 (2022)) — is not even a Pareto point of its own family.
+
+**4. Fast-forwardable classes kill any monotone-in-$t$ bound.** Quadratic fermionic/Gaussian $H$: exact circuit of $O(n^2)$ gates for all $t$ (Verstraete, Cirac, Latorre, PRA 79, 032316 (2009)). Characterizations: Atia & Aharonov, *Fast-forwarding of Hamiltonians and exponentially precise measurements*, Nat. Commun. 8, 1572 (2017); Gu, Somma, Şahinoğlu, *Fast-forwarding quantum evolution*, Quantum 5, 577 (2021). The composite bound grows with $t$ unconditionally.
+
+Separately: composite/qDRIFT bounds are diamond-norm, whereas your stated metric (trace distance on a state) is genuinely weaker — Trotter error for random or typical inputs concentrates well below the worst case (Zhao, Zhou, Shaw, Childs et al., *Hamiltonian simulation with random inputs*, PRL 129, 270502 (2022); Chen et al. 2021 above). So the upper bound is loose even before optimality enters.
+
+The only near-matching pairs in existence: $\Theta(\lambda t+\log(1/\varepsilon))$ **queries** in the black-box block-encoding model (LB1+LB2 vs. Low–Chuang), and $O(nt\,\mathrm{polylog})$ vs. $\Omega(nt)$ **gates** for lattice models (LB3). Neither is a profile-dependent statement.
+
+## What is precisely open
+
+1. **The $\log\log$ gap.** Is $\Omega(\log(1/\varepsilon))$ true, i.e. is qubitization's additive precision term exactly optimal?
+2. **Is $\lambda=\sum_j|a_j|$ an intrinsic complexity parameter or an artifact of LCU/randomization?** No lower bound anywhere grows with $\lambda$ rather than $\|H\|$ for a non-oracular Hamiltonian. Known to be an artifact for commuting and for Gaussian $H$. Unresolved in general — this is the single most load-bearing gap for your question, since every composite bound is stated in $\lambda$'s.
+3. **Profile-dependent lower bounds.** For a fixed profile (e.g. power-law $a_j\sim j^{-\alpha}$, or one heavy term plus a light tail) and worst-case $\{h_j\}$, determine gate complexity to within polylog. Nothing is known beyond LB1/LB2, which are profile-blind.
+4. **Is commutator scaling tight as a *problem* bound?** Childs, Su, Tran, Wiebe, Zhu, *Theory of Trotter error with commutator scaling*, PRX 11, 011020 (2021) gives upper bounds in nested commutators and lower bounds on *product-formula error*. Whether $\sum\|[h_{j_1},[\dots,h_{j_{k+1}}]]\|$-type quantities lower-bound *any* algorithm is open.
+5. **$L$-dependence per unit $\lambda t$.** Is $\Omega(\sqrt L)$ (or $\Omega(L)$) unavoidable overhead per query? Ties to state-preparation/QROM lower bounds; open.
+6. **Is $1/\varepsilon$ forced for ancilla-free mixtures of $\{e^{-i\theta h_j}\}$?** qSWIFT shows it is not forced for randomized compilers generally; no lower bound is known for the restricted ancilla-free convex-mixture model.
+7. **Instance optimality.** Existence of an efficiently computable $C(\{a_j\},\{h_j\},t,\varepsilon)$ characterizing gate complexity up to polylog. Open, and structurally hard: it demands superlinear circuit lower bounds for explicit unitary families, a regime where essentially nothing unconditional is known. Only conditional statements exist (universal fast-forwarding would collapse complexity classes — Atia–Aharonov).
+8. **Optimality of the split itself.** Hagan–Wiebe choose the Trotter/qDRIFT partition by a greedy/heuristic rule. Whether that partition is optimal even *within* the composite family, for a given profile, is not proved.
+
+Bottom line: the composite bound is a good practical interpolation with no matching lower bound for any nontrivial profile, and it is strictly dominated asymptotically in $t$ and $\varepsilon$. Claims of per-profile optimality in this area should be read as "optimal among the methods compared," never as complexity-theoretic.

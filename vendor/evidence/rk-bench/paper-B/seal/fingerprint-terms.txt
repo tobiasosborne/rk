@@ -1,0 +1,5 @@
+# Provenance fingerprints only (the QUESTION is the rediscovery target and is absent).
+2607.00507
+Quantum Memory Advantage from Contextuality
+Shiroman Prakash
+representational contextuality

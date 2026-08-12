@@ -1,0 +1,9 @@
+{"kind":"usage","at":"2026-07-20T11:49:43.328Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"20408b40-f913-493d-b91d-3ca99112e8bc","usage":{"input":2,"output":333,"cache_read":20906,"cache_creation":1195}}
+{"kind":"cross-vendor-rejected","at":"2026-07-20T11:49:43.330Z","node":"1","reason":"identity-unparseable"}
+{"kind":"node-skipped","at":"2026-07-20T11:49:43.330Z","node":"1","reason":"cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=claude) — fails closed, never conflated with a confirmed same-family violation"}
+{"kind":"usage","at":"2026-07-20T11:49:52.559Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"20408b40-f913-493d-b91d-3ca99112e8bc","usage":{"input":2,"output":325,"cache_read":22101,"cache_creation":731}}
+{"kind":"cross-vendor-rejected","at":"2026-07-20T11:49:52.559Z","node":"1","reason":"identity-unparseable"}
+{"kind":"node-skipped","at":"2026-07-20T11:49:52.560Z","node":"1","reason":"cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=claude) — fails closed, never conflated with a confirmed same-family violation"}
+{"kind":"usage","at":"2026-07-20T11:50:00.179Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"20408b40-f913-493d-b91d-3ca99112e8bc","usage":{"input":2,"output":349,"cache_read":22832,"cache_creation":723}}
+{"kind":"cross-vendor-rejected","at":"2026-07-20T11:50:00.179Z","node":"1","reason":"identity-unparseable"}
+{"kind":"node-skipped","at":"2026-07-20T11:50:00.179Z","node":"1","reason":"cross-vendor: identity-unparseable on load-bearing node '1' (prover=unknown, verifier=claude) — fails closed, never conflated with a confirmed same-family violation"}

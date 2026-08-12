@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:05:56.403872721Z","node_id":"1.7.5","note":"By dependency 1.4, the weights satisfy sum_i p_i = 1, so sum_i p_i * n_k = n_k * sum_i p_i = n_k. Thus the left-hand side in the inequality from 1.7.4 may validly be replaced by n_k.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

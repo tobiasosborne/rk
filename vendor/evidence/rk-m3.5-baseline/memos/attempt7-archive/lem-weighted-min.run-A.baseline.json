@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 2,
+  "entries": [
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.1", "tokens": 23500, "calls": 1},
+    {"claimId": "claim-lem-weighted-min", "lemma": "1.5", "tokens": 25636, "calls": 1}
+  ]
+}

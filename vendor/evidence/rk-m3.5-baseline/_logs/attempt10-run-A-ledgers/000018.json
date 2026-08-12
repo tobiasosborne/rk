@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.76125157Z","node_id":"1.4","note":"For each i, p_i is positive, so multiplying the established inequality n_i \u003e= mu by p_i preserves its direction, yielding p_i * n_i \u003e= p_i * mu.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:05:56.375933127Z","node_id":"1.7.3","note":"Given the dependencies, factoring the constant n_k out of the finite weighted sum yields sum_i p_i * n_k = n_k * sum_i p_i, and using sum_i p_i = 1 gives n_k * sum_i p_i = n_k.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

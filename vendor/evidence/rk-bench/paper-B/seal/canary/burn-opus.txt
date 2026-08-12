@@ -1,0 +1,8 @@
+No. I have no knowledge of a 2026 paper titled "Quantum Memory Advantage from Contextuality" by Shiroman Prakash, and "representational contextuality" is not a term I recognize as established in the quantum foundations / quantum information literature. I can't state a main result for it, and I won't guess at one.
+
+Two caveats worth separating out:
+
+- My knowledge cutoff is May 2026, so a genuinely recent 2026 preprint could exist and simply be outside what I know. Absence here is weak evidence, not proof the paper doesn't exist.
+- There *is* real, older work in this neighborhood that the title resembles — e.g. Kleinmann, Gühne, Portillo, Larsson & Cabello, "Memory cost of quantum contextuality" (NJP 2011), and the line of work on memory advantages in sequential/stochastic process simulation. If you're trying to place a half-remembered result, that's the likelier target. Note that Shiroman Prakash is a real researcher (qutrit magic-state distillation, among other things), so the author name alone doesn't flag the citation as fabricated.
+
+If you want, I can run a literature search (Scite/Consensus are available) to check whether the paper exists.

@@ -1,0 +1,46 @@
+rk verify --report: campaign '../rk-m3.5-baseline/lem-weighted-min'
+  totals: input=467386 output=9954 cache_read=541160 cache_creation=9231 turns=36
+  cache fraction: 0.5317
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=26 applied=26 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0 record-proof-failed=0
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=36 attributed-tokens=1027731 cache-fraction=0.5317 balloons=0
+    node 1: turns=2 attributed-tokens=54478 cache-fraction=0.6691
+    node 1.1: turns=1 attributed-tokens=26584 cache-fraction=0.3824
+    node 1.2: turns=1 attributed-tokens=26513 cache-fraction=0.3828
+    node 1.3: turns=1 attributed-tokens=26529 cache-fraction=0.3827
+    node 1.4: turns=1 attributed-tokens=26523 cache-fraction=0.3828
+    node 1.5: turns=1 attributed-tokens=26435 cache-fraction=0.3829
+    node 1.6: turns=1 attributed-tokens=31587 cache-fraction=0.4841
+    node 1.7: turns=5 attributed-tokens=139120 cache-fraction=0.6351
+    node 1.8: turns=1 attributed-tokens=31588 cache-fraction=0.4839
+    node 1.7.1: turns=1 attributed-tokens=26527 cache-fraction=0.3828
+    node 1.7.2: turns=1 attributed-tokens=26759 cache-fraction=0.3828
+    node 1.7.3: turns=1 attributed-tokens=31630 cache-fraction=0.4838
+    node 1.7.4: turns=1 attributed-tokens=31605 cache-fraction=0.4841
+    node 1.7.5: turns=1 attributed-tokens=26438 cache-fraction=0.3825
+    node 1.7.6: turns=8 attributed-tokens=231856 cache-fraction=0.5686
+    node 1.7.6.1: turns=5 attributed-tokens=147146 cache-fraction=0.6511
+    node 1.7.6.1.1: turns=1 attributed-tokens=26396 cache-fraction=0.3826
+    node 1.7.6.1.2: turns=1 attributed-tokens=31792 cache-fraction=0.4839
+    node 1.7.6.1.3: turns=1 attributed-tokens=31639 cache-fraction=0.4835
+    node 1.7.6.2: turns=1 attributed-tokens=26586 cache-fraction=0.3823
+  SC4 baseline comparison -- SC4 (IMPLEMENTATION_PLAN.md M3.9): >=3x improvement over the M3.5 baseline, or an honest miss with analysis.
+    claim-lem-weighted-min/1.1: baseline=26584tok/1call current=26584tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.2: baseline=26513tok/1call current=26513tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.3: baseline=26529tok/1call current=26529tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.4: baseline=26523tok/1call current=26523tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.5: baseline=26435tok/1call current=26435tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.6: baseline=31587tok/1call current=31587tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.8: baseline=31588tok/1call current=31588tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.1: baseline=26527tok/1call current=26527tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.2: baseline=26759tok/1call current=26759tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.3: baseline=31630tok/1call current=31630tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.4: baseline=31605tok/1call current=31605tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.5: baseline=26438tok/1call current=26438tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.6: baseline=231856tok/8call current=231856tok/8call ratio=1.00x
+    claim-lem-weighted-min/1.7.6.1: baseline=147146tok/5call current=147146tok/5call ratio=1.00x
+    claim-lem-weighted-min/1.7.6.1.1: baseline=26396tok/1call current=26396tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.6.1.2: baseline=31792tok/1call current=31792tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.6.1.3: baseline=31639tok/1call current=31639tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.7.6.2: baseline=26586tok/1call current=26586tok/1call ratio=1.00x

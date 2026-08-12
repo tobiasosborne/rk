@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T16:48:34.210506127Z","node_id":"1.6","note":"This follows immediately from dependency 1.5 by adding nu_v to both sides of sum_j a_j^+ - nu_v = 1.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ab867876-f40c-466a-adf8-8903f888141e"}

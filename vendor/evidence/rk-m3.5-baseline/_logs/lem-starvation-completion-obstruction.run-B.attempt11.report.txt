@@ -1,0 +1,9 @@
+rk verify --report: campaign 'lem-starvation-completion-obstruction'
+  totals: input=6 output=1898 cache_read=116598 cache_creation=5309 turns=3
+  cache fraction: 0.9564
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=0 applied=0 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=3 record-proof-failed=0
+  claim claim-lem-starvation-completion-obstruction (contract lem-starvation-completion-obstruction): turns=3 attributed-tokens=123811 cache-fraction=0.9564 balloons=0
+    node 1: turns=3 attributed-tokens=123811 cache-fraction=0.9564
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).

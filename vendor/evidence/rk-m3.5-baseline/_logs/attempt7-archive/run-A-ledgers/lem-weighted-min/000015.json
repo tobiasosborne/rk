@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T13:53:17.388870889Z","node_id":"1.5","note":"By distributivity, the constant mu factors out of the finite sum, and the hypothesis sum_i p_i = 1 gives mu * 1 = mu.","verified_by":"gpt|codex|gpt-5.6-sol|flat-224b9c67-df77-40c4-831a-3630b3176a25"}

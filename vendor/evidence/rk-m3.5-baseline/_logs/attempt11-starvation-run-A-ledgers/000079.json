@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T17:08:24.342803565Z","node_id":"1.10.10","note":"Using the pinned masses and stated actor coordinates, all other fiber terms vanish, and the remaining sum simplifies correctly to -(tau+t)aA+tA=A(t-a(tau+t)).","verified_by":"gpt|codex|gpt-5.6-sol|flat-ed3a1716-fb14-4fef-ba65-ff9ac2c5e70a"}

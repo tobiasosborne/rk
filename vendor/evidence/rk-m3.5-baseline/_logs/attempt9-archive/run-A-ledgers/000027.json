@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:05:03.452870608Z","node_id":"1.7.2","note":"Given dependencies 1.4 and 1.7.1, the weighted sum is established to be at least n_k, which is exactly the claimed inequality.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

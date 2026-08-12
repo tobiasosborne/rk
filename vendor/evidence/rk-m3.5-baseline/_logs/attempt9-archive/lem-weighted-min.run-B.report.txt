@@ -1,0 +1,18 @@
+rk verify --report: campaign '../rk-m3.5-baseline/lem-weighted-min'
+  totals: input=16396 output=3007 cache_read=186907 cache_creation=5626 turns=7
+  cache fraction: 0.8946
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=6 applied=6 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0 record-proof-failed=0
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=7 attributed-tokens=211936 cache-fraction=0.8946 balloons=0
+    node 1: turns=3 attributed-tokens=88852 cache-fraction=0.7840
+    node 1.1: turns=1 attributed-tokens=29548 cache-fraction=0.9712
+    node 1.2: turns=1 attributed-tokens=30393 cache-fraction=0.9750
+    node 1.3: turns=1 attributed-tokens=31211 cache-fraction=0.9752
+    node 1.4: turns=1 attributed-tokens=31932 cache-fraction=0.9741
+  SC4 baseline comparison -- SC4 (IMPLEMENTATION_PLAN.md M3.9): >=3x improvement over the M3.5 baseline, or an honest miss with analysis.
+    claim-lem-weighted-min/1: baseline=88852tok/3call current=88852tok/3call ratio=1.00x
+    claim-lem-weighted-min/1.1: baseline=29548tok/1call current=29548tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.2: baseline=30393tok/1call current=30393tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.3: baseline=31211tok/1call current=31211tok/1call ratio=1.00x
+    claim-lem-weighted-min/1.4: baseline=31932tok/1call current=31932tok/1call ratio=1.00x

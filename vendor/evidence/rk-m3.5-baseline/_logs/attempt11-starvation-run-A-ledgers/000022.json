@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T17:01:40.738671193Z","node_id":"1.2","note":"Substituting t=τ² and a=τ/(1+τ) gives a(τ+t)=τ(τ+τ²)/(1+τ)=τ²(1+τ)/(1+τ)=τ²=t; the denominator is nonzero since τ\u003e0.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ed3a1716-fb14-4fef-ba65-ff9ac2c5e70a"}

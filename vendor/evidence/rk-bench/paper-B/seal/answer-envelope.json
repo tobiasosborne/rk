@@ -1,0 +1,9 @@
+{
+  "sealed_question_sha256": "654946d88fb54a07e57add0e1112e543631479bffd513268faf28636b830795f",
+  "fingerprints_sha256": "38969d9c9e48b1fea11b3888e0dcbf5ec989a5938fcb79e87a430597147fc1f6",
+  "paper": "arXiv:2607.00507v1",
+  "v1_date": "2026-07-01",
+  "d_cutoff": "2026-05-31",
+  "variant": "question-finding (prereg append 2026-08-09)",
+  "sealed_on": "2026-08-09"
+}

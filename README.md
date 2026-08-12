@@ -19,9 +19,9 @@ does the bookkeeping.
 
 - `rk init` / `rk upgrade` — scaffold and version a campaign repository
   (definitions, argument shards, references, runs, report mirrors).
-- `rk check` — eight validity gates over the campaign tree (config, defs,
-  linker/argument, refs, provenance, runs, shards, freshness), each backed by a
-  red corpus of 123 fixtures drawn from real incidents. Gates report coverage
+- `rk check` — nine validity gates over the campaign tree (config, defs,
+  linker/argument, refs, provenance, runs, shards, freshness, reward), each backed by a
+  red corpus of 166 fixtures drawn from real incidents. Gates report coverage
   ("checked N/N"); a silent skip is a bug by definition.
 - `rk graph` — a typed claim-graph projection joining the campaign's proof
   ledger (af), exploration frontier (fr), and issue tracker (bd) exports;
@@ -76,6 +76,23 @@ Without `make`, the equivalent by hand is:
 bun install && bun run build     # -> dist/rk
 cp dist/rk ~/.local/bin/rk       # or anywhere on PATH
 ```
+
+### Developing rk on a new device
+
+The repo is self-contained for development (rk-he3r, 2026-08-12): the design
+record lives in `docs/design/` (the CLAUDE.md §0 read order), and the
+campaign-evidence siblings that have no remotes of their own ship in `vendor/`
+(git bundles for `rk-campaign-A`/`rk-campaign-C`, plain copies for `rk-bench`
+and `rk-m3.5-baseline` — see `vendor/README.md`). After cloning:
+
+```
+make bootstrap            # wires .claude/settings.json (rule-13 memory limits) + bun install
+make restore-siblings     # materializes ../rk-campaign-A etc. from vendor/ (skips existing)
+make test selftest        # green before you touch anything
+```
+
+The `.beads/issues.jsonl` snapshot in-repo is the durable export of the issue
+tracker; `bd` rebuilds its local state from the repo on first `bd prime`.
 
 ### The three sibling binaries
 

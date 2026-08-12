@@ -7,14 +7,15 @@
 
 rk is a general-purpose research-automation tool (TS/Bun CLI): the extraction of the
 workflow machinery evolved across the sister research repos, per the settled design in
-`../research-workflows/`. This file is HOW we work. It is deliberately short; when it
+`docs/design/` (moved into this repo 2026-08-12, rk-he3r; formerly
+`../research-workflows/`). This file is HOW we work. It is deliberately short; when it
 conflicts with a fast path, this file wins.
 
 ## 0. Read order (gate)
 
 1. This file.
-2. `../research-workflows/PRD.md` — WHAT. The decision record **D1–D8 is settled**.
-3. `../research-workflows/IMPLEMENTATION_PLAN.md` — sequencing, WPs, acceptance bars.
+2. `docs/design/PRD.md` — WHAT. The decision record **D1–D8 is settled**.
+3. `docs/design/IMPLEMENTATION_PLAN.md` — sequencing, WPs, acceptance bars.
 4. `HANDOFF.md` — current state, current WP, next steps.
 
 Not read these? STOP and read them. Do not improvise from memory of them.
@@ -85,8 +86,8 @@ Not read these? STOP and read them. Do not improvise from memory of them.
       >10x measured peaks (`bun test` 279 MB, `selftest` 66 MB, `--compile` 324 MB).
       Escape hatch when a step genuinely needs more: `AGENT_MEM_LIMIT_KB=16777216 <cmd>`.
       The script is committed but the wiring is not — `.claude/` is gitignored, and the
-      path must be absolute — so a fresh clone re-wires it once:
-      `mkdir -p .claude && printf '{"env":{"BASH_ENV":"%s/scripts/agent-limits.sh"}}\n' "$PWD" > .claude/settings.json`
+      path must be absolute — so a fresh clone re-wires it once: `make bootstrap`
+      (scripts/bootstrap.sh; refuses to clobber a settings.json with other content).
       Verify with `bash -c 'ulimit -S -d'` from a tool call: 8388608, not `unlimited`.
     - **`timeout` on anything that loops.** `bun test`, `bun run selftest`, and every
       ad-hoc script get `timeout <n>`. An un-timeout'd run is a WP-blocking defect when
@@ -183,11 +184,14 @@ one. The critical-path query (M2.5) is load-bearing for batch exclusion (M3.4).
 3. bd issues updated/closed; new work filed, not TODO'd.
 4. Atomic commits done. Push if a remote is configured. Never "ready to push when you
    are" — if there is a remote, you push.
+5. If a campaign sibling (`../rk-campaign-*`, `../rk-bench`, `../rk-m3.5-baseline`)
+   changed this session: `make refresh-bundles` and commit `vendor/` — those siblings
+   have no remotes; an unrefreshed bundle strands their changes on this machine.
 
 ## 7. Stop conditions (escalate to TJO, do not improvise)
 
 - A PRD/plan conflict or gap discovered mid-WP → surface it in HANDOFF + a note in
-  `../research-workflows/`, pick nothing silently.
+  `docs/design/`, pick nothing silently.
 - Tempted to add a runtime dependency, a server, a daemon, or remote automation.
 - An L6 validity semantic would change without a top-tier review available (codex
   gpt-5.6-sol xhigh, or Fable with explicit permission).

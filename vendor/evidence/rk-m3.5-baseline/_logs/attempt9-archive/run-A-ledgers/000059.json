@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:08:28.749253263Z","node_id":"1.7.6.2","note":"Given the dependency establishes the inequality and the equality sum_i p_i * n_k = n_k, substituting n_k for the left-hand side validly yields n_k \u003c= sum_i p_i * n_i.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

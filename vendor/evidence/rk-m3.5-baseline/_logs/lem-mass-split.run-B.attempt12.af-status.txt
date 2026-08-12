@@ -1,0 +1,32 @@
+=== Proof Status ===
+
+1 [[32mvalidated[0m/[32mclean[0m] Mass split: for an exact signed idempotent P and any row index v, writing a_j = P_{vj}, a_j^+ = max(a_j, 0), a_j^- = max(-a_j, 0), and nu_v = sum_j a_j^-, one has sum_j a_j^+ = 1 + nu_v.
+  1.1 [[32mvalidated[0m/[32mclean[0m] Since P is an exact signed idempotent, P\mathbf 1=\mathbf 1; hence for row v, \sum_j a_j=\sum_j P_{vj}=1.
+  1.2 [[32mvalidated[0m/[32mclean[0m] For every j, a_j=a_j^+-a_j^-.
+  1.3 [[32mvalidated[0m/[32mclean[0m] Summing the pointwise identity gives \sum_j a_j=\sum_j a_j^+-\sum_j a_j^-.
+  1.4 [[32mvalidated[0m/[32mclean[0m] Using \nu_v=\sum_j a_j^- and \sum_j a_j=1, one obtains \sum_j a_j^+=1+\nu_v.
+
+--- Statistics ---
+Nodes: 5 total
+  Epistemic: 0 [34mdraft[0m, 0 [33mpending[0m, 5 [32mvalidated[0m, 0 [36madmitted[0m, 0 [31mrefuted[0m, 0 [90marchived[0m, 0 [35mneeds_refinement[0m
+  Taint: 5 [32mclean[0m, 0 [36mself_admitted[0m, 0 [31mtainted[0m, 0 [33munresolved[0m
+
+--- Jobs ---
+  Prover: 0 nodes awaiting refinement
+  Verifier: 0 nodes ready for review
+
+--- Legend ---
+Epistemic States:
+  [34mdraft[0m      - Work in progress (not submitted)
+  [33mpending[0m    - Awaiting proof/verification
+  [32mvalidated[0m  - Verified by adversarial verifier
+  [36madmitted[0m   - Accepted without full verification
+  [31mrefuted[0m    - Proven false
+  [90marchived[0m   - Superseded or abandoned
+  [35mneeds_refinement[0m - Reopened for further refinement
+
+Taint States:
+  [32mclean[0m         - No epistemic uncertainty
+  [36mself_admitted[0m - Contains admitted node
+  [31mtainted[0m       - Depends on tainted/refuted node
+  [33munresolved[0m    - Taint status not yet computed

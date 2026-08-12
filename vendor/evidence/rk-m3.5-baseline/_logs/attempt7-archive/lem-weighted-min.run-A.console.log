@@ -1,0 +1,36 @@
+rk verify --af lem-weighted-min --live: preflight
+  backend resolved: verifier/hard -> 'codex' (model 'gpt-5.6-sol')
+  backend resolved: prover/hard -> 'claude' (model 'claude-opus-4-8')
+  session plan: ONE shared verifier session for claim 'claim-lem-weighted-min' + ONE prover session 'claim-lem-weighted-min-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)
+  workspace: proofs/lem-weighted-min (1 node(s) total)
+  estimated turn count: <= 1 (bounded by --max-turns 50 and --max-nodes 30)
+  campaign token cap: 500000 total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve 8000).
+  no worker has been called yet -- the next line, if any, is the first real call.
+rk verify --af lem-weighted-min --live: aborted -- campaign token budget exhausted: 502914 spent >= cap 500000 — no further dispatch
+  applied 2 node(s): 1.1, 1.5
+
+rk verify --af lem-weighted-min --live: final accounting (rk verify --report)
+rk verify --report: campaign '/home/tobiasosborne/Projects/rk-m3.5-baseline/lem-weighted-min'
+  totals: input=209044 output=5167 cache_read=283985 cache_creation=4718 turns=21
+  cache fraction: 0.5705
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=7 applied=7 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  discards: cross-vendor-rejected=0 vacuous-accept-discarded=0 bind-failed=0 parse-failed=0
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=21 attributed-tokens=502914 cache-fraction=0.5705 balloons=0
+    node 1: turns=2 attributed-tokens=45271 cache-fraction=0.6707
+    node 1.1: turns=1 attributed-tokens=23500 cache-fraction=0.4334
+    node 1.2: turns=2 attributed-tokens=46570 cache-fraction=0.7015
+    node 1.3: turns=2 attributed-tokens=47417 cache-fraction=0.7091
+    node 1.4: turns=2 attributed-tokens=48195 cache-fraction=0.7130
+    node 1.5: turns=1 attributed-tokens=25636 cache-fraction=0.4799
+    node 1.6: turns=2 attributed-tokens=49104 cache-fraction=0.7162
+    node 1.2.1: turns=1 attributed-tokens=23485 cache-fraction=0.4332
+    node 1.2.2: turns=1 attributed-tokens=23527 cache-fraction=0.4335
+    node 1.2.3: turns=1 attributed-tokens=23423 cache-fraction=0.4337
+    node 1.2.4: turns=1 attributed-tokens=23375 cache-fraction=0.4337
+    node 1.3.1: turns=1 attributed-tokens=23373 cache-fraction=0.4338
+    node 1.3.2: turns=1 attributed-tokens=25443 cache-fraction=0.4802
+    node 1.3.3: turns=1 attributed-tokens=25427 cache-fraction=0.4800
+    node 1.3.4: turns=1 attributed-tokens=25514 cache-fraction=0.4801
+    node 1.3.5: turns=1 attributed-tokens=23654 cache-fraction=0.4335
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).

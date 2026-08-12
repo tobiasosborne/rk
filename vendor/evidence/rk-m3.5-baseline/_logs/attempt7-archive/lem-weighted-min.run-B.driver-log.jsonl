@@ -1,0 +1,6 @@
+{"kind":"usage","at":"2026-07-20T13:57:34.414Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"verifier","sessionId":"e99f9820-6451-4758-be30-dc7414a9e386","usage":{"input":2,"output":599,"cache_read":20906,"cache_creation":1831}}
+{"kind":"verdict-outcome","at":"2026-07-20T13:57:34.434Z","node":"1","verdict":"challenge","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-20T13:57:48.194Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"prover","sessionId":"e99f9820-6451-4758-be30-dc7414a9e386","usage":{"input":13065,"output":608,"cache_read":9984,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-20T13:57:48.201Z","node":"1","reason":"af recordProof failed: af record-proof exit 1: child 2: dependency node 1.1 does not exist"}
+{"kind":"usage","at":"2026-07-20T13:58:02.358Z","contractId":"lem-weighted-min","claimId":"claim-lem-weighted-min","nodeId":"1","role":"prover","sessionId":"e99f9820-6451-4758-be30-dc7414a9e386","usage":{"input":13065,"output":483,"cache_read":9984,"cache_creation":0}}
+{"kind":"node-skipped","at":"2026-07-20T13:58:02.365Z","node":"1","reason":"af recordProof failed: af record-proof exit 1: child 2: dependency node 1.1 does not exist"}

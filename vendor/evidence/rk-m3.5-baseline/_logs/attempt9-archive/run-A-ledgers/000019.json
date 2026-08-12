@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:04:38.886312015Z","node_id":"1.6","note":"Substituting the given equality sum_i p_i = 1 yields n_k * sum_i p_i = n_k * 1 = n_k.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

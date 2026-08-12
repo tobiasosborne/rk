@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:04:38.837727166Z","node_id":"1.2","note":"Given dependency 1.1, which establishes that k indexes a minimum among the n_i, it follows directly that n_k \u003c= n_i for every i in {1, ..., m}.","verified_by":"gpt|codex|gpt-5.6-sol|flat-3984ab1f-2778-41d7-baf2-909424590eb4"}

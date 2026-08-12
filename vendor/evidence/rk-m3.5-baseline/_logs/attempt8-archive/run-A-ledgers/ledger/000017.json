@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T14:24:59.174476874Z","node_id":"1.5","note":"Multiplication by the constant mu distributes over the finite sum: summing p_i * mu yields mu times the sum of the p_i.","verified_by":"gpt|codex|gpt-5.6-sol|flat-8db17b44-9b16-400a-b8de-a5a59576c7e6"}

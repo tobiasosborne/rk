@@ -1,0 +1,14 @@
+{"kind":"usage","at":"2026-07-31T18:35:57.127Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":2,"output":185,"cache_read":32685,"cache_creation":2919}}
+{"kind":"verdict-outcome","at":"2026-07-31T18:35:57.143Z","node":"1","verdict":"challenge","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-31T18:36:17.006Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1","role":"prover","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":15884,"output":288,"cache_read":11008,"cache_creation":0}}
+{"kind":"proof-recorded","at":"2026-07-31T18:36:17.028Z","node":"1","children":4}
+{"kind":"usage","at":"2026-07-31T18:36:23.933Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1.1","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":2,"output":202,"cache_read":35604,"cache_creation":1671}}
+{"kind":"usage","at":"2026-07-31T18:36:30.842Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1.2","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":2,"output":197,"cache_read":37275,"cache_creation":2041}}
+{"kind":"usage","at":"2026-07-31T18:36:36.347Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1.3","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":2,"output":177,"cache_read":39316,"cache_creation":1158}}
+{"kind":"usage","at":"2026-07-31T18:36:43.221Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1.4","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":2,"output":247,"cache_read":40474,"cache_creation":1795}}
+{"kind":"verdict-outcome","at":"2026-07-31T18:36:43.237Z","node":"1.1","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-31T18:36:43.245Z","node":"1.2","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-31T18:36:43.253Z","node":"1.3","verdict":"accept","status":"applied","exit":0}
+{"kind":"verdict-outcome","at":"2026-07-31T18:36:43.262Z","node":"1.4","verdict":"accept","status":"applied","exit":0}
+{"kind":"usage","at":"2026-07-31T18:38:20.505Z","contractId":"lem-mass-split","claimId":"claim-lem-mass-split","nodeId":"1","role":"verifier","sessionId":"fa079b00-e0d0-4d91-aad2-547cab43c7c2","usage":{"input":1,"output":6292,"cache_read":42269,"cache_creation":2298}}
+{"kind":"verdict-outcome","at":"2026-07-31T18:38:20.521Z","node":"1","verdict":"accept","status":"applied","exit":0}

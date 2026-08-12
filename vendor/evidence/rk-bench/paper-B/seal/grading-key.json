@@ -1,0 +1,85 @@
+{
+ "seed": 20260809,
+ "key": [
+  {
+   "id": "Q1",
+   "arm": "control-haiku"
+  },
+  {
+   "id": "Q2",
+   "arm": "control-opus"
+  },
+  {
+   "id": "Q3",
+   "arm": "control-sonnet"
+  },
+  {
+   "id": "Q4",
+   "arm": "control-opus"
+  },
+  {
+   "id": "Q5",
+   "arm": "campaign"
+  },
+  {
+   "id": "Q6",
+   "arm": "campaign"
+  },
+  {
+   "id": "Q7",
+   "arm": "control-opus"
+  },
+  {
+   "id": "Q8",
+   "arm": "control-opus"
+  },
+  {
+   "id": "Q9",
+   "arm": "control-sonnet"
+  },
+  {
+   "id": "Q10",
+   "arm": "control-sonnet"
+  },
+  {
+   "id": "Q11",
+   "arm": "campaign"
+  },
+  {
+   "id": "Q12",
+   "arm": "control-haiku"
+  },
+  {
+   "id": "Q13",
+   "arm": "control-sonnet"
+  },
+  {
+   "id": "Q14",
+   "arm": "control-sonnet"
+  },
+  {
+   "id": "Q15",
+   "arm": "campaign"
+  },
+  {
+   "id": "Q16",
+   "arm": "campaign"
+  },
+  {
+   "id": "Q17",
+   "arm": "control-haiku"
+  },
+  {
+   "id": "Q18",
+   "arm": "control-haiku"
+  },
+  {
+   "id": "Q19",
+   "arm": "control-opus"
+  },
+  {
+   "id": "Q20",
+   "arm": "control-haiku"
+  }
+ ]
+}

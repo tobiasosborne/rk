@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T15:37:27.802691988Z","node_id":"1.8","note":"By dependency 1.6, the left-hand side equals mu times the sum of the p_i, and by dependency 1.7 this equals mu; hence the stated equality follows by transitivity.","verified_by":"gpt|codex|gpt-5.6-sol|flat-993a4e8a-c9e4-483c-ba0b-c7e6dbcbe072"}

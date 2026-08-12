@@ -1,0 +1,24 @@
+rk verify --af lem-weighted-min --live: preflight
+  backend resolved: verifier/hard -> 'claude' (model 'claude-opus-4-8')
+  backend resolved: prover/hard -> 'codex' (model 'gpt-5.6-sol')
+  session plan: ONE shared verifier session for claim 'claim-lem-weighted-min' + ONE prover session 'claim-lem-weighted-min-prover' (per-node prove-then-verify; turn 1 = shared context, every node after = a resume turn)
+  workspace: proofs/lem-weighted-min (1 node(s) total)
+  estimated turn count: <= 1 (bounded by --max-turns 30 and --max-nodes 20)
+  campaign token cap: 500000 total tokens (input+output+cache across all turns) -- the run ABORTS before any call it cannot afford (per-call reserve 8000).
+  no worker has been called yet -- the next line, if any, is the first real call.
+rk verify --af lem-weighted-min --live: aborted -- no verdict progress in 3 consecutive dispatch round(s) (cap 3) — claim declared stuck
+  applied 0 node(s): none
+
+rk verify --af lem-weighted-min --live: final accounting (rk verify --report)
+  [driver-log:2] unrecognized 'kind': "cross-vendor-rejected"
+  [driver-log:5] unrecognized 'kind': "cross-vendor-rejected"
+  [driver-log:8] unrecognized 'kind': "cross-vendor-rejected"
+rk verify --report: campaign '/home/tobiasosborne/Projects/rk-m3.5-baseline/lem-weighted-min'
+  totals: input=6 output=1007 cache_read=65839 cache_creation=2649 turns=3
+  cache fraction: 0.9612
+  verdicts (campaign-wide -- node ids repeat across claims, so this kind is never split per claim): total=0 applied=0 blocked=0 rejected=0 other=0
+  balloons: total=0 unclassified=0 by-classification={}
+  claim claim-lem-weighted-min (contract lem-weighted-min): turns=3 attributed-tokens=69501 cache-fraction=0.9612 balloons=0
+    node 1: turns=3 attributed-tokens=69501 cache-fraction=0.9612
+  3 driver-log line(s) could not be parsed (see above) -- never silently dropped.
+  SC4 baseline: no baseline recorded -- SC4 not yet measurable (pass --baseline <memo.json> once M3.5's memo exists).

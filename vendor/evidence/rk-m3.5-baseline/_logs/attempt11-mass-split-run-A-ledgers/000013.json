@@ -1,0 +1,1 @@
+{"type":"node_validated","timestamp":"2026-07-20T16:48:34.163227298Z","node_id":"1.2","note":"By the definition of an exact signed idempotent, P1=1. Taking the v-th coordinate gives sum_j P_{vj}=1, and a_j=P_{vj}, so sum_j a_j=1.","verified_by":"gpt|codex|gpt-5.6-sol|flat-ab867876-f40c-466a-adf8-8903f888141e"}

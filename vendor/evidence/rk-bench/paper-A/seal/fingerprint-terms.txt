@@ -1,0 +1,10 @@
+# Tripwire terms: PROVENANCE fingerprints only — phrases/identifiers an honest
+# rediscovery would not reproduce. The bound formula and the hard-instance idea are
+# the REDISCOVERY TARGET and are deliberately absent (class-a/b success must not trip).
+2607.19852
+Optimal Lower Bounds for Hamiltonian Simulation
+Zlokapa
+Richard R. Allen
+subset correlation ratio
+optimal deterministic-randomized split
+touched set
