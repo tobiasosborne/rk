@@ -163,6 +163,49 @@ describe("rk reward attest — a record it cannot know to be true is refused", (
   });
 });
 
+// REPAIR WAVE 2026-08-12, Tier A finding 4. The `--out` predicate accepted EVERY direct
+// `.rk/*.json`, so `--out .rk/config.json --force` overwrote the campaign's own configuration with
+// a provenance record, and without --force it fabricated an invalid control file where none
+// existed. The fix is a reserved NAMESPACE (`.rk/provenance-*.json`) rather than a denylist of
+// today's control filenames, because a denylist rots the day a new `.rk/*.json` control file is
+// added and a namespace does not.
+describe("rk reward attest — rk's own control files are unreachable through --out", () => {
+  const CONTROL = '{"schema_version":"1","canary":"campaign configuration"}\n';
+
+  test("--out naming an rk control file is refused and the existing file is never touched", async () => {
+    for (const name of ["config.json", "generated.json", "oracles.json"]) {
+      const root = repo();
+      mkdirSync(join(root, ".rk"), { recursive: true });
+      const control = join(root, ".rk", name);
+      writeFileSync(control, CONTROL, "utf8");
+      const cap = capture();
+      // --force is the destructive combination the reviewer named: it must not help.
+      expect(await rewardDispatch(ARGS(root, "--out", `.rk/${name}`, "--force"), cap.out)).toBe(1);
+      expect(readFileSync(control, "utf8")).toBe(CONTROL);
+      expect(cap.lines.join("\n")).toContain("provenance-");
+    }
+  });
+
+  test("a name outside the reserved namespace is refused even though it is a direct .rk/*.json", async () => {
+    for (const out of [".rk/review.json", ".rk/l5-verdicts.json", ".rk/rec.json"]) {
+      // The shard DECLARES this path, so the finding-1 precondition is satisfied and only the
+      // namespace rule can be what refuses.
+      const root = repo(SHARD.replace(".rk/provenance-lem-a.json", out));
+      const cap = capture();
+      expect(await rewardDispatch(ARGS(root, "--out", out), cap.out)).toBe(1);
+      expect(existsSync(join(root, ".rk"))).toBe(false);
+      expect(cap.lines.join("\n")).toContain("provenance-");
+    }
+  });
+
+  test("a custom name INSIDE the reserved namespace still works", async () => {
+    const root = repo(SHARD.replace(".rk/provenance-lem-a.json", ".rk/provenance-lem-a-w2.json"));
+    const { out } = capture();
+    expect(await rewardDispatch(ARGS(root, "--out", ".rk/provenance-lem-a-w2.json"), out)).toBe(0);
+    expect(existsSync(join(root, ".rk", "provenance-lem-a-w2.json"))).toBe(true);
+  });
+});
+
 // REPAIR WAVE 2026-08-12, Tier A finding 1 (docs/reviews/2026-08-12-waveA-tlwb-io5l-codex.md).
 // The reviewer's exploit: the command hashed the shard, WROTE the record, and only then printed
 // "add this `provenance:` line to the frontmatter" — an instruction whose execution changes the

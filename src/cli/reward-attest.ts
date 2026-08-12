@@ -78,15 +78,22 @@ export function rewardAttestHelp(out: Out): number {
   return 0;
 }
 
-/** The record's own path, either operator-chosen or derived. Confined to a `.json` file DIRECTLY
- * under `.rk/`: src/store/snapshot-load.ts text-loads `.rk/` one level only, so anywhere else is a
- * record the pure gate cannot read (corpus/reward/reward-21, the live campaign-A finding). */
+/** The record's own path, either operator-chosen or derived. Confined to `.rk/provenance-*.json`:
+ * one level under `.rk/` because src/store/snapshot-load.ts text-loads `.rk/` non-recursively
+ * (corpus/reward/reward-21, the live campaign-A finding), and inside the reserved `provenance-`
+ * namespace because everything else directly under `.rk/` is rk's own — `--out .rk/config.json
+ * --force` used to overwrite a campaign's configuration with a provenance record (Tier A review
+ * 2026-08-12, finding 4). The namespace is chosen over a denylist because a denylist rots the day
+ * a new control file is added; see `isProvenanceRecordPath`. */
 function resolveOutPath(claimId: string, override: string | undefined): { ok: true; path: string } | { ok: false; reason: string } {
   if (override === undefined) return provenanceRecordPath(claimId);
   if (!isProvenanceRecordPath(override)) {
     return {
       ok: false,
-      reason: `--out '${override}' is not a legal record location: it must be a .json file directly under .rk/ (the snapshot text-record boundary Check 4b reads)`,
+      reason:
+        `--out '${override}' is not a legal record location: it must be '.rk/provenance-<name>.json' — ` +
+        `directly under .rk/ (the snapshot text-record boundary Check 4b reads) and inside the reserved ` +
+        `'provenance-' namespace, so an attestation can never be written over one of rk's own .rk/ control files`,
     };
   }
   return { ok: true, path: override };

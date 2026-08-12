@@ -233,9 +233,27 @@ export function provenanceRecordPath(claimId: string): { ok: true; path: string 
   return { ok: true, path: `.rk/provenance-${claimId}.json` };
 }
 
-/** True iff `path` is a legal record location: a `.json` file DIRECTLY under `.rk/`, no nesting,
- * no traversal. The writer refuses any `--out` this rejects, so it can never place a record the
- * gate would then report as out-of-boundary. */
+/** The reserved filename prefix `.rk/` records are written under. Everything else directly under
+ * `.rk/` belongs to rk itself. */
+export const PROVENANCE_RECORD_PREFIX = "provenance-";
+
+/** True iff `path` is a legal WRITE location for a record: `.rk/provenance-<name>.json`, one level
+ * deep, no traversal. Two constraints, one predicate:
+ *
+ * LOCATION — a `.json` file DIRECTLY under `.rk/`, because src/store/snapshot-load.ts text-loads
+ * `.rk/` one level only and a record anywhere else is invisible to the pure gate that must read
+ * its author field (corpus/reward/reward-21, the live campaign-A finding).
+ *
+ * NAMESPACE (Tier A review 2026-08-12, finding 4) — the `provenance-` prefix. The predicate used
+ * to accept every direct `.rk/*.json`, which meant `rk reward attest --out .rk/config.json
+ * --force` overwrote a campaign's own configuration with a provenance record, and without
+ * `--force` fabricated an invalid control file where none existed. A RESERVED NAMESPACE is chosen
+ * over a denylist of today's control filenames (`config.json`, `generated.json`, `oracles.json`)
+ * deliberately: a denylist is wrong the day someone adds a new `.rk/*.json` control file and
+ * nobody remembers this predicate, whereas the namespace stays correct by construction. It is
+ * strictly narrower than what the CONSUMER reads — src/reward/pma-backing.ts accepts any
+ * `.rk/<name>.json` a shard declares, because hand-written records predate this tool and refusing
+ * to READ them would be the gate lying about what it can see. Writer strict, reader honest. */
 export function isProvenanceRecordPath(path: string): boolean {
-  return /^\.rk\/[A-Za-z0-9][A-Za-z0-9._-]*\.json$/.test(path);
+  return /^\.rk\/provenance-[A-Za-z0-9][A-Za-z0-9._-]*\.json$/.test(path);
 }
