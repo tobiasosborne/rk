@@ -52,6 +52,9 @@ function claimBytesHash(text: string = shard()): string {
   return sha256Hex(new TextEncoder().encode(text));
 }
 
+/** A schema-complete record. `verdict`/`reason` are present because the schema requires them and
+ * (since the 2026-08-12 repair wave, bead rk-xrgn) the banking site reads them: the green controls
+ * here stay green by carrying HONEST fields, never by the check being lenient. */
 function record(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     schema_version: "1",
@@ -59,6 +62,8 @@ function record(overrides: Record<string, unknown> = {}): string {
     claimSha256: claimBytesHash(),
     author: VERIFIER,
     role: "verifier",
+    verdict: "VALID",
+    reason: "Independent hostile verification of the statement and its proof survived.",
     ...overrides,
   });
 }
@@ -104,9 +109,65 @@ describe("Gate 8 Check 4b v2 — provenance-record independence", () => {
   test("an authorless record never backs its proved-mod-audit close", () => {
     const snapshot = snapshotFromFiles({
       [CLAIM_PATH]: shard(),
-      [RECORD_PATH]: JSON.stringify({ schema_version: "1", claimId: "lem-claim", role: "verifier" }),
+      // Complete but for the author, so the refusal isolates anonymity.
+      [RECORD_PATH]: (() => {
+        const bare = JSON.parse(record()) as Record<string, unknown>;
+        delete bare.author;
+        return JSON.stringify(bare);
+      })(),
     });
     expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  // REPAIR WAVE 2026-08-12, Tier A finding 2 (bead rk-xrgn). The banking site checked WHO wrote
+  // the record, for WHICH claim, and against WHICH bytes — but never what the record SAID. A
+  // hand-authored record carrying `verdict: "REFUTED"`, no verdict at all, or a blank reason
+  // reached the success return and banked a proved-mod-audit close. The schema
+  // (schemas/provenance-record.v1.json) had been normative for producers only; it is now enforced
+  // where the money moves, fail-closed, with a distinct refusal per field.
+  test("a REFUTED record never backs — a refutation is not an endorsement (rk-xrgn)", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record({ verdict: "REFUTED" }),
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("REFUTED");
+  });
+
+  test("a record with no verdict at all never backs, and says so distinctly", () => {
+    const bare = JSON.parse(record()) as Record<string, unknown>;
+    delete bare.verdict;
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: JSON.stringify(bare),
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("records no 'verdict'");
+  });
+
+  test("VALID-WITH-CORRECTION never backs route (i), exactly as it never backs route (ii)", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record({ verdict: "VALID-WITH-CORRECTION" }),
+    });
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  test("a blank or missing reason never backs — an unexplained attestation is not auditable", () => {
+    for (const reason of ["", "   ", undefined, 7]) {
+      const bare = JSON.parse(record()) as Record<string, unknown>;
+      if (reason === undefined) delete bare.reason;
+      else bare.reason = reason;
+      const snapshot = snapshotFromFiles({
+        [CLAIM_PATH]: shard(),
+        [RECORD_PATH]: JSON.stringify(bare),
+      });
+      const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+      expect(decision.backed).toBe(false);
+      if (!decision.backed) expect(decision.reason).toContain("'reason'");
+    }
   });
 
   test("an independent verifier's recorded identity backs the claim", () => {
@@ -151,9 +212,11 @@ describe("Gate 8 Check 4b v2 — provenance-record independence", () => {
 // forges the current hash is not detected here (the V1/V2 honesty stance), staleness is.
 describe("Gate 8 Check 4b(i) — the backing record binds to the claim bytes it reviewed", () => {
   test("a record that names no reviewed claim bytes never backs", () => {
-    const withoutBinding = JSON.stringify({
-      schema_version: "1", claimId: "lem-claim", author: VERIFIER, role: "verifier",
-    });
+    // Every OTHER clause is satisfied (honest verdict and reason included, per rk-xrgn) so the
+    // refusal isolates the missing content binding rather than tripping an earlier check.
+    const bare = JSON.parse(record()) as Record<string, unknown>;
+    delete bare.claimSha256;
+    const withoutBinding = JSON.stringify(bare);
     const snapshot = snapshotFromFiles({ [CLAIM_PATH]: shard(), [RECORD_PATH]: withoutBinding });
     const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
     expect(decision.backed).toBe(false);
@@ -196,11 +259,11 @@ describe("Gate 8 Check 4b(i) — the backing record binds to the claim bytes it 
   });
 
   test("binding to the record's own bytes is not binding to the claim", () => {
-    const selfBound = JSON.stringify({
-      schema_version: "1", claimId: "lem-claim", author: VERIFIER, role: "verifier",
-      claimSha256: claimBytesHash(record()),
-    });
+    const selfBound = record({ claimSha256: claimBytesHash(record()) });
     const snapshot = snapshotFromFiles({ [CLAIM_PATH]: shard(), [RECORD_PATH]: selfBound });
-    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    // Refused as STALE — every other clause passes, so the binding is what is under test.
+    if (!decision.backed) expect(decision.reason).toContain("stale");
   });
 });

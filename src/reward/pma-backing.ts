@@ -18,6 +18,13 @@ export type PmaBackingDecision =
 
 const BACKING_ROLES = new Set(["verifier", "reviewer"]);
 
+/** The only outcome a record can carry and still back a close. Duplicated from
+ * src/reward/provenance-record.ts's `PROVENANCE_RECORD_VERDICT` on purpose, exactly as
+ * `CLAIM_SHA256_RE` and `canonicalIdentity` are: this module is the CONSUMER and must not soften
+ * because a producer constant moved. test/reward/provenance-record.test.ts's anti-drift block runs
+ * both sides over the same records and is what keeps them equal. */
+const BACKING_VERDICT = "VALID";
+
 /** A full sha256 in hex. Case-insensitive to match the identity comparison's case-normalization
  * stance (a writer using an uppercase-hex hasher is not a validity event); every other shape —
  * short prefix, padded, non-hex, non-string — is refused rather than coerced. */
@@ -106,6 +113,46 @@ function provenanceDecision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDe
   if (typeof value.role !== "string" || !BACKING_ROLES.has(value.role)) {
     return { backed: false, reason: `provenance path '${path}' must record role 'verifier' or 'reviewer'` };
   }
+
+  // WHAT THE RECORD SAYS (rk-xrgn, Tier A review 2026-08-12 finding 2). Until this landed the
+  // banking site read WHO wrote the record, for WHICH claim, and against WHICH bytes — never its
+  // OUTCOME. A hand-authored record carrying `verdict: "REFUTED"`, no verdict at all, or a blank
+  // reason therefore reached the success return and banked a proved-mod-audit close: the reviewer
+  // banked a close on a record stating the claim is false. `rk reward attest` could never emit
+  // one (`verdict` is a constant of the record type there, not a caller choice), but Check 4b
+  // reads records nobody's tool wrote — that is precisely why route (i) exists.
+  //
+  // PLACEMENT, deliberate: these clauses sit with the record's other INTRINSIC-shape checks
+  // (schema_version, claimId, role) and BEFORE the identity/independence machinery, because
+  // recovering the claim's prover-of-record is a cross-document lookup that can fail with its own
+  // reason ("no recoverable prover-of-record") and would then mask the far more actionable fact
+  // that the record says REFUTED. Nothing downstream is reordered: the content binding stays last
+  // for the reason its own header gives, and no existing corpus fixture's reported reason moves,
+  // because every one of them carries an honest `verdict: "VALID"` and a non-blank reason.
+  if (typeof value.verdict !== "string") {
+    return {
+      backed: false,
+      reason: `provenance path '${path}' records no 'verdict' — a record stating no outcome endorses nothing`,
+    };
+  }
+  if (value.verdict !== BACKING_VERDICT) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' records verdict '${value.verdict}', not '${BACKING_VERDICT}' — only an ` +
+        `endorsement backs a close; a refutation is recorded by a demote event's evidenceRef (check 5), ` +
+        `never by an attestation carrying a different verdict word`,
+    };
+  }
+  if (typeof value.reason !== "string" || value.reason.trim().length === 0) {
+    return {
+      backed: false,
+      reason:
+        `provenance path '${path}' has no non-blank 'reason' — an unexplained attestation is the ` +
+        `prose-free twin of the prose-only record this route exists to replace, and is not auditable`,
+    };
+  }
+
   if (typeof value.author !== "string" || value.author.trim().length === 0) {
     return { backed: false, reason: `provenance path '${path}' has no recoverable author` };
   }

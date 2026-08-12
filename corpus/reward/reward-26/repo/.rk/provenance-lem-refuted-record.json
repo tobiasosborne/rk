@@ -1,0 +1,1 @@
+{"schema_version":"1","claimId":"lem-refuted-record","claimSha256":"e7778578aa41336c7803887dfa7bfad6060841815956a4949ba317bca7adad46","author":"gpt|codex|gpt-5.6-sol|review-session","role":"verifier","verdict":"REFUTED","reason":"Hostile verification found a counterexample at k=3; the claim is false as stated."}

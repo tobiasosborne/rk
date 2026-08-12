@@ -92,6 +92,10 @@ function syncRepo(): string {
       claimSha256: sha256Hex(readFileSync(join(root, "argument", "lem-audit.md"))),
       author: "gpt|codex|gpt-5.6-sol|claim-verifier",
       role: "verifier",
+      // Check 4b(i) reads the record's OUTCOME too (rk-xrgn, 2026-08-12): this control stays
+      // green by carrying the honest fields the schema always required, not by leniency.
+      verdict: "VALID",
+      reason: "Hostile cross-vendor review of the audit lemma's statement and proof survived.",
     }),
     "utf8",
   );

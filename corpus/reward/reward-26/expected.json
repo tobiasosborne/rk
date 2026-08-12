@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unbacked"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "The 2026-08-12 Tier A reviewer's own exploit (bead rk-xrgn, review finding 2). Everything Check 4b USED to look at is impeccable here: the record is directly under .rk/, carries schema_version '1', names the right claimId, records role 'verifier', is authored by a decoded model different from the prover-of-record, and its claimSha256 is the shard's CURRENT byte hash. The one thing it says is that the claim is FALSE — `verdict: \"REFUTED\"` — and before this repair that record banked the proved-mod-audit close, because the banking site read WHO wrote the record and never what it SAID. Red against the pre-repair source (verdict pass, exit 0, zero findings), green after. Sibling green control: reward-10 (identical shape, honest `verdict: \"VALID\"`). Editing the shard by so much as a newline invalidates claimSha256 and flips this fixture to reward-23's staleness reason, which would make it pass for the wrong reason: recompute the hash when the shard changes."
+}
