@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/provenance-record.v1.json",
+  "title": "rk provenance record (v1) — one .rk/<name>.json authorship record backing a proved-mod-audit close",
+  "description": "AN ATTESTATION: a machine-readable record that some identity OTHER than a claim's prover-of-record examined that claim and found it valid. It is the artifact Gate 8 Check 4b's independence route (docs/gate-contracts.md, 'Gate 8 — reward', check 4) reads when it decides whether a `proved-mod-audit` close may bank. THE INCIDENT (CLAUDE.md L2, real and dated): campaign A (../rk-campaign-A) ran seven windows of genuine cross-vendor hostile verification — Claude provers, `codex exec` gpt-5.6-sol verifiers, prover and verifier in separate contexts — and recorded every one of those verification events as PROSE under `docs/worker-output/*.md`. Check 4b v2 landed on 2026-08-10 and the campaign immediately drew 12 `[reward-tier-unbacked]` structural errors, one per pma close, because prose is not a record: the reports are hash-visible but outside the snapshot text-record boundary, carry no parseable author identity, and no rk subcommand existed that would have written one (bead rk-tlwb). This schema plus `rk reward attest` (src/cli/reward-attest.ts) close that producer gap; src/reward/provenance-record.ts is the pure runtime validator enforcing every constraint below, and test/reward/provenance-record.test.ts is the anti-drift guard tying this shape to what src/reward/pma-backing.ts actually accepts.\n\nWHAT THIS RECORD DOES NOT CLAIM. Identity seams are DRIVER-SUPPLIED and unauthenticated (PRD C3/C9 honesty stance, restated in src/reward/pma-backing.ts's header). Nothing here proves that the named model wrote the attestation; the record makes the claim RECORDED, CHECKABLE, and — because a false seam is an explicit, falsifiable lie in a committed file rather than honest-looking silence — attributable. The trust anchor remains the driver's role isolation. Independence itself is NOT expressible in this schema: whether `author` differs from the claim's prover-of-record is a cross-document comparison Gate 8 performs (src/reward/pma-backing.ts's `provenanceDecision`), so a schema-valid record can still, correctly, fail to back a close.\n\nLOCATION IS PART OF THE CONTRACT. The record must be a JSON file DIRECTLY under `.rk/` (`.rk/<name>.json`, canonically `.rk/provenance-<claimId>.json`). That is not a style preference: src/store/snapshot-load.ts's include set text-loads `.rk/` one level only, so a record anywhere else is invisible to the pure gate that must read its author field, and Check 4b reports that placement constraint as its own distinct finding (corpus/reward/reward-21). The include set is deliberately NOT widened to reach prose directories.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "claimId", "claimSha256", "author", "role", "verdict", "reason"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "The STRING \"1\", never the number 1. Consumers check this before parsing anything else and a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Note the snake_case spelling: it matches the driver-constructed verdict document (schemas/verdict.v1.json's `schema_version`), not the camelCase `schemaVersion` of rk's own append-only stores (schemas/retraction.v1.json, `.rk/l5-verdicts.jsonl`) — this record is an attestation a worker-facing tool writes, not a line of an rk-owned ledger. The string/number distinction is load-bearing and is the exact mistake a hand-authored record makes (corpus/reward/reward-22): src/reward/pma-backing.ts compares with `!==` against the string, so `1` silently fails to back the close."
+    },
+    "claimId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "The registry id of the claim being attested — the `id:` frontmatter of an `argument/` shard, and the id Check 4b compares against the close's `nodeId`. A record naming a different claim never backs that claim, so this field is what stops one attestation from silently backing a whole campaign. The charset is narrower than 'non-blank' on purpose: `provenanceRecordPath` derives the record's own filename from it (`.rk/provenance-<claimId>.json`), and `/`, `..`, or leading-dot ids would let a caller-supplied id escape `.rk/` or write a dotfile. Registry ids in every rk campaign already match this charset (`lem-`/`thm-`/`prop-`/`cor-`/`op-`/`obs-<slug>`)."
+    },
+    "claimSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "The sha256 of the CLAIM-SHARD BYTES the author actually reviewed — the same `l5-shard-bytes` domain schemas/verdict.v1.json pins (lowercase hex of the raw file bytes, no normalization). THE CONTENT BINDING (rk-io5l): a record backs only the bytes it names. Check 4b re-derives the shard's current hash and refuses a record whose `claimSha256` no longer matches, which is the identical staleness rule route (ii) has enforced since M3.7 — without it an endorsement silently survives arbitrary later rewrites of the claim it endorsed ('ENDORSE WITH REVISIONS applied' is the campaign motion that produces exactly that). Recorded-and-checkable, not authentication: a writer that copies the current hash into a record it never read is not detected; staleness is. `rk reward attest` computes it from the claim shard on disk at write time and says so, and `--claim-sha256` lets an operator record the genuinely-reviewed bytes instead — a backfilled historical attestation whose shard has since been edited will then, correctly, refuse to back, and must be either re-verified against the current bytes or waived."
+    },
+    "author": {
+      "type": "string",
+      "description": "WHO performed the verification, as ONE canonical driver identity seam: `modelFamily|backend|model|sessionId` (src/drive/identity.ts's `encodeVerifierSeam` — the single encoding M3.8's cross-vendor check also parses, so a second ad-hoc format here would silently break family comparison). `modelFamily` is closed to the lineages in src/drive/vocab.ts (`claude`, `gpt`, `gemini`) — `codex` is a BACKEND, not a lineage, so a codex-fronted OpenAI model is `gpt|codex|gpt-5.6-sol|<session>`. No component may be blank or carry leading/trailing whitespace: whitespace is rejected, never trimmed into acceptability, because ` gpt` and `gpt` comparing unequal is precisely how a same-model review would pass as independent. Populate it from the worker's own transcript header (a `codex exec` log's `model:`/`provider:`/`session id:` lines), never from the identity of whatever process runs `rk reward attest` — the attesting worker is normally a different process, and a seam invented by the recording tool is worse than no record at all."
+    },
+    "role": {
+      "enum": ["verifier", "reviewer"],
+      "description": "The seat the author occupied for this examination. Closed to the two seats that can establish backing; `prover` is deliberately absent — a prover attesting to its own claim is the self-report Check 4b exists to refuse, and it must be impossible to express here rather than merely refused downstream. Matches src/drive/vocab.ts's `Role` minus `prover`."
+    },
+    "verdict": {
+      "const": "VALID",
+      "description": "The examination's outcome, and the only outcome this record type can carry. A record type whose sole purpose is to BACK a close has exactly one backing value: route (ii) of the same check refuses `VALID-WITH-CORRECTION` and stale verdicts, so route (i) must not accept a weaker word. A REFUTATION is recorded by a schema-v2 `demote` event's `evidenceRef` (Gate 8 check 5), never by an attestation with a different verdict string. KNOWN DIVERGENCE, recorded rather than hidden (rk-tlwb triage, 2026-08-12): src/reward/pma-backing.ts does NOT currently read this field, so a hand-authored record that violates this schema by carrying `\"verdict\":\"REFUTED\"` still backs a close. `rk reward attest` cannot emit one, and the hardening of the consumer is filed as its own bead; this schema is normative for producers today."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the author found the claim valid — what was actually checked, in the author's own words. Non-blank is structural, exactly as a verdict's `justification` and a retraction's `reason` are: an unexplained attestation is the prose-free twin of the prose-only failure mode this record replaces, and it is what a human auditor reads first when deciding whether the recorded independence meant anything. Not read by Check 4b (see `verdict`)."
+    },
+    "sourceRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional but strongly encouraged: the repo-relative path of the artifact the attestation was transcribed FROM — the worker's report or raw transcript (e.g. `docs/worker-output/w2-verifier-codex.log`). This is what makes `author` auditable rather than merely asserted: a reviewer can open the cited log, read its `model:`/`session id:` header, and check the seam. `rk reward attest` refuses a `--source` naming a path absent from the repo, so a cited source is at least a file that exists. Optional in v1 because the four provenance records already landed in corpus/reward/ predate this field and remain valid; a v2 may promote it to required."
+    },
+    "recordedAt": {
+      "type": "string",
+      "description": "Optional ISO-8601 wall-clock timestamp of when the record was WRITTEN (not when the verification ran), set at the fs edge only — src/reward/provenance-record.ts is pure and never reads a clock (CLAUDE.md L3). Explicitly NON-IDENTITY: no backing, staleness, or independence decision reads it. Freshness of the attestation relative to the claim's bytes is NOT tracked by this record type at all — that is route (ii)'s job (`.rk/l5-verdicts.jsonl` pins a content hash); a record here that predates a later edit of the shard still backs, which is a recorded v2 question (bead: hash-pin the attested shard bytes)."
+    }
+  }
+}
