@@ -21,6 +21,20 @@
 // a record that will not back the close — a same-model reviewer or a stale hash is a true fact
 // about what happened, and suppressing it would leave the campaign with no record at all. It
 // writes the truth and then prints the gate's real verdict on it.
+//
+// DECLARE FIRST, THEN ATTEST (Tier A repair wave 2026-08-12, finding 1). The shard's
+// `provenance:` frontmatter line is part of the shard's RAW BYTES, and rk-io5l's content binding
+// pins the record to exactly those bytes. So the ordering is not cosmetic: this command used to
+// hash, write, and only then print "add this line", which meant an operator following the tool's
+// own next-step immediately made the record stale — the workflow's happy path emitted a record
+// `rk check` then rejected. The declaration is therefore a PRECONDITION of hashing, checked
+// before a single byte is written. This suppresses no truth (the attestation is written on the
+// very next run, stale hash and all when `--claim-sha256` says so); it fixes only the ORDER. The
+// command still never edits the shard: it names the line and refuses until the researcher has
+// written it, which also means the bytes the record binds are bytes a human deliberately
+// finalized. What the author must have reviewed is then stated on the way out, because the
+// declaration line is itself part of the bound bytes and the author reviewed the claim, not the
+// bookkeeping.
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -52,9 +66,15 @@ export function rewardAttestHelp(out: Out): number {
   out.log("  --claim-sha256 overrides the reviewed-bytes hash (default: the claim shard as it is on");
   out.log("    disk now). Use it when backfilling an attestation of bytes that have since changed —");
   out.log("    the record then correctly fails to back, rather than silently claiming current bytes.");
-  out.log("  Writes one file and nothing else. It never edits the claim shard: it prints the exact");
-  out.log("  'provenance:' frontmatter line to add, then reports the gate's real backing decision.");
-  out.log("  next: 'rk reward attest --claim <id> --author <seam> --role verifier --reason \"...\"'.");
+  out.log("  --out must name the reserved record namespace '.rk/provenance-<name>.json'; rk's own");
+  out.log("    control files (.rk/config.json, .rk/generated.json, .rk/oracles.json) are not writable here.");
+  out.log("  Writes one file and nothing else, and never edits the claim shard — so the shard must");
+  out.log("  ALREADY carry 'provenance: <record path>'. That line is part of the bytes the record");
+  out.log("  binds, so adding it afterwards would make the record stale on arrival: when it is");
+  out.log("  missing the command prints the exact line and refuses. Add it, re-run, and the command");
+  out.log("  reports the gate's real backing decision.");
+  out.log("  next: add the 'provenance:' line to the shard, then");
+  out.log("        'rk reward attest --claim <id> --author <seam> --role verifier --reason \"...\"'.");
   return 0;
 }
 
@@ -116,6 +136,25 @@ export async function rewardAttestCommand(args: string[], out: Out): Promise<num
     return 1;
   }
 
+  const outPath = resolveOutPath(claimId!, outOverride);
+  if (!outPath.ok) {
+    out.log(`rk reward attest: ${outPath.reason}`);
+    return 1;
+  }
+
+  // THE DECLARATION IS A PRECONDITION OF HASHING (finding 1). The `provenance:` line lives in the
+  // shard's raw bytes, which is exactly what the record binds — so a record written before the
+  // line exists is stale the instant the operator adds it. Refusing here, before anything is
+  // hashed or written, is what makes the printed next-step safe to follow.
+  const declared = (target.provenance ?? "").trim().split(/\s+/)[0];
+  if (declared !== outPath.path) {
+    out.log(`rk reward attest: '${target.path}' does not declare '${outPath.path}' yet, and this record binds that shard's CURRENT bytes — writing it now and adding the line after would make it stale on arrival.`);
+    out.log(`  add to '${target.path}'s frontmatter (Check 4b reads the FIRST whitespace token of it):`);
+    out.log(`    provenance: ${outPath.path} — <one line saying what was verified and by whom>`);
+    out.log("  next: add that line, then re-run this exact command.");
+    return 1;
+  }
+
   // The reviewed-bytes hash is DERIVED by default. An operator asserting a different one is
   // recording a historical attestation, which the gate will (correctly) call stale.
   const currentSha = fileSha256(snapshot, target.path);
@@ -125,11 +164,6 @@ export async function rewardAttestCommand(args: string[], out: Out): Promise<num
   }
   const claimSha256 = shaOverride ?? currentSha!;
 
-  const outPath = resolveOutPath(claimId!, outOverride);
-  if (!outPath.ok) {
-    out.log(`rk reward attest: ${outPath.reason}`);
-    return 1;
-  }
   const abs = join(root, ...outPath.path.split("/"));
   if (existsSync(abs) && !force) {
     out.log(`rk reward attest: ${outPath.path} already exists — an attestation records an event and is never silently replaced.`);
@@ -153,24 +187,26 @@ export async function rewardAttestCommand(args: string[], out: Out): Promise<num
   mkdirSync(join(root, ".rk"), { recursive: true });
   writeFileSync(abs, serializeProvenanceRecord(built.record), "utf8");
   out.log(`wrote ${outPath.path} (${built.record.role} ${built.record.author}, claim bytes ${claimSha256.slice(0, 12)})`);
-  if (shaOverride !== undefined && currentSha !== undefined && shaOverride.toLowerCase() !== currentSha.toLowerCase()) {
+  // Say plainly which bytes were bound, because the author reviewed the CLAIM and the bound bytes
+  // include the `provenance:` bookkeeping line the operator added to satisfy the precondition
+  // above. That is the one divergence between "what was reviewed" and "what is bound", and it is
+  // stated rather than left for a reader to discover.
+  if (shaOverride === undefined) {
+    out.log(`  it binds '${target.path}'s bytes AS THEY ARE NOW, the 'provenance:' declaration line included —`);
+    out.log("  attest only if those are the bytes whose claim and proof the author actually examined; any");
+    out.log("  later edit to the shard makes this record stale and the close unbacked, deliberately.");
+  } else if (currentSha !== undefined && shaOverride.toLowerCase() !== currentSha.toLowerCase()) {
     out.log(`  NOTE: the recorded bytes are not '${target.path}'s current bytes (${currentSha.slice(0, 12)}) — this is a historical attestation.`);
+  } else {
+    out.log(`  NOTE: the --claim-sha256 you supplied equals '${target.path}'s current bytes; the record binds those.`);
   }
 
-  // Report the gate's REAL verdict over the repo as it now stands, including the shard's own
-  // provenance pointer. The command never edits the shard: naming the line to add is self-teaching,
-  // rewriting a researcher's frontmatter is not this tool's job.
+  // Report the gate's REAL verdict over the repo as it now stands. The shard's own provenance
+  // pointer is guaranteed present (it was a precondition), so this is the complete decision.
   const after = loadSnapshot(root);
   const { lemmas: afterLemmas } = parseRegistry(after);
-  const afterTarget = afterLemmas.find((l) => l.id === claimId);
-  const declared = (afterTarget?.provenance ?? "").trim().split(/\s+/)[0];
-  if (declared !== outPath.path) {
-    out.log(`  the claim shard does not point at this record yet. Add to ${target.path}'s frontmatter:`);
-    out.log(`    provenance: ${outPath.path} — <one line saying what was verified and by whom>`);
-    out.log("  next: add that line, then 'rk check' — Check 4b reads the FIRST whitespace token of it.");
-    return 0;
-  }
-  const decision = pmaBackingDecision(after, afterTarget!, afterLemmas);
+  const afterTarget = afterLemmas.find((l) => l.id === claimId) ?? target;
+  const decision = pmaBackingDecision(after, afterTarget, afterLemmas);
   if (decision.backed) {
     out.log(`  this record backs '${claimId}'s proved-mod-audit close (route: ${decision.route}).`);
   } else {

@@ -163,16 +163,52 @@ describe("rk reward attest — a record it cannot know to be true is refused", (
   });
 });
 
-describe("rk reward attest — self-teaching output", () => {
-  test("a shard whose provenance does not name the record is told the exact line to write", async () => {
-    const root = repo(SHARD.replace("provenance: .rk/provenance-lem-a.json\n", ""));
+// REPAIR WAVE 2026-08-12, Tier A finding 1 (docs/reviews/2026-08-12-waveA-tlwb-io5l-codex.md).
+// The reviewer's exploit: the command hashed the shard, WROTE the record, and only then printed
+// "add this `provenance:` line to the frontmatter" — an instruction whose execution changes the
+// very bytes the record had just bound, so an operator who followed the tool's own next-step
+// produced a record `rk check` immediately reports as stale. The declaration is now a
+// PRECONDITION of hashing: no record is written until the shard already points at it.
+describe("rk reward attest — the printed next-step can never invalidate the record", () => {
+  const UNDECLARED = SHARD.replace("provenance: .rk/provenance-lem-a.json\n", "");
+
+  test("a shard that does not declare the record yet is refused BEFORE the hash is taken", async () => {
+    const root = repo(UNDECLARED);
     const { out, lines } = capture();
-    expect(await rewardDispatch(ARGS(root), out)).toBe(0);
+    expect(await rewardDispatch(ARGS(root), out)).toBe(1);
+    expect(existsSync(join(root, ".rk", "provenance-lem-a.json"))).toBe(false);
     const text = lines.join("\n");
     expect(text).toContain("provenance: .rk/provenance-lem-a.json");
     expect(text).toContain("argument/lem-a.md");
+    expect(text).toContain("re-run");
   });
 
+  test("following the printed instruction and re-running binds the FINAL bytes and backs", async () => {
+    const root = repo(UNDECLARED);
+    const first = capture();
+    expect(await rewardDispatch(ARGS(root), first.out)).toBe(1);
+
+    // The operator does exactly what the refusal told them to do.
+    writeFileSync(join(root, "argument", "lem-a.md"), SHARD, "utf8");
+    const second = capture();
+    expect(await rewardDispatch(ARGS(root), second.out)).toBe(0);
+    const parsed = parseProvenanceRecord(readFileSync(join(root, ".rk", "provenance-lem-a.json"), "utf8"));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    // Bound to the bytes that CARRY the declaration — the post-instruction bytes, not the pre-.
+    expect(parsed.record.claimSha256).toBe(sha256Hex(new TextEncoder().encode(SHARD)));
+    expect(second.lines.join("\n")).toContain("backs");
+  });
+
+  test("the derived-hash record states which bytes the author must have reviewed", async () => {
+    const root = repo();
+    const { out, lines } = capture();
+    expect(await rewardDispatch(ARGS(root), out)).toBe(0);
+    expect(lines.join("\n")).toContain("AS THEY ARE NOW");
+  });
+});
+
+describe("rk reward attest — help", () => {
   test("`rk reward attest --help` prints usage and writes nothing", async () => {
     const root = repo();
     const { out, lines } = capture();
