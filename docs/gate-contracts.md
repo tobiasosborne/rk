@@ -2517,10 +2517,16 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    `rk reward attest` (`src/cli/reward-attest.ts`) is the one tool that writes it — a check
    whose artifact no tool produces is a check every honest campaign fails, which is exactly
    what happened to campaign A for two days. The schema is `additionalProperties:false` and
-   additionally requires a non-blank `reason` and `verdict: "VALID"` (a refutation is
-   recorded by a `demote` event's `evidenceRef`, never by an attestation). This check reads
-   neither `verdict` nor `reason` today; that divergence is recorded as rk-xrgn rather than
-   silently tolerated, and the unknown-key direction as rk-fddu.
+   additionally requires a non-blank `reason` and `verdict: "VALID"`. Both are ENFORCED at the
+   banking site (rk-xrgn, 2026-08-12 Tier A review finding 2): a record whose `verdict` is
+   absent, non-string, or any word other than `VALID`, or whose `reason` is absent,
+   non-string, or whitespace-only, does not back the close, each with its own refusal reason,
+   fail-closed. A refutation is recorded by a `demote` event's `evidenceRef` (check 5), never
+   by an attestation carrying a different verdict word; `VALID-WITH-CORRECTION` no more backs
+   route (i) than it backs route (ii). Between 2026-08-10 and 2026-08-12 this check read
+   neither field, so a hand-authored `REFUTED` record banked a close — `corpus/reward/
+   reward-26` is that red case, and `rk reward attest` could never emit one. The unknown-key
+   direction remains recorded as rk-fddu rather than silently tolerated.
    The claim's prover-of-record MUST be recoverable from af `proof_author`/`author` metadata
    or a canonical shard `prover:` seam. Both the record author and the prover-of-record MUST
    decode as canonical identity seams; no decoded component may carry leading or trailing
@@ -2545,7 +2551,17 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    normalized on comparison; nothing else is coerced. Like every other clause here this is
    recorded-and-checkable, not authentication: a writer that copies the current hash into a
    record it never read is not detected; staleness is. `rk reward attest` computes the field
-   from the claim shard at write time;
+   from the claim shard at write time, and REQUIRES the
+   shard's `provenance:` declaration to already be present before it hashes (2026-08-12 review
+   finding 1): the declaration line is part of the bytes the record binds, so a record written
+   before it exists is stale the instant it is added. `--out` is confined to the reserved
+   namespace `.rk/provenance-<name>.json` so an attestation can never be written over one of
+   rk's own `.rk/` control files (finding 4); the CONSUMER still reads any `.rk/<name>.json` a
+   shard declares. `schemas/provenance-record.v1.json` has required `claimSha256` from
+   inception and no other shape was ever published under `schema_version "1"` — the schema file
+   and the requirement landed the same day, and no provenance record of any shape exists in any
+   rk campaign repo or its git history, so no version bump is owed (finding 3, ruling recorded
+   in the schema's own description);
    (ii) a fresh VALID L5 verdict from a HEALTHY store (zero parse issues, intact ordinal
    chain — the linker's poisoning stance), with a healthy retraction ledger and no live
    retraction for the shard in either hash domain; VALID-WITH-CORRECTION and stale verdicts
@@ -2623,7 +2639,8 @@ different-session backing ⇒ ERROR, repair R3), reward-21 (out-of-tree provenan
 ERROR with placement reason, repair R9), reward-22 (backing record naming no reviewed bytes
 ⇒ ERROR, rk-io5l), reward-23 (record recorded against superseded claim bytes ⇒ ERROR,
 rk-io5l), reward-24 (hand-authored record with numeric `schema_version` ⇒ ERROR, rk-tlwb),
-reward-25 (producer-written record ⇒ PASS, rk-tlwb).
+reward-25 (producer-written record ⇒ PASS, rk-tlwb), reward-26 (independently authored,
+current-bytes-bound REFUTED record ⇒ ERROR, rk-xrgn).
 
 **Reward-ledger schema compatibility (rk-4317).** The reward-ledger record family is now
 version 2; the stable family filename remains `schemas/reward-ledger.v1.json`, following the
