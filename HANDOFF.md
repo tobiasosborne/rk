@@ -3,101 +3,107 @@
 
 # HANDOFF
 
-## State (2026-08-11, session close — wave 2 opened: rk-0ree landed)
+## State (2026-08-12, session close — wave 2 COMPLETE)
 
-This session (Fable, serial, no subagents — TJO directive): took the first wave-2
-item, rk-0ree, end to end. **Attribution rule v1 is settled and live**: per-node
-spentTokens is now recovered from `.rk/driver-log.jsonl` and banked into close
-events by `rk reward sync`. The window-1 inversion (prunes paid ~1.3, real pma
-closes paid 0.0 because every close banked spentTokens=0) is fixed at the source.
-All green at close: 2809 tests, corpus 161/161, selftest OK. Commit 1a945db.
+This session (Fable orchestrating; Opus implementer lanes for validity code, Sonnet
+for template prose, codex gpt-5.6-sol xhigh for the Tier A review — per TJO directive
+"opus or codex if the code is important"): the remaining wave-2 remediation items all
+landed. rk-tlwb, rk-io5l, rk-xrgn, rk-6cmx, rk-oeal closed; rk-cz1h design delivered
+(TJO-gated). All green at close: 2860 tests, corpus 166/166, selftest OK.
+**dist/rk REBUILT** (deliberate, post-wave — `~/.local/bin/rk` now enforces the
+hardened Check 4b everywhere it is hooked).
 
-**The rule** (dated append to docs/memos/2026-08-08-prereg-autonomy-v1.md, at its
-legitimate S0-2 re-registration point; pure implementation in
-src/reward/attribution.ts):
-- Hard-tier usage records (claimId not starting `l5:`) attribute in FULL to their
-  `contractId` — one af workspace closes one contract; prover/verifier/repair/
-  discarded turns all count (the rk-s9t budget stance).
-- L5 records (claimId starting `l5:`) attribute member turns to `nodeId`;
-  `(session-open)` sentinel cost pools per session and splits integer-fair across
-  that session's distinct members; a dead session's open cost is reported
-  unattributable, never smeared.
-- Conservation: attributed + unattributed == the log's total usage tokens
-  (property-tested). Figures are at-sync-time; a close banks once.
-- Sync FAILS CLOSED on unreadable driver-log lines (hidden spend); only
-  `unrecognized 'kind'` warns (cannot conceal a usage record).
+**What landed:**
+- **rk-tlwb**: `schemas/provenance-record.v1.json` (v1 requires `claimSha256` from
+  inception — version ruling recorded in the schema description), pure validator
+  `src/reward/provenance-record.ts`, writer `rk reward attest` (`--author` required,
+  never inferred — the tool cannot know who verified). Campaign-A: 12 unbacked closes
+  WAIVED, not backfilled (`../rk-campaign-A/docs/2026-08-12-check4b-backing-waiver.md`)
+  — 9 have no recoverable prover seam, 3 are same-model, and none can name the bytes
+  reviewed. Verifier seams preserved in the waiver before transcripts rot.
+- **rk-io5l**: campaign C's record-integrity oracle triaged (sound core, 4 unsound
+  behaviors NOT ported); Check 4b(i) records now hash-bound: `claimSha256` must equal
+  the shard's current raw bytes, stale ⇒ no backing (reward-22/23).
+- **rk-xrgn** (found by Lane 1, confirmed P1 by review, fixed in repair wave): the
+  banking site now reads `verdict` and `reason` — a REFUTED record no longer backs
+  (reward-26 is the reviewer's exploit, verbatim).
+- **rk-6cmx + rk-oeal**: template_version 1.7.0 stamps §4a predict/reward (S0), §4b
+  probe protocol I.1-I.3, §4c briefs + hostile seat, §4d worker lifecycle — each with
+  its campaign scar, test-enforced (test/templates). Campaign C constitution
+  backfilled (`../rk-campaign-C` 5b76f00); AGENTS.md byte-identity drift fixed there.
+- **rk-cz1h**: design memo `docs/memos/2026-08-12-escrow-onramp-design.md` —
+  deferred-review on-ramp (probe record opens escrow, releases nothing; conditional-
+  step review moves post-children-close). Key result: under current H_pred bounds,
+  every k≥4 decomposition pays exactly ZERO for any prediction assignment; campaign
+  A's only V>0 shapes were k=1 (the laundering shape). No prereg number changed;
+  appends are TJO-gated (memo §6.1). Implementation beads wait on the ruling.
 
-**L6 process held**: codex gpt-5.6-sol xhigh review BEFORE landing (the opus-panel
-directive was wave-1-only; default review policy resumed). Two P2 validity findings,
-both repaired and probe-verified same-session, one review round + one repair wave:
-- Fractional usage components could MINT tokens via fairShares(0.5,1)=[1] —
-  usage components now must be non-negative INTEGERS (parse-level, all readers).
-- A registry node literally named `(session-open)` collides with the L5 sentinel —
-  the id is now reserved: l5-dispatch refuses such a member pre-dispatch
-  (stage "reserved-item-id"), sync withholds such a close loudly.
+**L6 process held**: one codex gpt-5.6-sol xhigh review over the whole wave diff
+(`docs/reviews/2026-08-12-waveA-tlwb-io5l-codex.md`), one repair wave (4/4 findings:
+attest declare-before-hash ordering; verdict/reason enforcement; no schema bump —
+evidence showed zero records of any prior shape exist anywhere; `--out` confined to
+`.rk/provenance-<name>.json` namespace). Repairs verified mechanically against the
+review's file:line claims; not re-reviewed (anti-Zeno).
 
-**Live-fire**: dry-runs on the two rk-m3.5-baseline repos (real driver logs).
-lem-mass-split banks spentTokens=273996 — exact match against an independent
-python hand-sum; lem-starvation-completion-obstruction banks 1533460.
+**Round-0 chore finding (campaign C)**: `rk reward sync` withholds all 6 window-1
+pma closes — NOT the anticipated spentTokens=0 gap (that is honest) but missing
+provenance records (`rk reward attest` postdates the banking). Backfill is transcript
+archaeology with a seam-fabrication hazard → bead **rk-mief** (P2). New closes in
+window 2 are unaffected: the protocol is now stamped in the constitution.
 
-**Also this session**: fairShares moved to src/drive/accounting.ts and the
-session-open sentinel to src/drive/report-parse.ts (pure homes; l5-dispatch
-re-exports); docs/worker-contract.md usage-shape clause updated.
+## Next steps
 
-## Next steps (wave 2 continues, then per the remediation plan)
-
-1. **rk-tlwb (P1)** — provenance-record producer + schema: campaign-A draws 12
-   [reward-tier-unbacked] findings; needs schemas/provenance-record.v1.json + a
-   writer + template section + campaign remediation. Do NOT weaken the gate.
-2. **rk-6cmx + rk-oeal (P1)** — template gets §G AND the full campaign-proven
-   protocol (probes I.1-I.3, brief format, hostile seat, worker lifecycle), every
-   section citing its campaign scar; then backfill campaign C's constitution and
-   run its round-0 `rk reward sync` chore (dry-run first — campaign repos have no
-   driver logs, so closes bank 0 there until campaign tooling writes usage records;
-   that is honest, not a bug).
-3. rk-io5l (port campaign C's record-integrity oracle if sound), rk-cz1h (escrow
-   on-ramp design; reduces=0 across all 6 windows — Tier A where it touches payouts).
+1. **TJO decision queue below** — wave 3 and the escrow implementation both block on it.
+2. **Campaign C window 2** is now unblocked on the frozen-environment rule (waves 1-2
+   in). Remaining pre-launch choices: rk-mief (attest backfill or waiver for the 6),
+   and whether window 2 waits for wave 3 (it must, if unattended — rk-afyf).
+3. **MBGP campaign bootstrap** (TJO 2026-08-12 intent, this session): rk is now
+   usable for an ATTENDED many-body-graph-products campaign — template 1.7.0 stamps
+   the full proven protocol, reward economics produce true numbers, provenance is
+   producible. Bead **rk-t69x** (P1) holds the bootstrap plan sketch (seed goal graph from
+   phase-8 frontier; re-admit ~22 PROVED_PROJECT results as proved-mod-audit with
+   attest records; `rk refs add` their sources; git init — it has no VCS at all).
 4. **Wave 3 — worker contract / unattended operation**: rk-4w2y, rk-p037, rk-j8xo,
-   rk-7the (needs TJO ratification).
-5. **Wave 4 — boundary-probe worker** (rk-5man); **wave 5** — audit lenses
-   (rk-czzc into rk-g7fc) + Tier C friction batch.
-Campaign C window 2 launches only after waves 1-2 are in (frozen-environment rule).
-Waves 3-4 gate any further unattended/zero-intervention window (rk-afyf).
+   rk-7the (needs ratification). Then wave 4 (rk-5man boundary-probe worker), wave 5
+   (audit lenses rk-czzc/rk-g7fc + Tier C batch).
+5. Smaller follow-ups this wave filed: rk-yic3 (P1, Tier A — live retraction does not
+   stop the provenance backing route; next milestone review), rk-4rrq (stale installed
+   rk green-lights old gates — partially mitigated by this session's rebuild),
+   rk-ao9k, rk-v266, rk-fddu, rk-yast, rk-168x.
 
-## TJO decision queue (blocking, unchanged from 2026-08-10 + one resolved)
+## TJO decision queue (blocking)
 
-1. rk-7the — ratify no-pattern-kill amendment (text exists, live incident).
-2. rk-23pr — ratify remaining autonomy plan items.
-3. Roster policy: window-5 same-family waiver — standing or per-campaign?
-4. Campaign codas (cheap, decaying): rk-2h33 (Theorem G via af), rk-iup9
-   (campaign B regrade), rk-mxl3 (C_G contract repair ruling).
-5. ~~Review policy~~ RESOLVED this session by default: opus panel was wave-1-only;
-   wave 2 reviews ran codex gpt-5.6-sol xhigh per standing §3. Say if wrong.
+1. rk-cz1h memo §6.1 — four questions, chief: do no-number-change appends need a §7
+   re-registration point; does the roster waiver make a probe seat cheap single-vendor?
+2. rk-7the — ratify no-pattern-kill (template clause stamped "pending ratification").
+3. rk-23pr — ratify remaining autonomy plan items.
+4. rk-mief — campaign C: attest backfill vs waiver for the 6 window-1 closes.
+5. Roster policy: window-5 same-family waiver — standing or per-campaign?
+6. Campaign codas (decaying): rk-2h33, rk-iup9, rk-mxl3.
 
 ## Key facts for the next session
 
-- `dist/rk` still NOT rebuilt (frozen env; ~/.local/bin/rk symlinks it). Sessions
-  here ran the new code via `bun run src/cli.ts`. Rebuild deliberately before any
-  campaign window uses reward sync: `bun build --compile src/cli.ts --outfile dist/rk`.
-- Campaign repos (rk-campaign-A/C) have reward ledgers (A) but NO driver logs —
-  their workers ran outside the rk driver. New closes there bank spentTokens=0
-  honestly. Real figures start once campaign windows drive workers through rk
-  (or rk-0ree-style accounting is added to campaign tooling — not planned).
-- The two rk-m3.5-baseline repos are the live-fire targets with real driver logs.
-- Usage-record validation is now STRICTER (non-negative integers). Any tool
-  writing driver-log usage records must comply or its lines block reward sync.
-- `(session-open)` is a reserved id everywhere (prereg append clause 7).
-- Corpus counts live at test/corpus.test.ts:66,68 + EXPECTED_FIXTURE_COUNT=161;
-  README Totals reconciled. Keep true.
-- Codex review invocation that works: `codex exec review --uncommitted -c
-  model_reasoning_effort="xhigh" -o <file>` — it does NOT accept a prompt
-  argument alongside --uncommitted.
+- dist/rk is CURRENT as of cea76bc+410317a. Campaign-A's pre-commit will now FAIL
+  rk check (12 waived-in-prose errors are live findings to the new binary) — that
+  campaign is wound down; use the waiver doc if a commit is ever needed there.
+- `rk reward attest` REFUSES until the shard's `provenance:` declaration exists (the
+  declaration is part of the bytes bound). `--out` only accepts
+  `.rk/provenance-<name>.json`. The consumer still reads any declared `.rk/*.json`.
+- Backing records must carry `verdict: "VALID"` + non-blank `reason` + current
+  `claimSha256`; REFUTED/stale/missing ⇒ withheld, fail-closed.
+- Corpus counts: test/corpus.test.ts title+assertion, EXPECTED_FIXTURE_COUNT, and
+  corpus/README.md totals — all say 166. Keep the three in step.
+- Codex review invocation that works for committed work:
+  `codex exec review --base <branch> -c model_reasoning_effort="xhigh" -o <file>`
+  (and `--uncommitted` for diffs; neither accepts a prompt argument).
+- Orchestration pattern that worked: 2 lanes max, path-scoped commits, lanes report
+  shared-file deltas as exact text, orchestrator is single writer for the contract
+  surface; design lanes write to scratchpad while a review runs (tree stays still).
 
 ## Governance (standing)
 
-- Anti-Zeno held: ONE review round + ONE repair wave; repairs verified by
-  re-running the reviewer's own exploits, not re-reviewed.
-- L1/L2 never relaxed: every change red-green with mutation proofs (5 mutations
-  proved on the attribution rule alone).
-- D1-D8 + PRD Amendment A1 stand. bd for all tracking. Benchmark hygiene rules
-  unchanged (campaign A wound down, B closed, C between windows 1 and 2).
+- Anti-Zeno held: one review round + one repair wave; repairs verified mechanically.
+- L1/L2 never relaxed: reviewer exploits became red fixtures (reward-26) before fixes;
+  mutation proofs on every repair.
+- D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed,
+  C between windows 1 and 2; frozen-environment rule satisfied for window 2.
