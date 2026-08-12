@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "claimId": "lem-attested",
+  "claimSha256": "15332fe87085b57455a1faf041217b99ceed84c3fc9b3736989b5021c8be370e",
+  "author": "gpt|codex|gpt-5.6-sol|019fe0f0-f003-7eb0-b754-3a856f591a8c",
+  "role": "verifier",
+  "verdict": "VALID",
+  "reason": "Hostile cross-vendor verification: statement and proof both checked; the balanced-split constant was re-derived and corrected.",
+  "sourceRef": "docs/worker-output/verifier.log",
+  "recordedAt": "2026-08-12T14:47:33.085Z"
+}

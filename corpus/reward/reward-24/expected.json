@@ -1,0 +1,15 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "must carry schema_version '1'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "rk-tlwb red case: the shape drift a HAND-AUTHORED record produces. The verification was real, independent, and cross-vendor; the record names the reviewed bytes correctly; its only defect is `schema_version` written as the JSON number 1 instead of the string \"1\" — the mistake anyone transcribing a contract clause by eye makes, and one that fails silently in the direction of an unbanked honest close rather than a banked dishonest one. This is why the schema (schemas/provenance-record.v1.json, `const: \"1\"`) and a producer (`rk reward attest`) exist at all: for two days after Check 4b v2 landed, the only way to write this record was by hand, and the one campaign that tried recorded prose instead. Companion green twin: reward-25, whose record the producer wrote."
+}

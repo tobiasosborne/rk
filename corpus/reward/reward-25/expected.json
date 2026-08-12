@@ -1,0 +1,9 @@
+{
+  "gate": "reward",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and provenance-backing record are rk-only (PRD Amendment A1, N2).",
+  "notes": "rk-tlwb PRODUCER fixture (rule 10: a schema change ships with a fixture). `.rk/provenance-lem-attested.json` is byte-for-byte the output of `rk reward attest` — not hand-written like reward-08/09/10/20's records — so the schema (schemas/provenance-record.v1.json), the writer (src/cli/reward-attest.ts) and the consumer (src/reward/pma-backing.ts) are pinned to one shape by a checked-in artifact rather than by three modules agreeing in prose. It also carries the optional `sourceRef` pointing at the verifier transcript whose header the author seam was read from, which is what makes an unauthenticated, driver-supplied identity auditable by a human."
+}
