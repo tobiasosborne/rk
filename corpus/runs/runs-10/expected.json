@@ -1,0 +1,24 @@
+{
+  "gate": "runs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "runs/scratch-notes.txt",
+      "message_pattern": "stray file at runs/ top level"
+    },
+    {
+      "severity": "WARN",
+      "path_pattern": "runs/probe-ledger.jsonl.bak",
+      "message_pattern": "stray file at runs/ top level"
+    }
+  ],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["sanctioned runs/ infrastructure: probe-channel.sh, probe-ledger.jsonl"]
+  },
+  "aism_behavior": "same",
+  "notes": "rk-z93m anti-hole guard (sibling of runs-09): the declared-infrastructure allowance must not widen into 'anything probe-shaped at the runs/ top level is fine'. The sanctioned pair is present and silent, while an ordinary stray (runs/scratch-notes.txt) AND a near-miss of a sanctioned name (runs/probe-ledger.jsonl.bak — a stale copy, exactly the shape an editor or a re-run leaves behind) each still draw check 6's WARN, unchanged from check-runs.py:46-50. Verdict stays pass because check 6 is WARN-only in BOTH phases — a stray file has never been an ERROR here, in exploration or consolidation (bead rk-z93m's 'would ERROR in consolidation' overstated it; the finding it draws is advisory, and the fix is that the constitution's own mandatory artifact must draw no finding at all). Matching on the sanctioned names is EXACT: the `.bak` WARN is what proves it."
+}

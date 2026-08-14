@@ -24,6 +24,7 @@ import worklogTmpl from "../../templates/docs/worklog.md.tmpl" with { type: "tex
 import definitionsReadmeTmpl from "../../templates/definitions/README.md.tmpl" with { type: "text" };
 import argumentReadmeTmpl from "../../templates/argument/README.md.tmpl" with { type: "text" };
 import northStarShardTmpl from "../../templates/argument/north-star.md.tmpl" with { type: "text" };
+import probeChannelTmpl from "../../templates/runs/probe-channel.sh.tmpl" with { type: "text" };
 
 import type { Manifest } from "./manifest-types";
 
@@ -47,4 +48,5 @@ export const TEMPLATE_TEXT: Record<string, string> = {
   "definitions/README.md.tmpl": definitionsReadmeTmpl,
   "argument/README.md.tmpl": argumentReadmeTmpl,
   "argument/north-star.md.tmpl": northStarShardTmpl,
+  "runs/probe-channel.sh.tmpl": probeChannelTmpl,
 };

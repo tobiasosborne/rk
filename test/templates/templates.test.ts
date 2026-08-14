@@ -13,6 +13,7 @@ import { parseFrontmatter } from "../../src/gates/snapshot";
 import { AF_STATES, KINDS, MATH_STATUS } from "../../src/gates/linker-lemma";
 import { fillTemplate } from "../../src/scaffold/slots";
 import { NORTH_STAR_SHARD_ID, NORTH_STAR_SHARD_PATH } from "../../src/scaffold/north-star";
+import { SANCTIONED_RUNS_INFRASTRUCTURE } from "../../src/gates/runs";
 
 const TEMPLATES_ROOT = join(import.meta.dir, "..", "..", "templates");
 
@@ -41,10 +42,16 @@ const VALID_CLASSIFICATIONS = ["authored-append-only", "rewritten-whole", "gener
 //  - .gitignore.tmpl stamps a .gitignore: an HTML comment is not a comment in gitignore syntax —
 //    a line reading `<!-- ROLE: ... -->` would be a literal, nonsense ignore PATTERN, not
 //    documentation (rk-zva).
-// Neither is skipped silently — describe-block (a2) below asserts the equivalent contract for
-// both (the manifest declares the class; the body states it in prose using its OWN comment
+//  - runs/probe-channel.sh.tmpl stamps an executable shell script: `<!--` is not a bash comment,
+//    and a shebang must be the file's FIRST line to work at all (rk-z93m).
+// None is skipped silently — describe-block (a2) below asserts the equivalent contract for
+// all three (the manifest declares the class; the body states it in prose using its OWN comment
 // syntax), and (g) additionally parses the shard template with the linker's own parser.
-const NO_HTML_HEADER_TMPL_FILES = new Set(["argument/north-star.md.tmpl", ".gitignore.tmpl"]);
+const NO_HTML_HEADER_TMPL_FILES = new Set([
+  "argument/north-star.md.tmpl",
+  ".gitignore.tmpl",
+  "runs/probe-channel.sh.tmpl",
+]);
 
 // Constitution slots that must appear EXACTLY ONCE (uniqueness matters — a duplicated north-star
 // or phase declaration is an authoring error). PROJECT_NAME is deliberately excluded: it recurs
@@ -87,6 +94,7 @@ describe("templates / sanity", () => {
         "definitions/README.md.tmpl",
         "argument/README.md.tmpl",
         "argument/north-star.md.tmpl",
+        "runs/probe-channel.sh.tmpl",
       ].sort(),
     );
   });
@@ -253,8 +261,8 @@ describe("templates / (d) manifest.json", () => {
 
   // rk-o1y: the M1.4 upgrade stub exists to notice exactly this kind of template-content change
   // — a stamped repo carrying an older template_version must MISMATCH a binary carrying this one.
-  test("template_version was bumped to 1.7.0 for the reward-protocol and probe/brief/hostile/lifecycle sections (rk-6cmx, rk-oeal)", () => {
-    expect(manifest.template_version).toBe("1.7.0");
+  test("template_version was bumped to 1.8.0 for the stamped probe channel and the runs-gate allowance (rk-z93m)", () => {
+    expect(manifest.template_version).toBe("1.8.0");
   });
 
   // A version bump whose changes are INVISIBLE to a per-file diff (a brand-new stamped path, a new
@@ -570,12 +578,69 @@ describe("templates / (h) reward/predict + probe/brief/hostile/worker-lifecycle 
     expect(section).toContain("/dev/null");
   });
 
+  test("the probe channel is stamped campaign-seed and owns the sanctioned ledger path (rk-z93m)", () => {
+    const manifest = JSON.parse(readFileSync(join(TEMPLATES_ROOT, "manifest.json"), "utf8"));
+    const entry = manifest.stamped.find((e: { path: string }) => e.path === "runs/probe-channel.sh");
+    expect(entry).toBeDefined();
+    expect(entry.template).toBe("runs/probe-channel.sh.tmpl");
+    // campaign-seed: a campaign tunes the channel to its own runtime, and `rk upgrade` must never
+    // overwrite that (the ledger's own entries were produced by THAT script, not this one).
+    expect(entry.classification).toBe("campaign-seed");
+
+    const body = read("runs/probe-channel.sh.tmpl");
+    // A shebang only works as the file's first line — this is why the template is exempt from the
+    // leading-HTML-comment header rule above.
+    expect(body.startsWith("#!/usr/bin/env bash")).toBe(true);
+    // The channel and the gate must agree on the ledger path, or the stamped script writes to a
+    // file the gate then reports as a stray.
+    expect(body).toContain("runs/probe-ledger.jsonl");
+    // I.3's immutability rule has to be enforced by the script, not by the researcher's memory.
+    expect(body).toContain("output.txt already exists");
+    expect(body).toContain("sha256sum");
+  });
+
+  // rk-z93m: the runs gate's sanctioned-name allowance and what `rk init` actually stamps under
+  // runs/ are two halves of one contract. If a future template stamps another file there without
+  // adding it to the gate's list, the freshly-stamped repo fails its own first `rk check` with a
+  // stray-file WARN — the exact failure this bead fixed. This test is that binding.
+  test("every file stamped directly under runs/ is sanctioned by the runs gate (gate/scaffold binding)", () => {
+    const manifest = JSON.parse(readFileSync(join(TEMPLATES_ROOT, "manifest.json"), "utf8"));
+    const stampedUnderRuns = manifest.stamped
+      .filter((e: { path: string; template: string | null }) => e.template !== null && e.path.startsWith("runs/"))
+      .map((e: { path: string }) => e.path.slice("runs/".length));
+    // One level only: a file in a runs/ SUBdirectory is bundle content, not top-level
+    // infrastructure, and the allowance deliberately does not reach it.
+    for (const name of stampedUnderRuns) {
+      expect(name).not.toContain("/");
+      expect(SANCTIONED_RUNS_INFRASTRUCTURE).toContain(name);
+    }
+    // And the list itself is exactly the two names the constitution and the gate both document —
+    // pinned so widening it is a deliberate, visible edit here as well as in the gate.
+    expect([...SANCTIONED_RUNS_INFRASTRUCTURE]).toEqual(["probe-channel.sh", "probe-ledger.jsonl"]);
+    // The ledger is NOT stamped: the channel creates it on first append (an empty JSONL file
+    // carries no ROLE header and teaches nothing), but the gate sanctions the name either way.
+    expect(stampedUnderRuns).toEqual(["probe-channel.sh"]);
+  });
+
   test("no bead id other than the deliberately pending-ratification one appears in the stamped constitution", () => {
     // A domain expert stamping a fresh campaign must find no rk-repo-specific residue: bead ids
     // are internal bookkeeping for THIS repo and meaningless elsewhere, so only the one clause
     // task instructions marked as a deliberate pending-ratification exception may carry one.
     const beadIds = claude.match(/\brk-[a-z0-9]{4}\b/g) ?? [];
     expect(new Set(beadIds)).toEqual(new Set(["rk-7the"]));
+  });
+
+  test("§4b I.3 names the stamped channel, both sanctioned file names, and the rename hazard (rk-z93m)", () => {
+    const section = claude.slice(claude.indexOf("## 4b."), claude.indexOf("## 4c."));
+    const flat = section.replace(/\s+/g, " ");
+    // The two names are the whole contract between the constitution and the runs gate.
+    for (const name of SANCTIONED_RUNS_INFRASTRUCTURE) expect(section).toContain(`runs/${name}`);
+    // How to actually invoke it — the stamped file is not executable, so the constitution must
+    // not tell a researcher to run it as `runs/probe-channel.sh` and walk them into a 126.
+    expect(section).toContain("bash runs/probe-channel.sh");
+    // The failure mode the bead is about: the gate only sanctions these EXACT names.
+    expect(flat.toLowerCase()).toContain("rename either file");
+    expect(section).toContain("probe-ledger.jsonl.bak");
   });
 
   test("§5 provenance subsection: declare-then-attest ordering, not attest-then-declare", () => {

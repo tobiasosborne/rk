@@ -1,0 +1,13 @@
+{
+  "gate": "runs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["run bundle(s)", "sanctioned runs/ infrastructure: probe-channel.sh, probe-ledger.jsonl"]
+  },
+  "aism_behavior": "differs",
+  "notes": "rk-z93m: the SANCTIONED probe-channel layout — runs/probe-channel.sh + runs/probe-ledger.jsonl at the runs/ top level, beside a conforming bundle DIRECTORY — is a golden PASS with zero findings, and the coverage line names both sanctioned files. Real incident (campaign D, s2): the 1.7.0 constitution's 4b I.3 REQUIRES an append-only hash-bound probe ledger produced by one sanctioned channel; check 6's bundles-are-dirs rule then WARNed on both files, so the template's own mandatory artifact failed the template's own gate. `aism_behavior: differs` — check-runs.py:46-50 WARNs any non-directory at the runs/ top level other than README.md, and knows nothing of a probe channel (AISM had none); the allowance is a deliberate, exact-name narrowing of check 6's stray set, not a stricter baseline, so it is not triaged into the rk-stricter-intended/rk-bug/ambiguous triad (same shape as linker-25/shards-15). Runs under the DEFAULT config, i.e. phase consolidation — the phase that matters for the bead. Red-first proof is test/gates/runs.test.ts's own allowance block (pre-fix: two stray WARNs and a bare 'run bundle(s)' coverage unit, which this fixture's unit_patterns also catch); mutation-proven by widening the allowance to a `probe-` prefix (red) and by dropping the coverage naming (red). Anti-hole sibling: runs-10."
+}

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# ROLE: the sanctioned probe execution channel required by this campaign's constitution,
+#   section 4b I.3 — the ONE way a numeric probe record that any shard CITES gets produced.
+#   Bounded (timeout), single-threaded, output kept, and every run appended as a hash-bound
+#   entry to the append-only ledger runs/probe-ledger.jsonl.
+# UPDATE POLICY: campaign-seed — stamped once by `rk init`; `rk upgrade` never rewrites it.
+#   Tune it to your own runtime (a different interpreter, a scheduler submission, extra
+#   determinism knobs) and commit the change; a change here never invalidates a prior ledger
+#   entry, because the ledger is append-only and its entries are immutable.
+# TRIGGER: a defect in the channel itself, or a runtime this dispatcher cannot launch.
+#
+# `rk check`'s runs gate sanctions exactly two names at the top of runs/ — this file and
+# runs/probe-ledger.jsonl — and reports both in its coverage line. Any OTHER loose file directly
+# under runs/ is still a stray (WARN): runs/ holds bundle DIRECTORIES and this channel, nothing
+# else. Rename either file and the gate goes back to warning about it.
+#
+# Usage:  bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]
+#   <bundle-dir>   a NEW run bundle directory (runs/<YYYY-MM-DD>-<slug>/) that already contains
+#                  <script>. Refuses to run if <bundle-dir>/output.txt exists: results are
+#                  IMMUTABLE (I.3) and a re-run gets a NEW bundle directory, so a hash a shard
+#                  already cited can never be orphaned by an overwrite.
+#   <script>       .py runs under python3, .sh under bash, anything executable runs directly.
+#   Appends one JSONL line: ts, bundle, script, script_sha256, output_sha256, cmd, exit, secs.
+#   A shard cites the probe by its bundle path; the ledger entry binds that path to content
+#   hashes, so a later reader can prove the cited output is the output that was produced.
+set -euo pipefail
+
+BUNDLE="${1:?usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]}"
+SCRIPT="${2:?usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]}"
+TMO="${3:-600}"
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LEDGER="$ROOT/runs/probe-ledger.jsonl"
+BDIR="$ROOT/$BUNDLE"
+
+[ -d "$BDIR" ] || { echo "probe-channel: no such bundle dir: $BUNDLE" >&2; exit 2; }
+[ -f "$BDIR/$SCRIPT" ] || { echo "probe-channel: no such script: $BUNDLE/$SCRIPT" >&2; exit 2; }
+[ ! -e "$BDIR/output.txt" ] || {
+  echo "probe-channel: $BUNDLE/output.txt already exists — probe results are immutable (4b I.3);" >&2
+  echo "               re-run into a NEW bundle directory instead of overwriting this one." >&2
+  exit 3
+}
+
+case "$SCRIPT" in
+  *.py) RUNNER=(python3 "$SCRIPT") ;;
+  *.sh) RUNNER=(bash "$SCRIPT") ;;
+  *) if [ -x "$BDIR/$SCRIPT" ]; then RUNNER=("./$SCRIPT"); else
+       echo "probe-channel: don't know how to run '$SCRIPT' (not .py, not .sh, not executable)." >&2
+       echo "               Add a case to this dispatcher — it is yours to edit." >&2
+       exit 2
+     fi ;;
+esac
+
+START=$(date -u +%s)
+set +e
+( cd "$BDIR" && timeout "$TMO" env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 PYTHONHASHSEED=0 \
+    "${RUNNER[@]}" </dev/null >output.txt 2>&1 )
+RC=$?
+set -e
+SECS=$(( $(date -u +%s) - START ))
+
+SSHA=$(sha256sum "$BDIR/$SCRIPT" | cut -d' ' -f1)
+OSHA=$(sha256sum "$BDIR/output.txt" | cut -d' ' -f1)
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ENTRY=$(printf '{"ts":"%s","bundle":"%s","script":"%s","script_sha256":"%s","output_sha256":"%s","cmd":"timeout %s single-threaded %s","exit":%d,"secs":%d}' \
+  "$TS" "$BUNDLE" "$SCRIPT" "$SSHA" "$OSHA" "$TMO" "${RUNNER[*]}" "$RC" "$SECS")
+
+# Append-only, one writer at a time. flock serializes concurrent probes; without it, a plain
+# append is still atomic for a single short line on every filesystem this runs on.
+if command -v flock >/dev/null 2>&1; then
+  flock "$ROOT/runs" -c "printf '%s\n' '$ENTRY' >> '$LEDGER'"
+else
+  printf '%s\n' "$ENTRY" >> "$LEDGER"
+fi
+
+echo "probe-channel: exit=$RC secs=$SECS output=$BUNDLE/output.txt sha256=$OSHA" >&2
+echo "probe-channel: ledgered in runs/probe-ledger.jsonl — cite the bundle path, not a loose number." >&2
+exit "$RC"

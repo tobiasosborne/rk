@@ -256,6 +256,20 @@ in that campaign dropped from the campaign's stable ~3-of-5 refutation rate to 1
    numeric check a worker runs purely for its own feedback needs no ledger entry; the moment a
    claim CITES a numeric fact, that fact goes through the sanctioned channel.
 
+   **The channel is stamped, and it has exactly two file names.** `rk init` stamps
+   `runs/probe-channel.sh`; it appends to `runs/probe-ledger.jsonl`, which it creates on the
+   first probe. Run it as `bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]`,
+   with `<bundle-dir>` a NEW `runs/<YYYY-MM-DD>-<slug>/` bundle holding the script; it refuses to
+   start if that bundle already has an `output.txt`, which is how the never-overwrite rule above
+   is enforced mechanically rather than by memory. Those two names are the ONLY files `rk check`
+   sanctions at the top of `runs/` — the runs gate names them in its coverage line, and warns
+   about every other loose file there, `probe-ledger.jsonl.bak` and a second ledger included.
+   The channel script is yours (campaign-seed: `rk upgrade` never rewrites it) — edit its
+   interpreter dispatch and determinism knobs freely, but rename either file and `rk check` goes
+   back to reporting your own required infrastructure as junk in `runs/`. (Scar: that is exactly
+   what happened to the campaign this clause comes from — it built the channel this section
+   demands, under its own names, and the gate flagged both files as strays.)
+
 ## 4c. Briefs and hostile verification
 
 **Brief format (measured: orchestrator technical steers were wrong roughly three times in four).**

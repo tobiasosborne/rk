@@ -322,6 +322,95 @@ describe("runsGate — stray top-level file (check 6)", () => {
   });
 });
 
+// rk-z93m: the 1.7.0 constitution's § 4b I.3 REQUIRES a sanctioned, ledgered probe channel, and
+// campaign D stood it up exactly where the channel has to live — `runs/probe-channel.sh` +
+// `runs/probe-ledger.jsonl`, at the top of runs/, next to the bundle DIRECTORIES it writes. Check
+// 6's bundles-are-dirs rule then WARNed on both: the template's own mandatory artifact failed the
+// template's own gate. These tests pin the declared-infrastructure allowance — exactly the two
+// names `rk init` stamps/owns are sanctioned, in BOTH phases (the gate is phase-unaware; the
+// corpus and these tests run the consolidation default), every other stray still WARNs, and the
+// coverage line SAYS what it sanctioned (CLAUDE.md L2: never a silent skip).
+describe("runsGate — declared probe-channel infrastructure (check 6 allowance, rk-z93m)", () => {
+  const CAMPAIGN_D_LAYOUT = {
+    "INDEX.md": "- `runs/2026-08-13-one-sided-gap-probes/`\n",
+    "runs/probe-channel.sh": "#!/usr/bin/env bash\n# the sanctioned probe execution channel\n",
+    "runs/probe-ledger.jsonl": '{"ts":"2026-08-13T19:09:26Z","bundle":"runs/2026-08-13-one-sided-gap-probes"}\n',
+    "runs/2026-08-13-one-sided-gap-probes/README.md": goodReadme(),
+  };
+
+  test("the campaign-D layout draws ZERO findings: neither channel nor ledger is a stray file", () => {
+    const result = run(CAMPAIGN_D_LAYOUT);
+    expect(result.findings).toEqual([]);
+  });
+
+  test("neither sanctioned file is counted as a run bundle (coverage denominator unchanged)", () => {
+    const result = run(CAMPAIGN_D_LAYOUT);
+    expect(result.coverage[0]!.checked).toBe(1);
+    expect(result.coverage[0]!.total).toBe(1);
+  });
+
+  test("the coverage line NAMES what it sanctioned, never a silent skip (L2)", () => {
+    const unit = run(CAMPAIGN_D_LAYOUT).coverage[0]!.unit;
+    expect(unit).toContain("run bundle(s)");
+    expect(unit).toContain("sanctioned runs/ infrastructure");
+    expect(unit).toContain("probe-channel.sh");
+    expect(unit).toContain("probe-ledger.jsonl");
+  });
+
+  test("each sanctioned name is allowed on its own (a ledger with no channel yet, and vice versa)", () => {
+    const channelOnly = run({ "INDEX.md": "# INDEX\n", "runs/probe-channel.sh": "#!/usr/bin/env bash\n" });
+    expect(channelOnly.findings).toEqual([]);
+    expect(channelOnly.coverage[0]!.unit).toContain("probe-channel.sh");
+    expect(channelOnly.coverage[0]!.unit).not.toContain("probe-ledger.jsonl");
+
+    const ledgerOnly = run({ "INDEX.md": "# INDEX\n", "runs/probe-ledger.jsonl": "" });
+    expect(ledgerOnly.findings).toEqual([]);
+    expect(ledgerOnly.coverage[0]!.unit).toContain("probe-ledger.jsonl");
+    expect(ledgerOnly.coverage[0]!.unit).not.toContain("probe-channel.sh");
+  });
+
+  test("the allowance is NOT a hole: an arbitrary stray next to the sanctioned pair still WARNs", () => {
+    const result = run({ ...CAMPAIGN_D_LAYOUT, "runs/NOTES.txt": "loose notes\n" });
+    expect(warnings(result)).toHaveLength(1);
+    expect(warnings(result)[0]!.path).toBe("runs/NOTES.txt");
+    expect(warnings(result)[0]!.message).toContain("stray file at runs/ top level");
+  });
+
+  test("the allowance is exact-name, not a prefix or extension family", () => {
+    const result = run({
+      "INDEX.md": "# INDEX\n",
+      "runs/probe-channel.sh.bak": "old copy\n",
+      "runs/probe-ledger.jsonl.tmp": "half-written\n",
+      "runs/probe-ledger-2.jsonl": "a second, unsanctioned ledger\n",
+      "runs/probes/probe-channel.sh": "not at the runs/ top level\n",
+    });
+    const strayPaths = warnings(result)
+      .filter((f) => f.message.includes("stray file at runs/ top level"))
+      .map((f) => f.path)
+      .sort();
+    expect(strayPaths).toEqual(["runs/probe-channel.sh.bak", "runs/probe-ledger-2.jsonl", "runs/probe-ledger.jsonl.tmp"]);
+    // `runs/probes/` holds a file, so it is a DIRECTORY at the runs/ top level — a (badly named)
+    // bundle, exactly as before: the allowance never reclassifies a directory.
+    expect(errors(result).some((f) => f.path === "runs/probes" && f.message.includes("bad bundle name"))).toBe(true);
+  });
+
+  test("day-1 (no infrastructure present): the coverage line is unchanged, nothing is claimed", () => {
+    const result = run({ "INDEX.md": "# INDEX\n" });
+    expect(result.coverage).toEqual([{ gate: "runs", unit: "run bundle(s)", checked: 0, total: 0 }]);
+  });
+
+  test("a DIRECTORY carrying a sanctioned name is still a bundle, not sanctioned infrastructure", () => {
+    // Defense against the allowance leaking into the bundle classifier: `runs/probe-ledger.jsonl/`
+    // as a directory is a malformed bundle and must keep drawing the bad-name ERROR.
+    const result = runsGate.run(
+      snapshotWithDirs({ "INDEX.md": "# INDEX\n" }, ["runs", "runs/probe-ledger.jsonl"]),
+      DEFAULT_GATE_CONFIG,
+    );
+    expect(errors(result).some((f) => f.path === "runs/probe-ledger.jsonl" && f.message.includes("bad bundle name"))).toBe(true);
+    expect(result.coverage[0]!.unit).not.toContain("sanctioned runs/ infrastructure");
+  });
+});
+
 describe("runsGate — coverage counting", () => {
   test("checked/total both equal the bundle-directory count, not the file count", () => {
     const result = run({
