@@ -1,0 +1,3 @@
+Lemma 4.2 (spectral gap of the almost-idempotent family).
+the spectral gap closes as the system size grows without bound
+Proof sketch: the variational argument of Section 3 applies verbatim.

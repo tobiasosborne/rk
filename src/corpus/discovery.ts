@@ -171,5 +171,14 @@ export function totalFixtureCount(corpusRoot: string): number {
  * check of its own — byte-verified a quote against bytes that were never adopted: `checked 1/1`,
  * exit 0. The resolver now compares the payload against `entry.sha256`, the ADOPTED pin, before it
  * looks at the extraction at all. See docs/gate-contracts.md Gate 3 check 10's violated-pin
- * clause. */
-export const EXPECTED_FIXTURE_COUNT = 172;
+ * clause.
+ * 174 (+2 over the then-pinned 172): rk-r0j3 (P1, Tier A) — the same review's P1-1 finding carried
+ * to its full scope: `resolveQuotableText` pin-checked PDFs only, returning raw bytes for every
+ * non-PDF payload before it consulted the lock at all, while Gate 3's externals half performs no
+ * pin check of its own. `refs-21` is refs-20's exploit against a TEXT source (payload replaced
+ * after adoption, quote byte-verbatim on the replacement ⇒ was `checked 1/1`, exit 0);
+ * `refs-22` is the weaker-rule discriminator (payload present, quote verbatim, NO lock at all ⇒
+ * unpinned bytes are not adopted evidence). The pin now runs for every payload kind before the
+ * PDF/non-PDF split, which is why `refs-02`/`03`/`07`/`09`/`11` gained locks — see
+ * corpus/README.md's rk-r0j3 paragraph. */
+export const EXPECTED_FIXTURE_COUNT = 174;

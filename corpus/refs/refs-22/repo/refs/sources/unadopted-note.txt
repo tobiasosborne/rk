@@ -1,0 +1,3 @@
+Lemma 2.1 (trace-distance bound).
+the diamond-norm defect is bounded by twice the trace distance
+Proof: expand the Stinespring dilation and apply the triangle inequality.

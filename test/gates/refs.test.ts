@@ -1,6 +1,7 @@
-// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 11 fixtures
+// Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s 22 fixtures
 // (refs-08 added by rk-6r3, M0.3 review finding 7: malformed non-object JSON externals;
-// refs-09/refs-10/refs-11 added by rk-wkzh / P2, AISM incidents I2/I3/I4).
+// refs-09/refs-10/refs-11 added by rk-wkzh / P2, AISM incidents I2/I3/I4; refs-21/refs-22 by
+// rk-r0j3, the adopted-pin rule extended from PDFs to every payload kind).
 //
 // Two fixture-loading paths are used deliberately:
 //  - "hand-built snapshot" tests construct a RepoSnapshot Map directly — these are the true unit
@@ -8,7 +9,8 @@
 //  - the "corpus fixtures" describe block at the bottom loads each corpus/refs/<id>/repo/ tree
 //    with a LOCAL, full-tree recursive reader defined in this file (`loadFullSnapshot`), not
 //    src/store/snapshot-load.ts's `loadSnapshot` — a second, independent reader over the same
-//    trees, so this gate's fixtures are verified 11/11 even if the shared loading edge changes.
+//    trees, so this gate's text-payload fixtures are verified twice over even if the shared
+//    loading edge changes (the block's own comment lists which ids it covers and why).
 //    HISTORY (rk-wkzh, 2026-08-03): this header used to say `loadSnapshot`'s INCLUDE_RULES had no
 //    rule for generic `refs/<source-id>/*` payloads, so test/corpus.test.ts silently dropped them.
 //    That gap is CLOSED — snapshot-load.ts:129 carries `{ dir: "refs", recursive: true }` (rk-skd),
@@ -33,9 +35,31 @@ import { unmatchedExpectations } from "../../src/gates/subset-match";
 import type { ExpectedFinding } from "../../src/gates/subset-match";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
+import { sha256Hex } from "../../src/gates/sha256";
 
-function snap(entries: Record<string, string>): RepoSnapshot {
-  return snapshotFromFiles(entries);
+const LOCK = "refs/manifest/sources.lock.json";
+const encoder = new TextEncoder();
+
+/** Builds a snapshot AND, by default, the `sources.lock.json` that ADOPTS every `refs/` payload in
+ * it at its own current digest (rk-r0j3: Gate 3 matches a quote only against bytes an adoption
+ * pinned, whatever the payload's kind — so an unpinned hand-built tree would now fail every test
+ * on the pin rather than on its own subject). The pin rule's own red cases are the "adopted pin"
+ * describe block below and corpus fixtures refs-21/refs-22, which build their locks explicitly.
+ * `{ lock: false }` opts out; an explicit `refs/manifest/sources.lock.json` entry always wins. */
+function snap(entries: Record<string, string>, opts: { lock?: boolean } = {}): RepoSnapshot {
+  const files = { ...entries };
+  const payloads = Object.keys(entries).filter((p) => p.startsWith("refs/") && !p.startsWith("refs/manifest/"));
+  if (opts.lock !== false && !(LOCK in files) && payloads.length > 0) {
+    files[LOCK] = JSON.stringify({
+      files: payloads.map((p) => ({
+        path: p.slice("refs/".length),
+        sha256: sha256Hex(encoder.encode(entries[p]!)),
+        source_id: p.slice("refs/".length),
+        fetch: null,
+      })),
+    });
+  }
+  return snapshotFromFiles(files);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -555,6 +579,81 @@ describe("refsGate — check 7 (the closed no-quote escape, I3)", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// Check 10's adopted-pin clause AT GATE LEVEL (rk-r0j3, P1/Tier A). The resolver's own unit tests
+// live in refs-extraction.test.ts; what these assert is the half the bead is about — that the
+// EXTERNALS half, which performs no pin check of its own, cannot byte-verify a quote against
+// unadopted bytes. Corpus counterparts: refs-21 (violated pin), refs-22 (no lock at all).
+// ---------------------------------------------------------------------------------------------
+
+describe("refsGate — check 10, the adopted pin (rk-r0j3)", () => {
+  const PAYLOAD = "refs/src-pin/paper.md";
+  const TEXT = "Recall that the map is idempotent on X, by the earlier lemma.";
+  const EXTERNAL = {
+    name: "GT-pin-1",
+    source: `See refs/src-pin/paper.md:1. VERBATIM "the map is idempotent on X" here.`,
+  };
+  const lockPinning = (sha: string): string =>
+    JSON.stringify({ files: [{ path: "src-pin/paper.md", sha256: sha, source_id: "src-pin", fetch: null }] });
+
+  test("golden: an ADOPTED text payload still byte-verifies its quote (the rule does not false-positive)", () => {
+    const result = refsGate.run(
+      snap({ [PAYLOAD]: TEXT, "proofs/lem-pin/externals/GT-pin-1.json": JSON.stringify(EXTERNAL) }),
+      DEFAULT_GATE_CONFIG,
+    );
+    expect(result.findings).toHaveLength(0);
+    expect(result.coverage[0]!.checked).toBe(1);
+  });
+
+  test("a text payload replaced after adoption FAILs even though its quote is byte-verbatim on disk", () => {
+    const s = snap(
+      {
+        [PAYLOAD]: TEXT,
+        "refs/manifest/sources.lock.json": lockPinning(sha256Hex(encoder.encode("an earlier revision of the paper\n"))),
+        "proofs/lem-pin/externals/GT-pin-1.json": JSON.stringify(EXTERNAL),
+      },
+      { lock: false },
+    );
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.message).toContain("VIOLATE their adopted pin");
+    expect(result.coverage[0]!.checked).toBe(0);
+    expect(formatCoverageLine(result.coverage[0]!)).toContain("1 failed");
+  });
+
+  test("a text payload with NO lock at all FAILs: a green verdict may not mean 'matched today's file'", () => {
+    const s = snap({ [PAYLOAD]: TEXT, "proofs/lem-pin/externals/GT-pin-1.json": JSON.stringify(EXTERNAL) }, { lock: false });
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.message).toContain("is not hash-pinned");
+    expect(result.coverage[0]!.checked).toBe(0);
+  });
+
+  test("two lock entries for one payload are ambiguous, never first-wins", () => {
+    const entry = { path: "src-pin/paper.md", sha256: sha256Hex(encoder.encode(TEXT)), source_id: "src-pin", fetch: null };
+    const s = snap(
+      {
+        [PAYLOAD]: TEXT,
+        "refs/manifest/sources.lock.json": JSON.stringify({ files: [entry, entry] }),
+        "proofs/lem-pin/externals/GT-pin-1.json": JSON.stringify(EXTERNAL),
+      },
+      { lock: false },
+    );
+    const result = refsGate.run(s, DEFAULT_GATE_CONFIG);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.message).toContain("ambiguous");
+  });
+
+  test("the pin ERROR is counted, never a skip: the failed external stays in the denominator", () => {
+    const s = snap({ [PAYLOAD]: TEXT, "proofs/lem-pin/externals/GT-pin-1.json": JSON.stringify(EXTERNAL) }, { lock: false });
+    const c = refsGate.run(s, DEFAULT_GATE_CONFIG).coverage[0]!;
+    expect(formatCoverageLine(c)).toBe(
+      "checked refs: 0/1 externals byte-verified, 1 failed, 0 import-skipped, 0 no-quote-skipped; checked 0/0 shard citations",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // Coverage line — the four-way split (checked/total, failed, import-skipped, no-quote-skipped)
 // must never collapse two skip reasons into one number (Gate 3 Divergences, message-only).
 // ---------------------------------------------------------------------------------------------
@@ -632,8 +731,12 @@ interface ExpectedJson {
   config_override?: Partial<GateConfig>;
 }
 
-describe("corpus fixtures — refs-01..11 (direct-load)", () => {
+describe("corpus fixtures — refs-01..11, refs-21, refs-22 (direct-load)", () => {
   const CORPUS_REFS = join(import.meta.dir, "..", "..", "corpus", "refs");
+  // The text-only externals-half fixtures. refs-12..refs-20 are excluded on purpose: this reader
+  // is a utf8 whole-tree walk, and refs-17..refs-20 carry BINARY PDF payloads whose utf8 round-trip
+  // would not reproduce their raw-byte sha256 (they run under test/corpus.test.ts's byte-faithful
+  // loader instead). refs-21/refs-22 (rk-r0j3) are text and belong here.
   const FIXTURE_IDS = [
     "refs-01",
     "refs-02",
@@ -646,6 +749,8 @@ describe("corpus fixtures — refs-01..11 (direct-load)", () => {
     "refs-09",
     "refs-10",
     "refs-11",
+    "refs-21",
+    "refs-22",
   ];
 
   for (const id of FIXTURE_IDS) {

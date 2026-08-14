@@ -1,12 +1,14 @@
 // ROLE: Gate 3's answer to "WHICH bytes does a claimed quote get matched against?" (bead rk-we5i,
-// P1). For an ordinary text payload the answer is unchanged — the payload itself. For a PDF
-// payload the raw bytes are FlateDecode streams in which no sentence of the document appears at
-// all, so matching against them can only ever produce a false NOT-FOUND; the answer there is the
-// payload's recorded EXTRACTION layer, admitted only when its provenance chain to the payload
-// hash is intact. Both of Gate 3's matching sites — the externals half (src/gates/refs.ts checks
-// 2-4/6) and the argument-shard half (src/gates/refs-shard-citations.ts check 8) — resolve their
-// text through `resolveQuotableText` here, so they can never disagree about which layer is
-// authoritative for a given source.
+// P1; extended by rk-r0j3). The answer is always "the bytes that were ADOPTED": every payload,
+// whatever its kind, must resolve to exactly one sources.lock.json entry whose pin it satisfies
+// before any text is handed back. For an ordinary text payload that adopted text is the payload
+// itself. For a PDF payload the raw bytes are FlateDecode streams in which no sentence of the
+// document appears at all, so matching against them can only ever produce a false NOT-FOUND; the
+// answer there is the payload's recorded EXTRACTION layer, admitted only when its provenance chain
+// to the payload hash is intact. Both of Gate 3's matching sites — the externals half
+// (src/gates/refs.ts checks 2-4/6) and the argument-shard half (src/gates/refs-shard-citations.ts
+// check 8) — resolve their text through `resolveQuotableText` here, so they can never disagree
+// about which bytes are authoritative for a given source.
 //
 // FAIL-CLOSED, ALWAYS. Every way the extraction layer can be missing, unrecorded, unreadable,
 // stale, or tampered with resolves to `{ ok: false }` with a reason — never to "fall back to the
@@ -93,25 +95,26 @@ export type ResolvedText =
  * Decision order (each step fails closed):
  *  1. payload absent from the snapshot            -> not resolvable (the caller's pre-existing
  *     ABSENT wording is preserved: this is the aism-dbq 19/19 check, unchanged).
- *  2. payload is not a PDF                        -> the payload's own text, layer `raw`. This is
- *     the pre-rk-we5i behavior verbatim for every text source.
- *  3. lock unreadable                             -> not resolvable (no chain can be checked).
- *  4. no / ambiguous lock entry for the payload   -> not resolvable.
- *  5. payload has no raw-byte hash fact           -> not resolvable (the chain's left end is
- *     unmeasurable; cannot happen for a present file at the real edge, but never assumed).
+ *  2. path outside `refs/`                        -> not resolvable (no lock entry can pin it).
+ *  3. lock unreadable/absent/malformed            -> not resolvable — the payload is NOT
+ *     HASH-PINNED, whatever its kind (bead rk-r0j3; see the pin block below).
+ *  4. no / ambiguous lock entry for the payload   -> not resolvable, same reason.
+ *  5. payload has no raw-byte hash fact           -> not resolvable (the pin cannot be checked;
+ *     cannot happen for a present file at the real edge, but never assumed).
  *  6. payload's hash != `entry.sha256`, the ADOPTED PIN -> not resolvable. The payload-swap case
- *     (2026-08-14 review P1-1): checked before anything about the extraction, because a
- *     re-chained sidecar makes every later check pass on bytes nobody adopted.
- *  7. no `extraction` recorded                    -> not resolvable — THE headline state: a PDF
+ *     (2026-08-14 review P1-1 for PDFs; rk-r0j3 for every other kind).
+ *  7. payload is not a PDF                        -> the payload's own text, layer `raw`. Reached
+ *     only once steps 2-6 have established that these bytes are the ADOPTED bytes.
+ *  8. no `extraction` recorded                    -> not resolvable — THE headline state: a PDF
  *     source is quotable only once an extraction layer exists.
- *  8. extraction file absent from the snapshot    -> not resolvable.
- *  9. chain broken (`extraction.payload_sha256` != payload's CURRENT hash) -> not resolvable. The
+ *  9. extraction file absent from the snapshot    -> not resolvable.
+ * 10. chain broken (`extraction.payload_sha256` != payload's CURRENT hash) -> not resolvable. The
  *     stale-extraction case: the payload moved and the extraction did not.
- * 10. extraction file's own hash != `extraction.sha256` -> not resolvable. The tampered/rewritten-
+ * 11. extraction file's own hash != `extraction.sha256` -> not resolvable. The tampered/rewritten-
  *     extraction case: the payload never moved, the derived text did.
- * 11. otherwise                                   -> the extraction's text, layer `extraction`.
+ * 12. otherwise                                   -> the extraction's text, layer `extraction`.
  *
- * Note on 6/9/10: every digest is compared case-insensitively and BOTH sides must be well-formed
+ * Note on 6/10/11: every digest is compared case-insensitively and BOTH sides must be well-formed
  * 64-hex; a malformed digest (in the record OR in the pin) is a broken chain, never a skipped
  * comparison. */
 export function resolveQuotableText(snapshot: RepoSnapshot, lock: LockFacts, refsPath: string): ResolvedText {
@@ -119,46 +122,71 @@ export function resolveQuotableText(snapshot: RepoSnapshot, lock: LockFacts, ref
   if (payloadText === undefined) {
     return { ok: false, reason: `refs file ${refsPath} ABSENT — a claimed VERBATIM refs quote cannot be byte-verified` };
   }
-  if (!isPdfText(payloadText)) return { ok: true, text: payloadText, layer: "raw", path: refsPath };
+  const isPdf = isPdfText(payloadText);
+  // `subject` is kind-neutral (the pin block below applies to every payload kind); `label` adds the
+  // PDF qualifier where the message is about the extraction layer, which only PDFs have.
+  const subject = `refs file ${refsPath}`;
+  const label = isPdf ? `${subject} is a PDF payload` : subject;
 
-  const label = `refs file ${refsPath} is a PDF payload`;
-  if (lock.error !== undefined) {
-    return { ok: false, reason: `${label}; its extraction layer cannot be resolved: ${lock.error}` };
-  }
+  // ---------------------------------------------------------------------------------------------
+  // THE ADOPTED PIN — checked for EVERY payload kind, before the PDF/non-PDF split (bead rk-r0j3,
+  // P1/Tier A; extends the 2026-08-14 Tier A review's finding P1-1 from PDFs to all payloads).
+  //
+  // Until rk-r0j3 this function returned `{ ok: true, layer: "raw" }` for any non-PDF payload
+  // WITHOUT consulting the lock at all, and Gate 3's externals half (src/gates/refs.ts) performs no
+  // pin check of its own — so a text source could be replaced after adoption, or never adopted at
+  // all, and its quotes would still "byte-verify" against whatever bytes happened to be on disk.
+  // That is the same exploit refs-20 pins for PDFs, one payload kind over (corpus refs-21), plus
+  // the weaker no-lock-at-all case (refs-22).
+  //
+  // The rule is the one the PDF branch and Gate 3's shard-citation half already applied, now
+  // stated once for everything: a quote is verified against the text of the bytes that were
+  // ADOPTED, so an absent/unreadable lock, a missing or ambiguous entry, a malformed pin, or a pin
+  // the payload does not satisfy each resolve to `ok: false` — never to a raw-bytes fallback. A
+  // green verdict must mean "matched the adopted source", not "matched today's file".
+  // ---------------------------------------------------------------------------------------------
   if (!refsPath.startsWith("refs/")) {
-    return { ok: false, reason: `${label} outside refs/ — no lock entry can pin it` };
+    return { ok: false, reason: `${subject} lies outside refs/ — no ${LOCK_PATH} entry can pin it` };
+  }
+  if (lock.error !== undefined) {
+    return {
+      ok: false,
+      reason:
+        `${subject} is not hash-pinned: ${lock.error} — a claimed VERBATIM quote cannot be verified ` +
+        `against bytes no adoption pinned`,
+    };
   }
   const relative = refsPath.slice("refs/".length);
   const matches = lock.entries.filter((e) => e.path === relative);
   if (matches.length !== 1) {
     const reason = matches.length === 0 ? "has no entry" : `has ${matches.length} ambiguous entries`;
-    return { ok: false, reason: `${label} but ${LOCK_PATH} ${reason} for ${relative} — no extraction layer can be chained to it` };
+    return { ok: false, reason: `${subject} is not hash-pinned: ${LOCK_PATH} ${reason} for ${relative}` };
   }
   const entry = matches[0]!;
 
-  // THE ADOPTED PIN, checked HERE and not only in the callers (2026-08-14 Tier A review, finding
-  // P1-1). Gate 3's two halves disagreed about this: refs-shard-citations.ts pin-checks a claim
-  // before calling this resolver, refs.ts's externals half never does. The reviewer's exploit rides
-  // the second path — replace an adopted PDF payload, then run `rk refs quote`, which sees a stale
-  // chain and re-chains a FRESH sidecar to the replacement's hash. Every chain check below then
-  // passes on bytes that were never adopted, and the externals half byte-verifies a quote against
-  // them. A single validity core has to answer "which bytes?" with "the bytes that were ADOPTED",
-  // so the comparison lives here too — defense in depth, not a duplicate of the caller's check.
   const payloadSha = fileSha256(snapshot, refsPath);
   if (payloadSha === undefined) {
-    return { ok: false, reason: `${label} present but carrying no raw-byte sha256 fact — its extraction chain cannot be checked` };
+    return { ok: false, reason: `${subject} is present but carries no raw-byte sha256 fact — its adopted pin cannot be checked` };
   }
   if (!sameDigest(entry.sha256, payloadSha)) {
+    // The re-chaining sentence is PDF-only: it names the specific repair a reader might reach for
+    // on a swapped PDF (regenerate the sidecar) and explains why it does not help. On a text
+    // payload there is no sidecar, so saying it would be noise.
+    const rechain = isPdf ? "Re-chaining an extraction to the replacement bytes cannot repair this. " : "";
     return {
       ok: false,
       reason:
         `${label} whose bytes VIOLATE their adopted pin in ${LOCK_PATH}: the lock pins sha256 ` +
-        `${entry.sha256} but the payload on disk hashes ${payloadSha}. Re-chaining an extraction to ` +
-        `the replacement bytes cannot repair this — the quotable text of a source is the text of the ` +
-        `bytes that were ADOPTED, so restore the pinned payload or re-adopt it ('rk refs adopt') and ` +
-        `re-verify every quote that cited it`,
+        `${entry.sha256} but the payload on disk hashes ${payloadSha}. ${rechain}The quotable text of a ` +
+        `source is the text of the bytes that were ADOPTED, so restore the pinned payload or re-adopt ` +
+        `it ('rk refs adopt') and re-verify every quote that cited it`,
     };
   }
+
+  // Only now: these bytes ARE the adopted bytes. A non-PDF payload is its own quotable text (the
+  // pre-rk-we5i layer decision, unchanged — what rk-r0j3 changed is WHETHER we get here, not what
+  // is returned once we do).
+  if (!isPdf) return { ok: true, text: payloadText, layer: "raw", path: refsPath };
 
   const extraction = entry.extraction;
   if (extraction === undefined) {

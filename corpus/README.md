@@ -107,6 +107,8 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `refs-18` | refs | PDF payload is revision 2 (which states the gap CLOSES) while the extraction sidecar beside it is revision 1's text (which states the gap is bounded below) and the shard quotes revision 1 ⇒ check 10 ERROR, coverage `checked 0/1 shard citations` | **rk-we5i** fail-closed case 1 — why the extraction layer is CHAINED rather than merely present. Every non-chain check is impeccable: the payload matches its lock pin exactly, the sidecar matches its own recorded sha256 exactly, and the quote is byte-verbatim at recorded line 2 of the sidecar. An extraction admitted on presence alone therefore reports `checked 1/1` and exits 0 while certifying a claim the CURRENT source refutes — strictly worse than the rk-we5i bug it fixes. `extraction.payload_sha256` (revision 1's digest) ≠ the payload's current digest, so the citation is unresolvable. Triage: rk-stricter-intended. Mutation-proven: disabling the `payload_sha256` comparison turns this fixture green at `checked 1/1` — the exact false-verify, observed and reverted. Green control: `refs-17`. | landed |
 | `refs-19` | refs | PDF payload present and hash-pinned with NO `extraction` recorded on its lock entry ⇒ check 10 ERROR naming the missing layer and the remedy, coverage `checked 0/1 shard citations` | **rk-we5i** fail-closed case 2 — the state every PDF source is in before an extraction exists, i.e. the state the bead's three field reports describe. The verdict is never a silently unchecked green and never a fallback to matching raw FlateDecode streams; the pre-fix path produced the misleading `quote NOT found byte-for-byte`, which blames the author for a tooling gap. The honest shard status while the extraction is missing is `stated`. A partially-written `extraction` record lands on this same branch (dropped, never half-trusted — `test/gates/refs-extraction.test.ts`). Triage: rk-stricter-intended. Green control: `refs-17` (same payload, extraction recorded and chained). | landed |
 | `refs-20` | refs | PDF payload SWAPPED after adoption and the sidecar RE-CHAINED to the replacement, so the extraction chain is internally impeccable while the payload violates its adopted pin ⇒ check 10 ERROR, coverage `checked 0/1 externals byte-verified, 1 failed` | **2026-08-14 Tier A review finding P1-1** (`docs/reviews/2026-08-14-refs-extraction-runs-infra-codex.md`), the reviewer's own exploit against rk-we5i's extraction layer. `sources/spectral.pdf` was adopted as revision 1 (pin `2e5f8c74…`, "the spectral gap is uniformly bounded below"); the payload on disk is now revision 2 (`0ce5d389…`, "the spectral gap CLOSES"), never re-adopted. Running `rk refs quote` on the replacement made `ensureExtraction` regenerate the sidecar from the NEW bytes, so `extraction.payload_sha256` equals the payload's current digest, `extraction.sha256` equals the sidecar's own digest, and the external's quote is byte-verbatim at line 2 of that sidecar — every check `resolveQuotableText` performed passed. Only the adopted pin dissented, and the resolver never looked at it: it compared `payload_sha256` to the payload's CURRENT hash only. Gate 3's shard-citation half pin-checks its claims before calling the resolver; **the externals half never did**, so this rode straight through at `checked 1/1`, exit 0. The pin comparison now lives in the resolver itself (single validity core, defense in depth). Triage: rk-stricter-intended. Mutation-proven red-first: red against pre-repair source (`checked 1/1`, exit 0, zero findings), green after; deleting the pin comparison restores exactly that false-verify, observed and reverted. Green control: `refs-17` (pin and chain both intact). Distinct from `refs-18`, whose pin holds while the CHAIN is stale — `refs-18` cannot detect this bug, because the resolver stops at the chain check. | landed |
+| `refs-21` | refs | text (non-PDF) payload REPLACED after adoption — revision 2 on disk, revision 1 pinned — with the external quoting revision 2 byte-verbatim at its recorded locus ⇒ check 10 stage-1 ERROR, coverage `checked 0/1 externals byte-verified, 1 failed` | **rk-r0j3** (P1, Tier A), the 2026-08-14 Tier A review's P1-1 carried to its full scope. `resolveQuotableText` pin-checked PDFs only: `refs-extraction.ts:122` returned `{ ok: true, layer: "raw" }` for every non-PDF payload BEFORE it consulted the lock, and Gate 3's externals half performs no pin check of its own — so this tree byte-verified a quote against bytes nobody adopted at `checked 1/1`, exit 0. `refs-20` cannot detect it: its payload is a PDF, so it never reaches the non-PDF return. Triage: rk-stricter-intended. Mutation-proven red-first (red against pre-bead source at `checked 1/1`, exit 0, zero findings; restoring the early non-PDF return reproduces exactly that, observed and reverted). Green controls: `refs-02`/`refs-03`/`refs-07` (same externals path, pins intact). Boundary partner: `refs-22`. | landed |
+| `refs-22` | refs | text payload present and quote byte-verbatim at its locus, but the repo has NO `refs/manifest/sources.lock.json` ⇒ check 10 stage-1 ERROR `is not hash-pinned`, coverage `checked 0/1 externals byte-verified, 1 failed` | **rk-r0j3**, the missing-lock half of the same decision, and the fixture that discriminates the adopted rule from the weaker variant "pin-check only when a lock entry happens to exist" (under which `refs-21` still ERRORs and this tree silently returns to `checked 1/1`, exit 0). A green verdict here would mean "the quote matched the file on disk today", not "the quote matched the adopted source". The rule matches what this resolver's PDF branch and Gate 3's shard-citation half already did with a missing lock — no third, softer rule for text. Triage: rk-stricter-intended. Mutation-proven: letting the lock-error branch fall through to raw bytes for non-PDF payloads restores `checked 1/1`, exit 0; reverted. Nearest neighbours: `refs-13` (shard half, absent payload), `defs-14` (Gate 1, manifest absent). | landed |
 | `provenance-01` [PLAN] | provenance | OVERCLAIM (registry `open` framed as proved) | class-driven; the gate's own header names this "the project's #1 guarded failure mode" (`check-provenance.py:24`) — no dated instance actually caught in AISM history, guarded preventively | landed |
 | `provenance-02` | provenance | underclaim (proved framed only `open`, WARN) | class-driven (no incident on record) | landed |
 | `provenance-03` [PLAN] | provenance | stale SHA256 (tracked source edited post-hash) | class-driven (no incident on record) | landed |
@@ -199,14 +201,42 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `reward-25` | reward | `.rk/provenance-lem-attested.json` written byte-for-byte by `rk reward attest`, carrying `sourceRef` to the verifier transcript ⇒ pass | **rk-tlwb producer fixture (rule 10):** pins schemas/provenance-record.v1.json, src/cli/reward-attest.ts and src/reward/pma-backing.ts to one shape with a checked-in artifact instead of three modules agreeing in prose. | landed |
 | `reward-26` | reward | independently authored, current-bytes-bound record whose `verdict` is `REFUTED` ⇒ structural ERROR `[reward-tier-unbacked]` naming the verdict field | **rk-xrgn**, the 2026-08-12 Tier A review's own exploit (finding 2): every clause Check 4b(i) checked was impeccable — `.rk/` placement, `schema_version` "1", right `claimId`, `role: verifier`, decoded model different from the prover-of-record, `claimSha256` equal to the shard's current hash — and the one thing the record SAID was that the claim is false, yet it banked the proved-mod-audit close, because the banking site read who wrote the record and never what it said. Red against pre-repair source (pass, exit 0, zero findings), green after. Green control: `reward-10` (identical shape, honest `verdict: "VALID"`). Editing the shard invalidates `claimSha256` and flips this to `reward-23`'s staleness reason — i.e. passing for the wrong reason; recompute the hash when the shard changes. | landed |
 
-Totals: 5 config + 15 defs + 46 argument/linker + 20 refs + 24 provenance + 10 runs +
-15 report-shards + 11 freshness + 26 reward = **172 fixtures** (reconciled 2026-08-10,
+Totals: 5 config + 15 defs + 46 argument/linker + 22 refs + 24 provenance + 10 runs +
+15 report-shards + 11 freshness + 26 reward = **174 fixtures** (reconciled 2026-08-10,
 rk-sp3n closed; the wave-1 panel's reviewer C recomputed the true counts; +2 rk-io5l,
 +2 rk-tlwb, +1 rk-xrgn, 2026-08-12; +3 rk-we5i, +2 rk-z93m, 2026-08-14;
-+1 refs-20 review repair 2026-08-14) across the gates named in
++1 refs-20 review repair 2026-08-14; +2 rk-r0j3 2026-08-14) across the gates named in
 `docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
 with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
 are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).
+`refs-21`, `refs-22` (+2 over the then-pinned 172) are rk-r0j3 (P1, Tier A): Gate 3's adopted-pin
+rule extended from PDF payloads to EVERY payload kind, on both halves of the gate. The bug: the
+2026-08-14 Tier A review's P1-1 repair put the pin comparison inside `resolveQuotableText`, but
+that function returned raw bytes for any non-PDF payload before it looked at the lock at all, and
+the externals half (`src/gates/refs.ts`) pin-checks nothing itself — so text sources on that path
+were unpinned. Both new fixtures were written RED first and observed byte-verifying at
+`checked 1/1`, exit 0, against pre-bead source.
+
+**Divergence decision recorded here (L5, default-stricter).** A payload with NO lock entry is an
+ERROR, not a WARN skip and not a raw-bytes fallback. This is not a new rule — it is the rule this
+same resolver's PDF branch and Gate 3's shard-citation half (`is not hash-pinned`) already
+applied; the alternative would have made "which bytes does a quote verify against?" depend on the
+payload's file format. Triage: **rk-stricter-intended**; the acceptance set strictly shrinks (a
+repo that never adopted its sources moves from green to a named ERROR with a remedy), and AISM is
+unaffected by construction — it has no lock file and zero refs-quote externals have ever existed
+there.
+
+**Fixture consequence, disclosed rather than absorbed.** Five pre-existing externals-half fixtures
+predate the rule and would otherwise have failed on the pin instead of on their own subject:
+`refs-02`, `refs-03`, `refs-07` (fabrication / paraphrase-wrapping), `refs-09` (wrong-passage
+locus) and `refs-11` (form-feed locus ambiguity). Each gained a `refs/manifest/sources.lock.json`
+adopting its payload at the digest on disk, so each fixture still proves exactly what it proved
+before — none of them is *about* pinning, and their expected verdicts are unchanged. Two fixtures
+deliberately did NOT gain a lock: `refs-01` (all payloads absent — check 2's ABSENT verdict
+precedes pinning, which is itself the assertion) and `refs-10` (the no-quote escape is decided in
+check 7, before any payload is resolved). See both new rows above, `docs/gate-contracts.md`
+Gate 3 check 10 stage 1 and its new `[rk-stricter-intended]` divergence entry.
+
 `config-05` (+1 over the then-pinned 131) is rk-k0m1 / P2 (live-fire RUN-REPORT-12): the red
 fixture for the new `workers` turn/session timeout overrides — a zero `turnTimeoutMs` is a
 loading-edge ERROR, not a silent fallback to the very 120s ceiling the operator meant to raise.
@@ -747,6 +777,14 @@ the M1-repair-wave fixtures above — their `aism_behavior` fields are backed by
 recorded in `docs/memos/2026-08-03-aism-postmortem/07-refs-report.md`, where I2 is documented as
 *observed live and still green*, not by a fresh harness execution. The `total` row stays at the
 M0 cohort's 92.)
+
+(Scope note, 2026-08-14, rk-r0j3: the refs row is deliberately left at 11/11. Gate 3 now has 22
+fixtures, but `refs-12`..`refs-22` have no AISM counterpart to run at all — the argument-shard
+citation grammar, the extraction layer, and `sources.lock.json` itself are rk constructs
+(`check-refs.py` reads only `proofs/<ws>/externals/*.json` and greps raw payload bytes). Their
+`aism_behavior: differs` fields are backed by direct reads of that script, as the rows record.
+This follows the convention rk-we5i set when it added `refs-17`..`refs-20`; the `total` row stays
+at the M0 cohort's 92.)
 
 (Scope note, 2026-08-14, rk-z93m: the runs row is updated to 10/10 on the same footing —
 `runs-09`/`runs-10` are outside the M0 cohort, and their `aism_behavior` fields are backed by a

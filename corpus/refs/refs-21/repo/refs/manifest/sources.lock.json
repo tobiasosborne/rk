@@ -1,0 +1,10 @@
+{
+  "files": [
+    {
+      "path": "sources/spectral-note.txt",
+      "sha256": "85fc7097a4b2d49f43a05373968f89bacb32ae017fdcaadb4689b4c5b80ddbde",
+      "source_id": "spectral-note",
+      "fetch": null
+    }
+  ]
+}

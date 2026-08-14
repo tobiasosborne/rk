@@ -1289,6 +1289,14 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   payload does not make the replacement quotable (check 10's violated-pin clause, review P1-1).
   Implementation: `src/gates/refs-extraction.ts` (`resolveQuotableText`), called by both Gate 3
   halves.
+- **Hash authority for BOTH halves** (rk-r0j3). `refs/manifest/sources.lock.json` pins every
+  citable payload, whatever its kind: a `refs/<path>` a quote is matched against must resolve to
+  exactly one lock entry, refs-relative, whose `sha256` is a full 64-hex digest equal to the
+  snapshot's raw-byte hash for that payload. This was already stated for argument-shard citations
+  (check 8) and for PDF externals; it now holds for text externals too — the externals half
+  performs no pin check of its own, so the shared resolver enforces it for both. An absent lock is
+  not an exemption (check 10, stage 1). A payload the lock does not pin is an ERROR whether it was
+  replaced after adoption or never adopted at all.
 
 **Checks.**
 1. **Classification** (check-refs.py:108-133):
@@ -1373,23 +1381,40 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    unit. If any cited shards exist and zero shard citations pass Check 8, emit a further
    **ERROR** `zero byte-verified shard citations`; a run may never be green merely because no
    citation was recognizable.
-10. **Extraction-chain resolution** (rk-we5i). Before checks 4/6 (externals) and check 8's final
-    byte comparison (shard citations) run, the payload path is resolved to the text the quote is
-    matched against. A non-PDF payload resolves to its own bytes — behavior identical to every
-    release before this check existed. A PDF payload resolves to its extraction layer, and ONLY
-    when the whole chain is intact. Each of the following is **ERROR**, counted in the coverage
-    denominator and never in the numerator, and never a fallback to raw payload bytes:
-    - the lock is absent/unparseable/malformed, or has zero / more than one entry for the payload;
+10. **Payload resolution — the adopted pin, then the extraction chain** (rk-we5i; the pin clause
+    generalized to every payload kind by rk-r0j3). Before checks 4/6 (externals) and check 8's
+    final byte comparison (shard citations) run, the payload path is resolved to the text the
+    quote is matched against. The answer is always **the bytes that were ADOPTED**: resolution
+    proceeds in two stages, and each of the clauses below is an **ERROR**, counted in the coverage
+    denominator and never in the numerator, and never a fallback to raw payload bytes.
+
+    **Stage 1 — the adopted pin. Applies to EVERY payload kind, PDF and non-PDF alike, before the
+    kind is even consulted.**
+    - the payload path lies outside `refs/` — no lock entry can pin it;
+    - **not hash-pinned**: the lock is absent/unparseable/malformed, or has zero / more than one
+      entry for the payload. **A missing lock is an ERROR, not an exemption** — the same rule this
+      gate's shard-citation half (check 8) has always applied, now applied to the externals half
+      too. A verdict reached without a pin would mean "the quote matched the file that happens to
+      be on disk today", not "the quote matched the adopted source", and Gate 3 exists to state
+      the second;
+    - the payload is present but the snapshot carries no raw-byte sha256 fact for it — the pin
+      cannot be checked, so it is not treated as satisfied;
     - **violated pin**: the payload's raw-byte sha256 ≠ its lock entry's adopted `sha256`, or that
-      pin is not well-formed 64-hex. Checked BEFORE anything about the extraction, and checked
-      here rather than only in the callers (2026-08-14 Tier A review, finding P1-1). The exploit it
-      closes: replace an adopted PDF payload without repinning, then run `rk refs quote`, which
-      finds the chain stale and re-chains a FRESH sidecar to the replacement's hash. Every other
-      clause below then passes on bytes nobody adopted. Gate 3's shard-citation half (check 8)
-      already pin-checks its claims before resolving; the externals half does not, so the single
-      validity core must — the quotable text of a source is the text of the bytes that were
-      ADOPTED, and no extraction can be chained into legitimacy around that. The remedy is to
-      restore the pinned payload or re-adopt it and re-verify every quote that cited it;
+      pin is not well-formed 64-hex. This is checked in the resolver rather than only in the
+      callers (2026-08-14 Tier A review, finding P1-1): Gate 3's shard-citation half pin-checks its
+      claims before resolving, the externals half does not, so the single validity core must. The
+      exploit it closes, for a PDF: replace an adopted payload without repinning, then run `rk refs
+      quote`, which finds the chain stale and re-chains a FRESH sidecar to the replacement's hash,
+      after which every stage-2 clause passes on bytes nobody adopted (`refs-20`). The same exploit
+      against a TEXT payload needs no sidecar at all — before rk-r0j3 the resolver returned raw
+      bytes for any non-PDF payload before it consulted the lock, so a replaced or never-adopted
+      text source byte-verified its quotes against whatever was on disk (`refs-21`, `refs-22`). The
+      remedy either way is to restore the pinned payload or re-adopt it (`rk refs adopt`) and
+      re-verify every quote that cited it.
+
+    **Stage 2 — the layer.** A non-PDF payload resolves to its own bytes (layer `raw`); what
+    rk-r0j3 changed is whether stage 2 is reached at all, not what it returns. A PDF payload
+    resolves to its extraction layer, and ONLY when the whole chain is intact:
     - no `extraction` recorded on the lock entry (also: a partially-written record, which is
       dropped rather than half-trusted) — the state every PDF source is in before an extraction
       exists; the honest shard status meanwhile is `stated`;
@@ -1399,14 +1424,20 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
     - **edited extraction**: the extraction file's raw-byte sha256 ≠ its recorded `extraction.sha256`
       — the payload never moved but the derived text did;
     - either digest malformed (not 64-hex) — a broken chain, never a skipped comparison.
+
     The two staleness clauses are the reason the layer is chained rather than merely present:
     admitting an unchained extraction would let a citation verify against text the current source
     no longer contains, which is strictly worse than the unreachable-cited-rung bug this check
     fixes. The violated-pin clause is the third staleness direction and the one a chain check
     alone cannot see: there the extraction is perfectly current — it is the ADOPTION that is
-    stale. Fixtures: `refs-17` (intact chain ⇒ PASS), `refs-18` (stale chain ⇒ ERROR), `refs-19`
-    (no extraction recorded ⇒ ERROR), `refs-20` (payload swapped, sidecar re-chained, pin violated
-    ⇒ ERROR).
+    stale. Note that check 2's ABSENT verdict still precedes all of this: an absent payload is
+    reported as absent, never as unpinned (`refs-01`). Fixtures: `refs-17` (intact chain ⇒ PASS),
+    `refs-18` (stale chain ⇒ ERROR), `refs-19` (no extraction recorded ⇒ ERROR), `refs-20` (PDF
+    payload swapped, sidecar re-chained, pin violated ⇒ ERROR), `refs-21` (TEXT payload swapped
+    after adoption ⇒ ERROR), `refs-22` (text payload with no lock at all ⇒ ERROR). The
+    pin-satisfied golden path is every other refs fixture with a payload: `refs-02`, `refs-03`,
+    `refs-07`, `refs-09`, `refs-11` (externals half) and `refs-12`, `refs-14`..`refs-17` (shard
+    half) all carry locks adopting their sources at the digests on disk.
 
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
@@ -1511,6 +1542,27 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   its ADOPTED pin, not merely to be the bytes the extraction was made from. Without that, the
   acceptance set would have GROWN in the one direction this bead must not grow — a payload
   replaced after adoption could be quoted through a freshly re-chained sidecar. Fixture: `refs-20`.
+- **[rk-stricter-intended] Every citable payload must satisfy an adopted pin, not only PDFs**
+  (P1, bead rk-r0j3; the 2026-08-14 Tier A review's P1-1 carried to its full scope). AISM's
+  `check-refs.py` has no lock file at all: it greps whatever bytes sit at the named path, so
+  "verified" there means "matched today's file". rk's port inherited a weaker version of the same
+  gap on one path — `resolveQuotableText` returned the raw payload for any non-PDF source *before*
+  it consulted the lock, and Gate 3's externals half performs no pin check of its own, so a text
+  source that had been replaced after adoption (or never adopted) still byte-verified its quotes.
+  The rule is now uniform across payload kinds and across both halves of the gate: absent lock,
+  missing/ambiguous entry, malformed pin, or violated pin ⇒ ERROR (check 10, stage 1). **Direction
+  of the change**: the acceptance set strictly SHRINKS — nothing that FAILed starts passing, and
+  a repo that never adopted its sources moves from green to a named ERROR with a remedy.
+  **Cost**: the affected population is repos that cite unpinned `refs/` payloads. Zero AISM
+  externals are affected (zero refs-quote externals have ever existed there — see the zero-cost
+  evidence above); five rk corpus fixtures (`refs-02`, `refs-03`, `refs-07`, `refs-09`, `refs-11`)
+  predate the rule and gained locks adopting their payloads, which leaves each fixture's own point
+  intact — none of them is *about* pinning. **Deliberate boundary**: the missing-lock case is an
+  ERROR rather than a WARN skip because both existing surfaces already treated it that way (the
+  PDF branch of this same resolver, and check 8's `is not hash-pinned` claim error); a third,
+  softer rule for text payloads would have made the gate's answer to "which bytes?" depend on the
+  payload's file format. Fixtures: `refs-21` (payload replaced after adoption), `refs-22` (no lock
+  at all).
 - **[message-only]** The single Gate 3 coverage line retains the four-way external breakdown
   and appends `; checked <C>/<K> shard citations` (rk-uqxh), rendering: `checked refs: <P>/<T>
   externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped; checked
@@ -1555,6 +1607,8 @@ changed across AISM's history at time of reading.
 | `refs-18` | **stale extraction chain** [rk-we5i] — payload is revision 2 of the PDF, sidecar is revision 1's text, both hashes self-consistent, quote byte-verbatim in the sidecar ⇒ check 10 ERROR, `checked 0/1 shard citations` (an unchained extraction would report `1/1` while certifying a claim the current source refutes) |
 | `refs-19` | **PDF source with no extraction recorded** [rk-we5i] — payload present and hash-pinned, no `extraction` on its lock entry ⇒ check 10 ERROR naming the missing layer, `checked 0/1 shard citations`, never a raw-bytes fallback |
 | `refs-20` | **payload swapped, sidecar re-chained, adopted pin violated** [2026-08-14 Tier A review, P1-1] — the payload on disk is a revision that was never adopted, and the extraction is chained to THOSE bytes, so the whole chain is internally consistent; an `externals` quote byte-verifies against it ⇒ check 10 ERROR, `checked 0/1 externals byte-verified, 1 failed` (PASSed at `checked 1/1` before this repair: the externals half performs no pin check of its own, so the resolver's chain test was the only thing standing between a swapped payload and a green Gate 3) |
+| `refs-21` | **TEXT payload swapped after adoption** [rk-r0j3] — a non-PDF source replaced by a later revision that was never re-adopted; the external quotes the replacement byte-verbatim at its recorded locus ⇒ check 10 stage-1 ERROR, `checked 0/1 externals byte-verified, 1 failed` (PASSed at `checked 1/1` before this bead: the resolver returned raw bytes for every non-PDF payload before consulting the lock, and the externals half performs no pin check of its own — `refs-20` cannot detect this, because its payload is a PDF) |
+| `refs-22` | **cited payload that no adoption ever pinned** [rk-r0j3] — text payload present, quote byte-verbatim at its locus, and NO `refs/manifest/sources.lock.json` in the tree ⇒ check 10 stage-1 ERROR, `checked 0/1 externals byte-verified, 1 failed`. The discriminator for the weaker rule "pin-check only when a lock entry happens to exist", under which `refs-21` still ERRORs and this tree silently returns to `checked 1/1`, exit 0 |
 
 ---
 

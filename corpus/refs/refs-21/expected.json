@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-spectral-note/externals/GT-spectral-note-closes.json",
+      "message_pattern": "VIOLATE their adopted pin"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "aism_behavior": "differs",
+  "notes": "rk-r0j3 (P1, Tier A), the live bug's own flip: refs-20's payload-swap exploit re-run against a NON-PDF payload. `sources/spectral-note.txt` was adopted as revision 1 (pin 85fc7097..., 'the spectral gap is uniformly bounded below by a constant'); the payload on disk is revision 2 (b4608b93..., 'the spectral gap CLOSES as the system size grows without bound'), never re-adopted, and the external quotes revision 2 byte-verbatim at its recorded locus. Before this bead resolveQuotableText returned raw bytes for every non-PDF payload WITHOUT consulting the lock at all (refs-extraction.ts:122, `if (!isPdfText(payloadText)) return { ok: true, ... }`), and Gate 3's externals half does no pin check of its own — so the quote byte-verified against bytes nobody adopted: `checked 1/1 externals byte-verified, 0 failed`, exit 0. refs-20 cannot detect this: its payload is a PDF, so it never exercises the non-PDF return. The pin check now runs for EVERY payload kind before the PDF/non-PDF split. `aism_behavior: differs` — check-refs.py has no lock at all and greps whatever bytes are on disk. Triage: rk-stricter-intended. Mutation-proof: restoring the pre-bead early return for non-PDF payloads returns this fixture to `checked 1/1`, exit 0, zero findings — the exact false-verify; observed and reverted. Green control: refs-02/refs-03/refs-07 (same externals path, pins intact). Boundary partner: refs-22 (no lock at all rather than a violated pin)."
+}

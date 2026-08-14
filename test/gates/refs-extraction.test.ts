@@ -1,6 +1,8 @@
-// Contract: docs/gate-contracts.md Gate 3 "Extraction layer (PDF payloads)" + src/gates/
-// refs-extraction.ts. This is the validity core of bead rk-we5i: which bytes a claimed quote is
-// matched against, and every way that resolution must fail closed.
+// Contract: docs/gate-contracts.md Gate 3 check 10 ("Payload resolution": the adopted-pin clause,
+// which applies to every payload kind, and the extraction chain, which applies to PDFs) +
+// src/gates/refs-extraction.ts. This is the validity core of beads
+// rk-we5i and rk-r0j3: which bytes a claimed quote is matched against — always the bytes that
+// were ADOPTED — and every way that resolution must fail closed.
 //
 // The load-bearing assertions are the NEGATIVE ones. A missing, absent, stale, or edited
 // extraction must resolve to `ok: false` — never to a silent fallback to the raw payload (which
@@ -53,17 +55,68 @@ function build(over: { lockRaw?: string; entry?: LockShape; omitSidecar?: boolea
   return { snapshot, lock: readLockFacts(snapshot) };
 }
 
-describe("resolveQuotableText — non-PDF payloads are untouched", () => {
-  test("a text payload resolves to its own bytes, layer 'raw' (pre-rk-we5i behavior, verbatim)", () => {
-    const snapshot = snapshotFromFiles({ "refs/sources/paper.tex": "Theorem 1.\nA verbatim sentence.\n" });
-    const r = resolveQuotableText(snapshot, readLockFacts(snapshot), "refs/sources/paper.tex");
-    expect(r).toEqual({ ok: true, text: "Theorem 1.\nA verbatim sentence.\n", layer: "raw", path: "refs/sources/paper.tex" });
+const TEX = "refs/sources/paper.tex";
+const TEX_TEXT = "Theorem 1.\nA verbatim sentence.\n";
+
+/** A text payload plus a lock; `pin` defaults to the payload's own digest (the adopted state). */
+function textTree(over: { pin?: string; text?: string; omitLock?: boolean } = {}) {
+  const text = over.text ?? TEX_TEXT;
+  const files: Record<string, string> = { [TEX]: text };
+  if (!over.omitLock) {
+    files["refs/manifest/sources.lock.json"] = JSON.stringify({
+      files: [{ path: "sources/paper.tex", sha256: over.pin ?? sha(text), source_id: "paper", fetch: null }],
+    });
+  }
+  const snapshot = snapshotFromFiles(files);
+  return { snapshot, lock: readLockFacts(snapshot) };
+}
+
+describe("resolveQuotableText — non-PDF payloads resolve to their own bytes, but only once ADOPTED", () => {
+  test("an ADOPTED text payload resolves to its own bytes, layer 'raw'", () => {
+    const { snapshot, lock } = textTree();
+    const r = resolveQuotableText(snapshot, lock, TEX);
+    expect(r).toEqual({ ok: true, text: TEX_TEXT, layer: "raw", path: TEX });
   });
 
-  test("a text payload needs no lock entry at all — an absent lock never blocks a text quote", () => {
-    const snapshot = snapshotFromFiles({ "refs/sources/paper.tex": "x" });
-    const r = resolveQuotableText(snapshot, readLockFacts(snapshot), "refs/sources/paper.tex");
-    expect(r.ok).toBe(true);
+  // rk-r0j3 (P1, Tier A) — THE flip. Until this bead the two tests below asserted the opposite
+  // ("a text payload needs no lock entry at all"): the resolver returned raw bytes for every
+  // non-PDF payload before it looked at the lock, and Gate 3's externals half performs no pin
+  // check of its own, so a text source that was replaced after adoption — or never adopted —
+  // still "byte-verified" its quotes against whatever was on disk. That is refs-20's exploit one
+  // payload kind over. Corpus counterparts: refs-21 (violated pin), refs-22 (no lock at all).
+  test("a text payload whose bytes VIOLATE their adopted pin is unresolvable — never a raw-bytes fallback", () => {
+    const { snapshot, lock } = textTree({ pin: sha("an earlier revision of the note\n") });
+    const r = resolveQuotableText(snapshot, lock, TEX);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("VIOLATE their adopted pin");
+    // The PDF-only remedy sentence must not appear on a text payload's finding.
+    expect(r.ok === false && r.reason).not.toContain("Re-chaining an extraction");
+  });
+
+  test("a text payload with NO lock at all is unresolvable: unpinned bytes are not adopted evidence", () => {
+    const { snapshot, lock } = textTree({ omitLock: true });
+    const r = resolveQuotableText(snapshot, lock, TEX);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("is not hash-pinned");
+  });
+
+  test("a text payload with no lock ENTRY of its own is unresolvable (a lock covering other sources is not a pin)", () => {
+    const snapshot = snapshotFromFiles({
+      [TEX]: TEX_TEXT,
+      "refs/manifest/sources.lock.json": JSON.stringify({
+        files: [{ path: "sources/other.tex", sha256: sha("other"), source_id: "other", fetch: null }],
+      }),
+    });
+    const r = resolveQuotableText(snapshot, readLockFacts(snapshot), TEX);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("has no entry");
+  });
+
+  test("a MALFORMED pin on a text payload is a violated pin, never a skipped comparison", () => {
+    const { snapshot, lock } = textTree({ pin: "not-a-digest" });
+    const r = resolveQuotableText(snapshot, lock, TEX);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("VIOLATE their adopted pin");
   });
 
   test("an absent payload keeps the aism-dbq 19/19 ABSENT wording (never a skip)", () => {
@@ -71,6 +124,13 @@ describe("resolveQuotableText — non-PDF payloads are untouched", () => {
     const r = resolveQuotableText(snapshot, readLockFacts(snapshot), "refs/sources/gone.tex");
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.reason).toContain("ABSENT");
+  });
+
+  test("a payload OUTSIDE refs/ is unresolvable whatever its kind — no lock entry can pin it", () => {
+    const snapshot = snapshotFromFiles({ "notes/paper.tex": TEX_TEXT });
+    const r = resolveQuotableText(snapshot, readLockFacts(snapshot), "notes/paper.tex");
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("lies outside refs/");
   });
 });
 

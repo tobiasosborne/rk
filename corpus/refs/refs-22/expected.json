@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-unadopted/externals/GT-unadopted-trace-bound.json",
+      "message_pattern": "is not hash-pinned: refs/manifest/sources.lock.json absent"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "aism_behavior": "differs",
+  "notes": "rk-r0j3 (P1, Tier A), the missing-lock half of the same decision. The text payload is present and the quote is byte-verbatim at its recorded locus, but the repo has NO refs/manifest/sources.lock.json: nothing records which revision of the source was ever adopted, so a green verdict would mean 'these bytes matched the bytes that happen to be on disk today', not 'these bytes matched the adopted source'. Gate 3 now treats an unpinned payload the same way its PDF branch and its shard-citation half already did — ERROR, counted in the denominator, never a raw-bytes fallback. This fixture, not refs-21, is what discriminates the adopted rule from the weaker variant 'pin-check only when a lock entry happens to exist': under that variant refs-21 still ERRORs and this tree silently returns to `checked 1/1`, exit 0. `aism_behavior: differs` — check-refs.py has no lock concept and PASSes. Triage: rk-stricter-intended. Mutation-proof: making the lock-error branch fall through to raw bytes for non-PDF payloads restores `checked 1/1`, exit 0, zero findings; observed and reverted. Boundary partners: refs-21 (lock present, pin violated), refs-13 (the shard-citation half's absent-payload counterpart), defs-14 (Gate 1's manifest-absent WARN, the same 'nothing pinned anything' shape one gate over)."
+}
