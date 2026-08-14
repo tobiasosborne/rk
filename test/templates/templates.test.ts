@@ -662,6 +662,52 @@ describe("templates / (h) reward/predict + probe/brief/hostile/worker-lifecycle 
     expect(body).toContain("sha256sum");
   });
 
+  // Codex review 2026-08-14 (P1 :38, P2-5 :63, P2-6 :66-72). The BEHAVIOUR these repairs bought is
+  // proved live in test/templates/probe-channel.test.ts, which drives the stamped script against
+  // real bundles, real concurrency and real hostile filenames. What is asserted HERE is only what
+  // a black-box run cannot show: the SHAPE of the critical section — one lock acquisition, taken
+  // before the reservation and never released early, and a pre-run digest that is textually ahead
+  // of the launch. A structurally different script that happened to pass the live-fire suite on a
+  // fast machine would still be a regression.
+  test("the channel's critical section is one flock, taken early, with no shell command string (codex 2026-08-14)", () => {
+    const body = read("runs/probe-channel.sh.tmpl");
+    const code = body
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n");
+
+    // P2-6: `flock -c '<interpolated string>'` re-parses ledger fields through a shell — an
+    // apostrophe in a filename broke it. The lock is taken on a file descriptor instead.
+    expect(code).not.toMatch(/flock\s[^\n]*\s-c\s/);
+    expect(code).toContain('exec 9<"$ROOT/runs"');
+    // Exactly one acquisition and no early release: the lock spans reservation, run, hash, append.
+    expect(code.match(/^flock /gm) ?? []).toHaveLength(1);
+    expect(code).not.toContain("flock -u");
+
+    const lockIdx = code.indexOf("flock -w");
+    const reserveIdx = code.indexOf("already has a ledger entry");
+    const preHashIdx = code.indexOf('SSHA=$(sha256sum "$BDIR/$SCRIPT"');
+    const runIdx = code.indexOf('"${RUNNER[@]}" </dev/null >output.txt');
+    const postHashIdx = code.indexOf('SSHA_AFTER=$(sha256sum "$BDIR/$SCRIPT"');
+    const appendIdx = code.indexOf('printf \'%s\\n\' "$ENTRY" >> "$LEDGER"');
+    for (const idx of [lockIdx, reserveIdx, preHashIdx, runIdx, postHashIdx, appendIdx]) {
+      expect(idx).toBeGreaterThan(0);
+    }
+    // P1: reserve AFTER the lock; P2-5: hash BEFORE the launch and again after; append last.
+    expect(lockIdx).toBeLessThan(reserveIdx);
+    expect(reserveIdx).toBeLessThan(preHashIdx);
+    expect(preHashIdx).toBeLessThan(runIdx);
+    expect(runIdx).toBeLessThan(postHashIdx);
+    expect(postHashIdx).toBeLessThan(appendIdx);
+
+    // P2-6: names are rejected rather than escaped — the allowlist is the whole defence, so it is
+    // pinned here. Widening it must be a deliberate edit in two places.
+    expect(code).toContain("NAME_RE='^[A-Za-z0-9][A-Za-z0-9._/-]*$'");
+    // No zero-dependency JSON escaping snuck in behind the allowlist (L4: the channel must not
+    // start requiring python3 for a .sh probe).
+    expect(code).not.toContain("import json");
+  });
+
   // rk-z93m: the runs gate's sanctioned-name allowance and what `rk init` actually stamps under
   // runs/ are two halves of one contract. If a future template stamps another file there without
   // adding it to the gate's list, the freshly-stamped repo fails its own first `rk check` with a

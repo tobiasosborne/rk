@@ -6,23 +6,55 @@
 # UPDATE POLICY: campaign-seed — stamped once by `rk init`; `rk upgrade` never rewrites it.
 #   Tune it to your own runtime (a different interpreter, a scheduler submission, extra
 #   determinism knobs) and commit the change; a change here never invalidates a prior ledger
-#   entry, because the ledger is append-only and its entries are immutable.
+#   entry, because the ledger is append-only and its entries are immutable. If you make probes
+#   run CONCURRENTLY, read RESERVATION below first: the reservation, the run, the hashing and
+#   the append are one critical section on purpose.
 # TRIGGER: a defect in the channel itself, or a runtime this dispatcher cannot launch.
 #
 # `rk check`'s runs gate sanctions exactly two names at the top of runs/ — this file and
 # runs/probe-ledger.jsonl — and reports both in its coverage line. Any OTHER loose file directly
 # under runs/ is still a stray (WARN): runs/ holds bundle DIRECTORIES and this channel, nothing
-# else. Rename either file and the gate goes back to warning about it.
+# else. Rename either file and the gate goes back to warning about it. (This is also why the lock
+# below is taken on the runs/ DIRECTORY itself rather than on a lockfile beside the ledger: a
+# runs/.probe-channel.lock would be one more stray the gate reports.)
 #
 # Usage:  bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]
 #   <bundle-dir>   a NEW run bundle directory (runs/<YYYY-MM-DD>-<slug>/) that already contains
-#                  <script>. Refuses to run if <bundle-dir>/output.txt exists: results are
-#                  IMMUTABLE (I.3) and a re-run gets a NEW bundle directory, so a hash a shard
-#                  already cited can never be orphaned by an overwrite.
+#                  <script>. Refuses to run if <bundle-dir> already has a LEDGER ENTRY, or if
+#                  <bundle-dir>/output.txt exists: results are IMMUTABLE (I.3) and a re-run gets a
+#                  NEW bundle directory, so a hash a shard already cited can never be orphaned by
+#                  an overwrite.
 #   <script>       .py runs under python3, .sh under bash, anything executable runs directly.
 #   Appends one JSONL line: ts, bundle, script, script_sha256, output_sha256, cmd, exit, secs.
 #   A shard cites the probe by its bundle path; the ledger entry binds that path to content
 #   hashes, so a later reader can prove the cited output is the output that was produced.
+#
+# RESERVATION (why this script is one long critical section).
+#   The LEDGER is the record of "already run", not the filesystem. Checking only for an existing
+#   output.txt was both racy and forgeable: two agents launching the same new bundle concurrently
+#   both passed the check, both truncated output.txt, and both appended a row — so the bundle path
+#   a shard cites no longer identified one immutable output; and deleting output.txt silently
+#   freed the bundle name for a second, differently-hashed run while the first row stayed in the
+#   append-only ledger. So: ONE exclusive flock on runs/ (fd 9) is held across the reservation
+#   check, the run, the hashing and the append. Probes therefore serialize campaign-wide — that is
+#   the price of a reservation that cannot be lost, and a waiter blocks for at most
+#   RK_PROBE_LOCK_WAIT seconds (default: this run's timeout + 60) before failing loudly.
+#
+# NAMES ARE VALIDATED, NOT ESCAPED.
+#   Every field below is interpolated verbatim into a JSON object. Escaping needs a JSON
+#   serializer this zero-dependency script will not require, so instead it REFUSES any name that
+#   would need escaping: bundle and script must match ^[A-Za-z0-9][A-Za-z0-9._/-]*$ with no `..`
+#   component. A `"` in a filename used to append a permanently malformed line to an append-only
+#   ledger; a `'` used to break the shell command string the append ran through. Neither is
+#   reachable now, and no ledger field ever passes through a shell -c command string.
+#
+# EXIT CODES. A channel-level refusal NEVER writes a ledger row:
+#   2  usage, missing bundle/script, unrunnable script, hostile name, missing flock(1)
+#   3  <bundle-dir>/output.txt already exists (immutability, I.3)
+#   4  <bundle-dir> already has a ledger entry (reservation)
+#   5  another probe holds the channel and RK_PROBE_LOCK_WAIT elapsed
+#   6  the probe script's bytes changed while it ran — bundle poisoned, nothing ledgered
+#   anything else is the PROBE's own exit status, and that run IS ledgered (124 = its timeout).
 set -euo pipefail
 
 BUNDLE="${1:?usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]}"
@@ -33,8 +65,64 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LEDGER="$ROOT/runs/probe-ledger.jsonl"
 BDIR="$ROOT/$BUNDLE"
 
+# --- 1. Fail-closed validation, before anything is opened, locked, written or run -------------
+NAME_RE='^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+reject_name() {
+  echo "probe-channel: refusing this $1 name — it cannot be recorded safely:" >&2
+  echo "               $2" >&2
+  echo "               a $1 must match $NAME_RE and contain no '..' component." >&2
+  echo "               Quotes, apostrophes, backslashes, spaces, newlines and control characters" >&2
+  echo "               are rejected: they corrupt the JSONL ledger every citation depends on." >&2
+  exit 2
+}
+for pair in "bundle:$BUNDLE" "script:$SCRIPT"; do
+  kind="${pair%%:*}"; value="${pair#*:}"
+  [[ "$value" =~ $NAME_RE ]] || reject_name "$kind" "$value"
+  case "/$value/" in */../*) reject_name "$kind" "$value" ;; esac
+done
+[[ "$TMO" =~ ^[1-9][0-9]*$ ]] || {
+  echo "probe-channel: timeout-seconds must be a positive integer, got: $TMO" >&2
+  exit 2
+}
+LOCK_WAIT="${RK_PROBE_LOCK_WAIT:-$((TMO + 60))}"
+[[ "$LOCK_WAIT" =~ ^[0-9]+$ ]] || {
+  echo "probe-channel: RK_PROBE_LOCK_WAIT must be a non-negative integer, got: $LOCK_WAIT" >&2
+  exit 2
+}
+command -v flock >/dev/null 2>&1 || {
+  echo "probe-channel: flock(1) not found — refusing to run." >&2
+  echo "               Without it the bundle reservation is not atomic, and two concurrent runs" >&2
+  echo "               can write competing ledger rows for one cited bundle. Install util-linux," >&2
+  echo "               or replace this lock with your platform's equivalent (this file is yours)." >&2
+  exit 2
+}
+
+# --- 2. Take the lock, and hold it to the last line -------------------------------------------
+# fd 9 on the runs/ directory. No `flock -c "<command string>"`: a command string re-parses every
+# interpolated value through a shell, which is how an apostrophe in a filename used to break the
+# append. The fd is released when this process exits, however it exits.
+exec 9<"$ROOT/runs"
+flock -w "$LOCK_WAIT" 9 || {
+  echo "probe-channel: another probe holds the channel (waited ${LOCK_WAIT}s) — refusing." >&2
+  echo "               Probes are serialized so a bundle reservation cannot be lost; retry when" >&2
+  echo "               the running probe finishes, or raise RK_PROBE_LOCK_WAIT to queue." >&2
+  exit 5
+}
+
+# --- 3. Reserve the bundle (ledger first: it is the source of truth for "already run") ---------
 [ -d "$BDIR" ] || { echo "probe-channel: no such bundle dir: $BUNDLE" >&2; exit 2; }
 [ -f "$BDIR/$SCRIPT" ] || { echo "probe-channel: no such script: $BUNDLE/$SCRIPT" >&2; exit 2; }
+
+# Exact-match on the serialized key pair. Safe as a fixed string because both names are validated
+# above, and this channel is the ledger's only writer.
+if [ -f "$LEDGER" ] && grep -Fq -- "\"bundle\":\"$BUNDLE\",\"script\":\"" "$LEDGER"; then
+  echo "probe-channel: $BUNDLE already has a ledger entry — refusing to run it again." >&2
+  echo "               Probe results are immutable (4b I.3) and the ledger, not the filesystem," >&2
+  echo "               says what has run: deleting output.txt does NOT free the bundle name, or a" >&2
+  echo "               shard citing this bundle would resolve to two competing rows." >&2
+  echo "               Re-run into a NEW bundle directory." >&2
+  exit 4
+fi
 [ ! -e "$BDIR/output.txt" ] || {
   echo "probe-channel: $BUNDLE/output.txt already exists — probe results are immutable (4b I.3);" >&2
   echo "               re-run into a NEW bundle directory instead of overwriting this one." >&2
@@ -51,6 +139,12 @@ case "$SCRIPT" in
      fi ;;
 esac
 
+# --- 4. Hash the bytes that are ABOUT to run, then run them -----------------------------------
+# The pre-run digest is the one recorded: a digest taken afterwards describes a program that may
+# not be the one that produced output.txt (a self-modifying probe, a `pip install -e .` that
+# rewrites its own entry point, an editor saving mid-run).
+SSHA=$(sha256sum "$BDIR/$SCRIPT" | cut -d' ' -f1)
+
 START=$(date -u +%s)
 set +e
 ( cd "$BDIR" && timeout "$TMO" env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
@@ -60,19 +154,34 @@ RC=$?
 set -e
 SECS=$(( $(date -u +%s) - START ))
 
-SSHA=$(sha256sum "$BDIR/$SCRIPT" | cut -d' ' -f1)
+# --- 5. Prove the bytes did not change under us; otherwise poison the bundle -------------------
+SSHA_AFTER=$(sha256sum "$BDIR/$SCRIPT" | cut -d' ' -f1)
+if [ "$SSHA_AFTER" != "$SSHA" ]; then
+  {
+    echo "This bundle is POISONED: the probe script changed while it ran, so no ledger entry"
+    echo "binds output.txt to the bytes that produced it."
+    echo "script:            $SCRIPT"
+    echo "sha256 at launch:  $SSHA"
+    echo "sha256 at exit:    $SSHA_AFTER"
+    echo "probe exit status: $RC"
+    echo "output.txt is kept as evidence and this bundle can never be re-run (results are"
+    echo "immutable). Re-run the probe into a NEW bundle with a script that does not rewrite"
+    echo "itself, and do not cite this bundle."
+  } > "$BDIR/POISONED.txt"
+  echo "probe-channel: $BUNDLE/$SCRIPT changed while it ran ($SSHA -> $SSHA_AFTER)." >&2
+  echo "               NOTHING was ledgered: a row recording either digest would misbind the" >&2
+  echo "               output to a program that did not produce it. See $BUNDLE/POISONED.txt." >&2
+  exit 6
+fi
+
 OSHA=$(sha256sum "$BDIR/output.txt" | cut -d' ' -f1)
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ENTRY=$(printf '{"ts":"%s","bundle":"%s","script":"%s","script_sha256":"%s","output_sha256":"%s","cmd":"timeout %s single-threaded %s","exit":%d,"secs":%d}' \
   "$TS" "$BUNDLE" "$SCRIPT" "$SSHA" "$OSHA" "$TMO" "${RUNNER[*]}" "$RC" "$SECS")
 
-# Append-only, one writer at a time. flock serializes concurrent probes; without it, a plain
-# append is still atomic for a single short line on every filesystem this runs on.
-if command -v flock >/dev/null 2>&1; then
-  flock "$ROOT/runs" -c "printf '%s\n' '$ENTRY' >> '$LEDGER'"
-else
-  printf '%s\n' "$ENTRY" >> "$LEDGER"
-fi
+# Append-only, one writer at a time: still under the fd-9 lock taken in step 2, so no other probe
+# can have reserved this bundle since the check above.
+printf '%s\n' "$ENTRY" >> "$LEDGER"
 
 echo "probe-channel: exit=$RC secs=$SECS output=$BUNDLE/output.txt sha256=$OSHA" >&2
 echo "probe-channel: ledgered in runs/probe-ledger.jsonl — cite the bundle path, not a loose number." >&2
