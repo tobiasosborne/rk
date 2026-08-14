@@ -149,6 +149,49 @@ describe("resolveQuotableText — fail-closed PDF cases", () => {
     expect(r.ok === false && r.reason).toContain("does not match its recorded sha256");
   });
 
+  test("PAYLOAD SWAP: bytes that violate the ADOPTED PIN are unresolvable even with a perfect chain", () => {
+    // 2026-08-14 Tier A review, finding P1-1 — corpus fixture refs-20. The reviewer's exploit:
+    // replace an adopted payload, then let `rk refs quote` re-chain a fresh sidecar to the
+    // REPLACEMENT's hash. Both chain checks below then pass (payload_sha256 == current hash,
+    // sidecar hash == recorded hash) and Gate 3's externals half, which does no pin check of its
+    // own, byte-verified a quote against bytes that were never adopted.
+    const REPLACEMENT = "%PDF-1.4\n<< /Filter /FlateDecode >>\nstream\nreplacement\nendstream\n";
+    const { snapshot, lock } = build({
+      payload: REPLACEMENT,
+      entry: {
+        sha256: sha(PDF_BYTES), // the ADOPTED pin — revision 1, never updated
+        extraction: {
+          path: "sources/paper.pdf.extracted.txt",
+          sha256: sha(EXTRACTED),
+          payload_sha256: sha(REPLACEMENT), // chained to the REPLACEMENT: internally impeccable
+          tool: "pdftotext -layout",
+        },
+      },
+    });
+    const r = resolveQuotableText(snapshot, lock, PAYLOAD);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("VIOLATE their adopted pin");
+    expect(r.ok === false && r.reason).toContain(sha(PDF_BYTES));
+    expect(r.ok === false && r.reason).toContain(sha(REPLACEMENT));
+  });
+
+  test("the pin check runs BEFORE the extraction checks — a swapped payload never reads as 'no extraction'", () => {
+    // Ordering is load-bearing for the remedy: "no extraction layer recorded" tells an operator to
+    // run `rk refs quote`, which on a swapped payload would chain a sidecar to the wrong bytes.
+    const REPLACEMENT = "%PDF-1.4\n<< /Filter /FlateDecode >>\nstream\nreplacement\nendstream\n";
+    const { snapshot, lock } = build({ payload: REPLACEMENT, entry: { sha256: sha(PDF_BYTES), extraction: undefined } });
+    const r = resolveQuotableText(snapshot, lock, PAYLOAD);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("VIOLATE their adopted pin");
+  });
+
+  test("a MALFORMED pin is a violated pin, never a skipped comparison", () => {
+    const { snapshot, lock } = build({ entry: { sha256: "not-a-digest" } });
+    const r = resolveQuotableText(snapshot, lock, PAYLOAD);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reason).toContain("VIOLATE their adopted pin");
+  });
+
   test("a malformed digest in the record is a BROKEN chain, never a skipped comparison", () => {
     const { snapshot, lock } = build({
       entry: {

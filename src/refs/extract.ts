@@ -8,8 +8,17 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_SPAWN_TIMEOUT_MS, runBounded } from "./bounded-spawn";
 
 export type Which = (bin: string) => string | null;
+
+/** Wall-clock ceiling for ONE extractor invocation (CLAUDE.md rule 13; 2026-08-14 Tier A review
+ * finding P1-3 — before it, both branches awaited `proc.exited` with no deadline and left marker's
+ * stdout pipe undrained, so `rk refs quote` could hang forever on a malformed PDF or block on a
+ * full pipe). Every spawn in this module goes through `runBounded`, which drains both pipes and
+ * kills the process group on expiry. Injectable per call so the timeout path itself is testable in
+ * milliseconds; there is deliberately no config/env surface for it. */
+export const EXTRACT_TIMEOUT_MS = DEFAULT_SPAWN_TIMEOUT_MS;
 
 /** True iff the `marker` binary is on PATH. `which` is injectable for tests; defaults to
  * Bun.which, which returns null (not a path) when the binary is absent. */
@@ -29,15 +38,14 @@ export async function extractWithMarker(
   pdfPath: string,
   outDir: string,
   which: Which = (bin) => Bun.which(bin),
+  timeoutMs: number = EXTRACT_TIMEOUT_MS,
 ): Promise<ExtractResult> {
   const bin = which("marker");
   if (bin === null) {
     return { skipped: true, reason: "marker not found" };
   }
-  const proc = Bun.spawn([bin, pdfPath, "--output_dir", outDir], { stdout: "pipe", stderr: "pipe" });
-  const exitCode = await proc.exited;
+  const { exitCode, stderr } = await runBounded([bin, pdfPath, "--output_dir", outDir], { timeoutMs });
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
     throw new Error(`marker exited ${exitCode}: ${stderr}`);
   }
   return { skipped: false, outputPath: outDir };
@@ -91,36 +99,40 @@ export type PdfTextResult =
  * A present-but-failing extractor DOES throw: a broken tool is a real error, not a skip, and
  * silently treating it as "no extraction available" would let a misconfigured box quietly demote
  * every PDF citation. */
-export async function extractPdfText(pdfPath: string, which: Which = (bin) => Bun.which(bin)): Promise<PdfTextResult> {
+export async function extractPdfText(
+  pdfPath: string,
+  which: Which = (bin) => Bun.which(bin),
+  timeoutMs: number = EXTRACT_TIMEOUT_MS,
+): Promise<PdfTextResult> {
   const extractor = selectExtractor(which);
   if (extractor === null) {
     return { skipped: true, reason: `no PDF text extractor found on PATH (tried: ${EXTRACTOR_PREFERENCE.join(", ")})` };
   }
-  const text = extractor.name === "pdftotext" ? await runPdftotext(extractor.bin, pdfPath) : await runMarker(extractor.bin, pdfPath);
+  const text =
+    extractor.name === "pdftotext"
+      ? await runPdftotext(extractor.bin, pdfPath, timeoutMs)
+      : await runMarker(extractor.bin, pdfPath, timeoutMs);
   return { skipped: false, text, tool: extractor.tool };
 }
 
 /** `pdftotext -layout <pdf> -` writes plain text to stdout: no temp files, and `-layout` preserves
  * the physical line structure, which is what makes the `path:line` citation anchor mean anything. */
-async function runPdftotext(bin: string, pdfPath: string): Promise<string> {
-  const proc = Bun.spawn([bin, "-layout", pdfPath, "-"], { stdout: "pipe", stderr: "pipe" });
-  const [text, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+async function runPdftotext(bin: string, pdfPath: string, timeoutMs: number): Promise<string> {
+  const { stdout, stderr, exitCode } = await runBounded([bin, "-layout", pdfPath, "-"], { timeoutMs });
   if (exitCode !== 0) throw new Error(`pdftotext exited ${exitCode}: ${stderr}`);
-  return text;
+  return stdout;
 }
 
 /** marker writes markdown into an output DIRECTORY rather than to stdout, so this runs it against a
  * scratch dir and reads back the single markdown file it produced (marker nests output under a
  * per-document subdirectory, hence the recursive search). The scratch dir is always removed. */
-async function runMarker(bin: string, pdfPath: string): Promise<string> {
+async function runMarker(bin: string, pdfPath: string, timeoutMs: number): Promise<string> {
   const outDir = mkdtempSync(join(tmpdir(), "rk-extract-"));
   try {
-    const proc = Bun.spawn([bin, pdfPath, "--output_dir", outDir], { stdout: "pipe", stderr: "pipe" });
-    const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    // marker's stdout carries per-page progress and is not the extraction result — but it MUST
+    // still be drained (runBounded does), or the child blocks in write(2) once the pipe fills and
+    // never exits. That was finding P1-3's first hang shape; the old code read stderr only.
+    const { stderr, exitCode } = await runBounded([bin, pdfPath, "--output_dir", outDir], { timeoutMs });
     if (exitCode !== 0) throw new Error(`marker exited ${exitCode}: ${stderr}`);
     const produced = findFirstMarkdown(outDir);
     if (produced === null) throw new Error(`marker exited 0 but produced no .md file under ${outDir}`);

@@ -161,5 +161,15 @@ export function totalFixtureCount(corpusRoot: string): number {
  * table was renamed). The merged `GateConfig` is byte-identical to a repo with no config at all, so
  * only `_configValidation.overriddenKeys` can tell the two apart — and without that distinction a
  * renamed status table leaves check 5 (OVERCLAIM, Gate 4's #1 guarded failure mode) verifying
- * nothing and reporting green. AISM incident (a), reproduced. */
-export const EXPECTED_FIXTURE_COUNT = 171;
+ * nothing and reporting green. AISM incident (a), reproduced.
+ * 172 (+1 over the then-pinned 171): the 2026-08-14 Tier A review's P1-1 landing-blocker
+ * (docs/reviews/2026-08-14-refs-extraction-runs-infra-codex.md) — `refs-20`: a PDF payload
+ * REPLACED after adoption, with the extraction sidecar re-chained to the replacement's hash by the
+ * very `rk refs quote` run that noticed the chain was stale. Every clause `resolveQuotableText`
+ * checked then passed (chain intact, sidecar hash intact, quote byte-verbatim at the recorded
+ * locus) and Gate 3's externals half — which, unlike the shard-citation half, performs no pin
+ * check of its own — byte-verified a quote against bytes that were never adopted: `checked 1/1`,
+ * exit 0. The resolver now compares the payload against `entry.sha256`, the ADOPTED pin, before it
+ * looks at the extraction at all. See docs/gate-contracts.md Gate 3 check 10's violated-pin
+ * clause. */
+export const EXPECTED_FIXTURE_COUNT = 172;

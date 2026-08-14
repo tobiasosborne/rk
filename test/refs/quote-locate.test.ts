@@ -29,18 +29,25 @@ describe("locateQuoteInRepo", () => {
     const root = makeRepo();
     const r = await locateQuoteInRepo(root, sourceId("foo-2026"), "every idempotent map on a compact semigroup");
     expect(r).toEqual({
-      sourceId: sourceId("foo-2026"),
-      path: "refs/foo-2026/paper.tex",
-      line: 2,
-      quote: "every idempotent map on a compact semigroup",
+      found: true,
+      extractions: [],
+      result: {
+        sourceId: sourceId("foo-2026"),
+        path: "refs/foo-2026/paper.tex",
+        line: 2,
+        quote: "every idempotent map on a compact semigroup",
+      },
     });
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("returns null when the pattern is not present in the source", async () => {
+  test("reports found:false — with the (empty) extraction ledger — when the pattern is absent", async () => {
+    // Review P2-4: the miss arm carries the same side-effect ledger as the hit arm, so a caller can
+    // never report "pattern not found" while silently having written a sidecar. A text payload
+    // writes nothing, hence the empty array.
     const root = makeRepo();
     const r = await locateQuoteInRepo(root, sourceId("foo-2026"), "text nowhere in the paper");
-    expect(r).toBeNull();
+    expect(r).toEqual({ found: false, extractions: [] });
     rmSync(root, { recursive: true, force: true });
   });
 

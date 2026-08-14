@@ -159,12 +159,24 @@ async function refsQuote(args: string[], out: Out): Promise<number> {
     return 2;
   }
   try {
-    const result = await locateQuoteInRepo(root, sourceId(id), pattern);
-    if (result === null) {
+    const lookup = await locateQuoteInRepo(root, sourceId(id), pattern);
+    if (!lookup.found) {
       out.log(`rk refs quote: pattern not found in '${id}'s local payload.`);
       out.log(`  next: check the pattern is an exact substring (byte-for-byte), or 'rk refs status' to confirm the payload is present.`);
+      // 2026-08-14 Tier A review, finding P2-4. The FIRST quote request against a PDF produces the
+      // extraction sidecar and the lock record whether or not the pattern turns up, and the old
+      // bare `null` return threw that fact away — "pattern not found" was the operator's entire
+      // report of a run that had just written two files. The searched layer is disclosed either
+      // way, because it also says WHICH bytes the negative answer is about.
+      for (const ex of lookup.extractions) {
+        out.log(`  (PDF payload: searched the extraction layer ${ex.path}, not the compressed payload bytes)`);
+        if (ex.regenerated) {
+          out.log(`  wrote ${ex.path} and recorded its sha256 (chained to the payload hash) in refs/manifest/sources.lock.json.`);
+        }
+      }
       return 1;
     }
+    const result = lookup.result;
     out.log(`${result.path}:${result.line}`);
     out.log(`"${result.quote}"`);
     // rk-we5i: a PDF payload is quoted through its extraction layer, and this command may have

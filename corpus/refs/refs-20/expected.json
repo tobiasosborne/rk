@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "proofs/lem-spectral-gap/externals/GT-spectral-gap-closes.json",
+      "message_pattern": "VIOLATE their adopted pin"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["1 failed", "0 import-skipped", "0 no-quote-skipped"] },
+  "aism_behavior": "differs",
+  "notes": "2026-08-14 Tier A review finding P1-1 (docs/reviews/2026-08-14-refs-extraction-runs-infra-codex.md), the reviewer's own exploit against the rk-we5i extraction layer: PAYLOAD SWAP, RE-CHAINED. sources/spectral.pdf was adopted as revision 1 (pin 2e5f8c74..., which states the spectral gap is uniformly bounded below) and the payload on disk is now revision 2 (0ce5d389..., which states the gap CLOSES), never re-adopted. Running 'rk refs quote' on the replacement made ensureExtraction regenerate the sidecar from the NEW bytes, so the extraction chain is internally IMPECCABLE: extraction.payload_sha256 equals the payload's current digest, extraction.sha256 equals the sidecar's own digest, and the external's quote is byte-verbatim at recorded line 2 of that sidecar. Only the adopted pin dissents. Before the repair resolveQuotableText compared payload_sha256 to the payload's CURRENT hash only and never to entry.sha256, so Gate 3's externals half — which does no pin check of its own, unlike the shard-citation half — byte-verified a quote against bytes that were never adopted: checked 1/1 externals, exit 0. The resolver now requires payloadSha === entry.sha256 and fails closed: ERROR, checked 0/1. Mutation-proof: deleting that pin comparison restores the false-verify at checked 1/1 exit 0, observed and reverted. Green control: refs-17 (same shapes, pin and chain both intact). Distinct from refs-18, where the pin holds and the CHAIN is stale — refs-18 cannot detect this bug because its resolver stops at the chain check."
+}

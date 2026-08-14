@@ -220,9 +220,9 @@ describe("adoptSource — the adopted source behaves like a fetched one (rk-pk8o
       retrieved: "2026-08-08",
     });
     const quote = await locateQuoteInRepo(root, sourceId(r.sourceId), "almost-idempotent map is close to a projection");
-    expect(quote).not.toBeNull();
-    expect(quote!.path).toBe("refs/sources/arxiv-1811.08017.txt");
-    expect(quote!.line).toBe(1);
+    expect(quote.found).toBe(true);
+    expect(quote.found === true && quote.result.path).toBe("refs/sources/arxiv-1811.08017.txt");
+    expect(quote.found === true && quote.result.line).toBe(1);
   });
 
   test("two payloads adopted under one source-id are both quote-searchable (pdf + txt, AISM's own convention)", async () => {
@@ -241,6 +241,6 @@ describe("adoptSource — the adopted source behaves like a fetched one (rk-pk8o
     const lock = parseLockFile(readFileSync(manifestPath(root, "sources.lock.json"), "utf8"));
     expect(lock.files).toHaveLength(2);
     const quote = await locateQuoteInRepo(root, sourceId("arxiv-1811.08017"), "close to a projection");
-    expect(quote!.path).toBe("refs/sources/arxiv-1811.08017.txt");
+    expect(quote.found === true && quote.result.path).toBe("refs/sources/arxiv-1811.08017.txt");
   });
 });

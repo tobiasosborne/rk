@@ -1,0 +1,4 @@
+Lemma 4.2 (spectral gap).
+the spectral gap of the transfer operator closes at the thermodynamic limit,
+so no uniform lower bound exists.
+

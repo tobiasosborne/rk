@@ -97,19 +97,23 @@ export type ResolvedText =
  *     the pre-rk-we5i behavior verbatim for every text source.
  *  3. lock unreadable                             -> not resolvable (no chain can be checked).
  *  4. no / ambiguous lock entry for the payload   -> not resolvable.
- *  5. no `extraction` recorded                    -> not resolvable — THE headline state: a PDF
- *     source is quotable only once an extraction layer exists.
- *  6. extraction file absent from the snapshot    -> not resolvable.
- *  7. payload has no raw-byte hash fact           -> not resolvable (the chain's left end is
+ *  5. payload has no raw-byte hash fact           -> not resolvable (the chain's left end is
  *     unmeasurable; cannot happen for a present file at the real edge, but never assumed).
- *  8. chain broken (`extraction.payload_sha256` != payload's CURRENT hash) -> not resolvable. The
+ *  6. payload's hash != `entry.sha256`, the ADOPTED PIN -> not resolvable. The payload-swap case
+ *     (2026-08-14 review P1-1): checked before anything about the extraction, because a
+ *     re-chained sidecar makes every later check pass on bytes nobody adopted.
+ *  7. no `extraction` recorded                    -> not resolvable — THE headline state: a PDF
+ *     source is quotable only once an extraction layer exists.
+ *  8. extraction file absent from the snapshot    -> not resolvable.
+ *  9. chain broken (`extraction.payload_sha256` != payload's CURRENT hash) -> not resolvable. The
  *     stale-extraction case: the payload moved and the extraction did not.
- *  9. extraction file's own hash != `extraction.sha256` -> not resolvable. The tampered/rewritten-
+ * 10. extraction file's own hash != `extraction.sha256` -> not resolvable. The tampered/rewritten-
  *     extraction case: the payload never moved, the derived text did.
- * 10. otherwise                                   -> the extraction's text, layer `extraction`.
+ * 11. otherwise                                   -> the extraction's text, layer `extraction`.
  *
- * Note on 8/9: both digests are compared case-insensitively and BOTH must be well-formed 64-hex;
- * a malformed digest in the record is a broken chain, never a skipped comparison. */
+ * Note on 6/9/10: every digest is compared case-insensitively and BOTH sides must be well-formed
+ * 64-hex; a malformed digest (in the record OR in the pin) is a broken chain, never a skipped
+ * comparison. */
 export function resolveQuotableText(snapshot: RepoSnapshot, lock: LockFacts, refsPath: string): ResolvedText {
   const payloadText = snapshot.get(refsPath);
   if (payloadText === undefined) {
@@ -131,6 +135,31 @@ export function resolveQuotableText(snapshot: RepoSnapshot, lock: LockFacts, ref
     return { ok: false, reason: `${label} but ${LOCK_PATH} ${reason} for ${relative} — no extraction layer can be chained to it` };
   }
   const entry = matches[0]!;
+
+  // THE ADOPTED PIN, checked HERE and not only in the callers (2026-08-14 Tier A review, finding
+  // P1-1). Gate 3's two halves disagreed about this: refs-shard-citations.ts pin-checks a claim
+  // before calling this resolver, refs.ts's externals half never does. The reviewer's exploit rides
+  // the second path — replace an adopted PDF payload, then run `rk refs quote`, which sees a stale
+  // chain and re-chains a FRESH sidecar to the replacement's hash. Every chain check below then
+  // passes on bytes that were never adopted, and the externals half byte-verifies a quote against
+  // them. A single validity core has to answer "which bytes?" with "the bytes that were ADOPTED",
+  // so the comparison lives here too — defense in depth, not a duplicate of the caller's check.
+  const payloadSha = fileSha256(snapshot, refsPath);
+  if (payloadSha === undefined) {
+    return { ok: false, reason: `${label} present but carrying no raw-byte sha256 fact — its extraction chain cannot be checked` };
+  }
+  if (!sameDigest(entry.sha256, payloadSha)) {
+    return {
+      ok: false,
+      reason:
+        `${label} whose bytes VIOLATE their adopted pin in ${LOCK_PATH}: the lock pins sha256 ` +
+        `${entry.sha256} but the payload on disk hashes ${payloadSha}. Re-chaining an extraction to ` +
+        `the replacement bytes cannot repair this — the quotable text of a source is the text of the ` +
+        `bytes that were ADOPTED, so restore the pinned payload or re-adopt it ('rk refs adopt') and ` +
+        `re-verify every quote that cited it`,
+    };
+  }
+
   const extraction = entry.extraction;
   if (extraction === undefined) {
     return {
@@ -147,10 +176,6 @@ export function resolveQuotableText(snapshot: RepoSnapshot, lock: LockFacts, ref
   const extractionText = snapshot.get(extractionPath);
   if (extractionText === undefined) {
     return { ok: false, reason: `${label} whose recorded extraction layer ${extractionPath} is ABSENT — nothing to byte-verify against` };
-  }
-  const payloadSha = fileSha256(snapshot, refsPath);
-  if (payloadSha === undefined) {
-    return { ok: false, reason: `${label} present but carrying no raw-byte sha256 fact — its extraction chain cannot be checked` };
   }
   if (!sameDigest(extraction.payload_sha256, payloadSha)) {
     return {

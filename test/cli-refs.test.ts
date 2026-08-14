@@ -4,7 +4,7 @@
 // value (including when both are set — see resolveRenamedEnv's "new wins silently" rule).
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { refsDispatch } from "../src/cli/refs";
@@ -230,5 +230,39 @@ describe("rk refs quote — compressed PDF payload (rk-we5i)", () => {
     expect(await refsDispatch(["quote", "spectral", sentence, "--root", root], q2.out)).toBe(0);
     expect(q2.lines.join("\n")).toContain("read from");
     expect(q2.lines.join("\n")).not.toContain("recorded its sha256");
+  });
+
+  // 2026-08-14 Tier A review, finding P2-4. The FIRST quote request against a PDF creates the
+  // sidecar and rewrites sources.lock.json even when the pattern turns out to be absent. Before
+  // the repair `locateQuoteInRepo` returned a bare `null` on that path, so the operator's entire
+  // report of a two-file write was the line "pattern not found".
+  test("a NON-MATCHING first quote still discloses the sidecar and lock write it performed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-refs-quote-pdf-miss-"));
+    dirs.push(root);
+    mkdirSync(join(root, "refs", "sources"), { recursive: true });
+    const bytes = makeCompressedPdf(["Lemma 4.2 spectral gap.", "the spectral gap of the transfer operator is uniformly bounded below"]);
+    writeFileSync(join(root, "refs", "sources", "spectral.pdf"), bytes);
+
+    const a = capture();
+    expect(await refsDispatch(["adopt", "refs/sources/spectral.pdf", "--source", "arxiv:2209.07024", "--root", root], a.out)).toBe(0);
+    const lockBefore = readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8");
+
+    const q = capture();
+    expect(await refsDispatch(["quote", "spectral", "a sentence that is nowhere in this paper", "--root", root], q.out)).toBe(1);
+    const text = q.lines.join("\n");
+    expect(text).toContain("pattern not found");
+    // The two writes, both disclosed rather than discoverable only through `git status`.
+    expect(text).toContain("refs/sources/spectral.pdf.extracted.txt");
+    expect(text).toContain("recorded its sha256");
+    // ...and they really did happen, which is why disclosing them is not cosmetic.
+    expect(existsSync(join(root, "refs", "sources", "spectral.pdf.extracted.txt"))).toBe(true);
+    expect(readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8")).not.toBe(lockBefore);
+
+    // A second non-matching run rewrites nothing, and says so by NOT claiming a write.
+    const q2 = capture();
+    expect(await refsDispatch(["quote", "spectral", "still nowhere in this paper", "--root", root], q2.out)).toBe(1);
+    const text2 = q2.lines.join("\n");
+    expect(text2).toContain("searched the extraction layer");
+    expect(text2).not.toContain("recorded its sha256");
   });
 });

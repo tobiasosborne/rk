@@ -57,9 +57,9 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     expect(raw.includes(SENTENCE)).toBe(false);
 
     const r = await locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, pdftotextOnly);
-    expect(r).not.toBeNull();
-    expect(r!.quote).toBe(SENTENCE);
-    expect(r!.line).toBe(2);
+    expect(r.found).toBe(true);
+    expect(r.found === true && r.result.quote).toBe(SENTENCE);
+    expect(r.found === true && r.result.line).toBe(2);
   });
 
   test("anchors the citation at the hash-pinned PAYLOAD path, not the derived sidecar", async () => {
@@ -67,7 +67,7 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     // unpinned derived file that nothing in the manifest vouches for.
     const { root } = makePdfRepo();
     const r = await locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, pdftotextOnly);
-    expect(r!.path).toBe("refs/sources/spectral.pdf");
+    expect(r.found === true && r.result.path).toBe("refs/sources/spectral.pdf");
   });
 
   test("records the extraction in sources.lock.json, chained to the payload's current sha256", async () => {
@@ -89,7 +89,7 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     // No extractor offered at all this time: a re-run would have to skip, so a successful quote
     // proves the recorded extraction was used.
     const r = await locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, () => null);
-    expect(r!.line).toBe(2);
+    expect(r.found === true && r.result.line).toBe(2);
     expect(readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8")).toBe(before);
   });
 
@@ -105,9 +105,13 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     writeFileSync(join(root, "refs", "manifest", "sources.lock.json"), JSON.stringify(lock, null, 2));
 
     // The old sentence must NOT be quotable any more — the stale sidecar is regenerated first.
-    expect(await locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, pdftotextOnly)).toBeNull();
+    const miss = await locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, pdftotextOnly);
+    expect(miss.found).toBe(false);
+    // Review P2-4: the miss that regenerated the sidecar must SAY it regenerated the sidecar —
+    // this is the exact call whose two on-disk writes used to vanish behind a bare `null`.
+    expect(miss.extractions).toEqual([{ path: "refs/sources/spectral.pdf.extracted.txt", regenerated: true }]);
     const after = await locateQuoteInRepo(root, sourceId("spectral"), "closes at the thermodynamic limit", pdftotextOnly);
-    expect(after).not.toBeNull();
+    expect(after.found).toBe(true);
     expect(readLock(root).files[0]!.extraction.payload_sha256).toBe(sha256Bytes(revised));
   });
 
@@ -127,7 +131,8 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     writeFileSync(join(root, "refs", "manifest", "sources.lock.json"), serialized);
 
     const r = await locateQuoteInRepo(root, sourceId("notes"), "A plain verbatim sentence.", () => null);
-    expect(r!.line).toBe(2);
+    expect(r.found === true && r.result.line).toBe(2);
+    expect(r.extractions).toEqual([]);
     expect(readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8")).toBe(serialized);
   });
 });
