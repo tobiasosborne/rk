@@ -10,7 +10,7 @@
 // statement about rk's toolchain masquerading as a statement about the source.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { locateQuoteInRepo } from "../../src/refs/quote-locate";
@@ -113,6 +113,30 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
     const after = await locateQuoteInRepo(root, sourceId("spectral"), "closes at the thermodynamic limit", pdftotextOnly);
     expect(after.found).toBe(true);
     expect(readLock(root).files[0]!.extraction.payload_sha256).toBe(sha256Bytes(revised));
+  });
+
+  test("refuses to extract a payload swapped after adoption — never writes a sidecar chained to unadopted bytes (rk-o85b)", async () => {
+    // The 2026-08-14 review's exploit mechanism (survived the Gate 3 repair R1): the payload is
+    // replaced on disk WITHOUT repinning `files[].sha256` in sources.lock.json. Gate 3 already
+    // fails closed on this later (resolveQuotableText step 6), but before this fix
+    // `ensureExtraction` never looked at the adopted pin at all — it happily extracted the
+    // replacement bytes and wrote a sidecar chained to THEM, so `rk refs quote` reported a found
+    // quote against text nobody adopted. Only a later `rk check` caught the mismatch.
+    const { root, payloadSha } = makePdfRepo();
+    const lockBefore = readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8");
+
+    const swapped = makeCompressedPdf(["Lemma 4.2 spectral gap.", "the spectral gap closes at the thermodynamic limit"]);
+    writeFileSync(join(root, "refs", "sources", "spectral.pdf"), swapped);
+    expect(sha256Bytes(swapped)).not.toBe(payloadSha);
+
+    await expect(locateQuoteInRepo(root, sourceId("spectral"), SENTENCE, pdftotextOnly)).rejects.toThrow(
+      /VIOLATES its adopted pin.*re-adopt/s,
+    );
+
+    // Fail-closed at ACQUISITION time, not just at Gate 3: no sidecar for the violating bytes, and
+    // sources.lock.json is untouched (no re-chained extraction record either).
+    expect(existsSync(join(root, "refs", "sources", "spectral.pdf.extracted.txt"))).toBe(false);
+    expect(readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8")).toBe(lockBefore);
   });
 
   test("with no extractor installed, THROWS an actionable error — never a silent 'pattern not found'", async () => {

@@ -270,6 +270,36 @@ in that campaign dropped from the campaign's stable ~3-of-5 refutation rate to 1
    what happened to the campaign this clause comes from — it built the channel this section
    demands, under its own names, and the gate flagged both files as strays.)
 
+   **The channel is not executable.** `rk init` has no per-file mode concept, so the stamped
+   `runs/probe-channel.sh` carries whatever mode the filesystem defaults to — invoke it as
+   `bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]`, or `chmod +x` it once
+   yourself if you would rather call it directly. This is a deliberate scope decision, not an
+   oversight: a manifest mode field was considered and declined (a single documented invocation
+   covers it without a new stamping concept).
+
+   **Reservation: the LEDGER decides "already run," not the filesystem.** Checking only for an
+   existing `output.txt` is racy and forgeable — two agents launching the same new bundle can both
+   pass that check before either write lands, and deleting `output.txt` would otherwise silently
+   free the bundle name for a second, differently-hashed run while the first row stays in the
+   append-only ledger. So `runs/probe-ledger.jsonl` is checked FIRST, and one lock held across the
+   whole reservation-run-hash-append sequence serializes every probe campaign-wide — the price of a
+   reservation that cannot be lost.
+
+   **Exit codes.** A channel-level refusal never appends a ledger row; any other exit code is the
+   probe's own status (124 = its `timeout` firing), and that run IS ledgered:
+     - `2` — invalid usage, a bundle/script name or timeout that fails validation, an unrunnable
+       script, or `flock(1)` missing.
+     - `3` — `<bundle-dir>/output.txt` already exists (the immutability rule above).
+     - `4` — `<bundle-dir>` already has a ledger entry: the reservation rule above means deleting
+       `output.txt` does NOT free the bundle name. Re-run into a NEW bundle directory.
+     - `5` — another probe holds the channel and the wait (`RK_PROBE_LOCK_WAIT`, default this run's
+       own timeout + 60s) elapsed. Retry later, or raise the env var to queue longer.
+     - `6` — the probe script's bytes changed while it ran: the bundle is POISONED
+       (`<bundle-dir>/POISONED.txt` names both digests), nothing was ledgered, and the bundle can
+       never be re-run — start a new one with a script that does not rewrite itself.
+   A worker seeing exit 4, 5, or 6 must not retry the same `<bundle-dir>`: every one of those exit
+   codes means that bundle name is now permanently spoken for or unusable.
+
 ## 4c. Briefs and hostile verification
 
 **Brief format (measured: orchestrator technical steers were wrong roughly three times in four).**
