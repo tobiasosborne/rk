@@ -752,6 +752,21 @@ describe("templates / (h) reward/predict + probe/brief/hostile/worker-lifecycle 
     expect(section).toContain("probe-ledger.jsonl.bak");
   });
 
+  test("§4b I.3 documents the hardened channel's exit codes, the reservation rule, and the exec bit", () => {
+    // R2 (2026-08-14) gave the stamped channel ledger-backed reservation (exit 4), bounded lock
+    // wait (exit 5), and poisoned-on-self-modification (exit 6); the constitution text had never
+    // caught up, so a worker hitting one of those had no constitution text to read.
+    const section = claude.slice(claude.indexOf("## 4b."), claude.indexOf("## 4c."));
+    for (const code of ["`2`", "`3`", "`4`", "`5`", "`6`"]) expect(section).toContain(code);
+    expect(section.toLowerCase()).toContain("ledger");
+    expect(section.toLowerCase()).toContain("not the filesystem");
+    expect(section).toContain("POISONED");
+    // rk init has no per-file mode concept (deliberately declined, not a gap left unexplained):
+    // the stamped script is not executable, so the constitution must say to run it via `bash`.
+    expect(section).toContain("not executable");
+    expect(section).toContain("bash runs/probe-channel.sh");
+  });
+
   test("§5 provenance subsection: declare-then-attest ordering, not attest-then-declare", () => {
     const section = claude.slice(
       claude.indexOf("### Recording an independent verification"),
