@@ -180,5 +180,13 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `refs-22` is the weaker-rule discriminator (payload present, quote verbatim, NO lock at all ⇒
  * unpinned bytes are not adopted evidence). The pin now runs for every payload kind before the
  * PDF/non-PDF split, which is why `refs-02`/`03`/`07`/`09`/`11` gained locks — see
- * corpus/README.md's rk-r0j3 paragraph. */
-export const EXPECTED_FIXTURE_COUNT = 174;
+ * corpus/README.md's rk-r0j3 paragraph.
+ * 176 (+2 over the then-pinned 174): bead rk-yic3 (P1, Tier A) — Check 4b's two backing routes were
+ * asymmetric about WITHDRAWAL. `l5Decision` refused backing on a live retraction or an unhealthy
+ * retraction ledger; `provenanceDecision` read neither, and `pmaBackingDecision` tried the
+ * provenance route first and returned as soon as it backed, so a retracted claim banked
+ * proved-mod-audit through a hand-written `.rk/` record. `reward-27` is the live-retraction case;
+ * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
+ * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
+ * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
+export const EXPECTED_FIXTURE_COUNT = 176;
