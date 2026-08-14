@@ -67,8 +67,11 @@ describe("retractionRefusal — which ledger states bar backing", () => {
     expect(reason).toContain("ordinal 0");
     expect(reason).toContain("audit:2026-08-14-independent-sweep");
     expect(reason).toContain("reuses the very bound");
-    // The remedy is stated, matching Check 16's own wording (src/gates/linker-retraction.ts).
+    // The remedy is stated, matching Check 16's own wording (src/gates/linker-retraction.ts). This
+    // domain's remedy is actionable: an edit changes the shard's bytes and releases the binding.
     expect(reason).toContain("demote the shard");
+    expect(reason).toContain("edit the artifact and re-verify");
+    expect(reason).not.toContain("retraction ledger itself");
   });
 
   test("an af-canonical retraction bars backing FAIL-CLOSED, whatever its recorded hash", () => {
@@ -76,6 +79,12 @@ describe("retractionRefusal — which ledger states bar backing", () => {
     // (src/gates/linker-retraction.ts's header). A hash matching nothing must still bar.
     const reason = refusal(retraction({ hashDomain: "af-canonical", contentHash: "b".repeat(64) }));
     expect(reason).toContain("af-canonical");
+    // The remedy here must be domain-specific: editing and re-verifying the artifact CANNOT release
+    // an af-canonical retraction (rk cannot observe the current af hash), so the generic
+    // edit-and-re-verify remedy would send the operator through a repair that stays blocked.
+    expect(reason).toContain("will NOT release this retraction");
+    expect(reason).toContain("resolve it in the retraction ledger itself");
+    expect(reason).not.toContain("edit the artifact and re-verify");
   });
 
   test("a retraction whose l5-shard-bytes hash no longer binds bars nothing", () => {

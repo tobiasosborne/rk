@@ -293,12 +293,16 @@ in that campaign dropped from the campaign's stable ~3-of-5 refutation rate to 1
      - `4` — `<bundle-dir>` already has a ledger entry: the reservation rule above means deleting
        `output.txt` does NOT free the bundle name. Re-run into a NEW bundle directory.
      - `5` — another probe holds the channel and the wait (`RK_PROBE_LOCK_WAIT`, default this run's
-       own timeout + 60s) elapsed. Retry later, or raise the env var to queue longer.
+       own timeout + 60s) elapsed, before this run ever reached the reservation check, a write, or
+       the ledger. The bundle is untouched: retry the SAME `<bundle-dir>` after a backoff, or raise
+       the env var to queue longer.
      - `6` — the probe script's bytes changed while it ran: the bundle is POISONED
        (`<bundle-dir>/POISONED.txt` names both digests), nothing was ledgered, and the bundle can
        never be re-run — start a new one with a script that does not rewrite itself.
-   A worker seeing exit 4, 5, or 6 must not retry the same `<bundle-dir>`: every one of those exit
-   codes means that bundle name is now permanently spoken for or unusable.
+   A worker seeing exit 3 or 4 must not retry the same `<bundle-dir>`: the bundle name is already
+   spoken for (an existing `output.txt`, or a ledger row). Exit 6 means the bundle is poisoned and
+   can never be re-run under that name either. Exit 5 is the exception: the channel never touched
+   the bundle, so the SAME `<bundle-dir>` is safe and correct to retry once the channel is free.
 
 ## 4c. Briefs and hostile verification
 

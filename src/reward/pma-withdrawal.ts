@@ -54,10 +54,21 @@ export function retractionRefusal(
   for (const { domain, view } of DOMAINS) {
     const r = view(retractions).get(target.id);
     if (r === undefined) continue;
+    // The remedy is domain-specific: l5-shard-bytes is released by an edit that changes the shard's
+    // bytes (readRetractionFacts re-binds against the CURRENT hash), but af-canonical is not — rk
+    // cannot observe the item's current af hash, so readRetractionFacts treats every af-canonical
+    // record as live regardless of any edit (src/gates/linker-retraction.ts:122-129). Telling an
+    // operator to "edit and re-verify" an af-canonical retraction sends them through a repair that
+    // cannot release it; the honest remedy is to resolve the record in the retraction ledger itself.
+    const remedy =
+      domain === "af-canonical"
+        ? `af-canonical retractions are live to rk regardless of any edit — rk cannot observe this ` +
+          `item's current af hash, so editing and re-verifying the artifact will NOT release this ` +
+          `retraction; resolve it in the retraction ledger itself (.rk/retractions.jsonl)`
+        : `demote the shard, or edit the artifact and re-verify (an edit releases the hash binding)`;
     return (
       `claim '${target.id}' has a live retraction (${domain}, ordinal ${r.ordinal}) issued by ` +
-      `${r.retractedBy}: ${r.reason} — a withdrawn claim is backed by NEITHER route; demote the ` +
-      `shard, or edit the artifact and re-verify (an edit releases the hash binding)`
+      `${r.retractedBy}: ${r.reason} — a withdrawn claim is backed by NEITHER route; ${remedy}`
     );
   }
   return undefined;

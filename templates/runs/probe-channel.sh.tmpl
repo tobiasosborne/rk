@@ -57,8 +57,17 @@
 #   anything else is the PROBE's own exit status, and that run IS ledgered (124 = its timeout).
 set -euo pipefail
 
-BUNDLE="${1:?usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]}"
-SCRIPT="${2:?usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]}"
+# Argument count is checked explicitly, before $1/$2 are ever referenced: under `set -u` a bare `$1`
+# with zero args given trips bash's own "unbound variable" and exits 1, which would make a usage
+# error indistinguishable from a ledgered probe run (exit codes above 6 are the probe's own status).
+# Usage is always exit 2, matching the documented contract (CLAUDE.md.tmpl section 4b I.3).
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  echo "probe-channel: usage: bash runs/probe-channel.sh <bundle-dir> <script> [timeout-seconds]" >&2
+  echo "               got $# argument(s); need 2 (bundle-dir, script) or 3 (with timeout-seconds)." >&2
+  exit 2
+fi
+BUNDLE="$1"
+SCRIPT="$2"
 TMO="${3:-600}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

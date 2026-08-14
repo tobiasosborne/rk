@@ -399,6 +399,32 @@ describe("templates / probe channel — live fire (rk-z93m, codex 2026-08-14)", 
     }
   });
 
+  // codex review 2026-08-15 (P2): under `set -u`, referencing $1 with zero args given trips bash's
+  // own unbound-variable handling and exits 1 — one status below the documented "2 = usage"
+  // contract, and outside the "anything else is a ledgered probe result" range, so a caller could
+  // mistake a usage error for a completed (if unusual) run. The count check must fire first, before
+  // $1/$2 are ever touched, and must produce exit 2 like every other usage failure.
+  test("a missing required argument exits 2 (usage), not 1, and ledgers nothing", () => {
+    const root = stampRepo();
+    try {
+      const zero = runChannel(root, []);
+      expect(zero.code).toBe(2);
+      expect(zero.stderr).toContain("usage");
+
+      const b = bundle(root, "2026-08-14-onearg", "probe.sh", "echo x\n");
+      const one = runChannel(root, [b]);
+      expect(one.code).toBe(2);
+      expect(one.stderr).toContain("usage");
+
+      const tooMany = runChannel(root, [b, "probe.sh", "30", "extra"]);
+      expect(tooMany.code).toBe(2);
+
+      expect(ledgerLines(root)).toHaveLength(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // ---- preserved guarantees ------------------------------------------------------------------
   test("missing bundle, missing script and an unknown interpreter all fail closed", () => {
     const root = stampRepo();
