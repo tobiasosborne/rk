@@ -14,6 +14,8 @@ import { AF_STATES, KINDS, MATH_STATUS } from "../../src/gates/linker-lemma";
 import { fillTemplate } from "../../src/scaffold/slots";
 import { NORTH_STAR_SHARD_ID, NORTH_STAR_SHARD_PATH } from "../../src/scaffold/north-star";
 import { SANCTIONED_RUNS_INFRASTRUCTURE } from "../../src/gates/runs";
+import { appendManifestRow, emptySourcesDocument, parseManifestTable } from "../../src/refs/manifest";
+import { sourceId } from "../../src/types";
 
 const TEMPLATES_ROOT = join(import.meta.dir, "..", "..", "templates");
 
@@ -95,8 +97,69 @@ describe("templates / sanity", () => {
         "argument/README.md.tmpl",
         "argument/north-star.md.tmpl",
         "runs/probe-channel.sh.tmpl",
+        "refs/manifest/SOURCES.md.tmpl",
       ].sort(),
     );
+  });
+});
+
+// rk-tyl6 (found live by ../rk-campaign-D): the first `rk refs add` in a freshly stamped repo
+// crashed because refs/manifest/SOURCES.md did not exist — and crashed AFTER writing the lock and
+// checksums, losing the manifest row. `add` now seeds the file itself, but a scaffold that ships
+// the registry it documents is the belt to that braces: the researcher can see the catalogue (and
+// its never-fabricate-a-hash policy) before the first source, not after.
+describe("templates / (i) the stamped refs/manifest seed (rk-tyl6)", () => {
+  const manifest = JSON.parse(readFileSync(join(TEMPLATES_ROOT, "manifest.json"), "utf8"));
+  const body = read("refs/manifest/SOURCES.md.tmpl");
+
+  test("the template is byte-identical to the seed `rk refs add`/`adopt` write themselves", () => {
+    // One canonical document, three writers. If they ever diverge, a repo's SOURCES.md would
+    // depend on WHICH command happened to create it — the same class of drift that made `add`
+    // and `adopt` disagree about a missing file in the first place.
+    expect(body).toBe(emptySourcesDocument());
+  });
+
+  test("it stamps an EMPTY registry table that the manifest parser and writer both accept", () => {
+    expect(parseManifestTable(body)).toEqual([]);
+    const withRow = appendManifestRow(body, {
+      sourceId: sourceId("paper-2508.00001"),
+      citation: "A. Author, *A Paper*",
+      locator: "arxiv:2508.00001",
+      retrieved: "2026-08-14",
+      localPath: "refs/paper-2508.00001/2508.00001.pdf",
+      sha16: "0123456789abcdef",
+      role: "",
+    });
+    expect(parseManifestTable(withRow)).toHaveLength(1);
+    // No slots: a registry seed has nothing campaign-specific in it, so nothing to substitute.
+    expect(body).not.toContain("{{RK_SLOT_");
+  });
+
+  test("it is stamped authored-append-only under a stamped refs/manifest/ directory", () => {
+    const entry = manifest.stamped.find((e: { path: string }) => e.path === "refs/manifest/SOURCES.md");
+    expect(entry).toBeDefined();
+    expect(entry.template).toBe("refs/manifest/SOURCES.md.tmpl");
+    // It grows by appended rows and is never re-stamped — exactly the manifest's own definition
+    // of authored-append-only (a campaign-seed is stamped WITH content it then rewrites in place).
+    expect(entry.classification).toBe("authored-append-only");
+    const paths: string[] = manifest.stamped.map((e: { path: string }) => e.path);
+    expect(paths).toContain("refs/manifest/");
+    // Ordering: the directory must be declared before the file inside it.
+    expect(paths.indexOf("refs/manifest/")).toBeLessThan(paths.indexOf("refs/manifest/SOURCES.md"));
+  });
+
+  // The deliberate half of the companion fix, and the reason it is NOT what the bead asked for:
+  // stamping empty machine artifacts would silence two truthful gate signals in a fresh repo.
+  // src/gates/defs.ts:203 WARNs "manifest absent: refs/manifest/checksums.sha256 (cannot verify
+  // cited hashes)" only when the file is ABSENT, and src/gates/refs-extraction.ts's readLockFacts
+  // reports "sources.lock.json absent" -> nothing is hash-pinned. An empty stamped file would flip
+  // both to "present" while nothing is actually pinned or verifiable. `add`/`adopt` create them on
+  // first use (both already had create-if-absent fallbacks), which is the honest moment.
+  test("no machine artifact is stamped — only SOURCES.md lives under refs/manifest/", () => {
+    const underManifestDir: string[] = manifest.stamped
+      .map((e: { path: string }) => e.path)
+      .filter((p: string) => p.startsWith("refs/manifest/") && p !== "refs/manifest/");
+    expect(underManifestDir).toEqual(["refs/manifest/SOURCES.md"]);
   });
 });
 

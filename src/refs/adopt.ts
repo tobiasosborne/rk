@@ -32,7 +32,8 @@ import { basename, join } from "node:path";
 import { checksumMatches, parseChecksumsFile, serializeChecksumsFile } from "./checksum";
 import { sha256File } from "./hash";
 import { parseLockFile, serializeLockFile } from "./lock";
-import { appendManifestRow, emptySourcesDocument, parseManifestTable } from "./manifest";
+import { appendManifestRow, parseManifestTable } from "./manifest";
+import { readSourcesDocument } from "./sources-doc";
 import { assertSafeRelPath } from "./path-safety";
 import type { LockFileEntry } from "../types";
 import { sourceId as brandSourceId } from "../types";
@@ -158,7 +159,10 @@ export async function adoptSource(repoRoot: string, inputPath: string, opts: Ado
   }
 
   const sourcesMdPath = join(manifestDir, "SOURCES.md");
-  const sourcesMd = await Bun.file(sourcesMdPath).text().catch(() => emptySourcesDocument());
+  // Shared with `add` since rk-tyl6 (src/refs/sources-doc.ts) — one reader, so the two writers
+  // cannot drift apart about what "no SOURCES.md yet" means. The only behavior change here: a
+  // file that exists but is blank now seeds too, instead of throwing one line later.
+  const sourcesMd = await readSourcesDocument(sourcesMdPath);
   if (!parseManifestTable(sourcesMd).some((r) => r.localPath === repoRel)) {
     await Bun.write(
       sourcesMdPath,

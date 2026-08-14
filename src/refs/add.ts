@@ -22,6 +22,7 @@ import { assertSafeRelPath } from "./path-safety";
 import { parseChecksumsFile, serializeChecksumsFile } from "./checksum";
 import { parseLockFile, serializeLockFile } from "./lock";
 import { appendManifestRow } from "./manifest";
+import { readSourcesDocument } from "./sources-doc";
 import type { UrlGetter } from "./fetch";
 import type { AddLocator, FetchSpec, LockFileEntry } from "../types";
 import { sourceId as brandSourceId } from "../types";
@@ -107,7 +108,18 @@ export interface AddResult {
 /** Acquires `locator`'s bytes, hashes them, installs the payload under
  * `<repoRoot>/refs/<id>/<basename>`, and appends a row to all three manifest artifacts. Never
  * fabricates a hash (SOURCES.md's own policy line, verbatim) — the sha256 recorded everywhere is
- * always freshly computed from the bytes actually installed. */
+ * always freshly computed from the bytes actually installed.
+ *
+ * ORDERING INVARIANT (rk-tyl6): at no intermediate failure point does the tree hold a lock or
+ * checksum entry whose SOURCES.md row is missing. Two halves, both load-bearing:
+ *   PREPARE — every read, parse and append happens before the first write, so a malformed
+ *     SOURCES.md (or an unparseable lock) aborts with NOTHING written, the way `adopt` already
+ *     did ("Writes NOTHING when any check fails");
+ *   COMMIT  — payload bytes, then the human-facing SOURCES.md ROW, then the two machine artifacts
+ *     that pin it. A crash between writes can therefore leave a row with no pin (visible, and
+ *     re-running `add` completes it) but never a pin with no row, which is what campaign-D hit:
+ *     checksums+lock updated, the manifest row lost, and the only way out a hand-seeded
+ *     SOURCES.md plus a rerun. */
 export async function addSource(repoRoot: string, locator: string, opts: AddOptions): Promise<AddResult> {
   assertSafeRelPath(opts.id);
   const parsed = parseLocator(locator);
@@ -117,17 +129,15 @@ export async function addSource(repoRoot: string, locator: string, opts: AddOpti
   const relPath = `${opts.id}/${fileBasename}`;
   assertSafeRelPath(relPath);
 
-  const dst = join(repoRoot, "refs", relPath);
-  await Bun.write(dst, bytes);
-
   const manifestDir = join(repoRoot, "refs", "manifest");
-
   const checksumsPath = join(manifestDir, "checksums.sha256");
+  const lockPath = join(manifestDir, "sources.lock.json");
+  const sourcesMdPath = join(manifestDir, "SOURCES.md");
+
+  // --- PREPARE: nothing below this line touches disk until every artifact's new content exists.
   const checksums = parseChecksumsFile(await Bun.file(checksumsPath).text().catch(() => ""));
   checksums.push({ sha256, path: relPath });
-  await Bun.write(checksumsPath, serializeChecksumsFile(checksums));
 
-  const lockPath = join(manifestDir, "sources.lock.json");
   const lock = parseLockFile(await Bun.file(lockPath).text().catch(() => '{"files":[]}'));
   const entry: LockFileEntry = {
     path: relPath,
@@ -137,11 +147,11 @@ export async function addSource(repoRoot: string, locator: string, opts: AddOpti
     ...(parsed.kind === "local-file" ? { note: "cache-only; acquire manually" } : {}),
   };
   lock.files.push(entry);
-  await Bun.write(lockPath, serializeLockFile(lock));
 
-  const sourcesMdPath = join(manifestDir, "SOURCES.md");
-  const sourcesMd = await Bun.file(sourcesMdPath).text();
-  const updated = appendManifestRow(sourcesMd, {
+  // Seeded when absent or blank, exactly as `rk refs adopt` seeds it (src/refs/sources-doc.ts):
+  // a fresh scaffold has no refs/manifest/ at all, and that must not be an error on the first
+  // `rk refs add` — let alone one thrown after the other two artifacts were already written.
+  const updatedSourcesMd = appendManifestRow(await readSourcesDocument(sourcesMdPath), {
     sourceId: brandSourceId(opts.id),
     citation: opts.citation ?? locator,
     locator,
@@ -150,7 +160,12 @@ export async function addSource(repoRoot: string, locator: string, opts: AddOpti
     sha16: sha256.slice(0, 16),
     role: opts.role ?? "",
   });
-  await Bun.write(sourcesMdPath, updated);
+
+  // --- COMMIT: row before pins (see the ordering invariant above).
+  await Bun.write(join(repoRoot, "refs", relPath), bytes);
+  await Bun.write(sourcesMdPath, updatedSourcesMd);
+  await Bun.write(checksumsPath, serializeChecksumsFile(checksums));
+  await Bun.write(lockPath, serializeLockFile(lock));
 
   return { sourceId: opts.id, path: `refs/${relPath}`, sha256 };
 }

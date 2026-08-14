@@ -12,6 +12,8 @@ import { checkCommand } from "../src/cli/check";
 import { parseFrontmatter } from "../src/gates/snapshot";
 import { TEMPLATE_MANIFEST } from "../src/scaffold/templates-embed";
 import { buildPreCommitHookScript } from "../src/scaffold/hooks";
+import { addSource } from "../src/refs/add";
+import { parseManifestTable } from "../src/refs/manifest";
 
 function capture() {
   const lines: string[] = [];
@@ -552,5 +554,39 @@ describe("rk init: the north star is bound, not just narrated (finding M3)", () 
     expect(code).toBe(2);
     expect(lines[0]).toContain("one line");
     expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
+  });
+});
+
+// rk-tyl6, the bead's own repro, end to end: `rk init` a fresh dir, then `rk refs add` a source.
+// Before this fix that sequence threw ENOENT on refs/manifest/SOURCES.md — after the lock and
+// checksums had already been written, so the payload was pinned twice with no manifest row, and
+// the campaign's workaround was to hand-seed SOURCES.md and re-run. Both halves are asserted here:
+// the scaffold now ships the registry, and the first add appends a row to it.
+describe("rk init + rk refs add: a fresh scaffold takes its first source (rk-tyl6)", () => {
+  test("the stamped scaffold carries an empty registry, and the first add appends to it", async () => {
+    const root = tmpRoot();
+    dirs.push(root);
+    const code = await initCommand(["Every widget is a gadget", "--root", root], capture().out, noSpawnDeps());
+    expect(code).toBe(0);
+
+    const sourcesMd = join(root, "refs", "manifest", "SOURCES.md");
+    expect(existsSync(sourcesMd)).toBe(true);
+    expect(parseManifestTable(readFileSync(sourcesMd, "utf8"))).toEqual([]);
+    // The machine artifacts are deliberately absent until a source exists (templates.test.ts (i)):
+    // their absence is what tells `rk check` that nothing is pinned or hash-verifiable yet.
+    expect(existsSync(join(root, "refs", "manifest", "checksums.sha256"))).toBe(false);
+    expect(existsSync(join(root, "refs", "manifest", "sources.lock.json"))).toBe(false);
+
+    const result = await addSource(root, "arxiv:2508.01234", {
+      id: "widget-2508.01234",
+      retrieved: "2026-08-14",
+      get: async () => new TextEncoder().encode("%PDF widget"),
+    });
+
+    const rows = parseManifestTable(readFileSync(sourcesMd, "utf8"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sha16).toBe(result.sha256.slice(0, 16));
+    expect(existsSync(join(root, "refs", "manifest", "checksums.sha256"))).toBe(true);
+    expect(existsSync(join(root, "refs", "manifest", "sources.lock.json"))).toBe(true);
   });
 });

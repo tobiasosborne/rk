@@ -19,22 +19,27 @@ export const SOURCES_TABLE_HEADER = [
   "|-----------|----------|---------|-----------|------------|----------------------|------|",
 ];
 
-/** A fresh SOURCES.md with an EMPTY Source registry table — what `rk refs adopt` seeds in a repo
- * that has no refs/manifest/ yet (rk-pk8o: the firewalled-librarian case, where the payload arrives
- * before any manifest exists). Carries the ROLE/UPDATE-POLICY header CLAUDE.md rule 9 requires of
- * every generated doc, and states the never-fabricate-a-hash policy AISM's own SOURCES.md states,
- * because that policy is exactly what makes an adopted row trustworthy. */
+/** A fresh SOURCES.md with an EMPTY Source registry table. THE canonical seed, used in three
+ * places that must never drift: `rk init` stamps it (templates/refs/manifest/SOURCES.md.tmpl is a
+ * byte-identical copy, bound by test/templates/templates.test.ts), and `rk refs add` /
+ * `rk refs adopt` seed it when a repo has no refs/manifest/ yet (rk-pk8o: the firewalled-librarian
+ * case, where the payload arrives before any manifest exists; rk-tyl6: `add` used to throw ENOENT
+ * instead, after it had already written the lock). Carries the ROLE/UPDATE-POLICY header CLAUDE.md
+ * rule 9 requires of every generated doc, and states the never-fabricate-a-hash policy AISM's own
+ * SOURCES.md states, because that policy is exactly what makes an adopted row trustworthy. */
 export function emptySourcesDocument(): string {
   return [
     "<!--",
     "ROLE: catalogue of ground-truth reference sources for this repo — citation, local path, role,",
-    "integrity hash. Generated/appended by `rk refs add` and `rk refs adopt`; rows may be edited by",
-    "hand for citation/role prose only.",
-    "UPDATE POLICY: append a row when a source is added; never rewrite a hash without re-deriving it",
-    "from the bytes on disk. Authoritative hashes live in refs/manifest/checksums.sha256; the fetch",
-    "recipe (when one exists) in refs/manifest/sources.lock.json. A source is PINNED only once its",
-    "bytes exist locally and a real SHA256 was computed — never fabricate a hash.",
-    "TRIGGER: `rk refs add`, `rk refs adopt`.",
+    "integrity hash. Written and appended to by `rk refs add` and `rk refs adopt`; rows may be",
+    "edited by hand for citation/role prose only.",
+    "UPDATE POLICY: authored-append-only — stamped once as this empty skeleton and grown one row at",
+    "a time as sources are added; never re-stamped, never overwritten. Never rewrite a hash without",
+    "re-deriving it from the bytes on disk. Authoritative hashes live in",
+    "refs/manifest/checksums.sha256; the fetch recipe (when one exists) in",
+    "refs/manifest/sources.lock.json. A source is PINNED only once its bytes exist locally and a",
+    "real SHA256 was computed — never fabricate a hash.",
+    "TRIGGER: `rk init` (stamps this skeleton), `rk refs add`, `rk refs adopt`.",
     "-->",
     "",
     "# SOURCES — ground-truth reference registry",

@@ -1,0 +1,19 @@
+<!--
+ROLE: catalogue of ground-truth reference sources for this repo — citation, local path, role,
+integrity hash. Written and appended to by `rk refs add` and `rk refs adopt`; rows may be
+edited by hand for citation/role prose only.
+UPDATE POLICY: authored-append-only — stamped once as this empty skeleton and grown one row at
+a time as sources are added; never re-stamped, never overwritten. Never rewrite a hash without
+re-deriving it from the bytes on disk. Authoritative hashes live in
+refs/manifest/checksums.sha256; the fetch recipe (when one exists) in
+refs/manifest/sources.lock.json. A source is PINNED only once its bytes exist locally and a
+real SHA256 was computed — never fabricate a hash.
+TRIGGER: `rk init` (stamps this skeleton), `rk refs add`, `rk refs adopt`.
+-->
+
+# SOURCES — ground-truth reference registry
+
+## Source registry
+
+| source-id | citation | locator | retrieved | local path | key file (sha256-16) | role |
+|-----------|----------|---------|-----------|------------|----------------------|------|
