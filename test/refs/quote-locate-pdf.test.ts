@@ -148,9 +148,12 @@ describe("locateQuoteInRepo — compressed PDF payload (rk-we5i)", () => {
 
   test("a non-PDF payload is unaffected: no extraction is produced and the lock is untouched", async () => {
     const { root } = makePdfRepo();
-    writeFileSync(join(root, "refs", "sources", "notes.tex"), "Intro.\nA plain verbatim sentence.\n");
+    const notesBytes = new TextEncoder().encode("Intro.\nA plain verbatim sentence.\n");
+    writeFileSync(join(root, "refs", "sources", "notes.tex"), notesBytes);
     const lock = readLock(root);
-    lock.files.push({ path: "sources/notes.tex", sha256: "0".repeat(64), source_id: "notes", fetch: null });
+    // The real hash: rk-r0j3 made the adopted pin bind every payload kind, not just PDFs, so a
+    // fake/mismatched sha256 here would now be refused rather than silently ignored.
+    lock.files.push({ path: "sources/notes.tex", sha256: sha256Bytes(notesBytes), source_id: "notes", fetch: null });
     const serialized = JSON.stringify(lock, null, 2);
     writeFileSync(join(root, "refs", "manifest", "sources.lock.json"), serialized);
 

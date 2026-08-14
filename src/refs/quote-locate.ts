@@ -18,7 +18,7 @@ import { locateQuote } from "./quote";
 import { parseLockFile } from "./lock";
 import { assertSafeRelPath } from "./path-safety";
 import { isPdfBytes } from "./pdf";
-import { ensureExtraction } from "./extraction-store";
+import { ensureExtraction, checkAdoptedPin } from "./extraction-store";
 import { sha256Bytes } from "./hash";
 import type { Which } from "./extract";
 import type { LockFileEntry, QuoteResult, SourceId } from "../types";
@@ -47,8 +47,16 @@ export type QuoteLookup =
   | { found: false; extractions: ExtractionTouch[] };
 
 async function searchableText(repoRoot: string, lockPath: string, entry: LockFileEntry, bytes: Uint8Array, which?: Which): Promise<Searchable> {
-  if (!isPdfBytes(bytes)) return { text: new TextDecoder().decode(bytes) };
-  const result = await ensureExtraction(repoRoot, lockPath, entry, sha256Bytes(bytes), which);
+  const payloadSha = sha256Bytes(bytes);
+  if (!isPdfBytes(bytes)) {
+    // THE ADOPTED PIN (bead rk-r0j3 follow-up): a raw/text payload gets the same refusal a PDF
+    // payload gets from `ensureExtraction` below — same shared check, same message shape, just a
+    // different refusal action, since there is no extraction sidecar to name for a text payload.
+    const pin = checkAdoptedPin(entry, payloadSha, "search or emit a quote anchor for bytes nobody adopted");
+    if (!pin.ok) return { skipReason: `refs/${entry.path}: ${pin.reason}` };
+    return { text: new TextDecoder().decode(bytes) };
+  }
+  const result = await ensureExtraction(repoRoot, lockPath, entry, payloadSha, which);
   if (result.status === "skipped") return { skipReason: `refs/${entry.path}: ${result.reason}` };
   return { text: result.text, extraction: { path: result.path, regenerated: result.regenerated } };
 }

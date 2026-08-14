@@ -1,23 +1,25 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { locateQuoteInRepo } from "../../src/refs/quote-locate";
+import { sha256Bytes } from "../../src/refs/hash";
 import { sourceId } from "../../src/types";
+
+const PAPER_TEX = "Introduction.\nTheorem 3: every idempotent map on a compact semigroup is a projection.\nQED.";
 
 function makeRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "rk-quote-locate-test-"));
   mkdirSync(join(root, "refs", "manifest"), { recursive: true });
   mkdirSync(join(root, "refs", "foo-2026"), { recursive: true });
-  writeFileSync(
-    join(root, "refs", "foo-2026", "paper.tex"),
-    "Introduction.\nTheorem 3: every idempotent map on a compact semigroup is a projection.\nQED.",
-  );
+  writeFileSync(join(root, "refs", "foo-2026", "paper.tex"), PAPER_TEX);
   writeFileSync(
     join(root, "refs", "manifest", "sources.lock.json"),
     JSON.stringify({
       files: [
-        { path: "foo-2026/paper.tex", sha256: "0".repeat(64), source_id: "foo-2026", fetch: null },
+        // The real hash (rk-r0j3: the adopted pin now binds every payload kind, not just PDFs) —
+        // a fake sha256 here would be refused rather than silently ignored.
+        { path: "foo-2026/paper.tex", sha256: sha256Bytes(new TextEncoder().encode(PAPER_TEX)), source_id: "foo-2026", fetch: null },
       ],
     }),
   );
@@ -66,6 +68,31 @@ describe("locateQuoteInRepo", () => {
       }),
     );
     await expect(locateQuoteInRepo(root, sourceId("evil"), "x")).rejects.toThrow(/unsafe|traversal/i);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("refuses a TEXT payload swapped after adoption — never emits a quote anchor for unadopted bytes (rk-r0j3 follow-up)", async () => {
+    // Mirrors the PDF exploit fix (rk-o85b): Gate 3's resolveQuotableText now binds the adopted
+    // pin for EVERY payload kind (rk-r0j3), not just PDFs, but until this fix the acquisition side
+    // (locateQuoteInRepo's non-PDF branch) never compared the payload's current bytes to its pin —
+    // it just decoded and searched whatever was on disk. A worker could `rk refs quote` a source
+    // whose text payload was replaced after adoption and get a "found" anchor that Gate 3 (now
+    // pin-checking every kind) rejects at `rk check` time — the same acquisition/gate mismatch the
+    // PDF case had, one payload kind over.
+    const root = makeRepo();
+    const lockBefore = readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8");
+
+    // Swap the payload WITHOUT re-pinning: the lock's sha256 still names the ORIGINAL bytes.
+    const swapped = "Introduction.\nTheorem 3 is FALSE: a counterexample exists.\nQED.";
+    writeFileSync(join(root, "refs", "foo-2026", "paper.tex"), swapped);
+    expect(sha256Bytes(new TextEncoder().encode(swapped))).not.toBe(sha256Bytes(new TextEncoder().encode(PAPER_TEX)));
+
+    await expect(
+      locateQuoteInRepo(root, sourceId("foo-2026"), "every idempotent map on a compact semigroup"),
+    ).rejects.toThrow(/VIOLATES its adopted pin.*re-adopt/s);
+
+    // Fail-closed at ACQUISITION time: the lock is untouched (no writes at all for a text payload).
+    expect(readFileSync(join(root, "refs", "manifest", "sources.lock.json"), "utf8")).toBe(lockBefore);
     rmSync(root, { recursive: true, force: true });
   });
 

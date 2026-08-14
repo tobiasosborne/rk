@@ -27,6 +27,36 @@ export type ExtractionState =
   | { usable: true; text: string }
   | { usable: false; reason: string };
 
+export type PinCheck = { ok: true } | { ok: false; reason: string };
+
+/** THE ADOPTED PIN, shared by both acquisition-side callers (bead rk-o85b for PDFs, extended to
+ * every payload kind by the same review follow-up once rk-r0j3 made Gate 3's
+ * `resolveQuotableText` bind the pin for ALL kinds, not just PDFs). Before this check existed,
+ * `rk refs quote` would search/extract whatever bytes were currently on disk and emit a "found"
+ * anchor for them even when those bytes were never adopted — a payload replaced after adoption,
+ * without repinning `entry.sha256` in sources.lock.json, would silently pass here and only be
+ * caught LATER by Gate 3 at `rk check` time. Checked on the WRITE/SEARCH side so the refusal (and
+ * its remediation) is what an operator sees immediately, and so a PDF swap never gets a fresh
+ * sidecar chained to the replacement bytes.
+ *
+ * `refusal` is the caller-specific tail of what is being refused (e.g. "extract or record an
+ * extraction sidecar chained to bytes nobody adopted" for the PDF path, "search or emit a quote
+ * anchor for bytes nobody adopted" for the raw-text path) — the pin violation and remediation text
+ * is identical either way, only the action differs. The reason string deliberately does NOT
+ * include the `refs/<path>: ` prefix `locateQuoteInRepo`'s skip-reporting adds uniformly to every
+ * skip reason (both this one and the pre-existing "no extractor installed" ones) — adding it here
+ * too would double it for this check specifically, since every caller already prefixes. */
+export function checkAdoptedPin(entry: LockFileEntry, payloadSha: string, refusal: string): PinCheck {
+  if (entry.sha256.toLowerCase() === payloadSha.toLowerCase()) return { ok: true };
+  return {
+    ok: false,
+    reason:
+      `payload on disk (sha256 ${payloadSha}) VIOLATES its adopted pin ${entry.sha256} recorded ` +
+      `in sources.lock.json — refusing to ${refusal}. Restore the pinned payload or re-adopt it ` +
+      `('rk refs adopt') and re-verify every quote that cited it before quoting again`,
+  };
+}
+
 /** The edge twin of `resolveQuotableText`'s steps 6-9: is this entry's recorded extraction present,
  * intact, and still bound to these payload bytes? `payloadSha` is the payload's CURRENT digest. */
 export async function extractionState(repoRoot: string, entry: LockFileEntry, payloadSha: string): Promise<ExtractionState> {
@@ -69,24 +99,9 @@ export async function ensureExtraction(
   payloadSha: string,
   which?: Which,
 ): Promise<EnsureResult> {
-  // THE ADOPTED PIN, checked BEFORE anything else (bead rk-o85b, follow-up to the 2026-08-14
-  // review's finding P1-1). Gate 3's `resolveQuotableText` already fails closed when a payload's
-  // current bytes violate `entry.sha256`, but that check lives on the READ side (Gate 3 runs
-  // later, at `rk check`). Before this check, `ensureExtraction` never looked at the pin at all:
-  // it would extract a swapped payload's REPLACEMENT bytes and record a fresh sidecar chained to
-  // them, so `rk refs quote` reported a found quote against text nobody adopted — the exploit
-  // mechanism the review flagged as surviving Gate 3's repair. Checked here, on the WRITE side, so
-  // the sidecar and lock record are never produced for the violating bytes in the first place.
-  if (entry.sha256.toLowerCase() !== payloadSha.toLowerCase()) {
-    return {
-      status: "skipped",
-      reason:
-        `refs/${entry.path}: payload on disk (sha256 ${payloadSha}) VIOLATES its adopted pin ` +
-        `${entry.sha256} recorded in sources.lock.json — refusing to extract or record an ` +
-        `extraction sidecar chained to bytes nobody adopted. Restore the pinned payload or ` +
-        `re-adopt it ('rk refs adopt') and re-verify every quote that cited it before quoting again`,
-    };
-  }
+  // THE ADOPTED PIN, checked BEFORE anything else (bead rk-o85b) — see `checkAdoptedPin` above.
+  const pin = checkAdoptedPin(entry, payloadSha, "extract or record an extraction sidecar chained to bytes nobody adopted");
+  if (!pin.ok) return { status: "skipped", reason: pin.reason };
 
   const current = await extractionState(repoRoot, entry, payloadSha);
   if (current.usable) {
