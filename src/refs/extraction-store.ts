@@ -69,6 +69,25 @@ export async function ensureExtraction(
   payloadSha: string,
   which?: Which,
 ): Promise<EnsureResult> {
+  // THE ADOPTED PIN, checked BEFORE anything else (bead rk-o85b, follow-up to the 2026-08-14
+  // review's finding P1-1). Gate 3's `resolveQuotableText` already fails closed when a payload's
+  // current bytes violate `entry.sha256`, but that check lives on the READ side (Gate 3 runs
+  // later, at `rk check`). Before this check, `ensureExtraction` never looked at the pin at all:
+  // it would extract a swapped payload's REPLACEMENT bytes and record a fresh sidecar chained to
+  // them, so `rk refs quote` reported a found quote against text nobody adopted — the exploit
+  // mechanism the review flagged as surviving Gate 3's repair. Checked here, on the WRITE side, so
+  // the sidecar and lock record are never produced for the violating bytes in the first place.
+  if (entry.sha256.toLowerCase() !== payloadSha.toLowerCase()) {
+    return {
+      status: "skipped",
+      reason:
+        `refs/${entry.path}: payload on disk (sha256 ${payloadSha}) VIOLATES its adopted pin ` +
+        `${entry.sha256} recorded in sources.lock.json — refusing to extract or record an ` +
+        `extraction sidecar chained to bytes nobody adopted. Restore the pinned payload or ` +
+        `re-adopt it ('rk refs adopt') and re-verify every quote that cited it before quoting again`,
+    };
+  }
+
   const current = await extractionState(repoRoot, entry, payloadSha);
   if (current.usable) {
     return { status: "ready", text: current.text, path: `refs/${entry.extraction!.path}`, regenerated: false };
