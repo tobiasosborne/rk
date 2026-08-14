@@ -1274,6 +1274,19 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   produces an ERROR: citation-shaped text that the strict adjacent two-line grammar did not
   byte-verify is a silent exemption. Such a hit never increments the checked numerator.
 
+- **Extraction layer for PDF payloads** (rk-we5i, PRD C7). A payload whose first five bytes are
+  `%PDF-` is **never** matched against its own bytes: a compressed PDF keeps every sentence inside
+  FlateDecode streams, so a raw-byte search can only ever report not-found. Such a payload is
+  quotable only through an **extraction layer** declared on its `refs/manifest/sources.lock.json`
+  entry as `extraction: { path, sha256, payload_sha256, tool }` — `path` refs-relative, `sha256`
+  the extraction file's own raw-byte digest, `payload_sha256` the payload's digest **at extraction
+  time** (the chain link), `tool` free-form provenance that is never consulted for a verdict. Both
+  digests are full 64-hex, compared case-insensitively. Detection is anchored at offset 0 with no
+  whitespace tolerance, so a text source that merely mentions `%PDF-` is unaffected. A citation
+  anchors at the PAYLOAD path (the hash-pinned artifact) with a line number indexing the
+  **extraction**; the sidecar is a derived file and is never itself a citable path. Implementation:
+  `src/gates/refs-extraction.ts` (`resolveQuotableText`), called by both Gate 3 halves.
+
 **Checks.**
 1. **Classification** (check-refs.py:108-133):
    - IMPORT external — `source` contains a `proofs/` reference and **no** refs/ locus ⇒
@@ -1357,6 +1370,27 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
    unit. If any cited shards exist and zero shard citations pass Check 8, emit a further
    **ERROR** `zero byte-verified shard citations`; a run may never be green merely because no
    citation was recognizable.
+10. **Extraction-chain resolution** (rk-we5i). Before checks 4/6 (externals) and check 8's final
+    byte comparison (shard citations) run, the payload path is resolved to the text the quote is
+    matched against. A non-PDF payload resolves to its own bytes — behavior identical to every
+    release before this check existed. A PDF payload resolves to its extraction layer, and ONLY
+    when the whole chain is intact. Each of the following is **ERROR**, counted in the coverage
+    denominator and never in the numerator, and never a fallback to raw payload bytes:
+    - no `extraction` recorded on the lock entry (also: a partially-written record, which is
+      dropped rather than half-trusted) — the state every PDF source is in before an extraction
+      exists; the honest shard status meanwhile is `stated`;
+    - the lock is absent/unparseable/malformed, or has zero / more than one entry for the payload;
+    - the recorded extraction file is absent from the tree;
+    - **stale chain**: `extraction.payload_sha256` ≠ the payload's CURRENT raw-byte sha256 — the
+      payload moved and the extraction did not;
+    - **edited extraction**: the extraction file's raw-byte sha256 ≠ its recorded `extraction.sha256`
+      — the payload never moved but the derived text did;
+    - either digest malformed (not 64-hex) — a broken chain, never a skipped comparison.
+    The two staleness clauses are the reason the layer is chained rather than merely present:
+    admitting an unchained extraction would let a citation verify against text the current source
+    no longer contains, which is strictly worse than the unreachable-cited-rung bug this check
+    fixes. Fixtures: `refs-17` (intact chain ⇒ PASS), `refs-18` (stale chain ⇒ ERROR), `refs-19`
+    (no extraction recorded ⇒ ERROR).
 
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
@@ -1442,6 +1476,21 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   FAIL, and only via checks 6-7. Zero AISM externals are affected in either direction (zero
   refs-quote externals have ever existed there — see the zero-cost evidence in the entry above);
   the affected population is future rk repos, which is the point.
+- **[rk-stricter-intended] PDF payloads are matched against a chained extraction layer, never
+  their raw bytes** (P1, bead rk-we5i). AISM's `check-refs.py` greps the payload bytes whatever
+  they are, so a compressed PDF is a permanent, silent not-found: in rk's own campaign, `rk refs
+  quote` returned pattern-not-found for RVW math/0406038, RV TR05-092 and JMRW 2209.07024 — even
+  for `spectral gap` — so no shard could carry `kind: cited` against any PDF source and Gate 3
+  reported `checked 0/0 shard citations`. That was fail-closed (no false green) but the cited rung
+  was unreachable, and the campaign workaround was to quote `pdftotext -layout` output by hand with
+  PDF-page anchors and shard honestly at `stated`. Check 10 above resolves a PDF payload to its
+  recorded extraction with the payload hash chained. **Direction of the change**: the acceptance
+  set both GROWS (a PDF citation can now verify at all — it never could) and SHRINKS (an extraction
+  present but unchained/edited is an ERROR, where a naive presence-only implementation would pass).
+  It is `stricter-intended` rather than a pure loosening because the new PASS path exists only
+  behind a hash chain no prior implementation had; nothing that FAILed for a *content* reason
+  starts passing. Zero AISM externals are affected (zero refs-quote externals have ever existed
+  there — see the zero-cost evidence above). Fixtures: `refs-17`/`refs-18`/`refs-19`.
 - **[message-only]** The single Gate 3 coverage line retains the four-way external breakdown
   and appends `; checked <C>/<K> shard citations` (rk-uqxh), rendering: `checked refs: <P>/<T>
   externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped; checked
@@ -1482,6 +1531,9 @@ changed across AISM's history at time of reading.
 | `refs-14` | **intact citation golden case** [rk-uqxh] — adopted SHA-256 matches and the exact quote occurs at the recorded line ⇒ PASS, `checked 1/1 shard citations` |
 | `refs-15` | **normalized-empty shard quote** [rk-uqxh repair R2] — single-space quote on a cited shard ⇒ Check 8 ERROR, coverage `checked 0/1 shard citations` |
 | `refs-16` | **decorated citation silent exemption** [rk-uqxh repair R7] — one genuine citation plus one blockquoted fabricated citation ⇒ ERROR, coverage `checked 1/2 shard citations` |
+| `refs-17` | **compressed-PDF citation, intact extraction chain** [rk-we5i] — cited shard quoting a sentence that occurs nowhere in the payload's raw bytes; the lock records a `pdftotext -layout` extraction chained to the payload hash ⇒ PASS, `checked 1/1 shard citations` (ERRORed at `checked 0/1` before this bead: the cited rung was unreachable for any PDF source) |
+| `refs-18` | **stale extraction chain** [rk-we5i] — payload is revision 2 of the PDF, sidecar is revision 1's text, both hashes self-consistent, quote byte-verbatim in the sidecar ⇒ check 10 ERROR, `checked 0/1 shard citations` (an unchained extraction would report `1/1` while certifying a claim the current source refutes) |
+| `refs-19` | **PDF source with no extraction recorded** [rk-we5i] — payload present and hash-pinned, no `extraction` on its lock entry ⇒ check 10 ERROR naming the missing layer, `checked 0/1 shard citations`, never a raw-bytes fallback |
 
 ---
 
@@ -1844,7 +1896,15 @@ class-driven from the script's own enumerated requirements, not incident-driven.
 
 **Inputs.**
 - Glob: `runs/*/` — only directories are bundles; a stray non-directory file at the top level
-  other than `README.md` ⇒ WARN (check-runs.py:46-50).
+  other than `README.md` and the two sanctioned-infrastructure names below ⇒ WARN
+  (check-runs.py:46-50).
+- **Sanctioned infrastructure** at the `runs/` top level (rk-z93m, `src/gates/runs.ts`'s
+  `SANCTIONED_RUNS_INFRASTRUCTURE`): `probe-channel.sh` and `probe-ledger.jsonl`, matched by
+  EXACT name, as FILES, one level under `runs/` only. These are the stamped constitution's own
+  § 4b I.3 probe channel and its append-only ledger — `rk init` stamps the channel from
+  `templates/runs/probe-channel.sh.tmpl` (template_version 1.8.0, classification campaign-seed)
+  and the channel creates the ledger on its first append. Neither is a bundle and neither is a
+  stray: they draw no finding, and whichever is present is named in the coverage line.
 - Bundle dirname: `^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$` (check-runs.py:30,54-55).
 - `runs/<bundle>/README.md`: plain markdown, **substring-search**, not a structured schema —
   case-insensitively must contain each of `hypothesis`, `command`, `finding`, `next`
@@ -1856,6 +1916,8 @@ class-driven from the script's own enumerated requirements, not incident-driven.
   the bundle dirname must appear as a substring of its text (check-runs.py:67-68) — also
   substring-based, not a structured-table check.
 - `SKIP = {README.md}` at the `runs/` top level (the schema doc itself, check-runs.py:36).
+  `README.md` is skipped SILENTLY (it names nothing in the coverage line — AISM parity); the two
+  sanctioned-infrastructure names are skipped VISIBLY (named in the coverage line).
 
 **Checks.**
 1. Bundle dirname matches the date-slug pattern ⇒ ERROR "bad bundle name" otherwise
@@ -1868,13 +1930,23 @@ class-driven from the script's own enumerated requirements, not incident-driven.
    invariant/certificate/known-value declared" otherwise (check-runs.py:64-66).
 5. Bundle dirname appears in repo-root `INDEX.md` ⇒ ERROR "not referenced in INDEX.md"
    otherwise (check-runs.py:67-68).
-6. A stray non-directory file at the `runs/` top level (not `README.md`) ⇒ WARN
-   (check-runs.py:49-50).
+6. A stray non-directory file at the `runs/` top level (not `README.md`, not one of the two
+   sanctioned-infrastructure names) ⇒ WARN (check-runs.py:49-50). WARN in BOTH phases: check 6
+   has never been an ERROR, and the Phase matrix only demotes ERRORs, so there is nothing here
+   for `exploration` to soften. (Bead rk-z93m's "would ERROR in consolidation" overstated the
+   severity; the defect it names is real regardless — the constitution's own mandatory artifact
+   must draw no finding at all, in either phase.)
 
 **Day-1 vacuity.** An empty `runs/` directory is an explicitly valid green state
 (check-runs.py:16, "Day 1: runs/ is empty by design ⇒ the gate is green") — zero bundles is
 zero errors, not a coverage failure. The coverage line must state `0 run bundle(s)` explicitly
 per the Shared conventions' coverage-reporting rule, never omit the line.
+
+**Coverage line.** `N run bundle(s)` when no sanctioned infrastructure is present (byte-identical
+to the pre-rk-z93m text — nothing was skipped, so nothing is claimed), and
+`N run bundle(s); sanctioned runs/ infrastructure: <names>` when it is, listing only the names
+actually present, always in the fixed order `probe-channel.sh, probe-ledger.jsonl`. `checked`/
+`total` count bundle DIRECTORIES only and are unaffected by the allowance.
 
 **Known limitations / incident history.**
 - Checks 3, 4, and 5 are all plain substring search, not structural (heading-based or
@@ -1888,9 +1960,27 @@ per the Shared conventions' coverage-reporting rule, never omit the line.
   the `runs/`↔`INDEX.md` substring-matching mirror entirely — a structural fix at M2.6
   supersedes a point-fix here. Not accepted for parity cost.
 
-**Divergences from AISM (triage).** None. This gate's logic is simple enough that it is ported
-as characterized prior art with no behavioral tightening; only the standard **[message-only]**
-cross-gate finding-format change and the mandatory day-1 coverage line apply.
+**Divergences from AISM (triage).** One, plus the standard **[message-only]** cross-gate
+finding-format change and the mandatory day-1 coverage line. Everything else is ported as
+characterized prior art with no behavioral change.
+
+- **Check 6's sanctioned-infrastructure allowance** (rk-z93m, 2026-08-14). `check-runs.py:46-50`
+  WARNs on every non-directory at the `runs/` top level except `README.md`; rk exempts
+  `probe-channel.sh` and `probe-ledger.jsonl` as well. This is a **narrowing of check 6's stray
+  set, not a stricter or looser reading of the same requirement**, so — like `linker-25` and
+  `shards-15` — it is not triaged into the usual {rk-stricter-intended | rk-bug | ambiguous}
+  triad: AISM had no probe channel for the rule to have an opinion about. rk's own stamped
+  constitution (§ 4b I.3, template_version ≥ 1.7.0) REQUIRES a single sanctioned, ledgered probe
+  channel, and 1.8.0's `rk init` stamps it at exactly these names; without the allowance the
+  scaffold's own mandatory artifact is reported as junk by the scaffold's own gate. **Found live**
+  (campaign D, s2): the campaign built the channel the constitution demands, and both files drew
+  stray WARNs. The allowance is deliberately the narrowest thing that fixes that — exact names,
+  files only, top level only, no config-supplied additions — so `probe-ledger.jsonl.bak`, a
+  second `probe-ledger-2.jsonl`, and a `probe-channel.sh` one directory down all still WARN
+  (fixture `runs-10`), and a DIRECTORY carrying a sanctioned name is still classified as a
+  (malformed) bundle. `test/templates/templates.test.ts` binds the gate's list to
+  `templates/manifest.json`: a future template stamping another file under `runs/` without
+  extending the list fails there rather than in a stranger's first `rk check`.
 
 **Historical schema-drift tolerance.** N/A — the `README.md` field/marker requirements have not
 changed across AISM's history at time of reading.
@@ -1907,6 +1997,8 @@ changed across AISM's history at time of reading.
 | `runs-06` | stray top-level file (WARN) |
 | `runs-07` | empty `runs/` golden case (day-1 green baseline; asserts the coverage line still fires) |
 | `runs-08` | **empty run bundle DIRECTORY (exists, no README)** [rk-399, finding 2 BLOCKER] — check 2 must ERROR "missing README.md" even when file-prefix inference sees nothing; the gate enumerates bundles from the `dirs` SnapshotFact, not file prefixes alone |
+| `runs-09` | **sanctioned probe-channel layout, golden pass** [rk-z93m, campaign D s2] — `runs/probe-channel.sh` + `runs/probe-ledger.jsonl` beside a conforming bundle dir ⇒ zero findings under the DEFAULT config (phase consolidation), coverage `1/1` naming both sanctioned files |
+| `runs-10` | **allowance is not a hole** [rk-z93m] — the sanctioned pair present AND an ordinary stray (`scratch-notes.txt`) plus a near-miss name (`probe-ledger.jsonl.bak`) ⇒ both strays still WARN, exact-name matching proven |
 
 ---
 
