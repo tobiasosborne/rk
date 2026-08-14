@@ -2616,7 +2616,23 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    Check 4b `[reward-tier-unbacked]` (window-1 finding rk-90so; hardened per the Tier A
    review of f5b6b7c; INDEPENDENCE added per rk-ne3a, campaign-A window-2 finding): a
    pma-by-status bank additionally requires the STATUS to be backed, and backing to be
-   RECORDED-INDEPENDENT of the claim's prover. Backing routes, both fail-closed:
+   RECORDED-INDEPENDENT of the claim's prover.
+   WITHDRAWAL BINDS BOTH ROUTES, and is evaluated BEFORE either (rk-yic3, P1 Tier A): a claim
+   carrying a live retraction in EITHER hash domain (`l5-shard-bytes` or `af-canonical`,
+   `src/gates/linker-retraction.ts`) is backed by NO route, and an UNHEALTHY retraction ledger
+   refuses backing on every route, fail-closed — unknowable withdrawal status is never read as
+   "nothing is retracted" at the site where credit is banked. A retraction is a fact about the
+   CLAIM, not about one kind of evidence for it, so it is a precondition of Check 4b rather than a
+   clause of route (ii). Between M3.7 and 2026-08-14 it WAS a clause of route (ii) only: route (i)
+   consulted neither the retraction ledger nor its health, and the decision tried route (i) first
+   and returned as soon as it backed, so a retracted claim banked proved-mod-audit through a
+   hand-authored `.rk/` provenance record — route (i) was the weaker sibling of a rule route (ii)
+   already enforced. `corpus/reward/reward-27` is the live-retraction red case and
+   `corpus/reward/reward-28` the poisoned-ledger one; they are separate fixtures because
+   `readRetractionFacts` empties both live maps on an unhealthy store, so the live-retraction case
+   is structurally blind to the health clause's removal. The precondition's pure implementation is
+   `src/reward/pma-withdrawal.ts`, consulted by `pmaBackingDecision` before either route.
+   Backing routes, both fail-closed:
    (i) a `provenance:` declaration whose FIRST whitespace-token names a readable JSON
    provenance record. The current snapshot edge text-loads provenance records only when they
    are JSON files directly under `.rk/`; a path that exists and is hash-visible but lies
@@ -2676,9 +2692,11 @@ Coverage line: `checked reward: <events>/<events+malformed> ledger events`.
    rk campaign repo or its git history, so no version bump is owed (finding 3, ruling recorded
    in the schema's own description);
    (ii) a fresh VALID L5 verdict from a HEALTHY store (zero parse issues, intact ordinal
-   chain — the linker's poisoning stance), with a healthy retraction ledger and no live
-   retraction for the shard in either hash domain; VALID-WITH-CORRECTION and stale verdicts
-   never back. A deficient provenance record does not suppress an independently sufficient
+   chain — the linker's poisoning stance); VALID-WITH-CORRECTION and stale verdicts
+   never back. The retraction-ledger health and live-retraction rules that used to be stated
+   here alone are now the shared WITHDRAWAL precondition above, binding routes (i) and (ii)
+   identically (rk-yic3); nothing about route (ii)'s behavior weakens, and the rule is no longer
+   reachable-around via route (i). A deficient provenance record does not suppress an independently sufficient
    fresh VALID L5 verdict. This check establishes recorded-and-checkable role separation
    only: driver-supplied identity seams are not authenticated, and this clause makes no
    adversary-resistance claim — the trust anchor remains driver-enforced role separation
@@ -2753,7 +2771,9 @@ ERROR with placement reason, repair R9), reward-22 (backing record naming no rev
 ⇒ ERROR, rk-io5l), reward-23 (record recorded against superseded claim bytes ⇒ ERROR,
 rk-io5l), reward-24 (hand-authored record with numeric `schema_version` ⇒ ERROR, rk-tlwb),
 reward-25 (producer-written record ⇒ PASS, rk-tlwb), reward-26 (independently authored,
-current-bytes-bound REFUTED record ⇒ ERROR, rk-xrgn).
+current-bytes-bound REFUTED record ⇒ ERROR, rk-xrgn), reward-27 (live `l5-shard-bytes`
+retraction with an impeccable provenance record ⇒ ERROR, rk-yic3), reward-28 (poisoned
+retraction ledger with an impeccable provenance record ⇒ ERROR, fail-closed, rk-yic3).
 
 **Reward-ledger schema compatibility (rk-4317).** The reward-ledger record family is now
 version 2; the stable family filename remains `schemas/reward-ledger.v1.json`, following the

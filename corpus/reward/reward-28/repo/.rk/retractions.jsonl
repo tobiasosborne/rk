@@ -1,0 +1,2 @@
+{"schemaVersion":"1","ordinal":0,"itemId":"lem-some-other-claim","contentHash":"3f5a1d0c8b7e6a49230d5c1b8e4f7a2d9c6b3e0a1f8d7c4b5a2e9f6d3c0b7a41","hashDomain":"l5-shard-bytes","retractedBy":"audit:2026-08-14-independent-sweep","reason":"a readable first record, so the truncated append below is the only fault","appendedAt":"2026-08-14T09:00:00.000Z"}
+{"schemaVersion":"1","ordinal":1,"itemId":"lem-poisoned-retraction-ledger","contentHash":"cec5fe80a9cf411e55a4739d6c6517aad7689c0826b99954db21ed5

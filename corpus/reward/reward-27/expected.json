@@ -1,0 +1,20 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unbacked"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "live retraction"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "AISM had no reward ledger; the retraction half of this case IS an AISM incident — 2026-07-28, lem-stage1-approximate-group-laws and lem-stage1-smooth-unitary-operations were retracted by an independent sweep while three of four layers still rendered 'validated' (docs/memos/2026-08-03-aism-postmortem/03-datamodel.md, 'Drift & inconsistency found' item 1). rk's banking site is the fourth layer.",
+  "notes": "bead rk-yic3. Check 4b's two backing routes were NOT symmetric about withdrawal: route (ii) (l5Decision) refused backing on a live retraction in either hash domain, route (i) (provenanceDecision) consulted the retraction ledger not at all, and pmaBackingDecision tried route (i) FIRST and returned the moment it backed. So a claim whose verdict had been retracted still banked proved-mod-audit through a hand-written .rk/ provenance record — the weaker sibling of a rule the stronger route already enforced. Everything else here is impeccable and deliberately so: the record is directly under .rk/, schema_version '1', right claimId, role 'verifier', verdict 'VALID' with a non-blank reason, authored by a decoded model different from the prover-of-record, and claimSha256 equal to the shard's CURRENT bytes — the ONLY defect is the live retraction. Red against the pre-repair source (exit 0, zero findings); green after the veto moved to pmaBackingDecision, ahead of both routes. Sibling: reward-28 (unhealthy ledger, which reward-27 cannot catch — a poisoned store yields ZERO live retractions by construction, so removing the health clause alone leaves this fixture green). HASH COUPLING: the shard bytes are hashed TWICE here, once into the record's claimSha256 and once into the retraction's contentHash. Edit the shard by so much as a newline and BOTH must be recomputed — a stale claimSha256 would flip this to reward-23's staleness reason and a stale contentHash would silently un-retract the claim, either of which makes the fixture pass for the wrong reason."
+}

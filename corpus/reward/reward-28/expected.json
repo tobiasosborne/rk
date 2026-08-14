@@ -1,0 +1,20 @@
+{
+  "gate": "reward",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "reward-tier-unbacked"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/reward-ledger.jsonl",
+      "message_pattern": "retraction ledger is unhealthy"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["ledger events"] },
+  "aism_behavior": "n/a — the reward ledger and the retraction ledger are both rk-only (PRD Amendment A1, N2; rk-0ehr/P1). AISM's equivalent of an unreadable withdrawal record was prose in a shard, which no layer read at all.",
+  "notes": "bead rk-yic3, the half reward-27 CANNOT catch. readRetractionFacts fails closed by emptying BOTH live maps on a poisoned store (src/gates/linker-retraction.ts:103-108), so a live-retraction fixture is blind to the health clause: delete `if (!retractions.healthy) ...` from the shared veto and reward-27 stays green while THIS fixture goes red. That asymmetry is why the two fixtures are separate rather than one. The ledger here carries one readable record for an unrelated item followed by a truncated append (the exact linker-46 corruption shape) — retraction status is unknowable, so the honest answer at the banking site is 'no route backs', not 'nothing is retracted'. The provenance record is otherwise impeccable (schema_version '1', right claimId, role 'verifier', verdict 'VALID' with a non-blank reason, independent decoded model, claimSha256 equal to the shard's current bytes), so the ONLY defect is the unreadable ledger. Red against the pre-repair source (exit 0, zero findings): route (i) never consulted store health at all. Note the truncated line's own itemId happens to be readable here for legibility, but nothing may rely on that — a real truncation can cut before the id, which is precisely why the whole store is poisoned rather than the one item. Recompute claimSha256 if the shard changes."
+}

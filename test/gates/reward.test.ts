@@ -267,3 +267,94 @@ describe("Gate 8 Check 4b(i) — the backing record binds to the claim bytes it 
     if (!decision.backed) expect(decision.reason).toContain("stale");
   });
 });
+
+// Gate 8 Check 4b's WITHDRAWAL PRECONDITION (bead rk-yic3, P1 Tier A). Route (ii) refused backing
+// on a live retraction in either hash domain and on an unhealthy retraction ledger; route (i) read
+// neither, and `pmaBackingDecision` tried route (i) FIRST and returned the moment it backed. So a
+// claim whose L5 verdict had been retracted still banked proved-mod-audit through a hand-written
+// `.rk/` provenance record — route (i) was the weaker sibling of a rule route (ii) already
+// enforced. The retraction facts now bind BOTH routes, ahead of either. Red corpus:
+// corpus/reward/reward-27 (live retraction) and corpus/reward/reward-28 (poisoned ledger).
+describe("Gate 8 Check 4b — a withdrawn claim is unbacked by EITHER route (rk-yic3)", () => {
+  const RETRACTIONS = ".rk/retractions.jsonl";
+
+  function retraction(overrides: Record<string, unknown> = {}): string {
+    return `${JSON.stringify({
+      schemaVersion: "1",
+      ordinal: 0,
+      itemId: "lem-claim",
+      contentHash: claimBytesHash(),
+      hashDomain: "l5-shard-bytes",
+      retractedBy: "audit:2026-08-14-independent-sweep",
+      reason: "the endorsed argument reuses the very bound it is meant to establish",
+      ...overrides,
+    })}\n`;
+  }
+
+  test("a live l5-shard-bytes retraction refuses the PROVENANCE route, not merely the L5 route", () => {
+    // Everything route (i) ever looked at is impeccable: this record backs the identical claim in
+    // the sibling test above ("an independent verifier's recorded identity backs the claim").
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record(),
+      [RETRACTIONS]: retraction(),
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) {
+      expect(decision.reason).toContain("live retraction");
+      expect(decision.reason).toContain("l5-shard-bytes");
+      expect(decision.reason).toContain("audit:2026-08-14-independent-sweep");
+    }
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  test("a live af-canonical retraction refuses the provenance route too — both domains bind", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record(),
+      // af-canonical liveness is fail-closed: rk cannot observe an item's current af-canonical
+      // hash, so the value below never has to match anything (src/gates/linker-retraction.ts).
+      [RETRACTIONS]: retraction({ hashDomain: "af-canonical", contentHash: "a".repeat(64) }),
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("af-canonical");
+  });
+
+  test("an unhealthy retraction ledger refuses backing on the provenance route, fail closed", () => {
+    // A poisoned store yields ZERO live retractions by construction, so this failure mode is NOT
+    // reachable through the live-retraction tests above — it needs its own assertion, exactly as
+    // it needs its own corpus fixture (reward-28).
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record(),
+      [RETRACTIONS]: `${retraction().trim().slice(0, 80)}\n`,
+    });
+    const decision = pmaBackingDecision(snapshot, claim(), [claim()]);
+    expect(decision.backed).toBe(false);
+    if (!decision.backed) expect(decision.reason).toContain("retraction ledger is unhealthy");
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(false);
+  });
+
+  test("a retraction whose hash no longer binds releases the claim — the veto is a real comparison", () => {
+    // The green control. An edit releases the binding (src/drive/retraction-record.ts's header):
+    // this must NOT degrade into "any retraction record for this id ever refuses backing", which
+    // would make the fixtures above pass for the wrong reason.
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record(),
+      [RETRACTIONS]: retraction({ contentHash: claimBytesHash(`${shard()}an earlier revision\n`) }),
+    });
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(true);
+  });
+
+  test("a retraction naming a DIFFERENT claim never refuses this one's backing", () => {
+    const snapshot = snapshotFromFiles({
+      [CLAIM_PATH]: shard(),
+      [RECORD_PATH]: record(),
+      [RETRACTIONS]: retraction({ itemId: "lem-some-other-claim" }),
+    });
+    expect(pmaBacked(snapshot, claim(), [claim()])).toBe(true);
+  });
+});

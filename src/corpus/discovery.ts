@@ -171,5 +171,13 @@ export function totalFixtureCount(corpusRoot: string): number {
  * check of its own — byte-verified a quote against bytes that were never adopted: `checked 1/1`,
  * exit 0. The resolver now compares the payload against `entry.sha256`, the ADOPTED pin, before it
  * looks at the extraction at all. See docs/gate-contracts.md Gate 3 check 10's violated-pin
- * clause. */
-export const EXPECTED_FIXTURE_COUNT = 172;
+ * clause.
+ * 174 (+2 over the then-pinned 172): bead rk-yic3 (P1, Tier A) — Check 4b's two backing routes were
+ * asymmetric about WITHDRAWAL. `l5Decision` refused backing on a live retraction or an unhealthy
+ * retraction ledger; `provenanceDecision` read neither, and `pmaBackingDecision` tried the
+ * provenance route first and returned as soon as it backed, so a retracted claim banked
+ * proved-mod-audit through a hand-written `.rk/` record. `reward-27` is the live-retraction case;
+ * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
+ * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
+ * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
+export const EXPECTED_FIXTURE_COUNT = 174;

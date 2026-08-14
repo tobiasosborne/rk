@@ -2,9 +2,15 @@
 // the gate and `rk reward sync`. The provenance route checks recorded role separation; it does
 // not authenticate identities. Every identity is driver-supplied, so the trust anchor remains
 // the driver's role isolation (PRD C3/C9 honesty stance).
+//
+// SHAPE: one WITHDRAWAL precondition (src/reward/pma-withdrawal.ts, rk-yic3) binding BOTH routes,
+// then the routes in order — (i) provenance record, (ii) L5 verdict. A rule that is a fact about
+// the CLAIM rather than about one kind of evidence belongs in the precondition: a rule living in
+// only one route is a rule the other route goes around, which is what happened to retraction until
+// 2026-08-14.
 
 import type { Lemma } from "../gates/linker-parse";
-import { readRetractionFacts } from "../gates/linker-retraction";
+import { retractionRefusal } from "./pma-withdrawal";
 import { introspectRootIdentity } from "../gates/linker-workspace";
 import type { RepoSnapshot } from "../gates/snapshot";
 import { fileSha256, parseFrontmatter } from "../gates/snapshot";
@@ -228,17 +234,16 @@ function contentBinding(
   return { backed: true, route: "provenance" };
 }
 
-function l5Decision(snapshot: RepoSnapshot, target: Lemma, lemmas: readonly Lemma[]): PmaBackingDecision {
+function l5Decision(snapshot: RepoSnapshot, target: Lemma): PmaBackingDecision {
   const text = snapshot.get(L5_STORE_PATH);
   if (text === undefined) return { backed: false, reason: "no L5 verdict store exists" };
   const parsed = parseL5Log(text);
   const health = l5StoreHealthy(parsed);
   if (!health.healthy) return { backed: false, reason: `the L5 verdict store is unhealthy: ${health.problems.join("; ")}` };
-  const retractions = readRetractionFacts(snapshot, lemmas);
-  if (!retractions.healthy) return { backed: false, reason: "the retraction ledger is unhealthy" };
-  if (retractions.liveL5.has(target.id) || retractions.liveAf.has(target.id)) {
-    return { backed: false, reason: `claim '${target.id}' has a live retraction` };
-  }
+  // The retraction clauses that used to live here are now `retractionRefusal`, enforced by the ONE
+  // caller below ahead of BOTH routes (rk-yic3) — hence no `lemmas` parameter. Not duplicated here:
+  // a second copy would be unreachable, and an unreachable copy of a validity rule reads like
+  // enforcement while proving nothing.
   const hash = fileSha256(snapshot, target.path);
   if (hash === undefined) return { backed: false, reason: `claim shard '${target.path}' has no current byte hash` };
   const latest = latestVerdictFor(parsed.records, target.id, hash);
@@ -250,11 +255,15 @@ function l5Decision(snapshot: RepoSnapshot, target: Lemma, lemmas: readonly Lemm
 
 /** Check 4b's complete decision. A bad provenance declaration never suppresses an independently
  * sufficient fresh VALID L5 verdict; when neither route backs, the provenance reason is the most
- * actionable one and the L5 reason is retained for diagnosis. */
+ * actionable one and the L5 reason is retained for diagnosis.
+ * The retraction precondition (rk-yic3) runs BEFORE either route and short-circuits both: a
+ * withdrawn claim — or an unknowable withdrawal status — is refused once, with one reason. */
 export function pmaBackingDecision(snapshot: RepoSnapshot, target: Lemma, lemmas: readonly Lemma[]): PmaBackingDecision {
+  const withdrawn = retractionRefusal(snapshot, target, lemmas);
+  if (withdrawn !== undefined) return { backed: false, reason: withdrawn };
   const provenance = provenanceDecision(snapshot, target);
   if (provenance.backed) return provenance;
-  const l5 = l5Decision(snapshot, target, lemmas);
+  const l5 = l5Decision(snapshot, target);
   if (l5.backed) return l5;
   return { backed: false, reason: `${provenance.reason}; ${l5.reason}` };
 }
