@@ -16,6 +16,7 @@ import type { GateConfig } from "./config";
 import { normalizeQuoteText, wholeQuoteMatch } from "../refs/quote";
 import { checkQuoteAtLocus } from "./refs-locus";
 import { checkShardCitations } from "./refs-shard-citations";
+import { readLockFacts, resolveQuotableText } from "./refs-extraction";
 
 /** check-refs.py:44 — a refs/ locus embedded in freeform source text, e.g.
  * "refs/hos/joa-m.md:2300" or "refs/kitaev-2405.02434/approximate_algebras.tex:503-532". No
@@ -121,6 +122,7 @@ export const refsGate: Gate = {
   name: "refs",
   run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const externals = collectExternals(snapshot);
+    const lockFacts = readLockFacts(snapshot);
     const shardCitations = checkShardCitations(snapshot);
     const findings: Finding[] = [];
 
@@ -202,18 +204,18 @@ export const refsGate: Gate = {
         continue;
       }
 
-      // refs-quote external — checks 2-4.
+      // refs-quote external — checks 2-4. Which bytes to match against is ./refs-extraction.ts's
+      // decision, not this loop's: a PDF payload resolves to its chained extraction layer and an
+      // unresolvable one (absent payload, absent/stale/tampered extraction) is a counted FAIL —
+      // never a silent fallback to raw PDF streams that no quote can ever occur in (rk-we5i).
       const fp = refsFilePath(cls.refsLocus!);
-      const refsText = snapshot.get(fp);
-      if (refsText === undefined) {
+      const resolved = resolveQuotableText(snapshot, lockFacts, fp);
+      if (!resolved.ok) {
         failed++;
-        findings.push({
-          severity: "ERROR",
-          path: ext.path,
-          message: `refs file ${fp} ABSENT — a claimed VERBATIM refs quote cannot be byte-verified`,
-        });
+        findings.push({ severity: "ERROR", path: ext.path, message: resolved.reason });
         continue;
       }
+      const refsText = resolved.text;
 
       const { matched, normalizedQuote } = wholeQuoteMatch(cls.quote!, refsText);
       if (matched) {

@@ -2,26 +2,19 @@
 // Gate 2's rigour propagation, so Gate 3 must re-check the bytes that justify that rung on every
 // run. The recognized grammar is the adjacent two-line output of `rk refs quote` embedded in an
 // argument shard: `refs/<path>:<line>` followed by `"<exact quote>"`.
+// The bytes a claim is matched against are resolved by ./refs-extraction.ts, never read straight
+// from the payload: a PDF source is matched against its chained extraction layer (rk-we5i), a text
+// source against itself, and every broken chain is one counted ERROR, never a fallback to raw bytes.
 // PURITY: pure — no fs/network/clock (L3). Payload text and raw-byte hashes come from RepoSnapshot.
 
 import type { Finding } from "./framework";
 import { fileSha256, parseFrontmatter, type RepoSnapshot } from "./snapshot";
 import { normalizeQuoteText } from "../refs/quote";
+import { LOCK_PATH, readLockFacts, resolveQuotableText, type LockFacts } from "./refs-extraction";
 
-const LOCK_PATH = "refs/manifest/sources.lock.json";
 const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
 const POINTER_RE = /^\s*(refs\/[A-Za-z0-9_./-]+)(?::([^\s]+))?\s*$/;
 const FULL_SHA256_RE = /^[0-9a-fA-F]{64}$/;
-
-interface HashPin {
-  path: string;
-  sha256: string;
-}
-
-interface LockFacts {
-  pins: HashPin[];
-  error?: string;
-}
 
 interface CitationClaim {
   shardPath: string;
@@ -96,31 +89,6 @@ function claimsInShard(shardPath: string, content: string): CitationClaim[] {
   return claims;
 }
 
-function readLock(snapshot: RepoSnapshot): LockFacts {
-  const raw = snapshot.get(LOCK_PATH);
-  if (raw === undefined) return { pins: [], error: `${LOCK_PATH} absent` };
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed === null || typeof parsed !== "object" || !Array.isArray((parsed as { files?: unknown }).files)) {
-      return { pins: [], error: `${LOCK_PATH} malformed (expected an object with files[])` };
-    }
-    const pins: HashPin[] = [];
-    for (const entry of (parsed as { files: unknown[] }).files) {
-      if (entry === null || typeof entry !== "object") {
-        return { pins: [], error: `${LOCK_PATH} malformed (non-object files[] entry)` };
-      }
-      const row = entry as { path?: unknown; sha256?: unknown };
-      if (typeof row.path !== "string" || typeof row.sha256 !== "string") {
-        return { pins: [], error: `${LOCK_PATH} malformed (each entry needs string path and sha256)` };
-      }
-      pins.push({ path: row.path, sha256: row.sha256 });
-    }
-    return { pins };
-  } catch (error) {
-    return { pins: [], error: `${LOCK_PATH} unparseable: ${(error as Error).message}` };
-  }
-}
-
 function safeSourcePath(path: string): boolean {
   const parts = path.split("/");
   return path.startsWith("refs/") && parts.every((part) => part !== "" && part !== "." && part !== "..");
@@ -153,7 +121,7 @@ function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFac
   if (lock.error !== undefined) return claimError(claim, `${label} is not hash-pinned: ${lock.error}`);
 
   const refsRelative = claim.sourcePath.slice("refs/".length);
-  const pins = lock.pins.filter((pin) => pin.path === refsRelative);
+  const pins = lock.entries.filter((pin) => pin.path === refsRelative);
   if (pins.length !== 1) {
     const reason = pins.length === 0 ? "has no entry" : `has ${pins.length} ambiguous entries`;
     return claimError(claim, `${label} is not hash-pinned: ${LOCK_PATH} ${reason} for ${refsRelative}`);
@@ -166,11 +134,20 @@ function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFac
     return claimError(claim, `${label} sha256 ${actualSha} does not match adopted pin ${pin.sha256}`);
   }
 
-  const sourceLine = sourceText.split(/\r?\n/)[recordedLine - 1];
+  // rk-we5i: WHICH bytes the recorded line locus indexes. For an ordinary text payload, the payload
+  // itself (unchanged). For a PDF payload, the chained extraction layer — the payload's own bytes
+  // are compressed streams containing none of the document's sentences, so `includes` there can
+  // only ever produce a false NOT-FOUND. Any break in the extraction chain resolves to `ok: false`
+  // and lands here as one counted ERROR: the claim is in the denominator, never the numerator.
+  const resolved = resolveQuotableText(snapshot, lock, claim.sourcePath);
+  if (!resolved.ok) return claimError(claim, `${label} cannot be byte-verified: ${resolved.reason}`);
+
+  const sourceLine = resolved.text.split(/\r?\n/)[recordedLine - 1];
   if (sourceLine === undefined || !sourceLine.includes(claim.quote)) {
+    const where = resolved.layer === "extraction" ? ` of extraction layer ${resolved.path}` : "";
     return claimError(
       claim,
-      `${label} quote NOT found byte-for-byte at recorded locus line ${recordedLine} (exact substring / grep -F semantics)`,
+      `${label} quote NOT found byte-for-byte at recorded locus line ${recordedLine}${where} (exact substring / grep -F semantics)`,
     );
   }
   return undefined;
@@ -202,7 +179,7 @@ export function checkShardCitations(snapshot: RepoSnapshot): ShardCitationResult
     });
   }
 
-  const lock = readLock(snapshot);
+  const lock = readLockFacts(snapshot);
   let checked = 0;
   for (const claim of claims) {
     const error = verifyClaim(claim, snapshot, lock);

@@ -167,6 +167,17 @@ async function refsQuote(args: string[], out: Out): Promise<number> {
     }
     out.log(`${result.path}:${result.line}`);
     out.log(`"${result.quote}"`);
+    // rk-we5i: a PDF payload is quoted through its extraction layer, and this command may have
+    // just WRITTEN that layer plus a lock record. Disclose both — a derived-file write that an
+    // operator only discovers via `git status` is exactly the kind of silent state change
+    // CLAUDE.md rule 9 (generated vs authored, never mixed) exists to prevent.
+    if (result.extraction) {
+      const verb = result.extraction.regenerated ? "extracted to" : "read from";
+      out.log(`  (PDF payload: line ${result.line} indexes the extraction layer, ${verb} ${result.extraction.path})`);
+      if (result.extraction.regenerated) {
+        out.log(`  wrote ${result.extraction.path} and recorded its sha256 (chained to the payload hash) in refs/manifest/sources.lock.json.`);
+      }
+    }
     return 0;
   } catch (err) {
     out.log(`rk refs quote: ${err instanceof Error ? err.message : String(err)}`);

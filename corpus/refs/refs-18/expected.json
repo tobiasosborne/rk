@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-stale-extraction.md",
+      "message_pattern": "is STALE: it was produced from payload sha256"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 0/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "rk-we5i fail-closed case 1 — the reason the extraction layer is CHAINED rather than merely present. The payload on disk is revision 2 of the PDF, which states that the spectral gap CLOSES; the extraction sidecar beside it is revision 1's pdftotext output, which states the gap is uniformly bounded below; the shard quotes revision 1. Every non-chain check is impeccable: the payload's raw-byte sha256 matches its lock pin exactly, the extraction file matches its own recorded sha256 exactly, and the quote occurs byte-for-byte at recorded line 2 of the extraction. An extraction layer admitted on presence alone would therefore report checked 1/1 and exit 0 while certifying a claim the current source refutes — strictly worse than the rk-we5i bug it fixes. `extraction.payload_sha256` (revision 1's digest) differs from the payload's current digest, so the citation is unresolvable: ERROR, checked 0/1. Mutation-proof: deleting the payload_sha256 comparison in resolveQuotableText turns this fixture green at checked 1/1 — the exact false-verify. Green control: refs-17 (same shapes, intact chain)."
+}

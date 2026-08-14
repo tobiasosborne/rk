@@ -101,3 +101,58 @@ describe("decideStatus — the fetch-refs.py --status dry-run decision, pure", (
     expect(decideStatus({ presentOnDisk: false, hasFetchSpec: false, cacheHit: false })).toBe("missing");
   });
 });
+
+// --- extraction records (bead rk-we5i) ------------------------------------------------------
+// A PDF payload's searchable text lives in a sidecar recorded on its lock entry, chained to the
+// payload hash. The lock is the transport for that chain, so it must round-trip losslessly: an
+// `extraction` silently dropped by `serializeLockFile` would erase the chain on the next
+// `rk refs add`/`adopt` write and demote every PDF citation back to unverifiable.
+
+const EXTRACTION_LOCK_JSON = `{
+  "files": [
+    {
+      "path": "sources/spectral.pdf",
+      "sha256": "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+      "source_id": "spectral",
+      "fetch": null,
+      "extraction": {
+        "path": "sources/spectral.pdf.extracted.txt",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "payload_sha256": "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+        "tool": "pdftotext -layout"
+      }
+    }
+  ]
+}`;
+
+describe("extraction records", () => {
+  test("parses all four fields of an extraction record", () => {
+    const lock = parseLockFile(EXTRACTION_LOCK_JSON);
+    expect(lock.files[0]!.extraction).toEqual({
+      path: "sources/spectral.pdf.extracted.txt",
+      sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+      payload_sha256: "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+      tool: "pdftotext -layout",
+    });
+  });
+
+  test("round-trips an extraction record through serialize -> parse without loss", () => {
+    const once = parseLockFile(EXTRACTION_LOCK_JSON);
+    const twice = parseLockFile(serializeLockFile(once));
+    expect(twice.files[0]!.extraction).toEqual(once.files[0]!.extraction);
+  });
+
+  test("an entry with no extraction stays extraction-free (absent is a legitimate text-payload state)", () => {
+    const lock = parseLockFile(serializeLockFile(parseLockFile(AISM_LOCK_JSON)));
+    expect(lock.files[0]!.extraction).toBeUndefined();
+    expect(serializeLockFile(lock)).not.toContain("extraction");
+  });
+
+  test("a PARTIAL extraction record is dropped, never half-trusted", () => {
+    // A record missing payload_sha256 has no chain at all; keeping it would leave the staleness
+    // comparison reading `undefined`. Dropping it lands the consumer on the fail-closed
+    // "no extraction recorded" branch instead.
+    const partial = EXTRACTION_LOCK_JSON.replace(/\s*"payload_sha256":[^,]+,/, "");
+    expect(parseLockFile(partial).files[0]!.extraction).toBeUndefined();
+  });
+});

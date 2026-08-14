@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-cited-no-extraction.md",
+      "message_pattern": "with NO extraction layer recorded in refs/manifest/sources.lock.json"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 0/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "rk-we5i fail-closed case 2 — the state every PDF source is in before an extraction is produced, and the state rk-we5i's field reports (RVW math/0406038, RV TR05-092, JMRW 2209.07024) describe. The payload is present and matches its lock pin; there is simply no `extraction` record, so no bytes exist that a quote could honestly be matched against. The verdict is ERROR at checked 0/1, never a silently unchecked green and never a fallback to matching the raw FlateDecode streams (in which no sentence of the document occurs at all — the pre-fix behavior produced the misleading `quote NOT found byte-for-byte` here, blaming the author for a tooling gap). The finding names the missing extraction and the remedy; the honest shard status while it is missing is `stated`. Green control: refs-17 (same payload, extraction recorded and chained)."
+}

@@ -5,8 +5,20 @@
 // Ground truth: fetch-refs.py's `load_lock` (fetch-refs.py:55-56) and its JSON shape (see a real
 // example at almost-idempotent-stochastic-maps/refs/manifest/sources.lock.json).
 
-import type { FetchSpec, LockFile, LockFileEntry, SourceId, SourceStatus } from "../types";
+import type { ExtractionRecord, FetchSpec, LockFile, LockFileEntry, SourceId, SourceStatus } from "../types";
 import { sourceId } from "../types";
+
+/** Accepts an `extraction` record only when all four fields are present strings (rk-we5i). A
+ * partially-written record is DROPPED rather than half-trusted: the consumer then sees "no
+ * extraction recorded", which for a PDF payload is the fail-closed state (no citation verifies),
+ * whereas a half-parsed record risks a comparison against `undefined` reading as a match. */
+function parseExtraction(raw: unknown): ExtractionRecord | undefined {
+  if (raw === null || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.path !== "string" || typeof r.sha256 !== "string") return undefined;
+  if (typeof r.payload_sha256 !== "string" || typeof r.tool !== "string") return undefined;
+  return { path: r.path, sha256: r.sha256, payload_sha256: r.payload_sha256, tool: r.tool };
+}
 
 export function parseLockFile(text: string): LockFile {
   const raw = JSON.parse(text) as {
@@ -17,15 +29,20 @@ export function parseLockFile(text: string): LockFile {
       source_id: string;
       fetch: FetchSpec | null;
       note?: string;
+      extraction?: unknown;
     }>;
   };
-  const files: LockFileEntry[] = raw.files.map((f) => ({
-    path: f.path,
-    sha256: f.sha256,
-    source_id: sourceId(f.source_id),
-    fetch: f.fetch,
-    ...(f.note !== undefined ? { note: f.note } : {}),
-  }));
+  const files: LockFileEntry[] = raw.files.map((f) => {
+    const extraction = parseExtraction(f.extraction);
+    return {
+      path: f.path,
+      sha256: f.sha256,
+      source_id: sourceId(f.source_id),
+      fetch: f.fetch,
+      ...(f.note !== undefined ? { note: f.note } : {}),
+      ...(extraction !== undefined ? { extraction } : {}),
+    };
+  });
   return { arxiv_verified: raw.arxiv_verified ?? [], files };
 }
 
@@ -38,6 +55,7 @@ export function serializeLockFile(lock: LockFile): string {
       source_id: f.source_id as SourceId as string,
       fetch: f.fetch,
       ...(f.note !== undefined ? { note: f.note } : {}),
+      ...(f.extraction !== undefined ? { extraction: f.extraction } : {}),
     })),
   };
   return JSON.stringify(out, null, 2);

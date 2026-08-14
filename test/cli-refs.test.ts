@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { refsDispatch } from "../src/cli/refs";
+import { makeCompressedPdf } from "./refs/pdf-fixture";
 
 function capture() {
   const lines: string[] = [];
@@ -194,5 +195,40 @@ describe("rk refs quote — no manifest at all (rk-p1p4a)", () => {
     expect(text).not.toContain("ENOENT");
     expect(text).toContain("not adopted");
     expect(text).toContain("rk refs adopt");
+  });
+});
+
+// rk-we5i: end-to-end through the CLI — adopt a compressed PDF, then quote a sentence that occurs
+// nowhere in its raw bytes. The disclosure lines matter as much as the exit code: `rk refs quote`
+// WRITES a derived sidecar and a lock record on this path, and an operator who only learns that
+// from `git status` has been handed a silent state change.
+describe("rk refs quote — compressed PDF payload (rk-we5i)", () => {
+  test("quotes through the extraction layer and discloses the sidecar it wrote", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-refs-quote-pdf-"));
+    dirs.push(root);
+    mkdirSync(join(root, "refs", "sources"), { recursive: true });
+    const sentence = "the spectral gap of the transfer operator is uniformly bounded below";
+    const bytes = makeCompressedPdf(["Lemma 4.2 spectral gap.", sentence]);
+    writeFileSync(join(root, "refs", "sources", "spectral.pdf"), bytes);
+    expect(Buffer.from(bytes).toString("latin1").includes(sentence)).toBe(false);
+
+    const a = capture();
+    expect(await refsDispatch(["adopt", "refs/sources/spectral.pdf", "--source", "arxiv:2209.07024", "--root", root], a.out)).toBe(0);
+
+    const q = capture();
+    expect(await refsDispatch(["quote", "spectral", sentence, "--root", root], q.out)).toBe(0);
+    const text = q.lines.join("\n");
+    // Anchored at the hash-pinned payload, line 2 of the extraction layer.
+    expect(text).toContain("refs/sources/spectral.pdf:2");
+    expect(text).toContain(`"${sentence}"`);
+    expect(text).toContain("indexes the extraction layer");
+    expect(text).toContain("refs/sources/spectral.pdf.extracted.txt");
+    expect(text).toContain("recorded its sha256");
+
+    // A second run re-uses the recorded extraction: no re-extraction is announced.
+    const q2 = capture();
+    expect(await refsDispatch(["quote", "spectral", sentence, "--root", root], q2.out)).toBe(0);
+    expect(q2.lines.join("\n")).toContain("read from");
+    expect(q2.lines.join("\n")).not.toContain("recorded its sha256");
   });
 });

@@ -30,6 +30,30 @@ export type FetchSpec =
   | { kind: "arxiv-eprint"; id: string }
   | { kind: "arxiv-eprint-member"; id: string };
 
+/** The extraction layer of a payload whose own bytes are not searchable text — in practice a
+ * compressed PDF (bead rk-we5i). PRD C7 names both hashes ("SHA256 of payload and extraction");
+ * this record is that pair, plus the chain between them.
+ *
+ * CHAINING IS THE WHOLE POINT. `payload_sha256` is the hash of the payload AS IT WAS WHEN THIS
+ * EXTRACTION WAS PRODUCED. A consumer (`rk refs quote`, Gate 3) must compare it against the
+ * payload's CURRENT raw-byte hash and treat any difference as NO MATCH: a re-fetched or replaced
+ * payload with a stale extraction beside it would otherwise let a citation verify against text
+ * that the current source no longer contains — a fabrication the gate would call verified.
+ * `sha256` (of the extraction file itself) closes the other half: a hand-edited extraction is
+ * detected even when the payload never moved. Both are full 64-hex lowercase digests of RAW bytes,
+ * same convention as `LockFileEntry.sha256`. */
+export interface ExtractionRecord {
+  /** Lock-relative (i.e. under `refs/`), same space as `LockFileEntry.path`. */
+  path: string;
+  /** sha256 of the extraction file's own raw bytes. */
+  sha256: string;
+  /** sha256 of the PAYLOAD at extraction time — the chain link. */
+  payload_sha256: string;
+  /** Provenance of the text, e.g. `"pdftotext -layout"` / `"marker"`. Human-facing; never
+   * consulted for a validity decision (a tool name proves nothing about the bytes). */
+  tool: string;
+}
+
 export interface LockFileEntry {
   path: string;
   sha256: string;
@@ -37,6 +61,10 @@ export interface LockFileEntry {
   /** null => cache-only, no reproducible fetch route (copyrighted / manually acquired). */
   fetch: FetchSpec | null;
   note?: string;
+  /** Present only for payloads that HAVE a recorded extraction layer (rk-we5i). Absent is a
+   * legitimate state for every text payload, and a FAIL-CLOSED state for a PDF one: a PDF with no
+   * extraction record can never have a quote verified against it. */
+  extraction?: ExtractionRecord;
 }
 
 export interface LockFile {
@@ -109,4 +137,10 @@ export interface QuoteResult {
   path: string;
   line: number;
   quote: string;
+  /** Set when the quote was located in a PDF payload's extraction layer rather than in the payload
+   * itself (rk-we5i): the repo-relative sidecar path, and whether this run produced it. `path`/
+   * `line` still anchor at the hash-pinned PAYLOAD with the line indexing this sidecar — that is
+   * what Gate 3 re-resolves. Present so the CLI can DISCLOSE a derived-file write instead of
+   * performing it silently; never a validity input. */
+  extraction?: { path: string; regenerated: boolean };
 }

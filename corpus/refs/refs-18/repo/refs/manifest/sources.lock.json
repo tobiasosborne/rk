@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "path": "sources/spectral.pdf",
+      "sha256": "0ce5d3896113ee55aea3809b56797c6c0519e68abe38ade7111bb1e28ef9784b",
+      "source_id": "spectral",
+      "fetch": null,
+      "extraction": {
+        "path": "sources/spectral.pdf.extracted.txt",
+        "sha256": "6626e1f1be925338daba1afffd0476a764a1774b2ee5e4bfcb8df7a0f608da18",
+        "payload_sha256": "2e5f8c74c832a7a0cd54fe1225475798755d431c990922a56ce4549529579b86",
+        "tool": "pdftotext -layout"
+      }
+    }
+  ]
+}

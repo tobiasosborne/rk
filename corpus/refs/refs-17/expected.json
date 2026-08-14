@@ -1,0 +1,9 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 1/1 shard citations"] },
+  "aism_behavior": "differs",
+  "notes": "rk-we5i golden case, the bug's own flip: the payload is a real FlateDecode-compressed PDF (716 bytes) whose sentence appears NOWHERE in its raw bytes, so every raw-byte search — `grep -F`, `rk refs quote`'s old payload scan, and Gate 3's old `sourceLine.includes(quote)` — fails. sources.lock.json records an `extraction` sidecar (`pdftotext -layout` output) chained to the payload hash, so the citation's line locus resolves in the extraction layer and the quote byte-verifies there: checked 1/1 shard citations, exit 0. Before rk-we5i the same tree ERRORed (`quote NOT found byte-for-byte at recorded locus line 2`) at checked 0/1 — no shard could carry `status: cited` against any PDF source. AISM has no extraction layer at all (check-refs.py greps the payload bytes), hence `differs`. Fail-closed siblings: refs-18 (stale chain), refs-19 (no extraction recorded)."
+}
