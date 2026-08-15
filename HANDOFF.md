@@ -3,61 +3,80 @@
 
 # HANDOFF
 
-## State (2026-08-15, session close — campaign-D w1s4 cycle complete)
+## State (2026-08-15, session close — campaign-D w1s4 AND w1s5 cycles run this session)
 
-This session (Fable, dual role: rk observer + campaign-D orchestrator per TJO directive):
-recovered the 2026-08-14 session loss (orphaned `fr dispatch` records committed, three
-lanes re-dispatched fresh), ran the full w1s4 cycle in ../rk-campaign-D — three
-claude-opus-5 lanes (roster amended from opus-4-8, TJO 2026-08-15; PRD/CLAUDE/workers all
-in step), one hostile codex gpt-5.6-sol xhigh review (review E: 1 BLOCKER + 6 MAJOR,
-4 rulings), ONE repair wave, mechanically verified, campaign session landed at cycle 4/10.
-Campaign headlines: NO cited shard (the first attempt was ruled aggregation and demoted);
-mutation gate stays PARTIAL with the typed-presentation-coordinate replacement approved-
-but-unscored (campaign bead -8uv, P1, opens next session); elegance FAIL re-recorded;
-op-normalization ruled UNDERDETERMINED (not closed off) after repair narrowed lane N's
-overclaim. Registry 40 shards + 9 defs, nothing above stated, rk check green throughout.
+One long Fable session (dual role: rk observer + campaign-D orchestrator, TJO directive)
+ran TWO full campaign cycles in ../rk-campaign-D and closed on a TJO stop directive:
 
-rk-side this session: Makefile `refresh-bundles` fixed (was naming four removed siblings,
-omitted the live rk-campaign-D); campaign-D bundle refreshed and committed; two stale
-merged agent worktrees pruned. No rk source changes; binaries current (dist/rk and
-~/.local/bin/rk from the 2026-08-15 enablement wave, corpus 176/176 still the baseline).
+- **w1s4**: recovery of the 2026-08-14 session loss; three opus-5 lanes (roster amended
+  opus-4-8 → claude-opus-5, in PRD/CLAUDE/workers); review E (1 BLOCKER + 6 MAJOR,
+  4 rulings incl. -eem: only the typed-presentation-coordinate replacement gate approved);
+  one repair wave, mechanically verified. First `cited` attempt demoted (aggregation);
+  op-normalization ruled UNDERDETERMINED.
+- **w1s5**: three opus-5 lanes — typed presentation coordinate BUILT (bead -8uv), +57
+  byte anchors (refs gate 157/157), full-corpus tolerance sweep (0 flips ever, 229+
+  sites); review F (3 BLOCKER + 6 MAJOR; gate GRADED PARTIAL — DOES NOT PASS; elegance
+  FAIL stands; the two escapes are TJO decisions); repair R2 complete, repair R1 CUT
+  MID-FLIGHT by the stop — campaign bead **rk-campaign-D-2gd (P1)** resumes it (same
+  anti-Zeno wave, no re-review).
+- **Independent neutral assessment** (fresh opus, read-only) delivered to TJO: machinery
+  works ("no surviving overclaim found"; captures independently re-verified), mathematics
+  correct-but-modest, "last two sessions bought trustworthiness rather than distance";
+  its w1s6 programme sits in the campaign HANDOFF's TJO decision queue.
 
-## New rk beads this session (campaign escalations, all filed with measurements)
+Campaign registry at close: 40 argument shards + 10 defs, nothing above `stated`, 19
+ledgered bundles, reward ledger 17 events (round 5), rk check green, campaign cycle 5/10.
+Campaign HANDOFF/worklog/FINDINGS/CONVENTIONS all rewritten at close; the campaign's own
+HANDOFF carries the full TJO decision queue (review-F escapes, factorization-aware E,
+assessor programme, §4a prediction-unit ratification).
+
+rk-side this session: Makefile `refresh-bundles` fixed (bundles only the live
+../rk-campaign-D; wound-down siblings' snapshots stay committed); campaign-D bundle
+refreshed TWICE and committed (last at campaign commit 3831dcc); two stale merged agent
+worktrees pruned. No rk source changes; binaries current (corpus 176/176 baseline).
+Two `bd remember` entries landed (orchestration recovery pattern; probe/citation honesty
+rules).
+
+## New rk beads this session (campaign escalations, filed with measurements)
 
 - **rk-pxkk (P2, bug)**: Gate 3 shard-citation checks scan argument/ only — a kind:cited
-  DEFINITION's quotation is gated by nothing (measured: 9 correct pairs in a defs shard,
-  count unchanged). Fix: extend checks 8-9 to definitions/**/*.md, red fixture first (L2).
+  DEFINITION's quotation is gated by nothing (measured). Extend checks 8-9 to
+  definitions/**/*.md, red fixture first (L2).
 - **rk-ahe9 (P2, bug)**: probe-channel ledger needs a monotonic sequence number — host
-  clock moved backward 2h48m mid-session, campaign ledger now non-monotone in ts (hash
-  binding intact; template change + compat fixture).
+  clock moved BACKWARD twice (2h48m, then again in w1s5); campaign ledgers are
+  non-monotone in ts. Order by append position only; fix in the stamped template.
 - **rk-pmyz (P3)**: rk refs quote returns only the first occurrence of a pattern.
-- **rk-rz6c (P3)**: rk refs quote rewrites refs/manifest/sources.lock.json unserialised —
-  concurrent lanes can race on the lock (observed shape, no corruption).
+- **rk-rz6c (P3)**: rk refs quote rewrites sources.lock.json unserialised (racy shape).
+- **rk-xmo0 (P3)**: Gate 3 citation-mismatch finding should name the first differing
+  byte offset (dominant failure mode is one invisible byte; extractions can carry raw
+  0x01 control bytes).
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer/tooling-health watch while campaign D runs. Campaign
-  next session opens on -8uv (typed presentation coordinate); watch for new escalation
-  beads, keep the binary current, refresh-bundles at every rk close if the sibling moved.
-- Campaign D governance held this session: anti-Zeno (one review + one repair, repairs
-  verified mechanically against file:line claims, no re-review); reviewer confirmed right
-  7/7 on verified findings. §4a scar recorded twice (no pre-registered predictions for the
-  two attempted obligations) — campaign HANDOFF now instructs pre-registration before any
-  new-obligation dispatch.
+- **rk-qqee (in_progress)**: observer/tooling-health watch while campaign D runs.
+  Campaign next session opens on rk-campaign-D-2gd (resume the cut repair wave), then
+  the TJO decision queue in the campaign HANDOFF — those decisions shape w1s6.
+- Governance held both cycles: anti-Zeno (one review + one repair wave; the w1s5 cut
+  wave RESUMES rather than re-reviews); reviewer verified right on every disputed
+  finding across E and F; disjoint lane write-ownership + orchestrator-sole-writer
+  pattern held through four transient network/API drops (SendMessage resume-in-place
+  recovered every one; see bd memories).
 
 ## Next steps
 
-1. **TJO decision queue below** — unchanged from 2026-08-12; wave 3 and the escrow
-   implementation still block on it.
-2. Observer duties (rk-qqee) while campaign D continues under the Fable orchestrator.
-3. rk-pxkk / rk-ahe9 are the natural next rk work items (P2, both campaign-blocking in
-   consolidation phase; neither blocks exploration today).
-4. rk-0s3u (P3 — extract at add/adopt time per PRD C7) remains open, unblocking no one.
+1. **TJO decision queues** — the standing rk queue below, PLUS the new campaign-D queue
+   (campaign HANDOFF §"TJO decision queue"): review-F ruling-1 escapes (mutation-gate
+   reading; coarsened replacement as exact), factorization-aware E adoption, the
+   assessor's w1s6 programme, §4a prediction-unit ratification.
+2. Observer duties (rk-qqee) while campaign D continues.
+3. rk-pxkk / rk-ahe9 are the natural next rk work items (P2; both become campaign
+   ERRORs at consolidation).
+4. rk-0s3u (P3) remains open, unblocking no one.
 5. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo,
    rk-7the needs ratification), then wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc +
    Tier C batch). rk-mief and rk-afyf still gate campaign C window 2 if unattended.
 
-## TJO decision queue (blocking, carried from 2026-08-12)
+## TJO decision queue (rk-side, carried from 2026-08-12)
 
 1. rk-cz1h memo §6.1 — four questions, chief: do no-number-change appends need a §7
    re-registration point; does the roster waiver make a probe seat cheap single-vendor?
@@ -71,29 +90,29 @@ merged agent worktrees pruned. No rk source changes; binaries current (dist/rk a
 
 - **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
   EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
-- Campaign-D model roster: orchestrator Fable (sole seat); provers claude-opus-5;
-  reviews codex gpt-5.6-sol xhigh. Recorded in campaign PRD row 3 + CLAUDE.md §4 +
-  .rk/config.json workers.
-- Campaign-D review records: docs/worker-output/w1s4-review-E.md (verbatim) + repair
-  records R1/R2; orchestration pattern that worked is written in the campaign HANDOFF
-  (disjoint write-ownership, out-of-ownership edits as exact text, tree still during
-  review, findings verbatim to repair lanes, mechanical verification).
-- `make refresh-bundles` now bundles ONLY ../rk-campaign-D (live); wound-down siblings'
-  last snapshots stay committed in vendor/ (restore-siblings recreates them).
-- Codex review invocation for prompt-style reviews (named questions):
-  `codex exec -s read-only -c model_reasoning_effort="xhigh" -o <scratch> "<prompt>"`;
-  `-o` to SCRATCH, then copy verbatim into docs/worker-output/ (campaign §4d rule).
-  Session id from ~/.codex/sessions/<date>/rollout-*.jsonl.
-- Repo self-contained since fed740c (rk-he3r); full suite still needs `../vibefeld`
-  cloned (2 seam tests, by design).
-- Probe-channel exit codes (stamped 1.8.0): 2 validation (pre-ledger), 3 output exists,
-  4 already ledgered, 5 busy (bundle untouched, retry safe), 6 poisoned; else the probe's
-  own status, ledgered.
+- Campaign-D roster: orchestrator Fable (sole seat); provers claude-opus-5; reviews
+  codex gpt-5.6-sol xhigh. In campaign PRD row 3 + CLAUDE.md §4 + workers config.
+- Review records: campaign docs/worker-output/w1s4-review-E.md and w1s5-review-F.md
+  (verbatim, immutable) + repair records. A late R1 report
+  (w1s5-repair-R1-extended-type.md) may exist untracked in the campaign repo — the
+  wind-down directive told the lane to write it after this close; bead -2gd says it is
+  authoritative for the done/partial/not-started split if present. Commit it with -2gd.
+- Codex prompt-review invocation: `codex exec -s read-only
+  -c model_reasoning_effort="xhigh" -o <scratch> "<prompt>"`; -o to SCRATCH, copy
+  verbatim to docs/worker-output/. Session id from ~/.codex/sessions/<date>/rollout-*.
+- `make refresh-bundles` bundles only ../rk-campaign-D (live); restore-siblings
+  recreates wound-down siblings from committed bundles.
+- Campaign probe-channel exit codes (1.8.0): 2 validation, 3 output exists, 4 already
+  ledgered, 5 busy (retry safe), 6 poisoned. Ledger ts is NON-MONOTONE (clock skew);
+  order by append position (rk-ahe9).
+- Repo self-contained since fed740c; full suite still needs `../vibefeld` (2 seam
+  tests, by design).
 
 ## Governance (standing)
 
-- Anti-Zeno held: one review round + one repair wave; repairs verified mechanically.
+- Anti-Zeno held both cycles; repairs verified mechanically, never re-reviewed.
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed,
-  C between windows 1 and 2, D mid-window-1 (w1s4 closed, w1s5 opens on -8uv; sole Fable
-  seat orchestrating; opus-5 provers; codex xhigh reviews; observer = rk main session).
+  C between windows 1 and 2, D mid-window-1 (w1s5 closed at cycle 5/10; w1s6 opens on
+  -2gd then the TJO decision queue; sole Fable seat; opus-5 provers; codex xhigh
+  reviews; observer = rk main session).
