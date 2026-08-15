@@ -64,10 +64,12 @@ rules).
 
 ## Next steps
 
-1. **TJO decision queues** — the standing rk queue below, PLUS the new campaign-D queue
-   (campaign HANDOFF §"TJO decision queue"): review-F ruling-1 escapes (mutation-gate
-   reading; coarsened replacement as exact), factorization-aware E adoption, the
-   assessor's w1s6 programme, §4a prediction-unit ratification.
+1. **TJO decisions RATIFIED 2026-08-15** (blanket, in-session): all four campaign-D
+   decisions recorded as campaign PRD rows 6-9 (gate deletion-half retired/ill-posed;
+   factorization-aware E adopted; assessor w1s6 programme + stop-list; §4a prediction
+   unit) with the w1s6 wave beaded (-5x2, -2av, -xg3); rk-7the (no-pattern-kill)
+   RATIFIED and closed — templates/CLAUDE.md.tmpl §4d updated in place. Still open for
+   TJO: rk-cz1h §6.1, rk-23pr, rk-mief, roster window-5 waiver, codas.
 2. Observer duties (rk-qqee) while campaign D continues.
 3. rk-pxkk / rk-ahe9 are the natural next rk work items (P2; both become campaign
    ERRORs at consolidation).
@@ -80,7 +82,7 @@ rules).
 
 1. rk-cz1h memo §6.1 — four questions, chief: do no-number-change appends need a §7
    re-registration point; does the roster waiver make a probe seat cheap single-vendor?
-2. rk-7the — ratify no-pattern-kill (template clause stamped "pending ratification").
+2. ~~rk-7the~~ — RATIFIED 2026-08-15, closed (template §4d updated in place).
 3. rk-23pr — ratify remaining autonomy plan items.
 4. rk-mief — campaign C: attest backfill vs waiver for the 6 window-1 closes.
 5. Roster policy: window-5 same-family waiver — standing or per-campaign?
