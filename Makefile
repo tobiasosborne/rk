@@ -32,11 +32,10 @@ restore-siblings:
 	sh scripts/restore-siblings.sh
 
 # Refresh vendored snapshots from the live ../ siblings (CLAUDE.md §6 item 5).
+# Only LIVE siblings are refreshed; wound-down siblings' last snapshots stay committed
+# in vendor/ as-is (rk-campaign-A/-C, rk-bench, rk-m3.5-baseline were removed from disk
+# after their final refresh — restore-siblings recreates them from the bundles).
 # Delete-then-copy for evidence so deletions propagate; bundles carry all refs.
 refresh-bundles:
-	git -C ../rk-campaign-A bundle create "$(CURDIR)/vendor/bundles/rk-campaign-A.bundle" --all
-	git -C ../rk-campaign-C bundle create "$(CURDIR)/vendor/bundles/rk-campaign-C.bundle" --all
-	rm -rf vendor/evidence/rk-bench vendor/evidence/rk-m3.5-baseline
-	cp -r ../rk-bench vendor/evidence/rk-bench
-	cp -r ../rk-m3.5-baseline vendor/evidence/rk-m3.5-baseline
+	git -C ../rk-campaign-D bundle create "$(CURDIR)/vendor/bundles/rk-campaign-D.bundle" --all
 	@echo "refresh-bundles: done — commit vendor/ if anything changed"
