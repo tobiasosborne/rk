@@ -22,13 +22,12 @@ ran TWO full campaign cycles in ../rk-campaign-D and closed on a TJO stop direct
 - **Independent neutral assessment** (fresh opus, read-only) delivered to TJO: machinery
   works ("no surviving overclaim found"; captures independently re-verified), mathematics
   correct-but-modest, "last two sessions bought trustworthiness rather than distance";
-  its w1s6 programme sits in the campaign HANDOFF's TJO decision queue.
+  its w1s6 programme was subsequently RATIFIED (see Next steps item 1).
 
 Campaign registry at close: 40 argument shards + 10 defs, nothing above `stated`, 19
 ledgered bundles, reward ledger 17 events (round 5), rk check green, campaign cycle 5/10.
 Campaign HANDOFF/worklog/FINDINGS/CONVENTIONS all rewritten at close; the campaign's own
-HANDOFF carries the full TJO decision queue (review-F escapes, factorization-aware E,
-assessor programme, §4a prediction-unit ratification).
+HANDOFF records the TJO decision queue as RATIFIED (PRD decisions 6-9; w1s6 wave beaded).
 
 rk-side this session: Makefile `refresh-bundles` fixed (bundles only the live
 ../rk-campaign-D; wound-down siblings' snapshots stay committed); campaign-D bundle
@@ -55,7 +54,8 @@ rules).
 
 - **rk-qqee (in_progress)**: observer/tooling-health watch while campaign D runs.
   Campaign next session opens on rk-campaign-D-2gd (resume the cut repair wave), then
-  the TJO decision queue in the campaign HANDOFF — those decisions shape w1s6.
+  the ratified w1s6 wave: -5x2 (gate restatement), -2av (factorization-aware E),
+  -nfm (input bridge), -xg3 (locality no-go).
 - Governance held both cycles: anti-Zeno (one review + one repair wave; the w1s5 cut
   wave RESUMES rather than re-reviews); reviewer verified right on every disputed
   finding across E and F; disjoint lane write-ownership + orchestrator-sole-writer
@@ -74,8 +74,8 @@ rules).
 3. rk-pxkk / rk-ahe9 are the natural next rk work items (P2; both become campaign
    ERRORs at consolidation).
 4. rk-0s3u (P3) remains open, unblocking no one.
-5. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo,
-   rk-7the needs ratification), then wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc +
+5. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo;
+   rk-7the ratified and closed), then wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc +
    Tier C batch). rk-mief and rk-afyf still gate campaign C window 2 if unattended.
 
 ## TJO decision queue (rk-side, carried from 2026-08-12)
