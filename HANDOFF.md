@@ -3,12 +3,13 @@
 
 # HANDOFF
 
-## State (2026-08-16, session close — campaign-D w1s6 AND w1s7 full cycles this sitting)
+## State (2026-08-16, session close — campaign-D w1s6, w1s7 AND w1s8 cycles this sitting)
 
-One Fable session (dual role: rk observer + campaign-D orchestrator, TJO directive) ran TWO
-complete campaign cycles in ../rk-campaign-D — each a full wave + single hostile review + single
-repair wave, mechanically verified — plus the TJO-requested settled-results report (built,
-then refreshed twice; final: 69 pp, all 57 shards, post-review-H, delivered to TJO):
+One Fable session (dual role: rk observer + campaign-D orchestrator, TJO directive) ran THREE
+campaign wave cycles in ../rk-campaign-D — w1s6 and w1s7 fully closed (wave + single hostile
+review + single repair wave, mechanically verified); w1s8's wave landed with its review HELD
+(externally killed twice, standing policy) — plus the TJO-requested settled-results report
+(built, then refreshed twice; final: 69 pp, all 57 then-shards, post-review-H, delivered):
 
 - **w1s6**: -2gd closed; four-lane wave (mutation gate restated per campaign PRD 6;
   factorization-aware E per PRD 7 — captures 0/4 -> 4/4 literal; locality answered two-sided;
@@ -21,11 +22,19 @@ then refreshed twice; final: 69 pp, all 57 shards, post-review-H, delivered to T
   FOUR-SLOT mutation self-test row is PASS** — the campaign's first gate movement, made by the
   independent seat on a measured record. Registry 47 shards; refs 204/204 (drsq anchors
   trimmed to the canonical cited home).
+- **w1s8**: four-lane wave — BOTH named non-subsumption residues DONE (PRWD typed
+  incomparability, two-sided, anti-originality; seventh-source JMRW sweep, 32 anchors, three
+  residues NARROW against the campaign — an absence verdict over N sources is worth exactly
+  N); the w1s7-b excluded 0.4234 certified a PHANTOM NUMBER (ratio of two rounding errors)
+  with the content reclaimed at the swept quantifier; repo-root INDEX.md adopted (runs WARNs
+  26 -> 1); rule-10 trims. **Review I HELD** (two external kills; prompt preserved; next
+  campaign session's first act). Registry 49 shards; refs 236/236.
 
-Campaign state at close: candidate fails admission on ONE gate (non-subsumption PARTIAL);
-elegance FAIL (grounds: five-slot replacement 3/4 + rejected coarsening); five-slot grading
-unchanged; obligation open; cycle counter 7/10 (audit fires at 10); reward round 7; 6 hostile
-cycles survived; rk check green at every one of the ~30 campaign commits this sitting.
+Campaign state at close: mutation self-test PASS (four-slot); non-subsumption PARTIAL PASS
+with its evidence now COMPLETE — movement in either direction is review I's ruling (a);
+elegance FAIL; five-slot grading unchanged; obligation open; cycle counter 8/10 (the
+MANDATORY audit fires at 10 — plan it); reward round 8; rk check green at every one of the
+~40 campaign commits this sitting.
 
 rk-side this session: templates.test.ts §4d stale assertion fixed (RATIFIED wording; red
 observed first); bun test 3010/0, selftest OK; vendor bundle refreshed at campaign 08ca5f2.
@@ -42,16 +51,19 @@ codex was live on the host); TJO approved the relaunch policy: one relaunch, the
 ## Current work
 
 - **rk-qqee (in_progress)**: observer/tooling-health watch. Campaign next session opens on
-  `rk reward sync --round` (round 8), then: the non-subsumption PRWD comparison (the one
-  remaining admission gate — highest-leverage item), elegance's remaining grounds, the w1s7-b
-  successor probe (optional), Tier C batch (-i20, -oyq, -7ge options on the bead for TJO).
-- Governance held both cycles: anti-Zeno; reviewer verified right throughout (11 MAJOR
-  findings across G+H, every one confirmed on inspection); orchestrator did mechanical-only
-  edits, always stated; FINDINGS now carries supersession entries — read certificates FORWARD.
+  **review I** (held; prompt at the campaign HANDOFF's "Current work" — launch, one repair
+  wave, close beads -96o/-slj, report refresh), then round 9 and the elegance/frontier queue.
+- Governance held all three cycles: anti-Zeno; reviewer verified right throughout (11 MAJOR
+  across G+H confirmed on inspection); orchestrator mechanical-only edits, always stated;
+  FINDINGS carries supersession entries — read certificates FORWARD. One w1s8 process lesson:
+  put the shared-file write partition in the briefs (an overlapping-allowlist briefing error
+  was caught and serialized mid-flight, no harm).
+- The review-kill pattern is now TWO sessions (G: 2 kills then TJO-approved success; I: 2
+  kills, held). If it recurs, it is a TJO decision item on where/how reviews run.
 
 ## Next steps
 
-1. Campaign D session 8 (queue above, all beaded campaign-side).
+1. Campaign D session 9: review I first (held), then the queue (campaign HANDOFF).
 2. rk-pxkk / rk-ahe9 / citation-kind schema are the natural rk work items (P2).
 3. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo), then
    wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
@@ -88,6 +100,6 @@ codex was live on the host); TJO approved the relaunch policy: one relaunch, the
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s7 closed at cycle 7/10; w1s8 opens on round 8 +
-  the non-subsumption item; sole Fable seat; opus-5 provers; codex xhigh reviews;
-  observer = rk main session).
+  between windows 1 and 2, D mid-window-1 (w1s8 closed at cycle 8/10; w1s9 opens on review I
+  then round 9; the mandatory audit fires at cycle 10; sole Fable seat; opus-5 provers;
+  codex xhigh reviews; observer = rk main session).
