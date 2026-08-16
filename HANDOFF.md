@@ -87,9 +87,12 @@ changes. Vendor bundle refreshed at 9f2413d.
 - **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
   EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
 - Campaign-D roster: orchestrator Fable (sole seat); provers claude-opus-5; reviews codex
-  gpt-5.6-sol xhigh. Review records A-J in campaign docs/worker-output/. The kill pattern was
-  the NETWORK (decision 11) — on a stable connection reviews run clean; retry-from-scratch is
-  the protocol, the old escalation ladder is the fallback.
+  gpt-5.6-sol xhigh. Review records A-K in campaign docs/worker-output/. The kill pattern:
+  decision 11 blamed the network, but the w1s12 attempt-1 kill REVISED this — HOST-SIDE
+  interference during concurrent codex activity is the lead suspect (steal and OOM excluded,
+  mechanism unknown; rk bead rk-qe0j). Working protocol: coordinate a codex-free window with
+  peer sessions before long reviews (clean-window record 2/2, kill-window 0/8); peers pin
+  explicit codex session ids, never resume --last on a shared host.
 - **TJO standing authorizations (this session, in-conversation)**: campaign PRD decision 15 —
   continue autonomously toward the north-star at qPCP grade; delegated decisions recorded as
   PRD rows, next hostile review checks faithfulness. Constitution unchanged.
@@ -105,6 +108,6 @@ changes. Vendor bundle refreshed at 9f2413d.
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s11 closed; audit counter 1/10; w1s12 opens on
-  review K; sole Fable seat; opus-5 provers; codex xhigh reviews; observer = rk main
-  session; TJO continue-authorization standing — campaign PRD decision 15).
+  between windows 1 and 2, D mid-window-1 (w1s11 + w1s12 closed; audit counter 2/10; w1s13
+  opens on the PIVOT wave then review L; sole Fable seat; opus-5 provers; codex xhigh reviews;
+  observer = rk main session; TJO continue-authorization standing — campaign PRD decision 15).
