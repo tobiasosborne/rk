@@ -3,72 +3,67 @@
 
 # HANDOFF
 
-## State (2026-08-16, session close — campaign-D w1s6, w1s7 AND w1s8 cycles this sitting)
+## State (2026-08-16, session close — campaign-D w1s9 full cycle orchestrated)
 
-One Fable session (dual role: rk observer + campaign-D orchestrator, TJO directive) ran THREE
-campaign wave cycles in ../rk-campaign-D — w1s6 and w1s7 fully closed (wave + single hostile
-review + single repair wave, mechanically verified); w1s8's wave landed with its review HELD
-(externally killed twice, standing policy) — plus the TJO-requested settled-results report
-(built, then refreshed twice; final: 69 pp, all 57 then-shards, post-review-H, delivered):
+One Fable session (dual role: rk observer + campaign-D orchestrator, TJO directive) ran the
+complete w1s9 cycle in ../rk-campaign-D — the held-over review I, its repair wave, a
+three-lane opus wave on the TJO-direction items, and the settled-results report refresh, all
+in one sitting:
 
-- **w1s6**: -2gd closed; four-lane wave (mutation gate restated per campaign PRD 6;
-  factorization-aware E per PRD 7 — captures 0/4 -> 4/4 literal; locality answered two-sided;
-  the frustration-free input bridge); review G (6 MAJOR, all over-quantification/typing;
-  measurements survived); three-lane repair. Registry 40 -> 46 shards.
-- **w1s7**: four-lane wave (FIRST true `cited` shard — prop-rv-def-6-2-verbatim, pure
-  quotation, standing per review H; typed-mixer bundle 1066/1066 paying review G's measurement
-  debt; the quotient test RUN on the point slot; graveyard backfilled — 24 certificates + the
-  one genuine retraction); review H (5 MAJOR, record-level; all repaired); **ruling (c): the
-  FOUR-SLOT mutation self-test row is PASS** — the campaign's first gate movement, made by the
-  independent seat on a measured record. Registry 47 shards; refs 204/204 (drsq anchors
-  trimmed to the canonical cited home).
-- **w1s8**: four-lane wave — BOTH named non-subsumption residues DONE (PRWD typed
-  incomparability, two-sided, anti-originality; seventh-source JMRW sweep, 32 anchors, three
-  residues NARROW against the campaign — an absence verdict over N sources is worth exactly
-  N); the w1s7-b excluded 0.4234 certified a PHANTOM NUMBER (ratio of two rounding errors)
-  with the content reclaimed at the swept quantifier; repo-root INDEX.md adopted (runs WARNs
-  26 -> 1); rule-10 trims. **Review I HELD** (two external kills; prompt preserved; next
-  campaign session's first act). Registry 49 shards; refs 236/236.
+- **Review I ran CLEAN on its third launch** (the kill pattern did NOT recur — no escalation
+  needed). Verdict: REJECT pending four MAJOR repairs; every central w1s8 result survived
+  with narrowed scope. Ruling (a): non-subsumption stays PARTIAL PASS, with the full ACWP
+  typed comparison named as the sufficient condition for a narrow PASS.
+- **Repair R1**: all four blockers fixed and mechanically verified (anti-Zeno, no re-review).
+  Notable: review I's own two "confirming" characteristic polynomials were charpolys of the
+  WRONG objects — R1's exact sympy certificate proves the conclusion anyway (lambda_max
+  exactly 1 both sides). The hostile seat's math was wrong; the record's is now exact.
+- **The wave** (write partitions stated in every brief — zero collisions, four concurrent
+  seats): lane A reframed op-capture-dinur (the pre-registered predicate-vs-operator "heart"
+  DISSOLVES on the classical CSP subclass; the real obstruction is the ALPHABET coordinate,
+  typed prefix argument, escape costed exponential; Dinur source installed, 15 verified
+  anchors); lane B declared the tensor primitive (register shuffle found load-bearing) and
+  PROVED the pre-registered mixed-sector max-not-product no-go — the naive tensor amplifies
+  nothing, dead route with certificate; lane C delivered the universal-carrier coverage
+  theorem at stated (every k-local H in the Pow-image of one fixed carrier; reflexive-closure
+  narrowing; 1/D contraction budget attained).
+- **Report refreshed per TJO standing directive**: 69 -> 104 pp, compiled clean, all new
+  notation defined and definitions written out in full; eight w1s9 shards marked UNGRADED
+  throughout; w1s8 present only post-correction; 0.4234 excluded-only. PDF delivered to TJO.
 
-Campaign state at close: mutation self-test PASS (four-slot); non-subsumption PARTIAL PASS
-with its evidence now COMPLETE — movement in either direction is review I's ruling (a);
-elegance FAIL; five-slot grading unchanged; obligation open; cycle counter 8/10 (the
-MANDATORY audit fires at 10 — plan it); reward round 8; rk check green at every one of the
-~40 campaign commits this sitting.
+Campaign state at close: registry 55 shards + 12 definitions; 32 bundles (29 ledgered); refs
+253/253; reward round 9; rk check green at every commit. **Cycle counter 9/10 — the MANDATORY
+audit fires at the NEXT campaign session's close.** Campaign beads: -96o/-slj/-me1/-c9a
+closed; 13 new filed (review-I follow-ups -f2p/-379/-52h/-5f1/-vfj; lane residues
+-xeq/-hve/-bth/-c07/-z03/-i8w/-zss/-b55).
 
-rk-side this session: templates.test.ts §4d stale assertion fixed (RATIFIED wording; red
-observed first); bun test 3010/0, selftest OK; vendor bundle refreshed at campaign 08ca5f2.
-Two review launches were externally killed early in the sitting (another workspace-write
-codex was live on the host); TJO approved the relaunch policy: one relaunch, then stop.
-
-## New rk beads this session
-
-- **citation-kind schema** (P2, feature): kind: citation / cit- prefix for pure-quotation
-  shards — campaign-D measured the gap (its cited shard uses kind: proposition under protest,
-  accepted by review H ruling (a)). Tier A: versioned schema + linker (a deps edge on a cited
-  node must not launder rigour) + red fixture.
+rk-side this session: no rk source changes. Vendor bundle refreshed at campaign ee89cd3.
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer/tooling-health watch. Campaign next session opens on
-  **review I** (held; prompt at the campaign HANDOFF's "Current work" — launch, one repair
-  wave, close beads -96o/-slj, report refresh), then round 9 and the elegance/frontier queue.
-- Governance held all three cycles: anti-Zeno; reviewer verified right throughout (11 MAJOR
-  across G+H confirmed on inspection); orchestrator mechanical-only edits, always stated;
-  FINDINGS carries supersession entries — read certificates FORWARD. One w1s8 process lesson:
-  put the shared-file write partition in the briefs (an overlapping-allowlist briefing error
-  was caught and serialized mid-flight, no harm).
-- The review-kill pattern is now TWO sessions (G: 2 kills then TJO-approved success; I: 2
-  kills, held). If it recurs, it is a TJO decision item on where/how reviews run.
+- **rk-qqee (in_progress)**: observer/tooling-health watch. Campaign next session (w1s10)
+  opens on `rk reward sync --round` (round 10), then the wave: ACWP typed comparison (-f2p,
+  the path to a non-subsumption PASS), the Tier A corrections batch under the round's single
+  review (-c07 B>=2 clause + P3 follow-ups), and the review GRADING the eight ungraded w1s9
+  shards (scope 509c518..eba5873). **Session close is BLOCKED by the mandatory audit** —
+  budget time for the read-back over w1s1..w1s10.
+- Governance held: anti-Zeno (one review + one repair); reviewer verified right on all four
+  blockers (and independently WRONG on its own supporting polynomials — caught by R1's exact
+  certificate, recorded); orchestrator edits mechanical-only, stated; write partitions in
+  briefs (the w1s8 lesson applied; zero collisions).
 
 ## Next steps
 
-1. Campaign D session 9: review I first (held), then the TJO-direction items — NORTH STAR UPGRADED post-close (campaign PRD decision 10: clause (d), Dinur powering; new critical-path obligation op-capture-dinur, predicted at creation; arms tensor-repetition/universal-carrier registered with boundary cautions pre-registered).
-2. rk-pxkk / rk-ahe9 / citation-kind schema are the natural rk work items (P2).
-3. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo), then
-   wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
+1. Campaign D w1s10: reward round 10; wave (ACWP -f2p; Tier-A corrections batch; grade the
+   w1s9 shards); MANDATORY AUDIT at close (9/10 now).
+2. TJO decision queue grew: campaign -xeq (regrouping primitive / exponential-fiber cost
+   admissibility), -z03 (normalization D3 'none' slot), PRD §6 has no success criterion for
+   op-capture-dinur (decision 10 never amended §6).
+3. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / citation-kind schema.
+4. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
+   (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
    campaign C window 2 if unattended.
-4. rk-0s3u (P3) remains open, unblocking no one.
+5. rk-0s3u (P3) remains open, unblocking no one.
 
 ## TJO decision queue (rk-side, carried)
 
@@ -77,22 +72,25 @@ codex was live on the host); TJO approved the relaunch policy: one relaunch, the
 3. rk-mief — campaign C: attest backfill vs waiver for the 6 window-1 closes.
 4. Roster policy: window-5 same-family waiver — standing or per-campaign?
 5. Campaign codas (decaying): rk-2h33, rk-iup9, rk-mxl3.
-6. NEW: campaign-D bead -7ge (mis-named immutable bundle) — three resolution options analysed
-   on the bead; recommendation (b): grandfathered-names allowance in the rk runs gate.
+6. Campaign-D bead -7ge (mis-named immutable bundle) — recommendation (b) carried.
+7. NEW (campaign-D, w1s9): -xeq regrouping/cost ruling; -z03 D3 'none' slot; PRD §6
+   criterion for op-capture-dinur.
 
 ## Key facts for the next session
 
 - **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
   EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
 - Campaign-D roster: orchestrator Fable (sole seat); provers claude-opus-5; reviews codex
-  gpt-5.6-sol xhigh. Review records A-H in campaign docs/worker-output/ (verbatim, immutable,
+  gpt-5.6-sol xhigh. Review records A-I in campaign docs/worker-output/ (verbatim, immutable,
   session ids in headers).
 - Codex review invocation that works: `codex exec -s read-only -c
   model_reasoning_effort="xhigh" -o <scratch> "<prompt>" < /dev/null`, backgrounded,
-  timeout 5400. If externally killed: one relaunch, then stop and escalate.
+  timeout 5400. Review I needed three launches across two sessions but the pattern did not
+  recur within this session; standing policy stays: one relaunch, then stop and escalate.
 - Campaign probe-channel exit codes (1.8.0): 2 validation, 3 output exists, 4 already
-  ledgered, 5 busy (retry safe), 6 poisoned. Ledger ts NON-MONOTONE; order by append
-  position (rk-ahe9). Heredoc file writes fail silently on this host (bd memory).
+  ledgered, 5 busy (retry safe — arbitrated four concurrent lanes cleanly this session),
+  6 poisoned. Ledger ts NON-MONOTONE; order by append position (rk-ahe9). Heredoc file
+  writes CAN fail silently on this host — always verify with a read-back.
 - `make refresh-bundles` bundles only ../rk-campaign-D (live).
 - Repo self-contained since fed740c; full suite still needs `../vibefeld` (2 seam tests).
 
@@ -100,6 +98,6 @@ codex was live on the host); TJO approved the relaunch policy: one relaunch, the
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s8 closed at cycle 8/10; w1s9 opens on review I
-  then round 9; the mandatory audit fires at cycle 10; sole Fable seat; opus-5 provers;
-  codex xhigh reviews; observer = rk main session).
+  between windows 1 and 2, D mid-window-1 (w1s9 closed at cycle 9/10; w1s10 opens on round
+  10 and MUST audit at close; sole Fable seat; opus-5 provers; codex xhigh reviews;
+  observer = rk main session).
