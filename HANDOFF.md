@@ -3,63 +3,64 @@
 
 # HANDOFF
 
-## State (2026-08-16, session close — campaign-D w1s9 AND w1s10 cycles this sitting)
+## State (2026-08-17, session close — campaign-D w1s11 full cycle orchestrated)
 
-One Fable session (dual role: rk observer + campaign-D orchestrator) ran TWO full campaign
-cycles in ../rk-campaign-D:
+One Fable session (dual role: rk observer + campaign-D orchestrator, TJO present early then
+departing under a standing continue-authorization) ran the campaign's biggest single-session
+cycle in ../rk-campaign-D:
 
-- **w1s9**: held-over review I ran clean on its third launch (four MAJORs, all repaired and
-  mechanically verified; the reviewer's own polynomials were wrong — R1's exact certificate
-  caught it); three-lane opus wave on TJO-direction items (Dinur heart-dissolves + alphabet
-  obstruction; tensor no-go PROVED; universal-carrier coverage); report 69 -> 104 pp.
-- **w1s10**: two TJO in-conversation directions (local tensoring + OR-over-copies; classical
-  shadows) plus the review-named ACWP comparison — four opus lanes, zero collisions. The
-  strategic outcome: the type problem for Dinur capture is SOLVED at candidate level
-  (def-site-fiber-local-tensor; prefix no-go outflanked at Dinur's own resource shape) and the
-  obstruction MIGRATED to dynamics (Theorem A: fiber-trivial attachments are gauges;
-  consistency free to the minimiser; Theorem S: saturated targets freeze at max; Theorem Q/T:
-  the quorum target reopens compounding at the exact single-copy exchange rate). THE JOIN
-  (campaign bead -nhg, P1) is where amplification now lives — the w1s11 lead. ACWP: two-sided
-  incomparability; non-subsumption evidence COMPLETE, verdict move pending review J. Report
-  104 -> 139 pp, all ungraded-flagged.
-- **Review J is HELD**: externally killed twice — the THIRD session with the kill pattern
-  (G/I/J, six kills). Standing policy exhausted. **ESCALATED TO TJO** (options in the campaign
-  HANDOFF: split the review / dedicated window / different host / diagnose first). NO further
-  review launches until ruled. Diagnostics at the kills: no other codex live, 23 GB free.
-- **The campaign's MANDATORY CYCLE-10 AUDIT ran — PASS** (first of the campaign; full
-  w1s1..w1s10 read-back; five attempted-overclaim instances traced, all caught by the
-  machinery; no surviving overclaim). Actions: zero-target rule promoted to CONVENTIONS;
-  gate-row consolidation bead. Counter reset to 0.
+- **The review-kill mystery is SOLVED**: TJO ruled it was the unstable network (campaign PRD
+  decision 11); review J attempt 3 ran CLEAN on the stable connection (~35 min, gpt-5.6-sol
+  xhigh). The rk-side BLOCKING escalation is CLOSED. Verdict: REJECT TO REPAIR, 12 MAJORs;
+  all seventeen previously-ungraded shards GRADED; **non-subsumption row -> NARROW PASS**
+  (ruling a); LT stays candidate; quorum four-field discipline ratified.
+- **TJO delegated the decision queue** ("maximise probability of discovering new interesting
+  science") and later issued a standing continue-authorization — both recorded as campaign
+  PRD decisions 12-15 (+11, +§6 criterion 6), each flagged for next-review faithfulness.
+- **Repair wave (3 opus lanes)**: every reviewer counterexample independently CONFIRMED by
+  probe before repair (zero refutations — but the discipline exists because review I once got
+  its own arithmetic wrong); all 12 MAJORs + rulings (d)/(e)/(f) + decisions 13/14 applied;
+  orchestrator mechanically verified every file:line claim. Anti-Zeno held.
+- **Wave 2 (4 opus lanes)**: THE JOIN answered two-sided with the negative half PROVED
+  (conjugation MULTIPLIES the dart's constraint — dishonesty costs energy but the declared
+  modulus can't see it; quorum family collapses to lambda^t); the THIRD COMPOSITION candidate
+  (def-carrier-fiber-direct-sum — one primitive, both convex laws, replacement product
+  slot-for-slot 27/27, and a freeze-escape regime the tensor lacks); the coupler priced by a
+  new proved support bar (declared degree != row support — a candidate clause-(b) resource
+  axis); the 152-pp report grade-trued and compiling clean. FIVE orchestrator brief framings
+  corrected by lanes this wave (calibration disclosure is load-bearing).
+- **TJO's parting directions banked**: lit sweep (opus, web) verified the qPR clue (OpenAI
+  Ten Advances ch. 6, Lean-certified statement, stated-only), found BMVZ 2510.01333 answering
+  a campaign OPEN question, confirmed the qPCPP gap is current, and confirmed NO prior art on
+  quantizing Dinur's cloud or block-encoding amplification (campaign beads -8sm/-lfa);
+  8 sources byte-hashed into campaign refs/.
 
-Campaign state at close: 62 argument shards + 14 definitions; 36 bundles (33 ledgered); refs
-253/253; reward round 10; rk check green at every commit; SEVENTEEN ungraded shards awaiting
-review J. rk-side: no rk source changes this session. Vendor bundle refreshed at campaign
-03b06f8.
+Campaign state at close: 68 argument shards + 17 definitions (4 candidates awaiting adoption);
+45 bundles / 42 ledgered; fr PIVOT to new arm direct-sum-composition; audit counter 1/10;
+rk check green at every commit (campaign HEAD fc11634). rk-side: no rk source changes.
+Vendor bundle refreshed at fc11634.
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer watch. Campaign w1s11 opens on: (1) the TJO review-run
-  ruling, (2) review J (held prompt: campaign scratchpad w1s10-review-j-prompt.txt, this
-  session's scratchpad — reconstruction instructions in the campaign HANDOFF), (3) then THE
-  JOIN (-nhg). Round 11 at open.
-- Governance held both cycles: anti-Zeno; write partitions in briefs (nine concurrent
-  dispatches, zero collisions, two sittings); orchestrator mechanical edits stated; two
-  orchestrator-brief framings corrected by lanes and recorded as findings (the calibration
-  disclosure worked as designed).
+- **rk-qqee (in_progress)**: observer watch. Campaign w1s12 opens on: (1) hostile review K —
+  ratification-heavy queue (six new shards, THREE candidate adoptions, decision-13 facet
+  ratification with facet (iii) needing re-grounding, decisions 11-15 faithfulness); then
+  (2) the frontier: -j3u k>=2 opinion layouts (Dinur's t-ball; feeds TJO's -8sm cloud
+  direction), -uv9 support-inflation resource theorem, -7ky cone mechanism-split. Round 12
+  sync at open.
+- Governance held: anti-Zeno (one review + one repair); nine concurrent dispatches across two
+  waves, zero collisions; all orchestrator mechanical edits stated; reviewer-arithmetic
+  verification caught nothing this time but remains mandatory.
 
 ## Next steps
 
-1. **TJO decisions now queued**: (a) where/how reviews run (the kill escalation — blocking
-   the next review); (b) campaign -xeq cost-admissibility half; (c) -z03 (three facets);
-   (d) -7ge; (e) PRD §6 criterion for op-capture-dinur.
-2. Campaign w1s11: review J (after ruling (a)) -> one repair wave -> grade-truing report
-   refresh -> THE JOIN wave (-nhg) + frontier tail (-zss, -4mu, -61v, -bth, -i8w).
-3. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / citation-kind schema (campaign now has a
-   SECOND protest-cited-kind data point: prop-rv-def-6-2-verbatim remains the only cited).
-4. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
+1. Campaign w1s12: review K (stable connection, from scratch per decision 11) -> one repair
+   wave -> grade-truing -> the PIVOT wave (direct-sum-composition arm lead + frontier tail).
+2. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
+3. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
    (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
    campaign C window 2 if unattended.
-5. rk-0s3u (P3) remains open, unblocking no one.
+4. rk-0s3u (P3) remains open, unblocking no one.
 
 ## TJO decision queue (rk-side, carried)
 
@@ -68,18 +69,20 @@ review J. rk-side: no rk source changes this session. Vendor bundle refreshed at
 3. rk-mief — campaign C: attest backfill vs waiver for the 6 window-1 closes.
 4. Roster policy: window-5 same-family waiver — standing or per-campaign?
 5. Campaign codas (decaying): rk-2h33, rk-iup9, rk-mxl3.
-6. Campaign-D -7ge (mis-named immutable bundle) — recommendation (b) carried.
-7. Campaign-D w1s9/w1s10 additions: review-run escalation (BLOCKING); -xeq cost half;
-   -z03 three facets; PRD §6 criterion for op-capture-dinur.
+6. (RESOLVED this session: campaign review-run escalation — decision 11; -xeq/-z03/-7ge/
+   PRD §6 criterion — decisions 12-14 + criterion 6, under the TJO delegation.)
 
 ## Key facts for the next session
 
 - **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
   EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
 - Campaign-D roster: orchestrator Fable (sole seat); provers claude-opus-5; reviews codex
-  gpt-5.6-sol xhigh. Review records A-I in campaign docs/worker-output/ (J held). The kill
-  pattern: G killed 2x then succeeded on TJO-approved third; I killed 2x then succeeded next
-  session; J killed 2x, HELD — escalation is BLOCKING further reviews.
+  gpt-5.6-sol xhigh. Review records A-J in campaign docs/worker-output/. The kill pattern was
+  the NETWORK (decision 11) — on a stable connection reviews run clean; retry-from-scratch is
+  the protocol, the old escalation ladder is the fallback.
+- **TJO standing authorizations (this session, in-conversation)**: campaign PRD decision 15 —
+  continue autonomously toward the north-star at qPCP grade; delegated decisions recorded as
+  PRD rows, next hostile review checks faithfulness. Constitution unchanged.
 - Codex review invocation: `codex exec -s read-only -c model_reasoning_effort="xhigh" -o
   <scratch> "<prompt>" < /dev/null`, backgrounded, timeout 5400.
 - Campaign probe-channel exit codes (1.8.0): 2 validation, 3 output exists, 4 already
@@ -92,6 +95,6 @@ review J. rk-side: no rk source changes this session. Vendor bundle refreshed at
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s10 closed; AUDIT DONE at cycle 10, counter
-  0/10; w1s11 blocked on the TJO review-run ruling for review J; sole Fable seat; opus-5
-  provers; codex xhigh reviews; observer = rk main session).
+  between windows 1 and 2, D mid-window-1 (w1s11 closed; audit counter 1/10; w1s12 opens on
+  review K; sole Fable seat; opus-5 provers; codex xhigh reviews; observer = rk main
+  session; TJO continue-authorization standing — campaign PRD decision 15).
