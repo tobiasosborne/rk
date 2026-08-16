@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-17, session close — campaign-D w1s11 full cycle orchestrated)
+## State (2026-08-17, session close — campaign-D w1s11 AND w1s12 cycles orchestrated this sitting)
 
 One Fable session (dual role: rk observer + campaign-D orchestrator, TJO present early then
 departing under a standing continue-authorization) ran the campaign's biggest single-session
@@ -35,27 +35,37 @@ cycle in ../rk-campaign-D:
   quantizing Dinur's cloud or block-encoding amplification (campaign beads -8sm/-lfa);
   8 sources byte-hashed into campaign refs/.
 
-Campaign state at close: 68 argument shards + 17 definitions (4 candidates awaiting adoption);
-45 bundles / 42 ledgered; fr PIVOT to new arm direct-sum-composition; audit counter 1/10;
-rk check green at every commit (campaign HEAD fc11634). rk-side: no rk source changes.
-Vendor bundle refreshed at fc11634.
+**w1s12 (same sitting)**: review K ran (attempt 1 killed with concurrent codex on host —
+kill-cause forensics on rk-qe0j, steal/OOM excluded, host contention the lead suspect,
+peer-coordination protocol works: clean-window record 2/2); REJECT TO REPAIR (3 BLOCKERs +
+6 MAJORs) fully repaired same session with every finding verified first. Yield: Theorem J3'
+(the exact blindness criterion, an IFF; third mechanism exhibited); support bar repaired
+STRONGER threshold-free (classical-subclass escape SURVIVES); the seat's own banked corollary
+CORRECTED (delta_s = 0 refuted — second reviewer-arithmetic catch) and banked as the live
+amplification lead; direct-sum associativity + generalized promise type (X, phi, a, b);
+report 155 pp with independent registry recount. **Review K's faithfulness audit caught my
+criterion-6 ruling exceeding the delegation — amended per the seat's minimal repair** (the
+delegation machinery works both ways). Both new candidates stay candidates.
+
+Campaign state at close: 69 argument shards + 17 definitions (4 candidates + 2 unratified
+type surfaces); 51 bundles / 48 ledgered; fr decision EXPLOIT direct-sum-composition; audit
+counter 2/10; rk check green at every commit (campaign HEAD 9f2413d). rk-side: no rk source
+changes. Vendor bundle refreshed at 9f2413d.
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer watch. Campaign w1s12 opens on: (1) hostile review K —
-  ratification-heavy queue (six new shards, THREE candidate adoptions, decision-13 facet
-  ratification with facet (iii) needing re-grounding, decisions 11-15 faithfulness); then
-  (2) the frontier: -j3u k>=2 opinion layouts (Dinur's t-ball; feeds TJO's -8sm cloud
-  direction), -uv9 support-inflation resource theorem, -7ky cone mechanism-split. Round 12
-  sync at open.
+- **rk-qqee (in_progress)**: observer watch. Campaign w1s13 opens on: (1) the PIVOT wave (direct-sum arm lead; saturated-target question -344 P1; k>=2 layouts -j3u P1) then review L —
+  grading the w1s12 repair content (J3', the three-layer bar, the corrected corollary, the
+  n-ary rule, the generalized promise type — all marked for ratification). Round 13 sync at
+  open. Codex protocol: coordinate a codex-free window with peer sessions (rk-qe0j).
 - Governance held: anti-Zeno (one review + one repair); nine concurrent dispatches across two
   waves, zero collisions; all orchestrator mechanical edits stated; reviewer-arithmetic
   verification caught nothing this time but remains mandatory.
 
 ## Next steps
 
-1. Campaign w1s12: review K (stable connection, from scratch per decision 11) -> one repair
-   wave -> grade-truing -> the PIVOT wave (direct-sum-composition arm lead + frontier tail).
+1. Campaign w1s13: PIVOT wave (direct-sum lead + -344 + -j3u) -> review L in a coordinated
+   codex-free window -> one repair wave -> grade-truing.
 2. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
 3. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
    (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
