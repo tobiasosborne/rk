@@ -63,7 +63,7 @@ codex was live on the host); TJO approved the relaunch policy: one relaunch, the
 
 ## Next steps
 
-1. Campaign D session 9: review I first (held), then the queue (campaign HANDOFF).
+1. Campaign D session 9: review I first (held), then the TJO-direction items — NORTH STAR UPGRADED post-close (campaign PRD decision 10: clause (d), Dinur powering; new critical-path obligation op-capture-dinur, predicted at creation; arms tensor-repetition/universal-carrier registered with boundary cautions pre-registered).
 2. rk-pxkk / rk-ahe9 / citation-kind schema are the natural rk work items (P2).
 3. **Wave 3 — worker contract / unattended operation** (rk-4w2y, rk-p037, rk-j8xo), then
    wave 4 (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
