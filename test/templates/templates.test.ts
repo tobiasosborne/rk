@@ -632,9 +632,11 @@ describe("templates / (h) reward/predict + probe/brief/hostile/worker-lifecycle 
     const section = claude.slice(claude.indexOf("## 4d."), claude.indexOf("## 5."));
     expect(section.length).toBeGreaterThan(0);
     expect(section.toLowerCase()).toContain("no pattern-kill");
-    // the one deliberately-marked bead id exception (task instructions: pending ratification only)
+    // ratified 2026-08-15 (TJO, closing rk-7the): the STATUS line records the ratification and
+    // must never revert to the provisional pending-ratification wording
     expect(section).toContain("rk-7the");
-    expect(section.toLowerCase()).toContain("pending upstream ratification");
+    expect(section).toContain("RATIFIED (TJO 2026-08-15");
+    expect(section.toLowerCase()).not.toContain("pending upstream ratification");
     expect(section.toLowerCase()).toContain("lossy signal");
     expect(section).toContain("one in three");
     expect(section.toLowerCase()).toContain("run-unique");
