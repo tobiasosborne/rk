@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-17, session close — campaign-D w1s11 AND w1s12 cycles orchestrated this sitting)
+## State (2026-08-17, session close — campaign-D w1s11 + w1s12 + w1s13 cycles orchestrated this sitting)
 
 One Fable session (dual role: rk observer + campaign-D orchestrator, TJO present early then
 departing under a standing continue-authorization) ran the campaign's biggest single-session
@@ -47,25 +47,38 @@ report 155 pp with independent registry recount. **Review K's faithfulness audit
 criterion-6 ruling exceeding the delegation — amended per the seat's minimal repair** (the
 delegation machinery works both ways). Both new candidates stay candidates.
 
-Campaign state at close: 69 argument shards + 17 definitions (4 candidates + 2 unratified
-type surfaces); 51 bundles / 48 ledgered; fr decision EXPLOIT direct-sum-composition; audit
-counter 2/10; rk check green at every commit (campaign HEAD 9f2413d). rk-side: no rk source
-changes. Vendor bundle refreshed at 9f2413d.
+**w1s13 (same sitting, the third cycle)**: PIVOT wave — Theorem P1 (saturated-target
+amplification EXISTS exactly, lambda^t at the input target; the K12 gap-creation family at
+additive degree with the ceiling exactly at the m_eff bar; Theorem N5 the blindness resource
+law; Lemma F the correct Theorem-S generalization). Review L (attempt-1 kill in a CLEAN
+window refutes pure codex-contention; retry-survives 5/5): REJECT TO REPAIR, 2 BLOCKERs +
+5 MAJORs, fully repaired same sitting (F5' exact classification + F10 unification; the
+constructor promise type; universal-liability restructure; P1's full criterion-2 receipt +
+Theorem P4). **Review L ruled P1's promotion path exactly — hard-tier cross-vendor
+verification is w1s14's lead (campaign bead -lhs), the shortest route to the campaign's
+first proved-mod-audit amplification statement (§6 criterion 2).** Adoption denied again
+with the exact bar (-w5c). Both orchestrator PRD edits re-audited FAITHFUL.
+
+Campaign state at close: 77 argument shards + 17 definitions (3 candidates + 3
+marked-for-ratification surfaces); 59 bundles / 56 ledgered; fr EXPLOIT
+direct-sum-composition; audit counter 3/10; rk check green at every commit (campaign HEAD
+a39e601). rk-side: no rk source changes. Vendor bundle refreshed at a39e601.
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer watch. Campaign w1s13 opens on: (1) the PIVOT wave (direct-sum arm lead; saturated-target question -344 P1; k>=2 layouts -j3u P1) then review L —
-  grading the w1s12 repair content (J3', the three-layer bar, the corrected corollary, the
-  n-ary rule, the generalized promise type — all marked for ratification). Round 13 sync at
-  open. Codex protocol: coordinate a codex-free window with peer sessions (rk-qe0j).
+- **rk-qqee (in_progress)**: observer watch. Campaign w1s14 opens on: (1) the PROMOTION wave — bead -lhs, hard-tier cross-vendor
+  verification of Theorem P1 (the first proved-mod-audit amplification candidate, §6
+  criterion 2); (2) the frontier (-w5c uniform gap-improvement = the adoption bar; -hp7 cone
+  x grounded; -8sm/-lfa TJO directions); (3) review M. Round 14 sync at open. Codex: first
+  launches may die, retry immediately (5/5 survive).
 - Governance held: anti-Zeno (one review + one repair); nine concurrent dispatches across two
   waves, zero collisions; all orchestrator mechanical edits stated; reviewer-arithmetic
   verification caught nothing this time but remains mandatory.
 
 ## Next steps
 
-1. Campaign w1s13: PIVOT wave (direct-sum lead + -344 + -j3u) -> review L in a coordinated
-   codex-free window -> one repair wave -> grade-truing.
+1. Campaign w1s14: promotion wave (-lhs hard-tier P1 verification) + frontier -> review M
+   -> one repair wave -> grade-truing.
 2. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
 3. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
    (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
@@ -108,6 +121,6 @@ changes. Vendor bundle refreshed at 9f2413d.
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s11 + w1s12 closed; audit counter 2/10; w1s13
-  opens on the PIVOT wave then review L; sole Fable seat; opus-5 provers; codex xhigh reviews;
+  between windows 1 and 2, D mid-window-1 (w1s11 + w1s12 + w1s13 closed; audit counter 3/10; w1s14
+  opens on the P1 promotion wave then review M; sole Fable seat; opus-5 provers; codex xhigh reviews;
   observer = rk main session; TJO continue-authorization standing — campaign PRD decision 15).
