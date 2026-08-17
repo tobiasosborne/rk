@@ -100,12 +100,12 @@ a39e601). rk-side: no rk source changes. Vendor bundle refreshed at a39e601.
 - **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
   EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
 - Campaign-D roster: orchestrator Fable (sole seat); provers claude-opus-5; reviews codex
-  gpt-5.6-sol xhigh. Review records A-K in campaign docs/worker-output/. The kill pattern:
-  decision 11 blamed the network, but the w1s12 attempt-1 kill REVISED this — HOST-SIDE
-  interference during concurrent codex activity is the lead suspect (steal and OOM excluded,
-  mechanism unknown; rk bead rk-qe0j). Working protocol: coordinate a codex-free window with
-  peer sessions before long reviews (clean-window record 2/2, kill-window 0/8); peers pin
-  explicit codex session ids, never resume --last on a shared host.
+  gpt-5.6-sol xhigh. Review records A-L in campaign docs/worker-output/. The kill pattern:
+  cause UNDETERMINED after full forensics (rk bead rk-qe0j) — network, resume-steal, OOM,
+  and pure codex-contention each excluded by at least one data point (review L attempt 1
+  died in a VERIFIED clean window). What is solid: first launches may die ~10-25 min in;
+  RETRIES SURVIVE 5/5. Working protocol: launch, expect a possible first kill, retry
+  immediately; coordinate windows when peers are active; peers pin explicit session ids.
 - **TJO standing authorizations (this session, in-conversation)**: campaign PRD decision 15 —
   continue autonomously toward the north-star at qPCP grade; delegated decisions recorded as
   PRD rows, next hostile review checks faithfulness. Constitution unchanged.
