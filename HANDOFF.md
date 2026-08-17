@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-17, session close — campaign-D w1s11 through w1s14 cycles orchestrated this sitting)
+## State (2026-08-17, session close — campaign-D w1s11 through w1s15 cycles orchestrated this sitting; ONE ITEM HELD FOR TJO)
 
 One Fable session (dual role: rk observer + campaign-D orchestrator, TJO present early then
 departing under a standing continue-authorization) ran the campaign's biggest single-session
@@ -71,25 +71,43 @@ degree is THE named open problem, campaign bead -1ga) and the composed-blindness
 mechanism list, was always the obstruction). One lane self-reported a §4d pattern-kill
 (rehearsal-only; recorded, no cover-up).
 
-Campaign state at close: 79 argument shards (ONE at proved-mod-audit) + 17 definitions; 61
-bundles / 58 ledgered; fr EXPLOIT direct-sum-composition; audit counter 4/10; rk check green
-at every commit (campaign HEAD 0c8cc74). rk-side: no rk source changes. Vendor bundle
-refreshed at 0c8cc74.
+**w1s15 (same sitting, the fifth cycle) — THE PROMOTION AUDIT, AND A HELD ITEM FOR TJO**:
+review M audited the first promotion and ruled it STRUCTURALLY INVALID AS A RECORD (mixed
+shard; the attested sha included post-verification metadata; my "verbatim mechanical"
+description of the P1(d) edit was false) while P1's MATHEMATICS stands untouched. The full
+repair wave landed IN THE CAMPAIGN'S WORKING TREE: shard split four ways per the new
+standing promotion recipe (ruling e), nine boundary MAJORs repaired (U2 simplicity
+hypothesis; U5' the exact freeze dichotomy verified over 107k graphs; |Sigma| >= 2 across
+the blindness family with lanes catching one defect beyond the review), records corrected.
+**HELD FOR TJO: the final promotion step.** My harness's permission layer declined the
+status-restoring write (twice) and I do not route around my own safety layer; the campaign's
+reward gate independently fails closed on the same state (its designed human-look signal),
+which blocks campaign commits. So: the w1s15 wave is UNCOMMITTED in ../rk-campaign-D's
+working tree (protect it), the vendor bundle is at the last committed state (7299ba9), and
+the campaign HANDOFF (in-tree) carries the exact three-step completion recipe. P1's
+mathematics is unchallenged; one status write + one endorsing verifier pass + one attest
+complete the campaign's first rigorous-track close properly.
+
+Campaign state: 82 argument shards + 17 definitions (tree) / committed HEAD 7299ba9; 64
+bundles / 61 ledgered; fr EXPLOIT direct-sum-composition; audit counter 5/10; rk check
+carries exactly ONE ERROR — the intended fail-closed signal. rk-side: no rk source changes.
+Vendor bundle deliberately NOT refreshed past 7299ba9 (a refresh cannot capture the
+uncommitted tree; refresh after TJO completes the chain).
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer watch. Campaign w1s15 opens on: (1) review M — the richest queue yet (grade U1-U8/C1-C6/the
-  w1s13 repairs; RULE whether P1's promotion meets §6 criterion 2 in full; AUDIT the
-  promotion protocol execution; adoption re-exam with the uniform theorem on the table;
-  ratifications); (2) the frontier (-1ga constant gap at o(N) degree — THE open problem;
-  -uv9; -8sm/-lfa). Round 15 sync at open. Codex: first launches may die, retry (5/5).
+- **rk-qqee (in_progress)**: observer watch. Campaign w1s16 opens on: (1) TJO completes the held promotion (three steps, campaign
+  HANDOFF); (2) commit the staged w1s15 wave + refresh the vendor bundle; (3) criterion-2
+  residues (P4 review; one local-class instantiation), -36l N5 knock-on (Tier A), -1ga,
+  the U-theorem's hard-tier pass (the adoption route).
 - Governance held: anti-Zeno (one review + one repair); nine concurrent dispatches across two
   waves, zero collisions; all orchestrator mechanical edits stated; reviewer-arithmetic
   verification caught nothing this time but remains mandatory.
 
 ## Next steps
 
-1. Campaign w1s15: review M -> one repair wave -> grade-truing -> the -1ga wave.
+1. TJO: complete the held promotion (campaign HANDOFF, three steps) -> campaign commits
+   unblock -> vendor refresh -> w1s16 proper.
 2. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
 3. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
    (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
@@ -132,6 +150,6 @@ refreshed at 0c8cc74.
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s11-w1s14 closed; audit counter 4/10; ONE proved-mod-audit result on
-  the books; w1s15 opens on review M; sole Fable seat; opus-5 provers; codex xhigh reviews;
+  between windows 1 and 2, D mid-window-1 (w1s11-w1s15 closed, w1s15 in-tree only; audit counter 5/10; the first
+  promotion HELD one step from completion — TJO's write; w1s16 opens there; sole Fable seat; opus-5 provers; codex xhigh reviews;
   observer = rk main session; TJO continue-authorization standing — campaign PRD decision 15).
