@@ -77,7 +77,7 @@ bundles / 76 ledgered; review records A-O; audit counter 7/10; rk check green, z
 
 ## Next steps
 
-1. Campaign w1s18 per the campaign HANDOFF (3e8a84a).
+1. Campaign w1s19 per the campaign HANDOFF: banking attempt 2 (shas bc4bc567/d2196274/e730ae7c) + review P (alpha admissibility, clause-(d) ruling).
 2. rk-side new P2 feature bead: host-wide codex dispatch lockfile (kill-pattern durable fix;
    peer session pre-committed) — natural wave-3 worker-contract work (rk-4w2y adjacent).
 3. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
