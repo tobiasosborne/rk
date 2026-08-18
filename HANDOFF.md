@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-18, session close — campaign-D w1s16 orchestrated FULLY DELEGATED; two mega-results)
+## State (2026-08-18, session close — campaign-D w1s16 AND w1s17 orchestrated FULLY DELEGATED same sitting; CRITERION 2 MET)
 
 One Fable session (dual role: rk observer + campaign-D orchestrator; TJO issued the sitting's
 directives — "continue, do not escalate or stop until a full quantum PCP grade definition is
@@ -49,25 +49,35 @@ nested codex behind `&` (detached) — caught in seconds, killed by verified PID
 ruled by review N (violation; handling FAITHFUL); a process-safeguard bead is filed
 campaign-side (dispatcher rejects backgrounding syntax).
 
-Campaign state at close: 86 argument shards (TWO proved-mod-audit, both protocol-valid) + 18
-definitions; 74 bundles / 71 ledgered; review records A-N; audit counter 6/10; rk check
-green, zero ERRORs (campaign HEAD af06bc1). Vendor bundle refreshed at af06bc1. rk-side: no
-rk source changes.
+w1s17 (same sitting, the seventh cycle): review O RULED PRD §6 CRITERION 2 FORMALLY MET
+(the first pillar of the decision-15 target) on the promoted instantiation; the -rqs
+question CLOSED BOTH WAYS (the locality-gap no-go obs-direct-sum-locality-gap-no-go, gap
+<= 2k/n_* degree-independent, order-tight at 3/log2 N — locality is the currency, ruled NO
+PRD tension); the Dinur capture REDUCED TO TWO RESIDUES (def-walk-indexed-neighbourhood-cloud
++ four shards, claude-opus lane; block-encoding necessity proved for the commuting class —
+the lane's broader claim narrowed by review O, orchestrator overclaim owned and corrected);
+DE-v1 one fresh pass from consensus (GATE semantic fixed; my fr oracle ruled UNSOUND and
+hardened per prescription, genuine record re-verified). Review O ACCEPT-WITH-REPAIRS, one
+repair wave, anti-Zeno held.
+
+Campaign state at close: 92 argument shards (TWO proved-mod-audit) + 19 definitions; 79
+bundles / 76 ledgered; review records A-O; audit counter 7/10; rk check green, zero ERRORs
+(campaign HEAD 3e8a84a). Vendor bundle refreshed at 3e8a84a. rk-side: no rk source changes.
 
 ## Current work
 
-- **rk-qqee (in_progress)**: observer watch. Campaign w1s17 opens on: (1) DE-v1's own
-  independent review, then -kba (theorem-level DE-v1 bounds for P4 + U — THE adoption route);
-  (2) -rqs (constant gap + constant locality + bounded qudit dim — the primitive's defining
-  question); (3) U hard pass 3 after -kba (adoption); (4) the Dinur-capture directions
-  (-8sm/-lfa/-0en, criterion 6). Round 17 sync at open.
+- **rk-qqee (in_progress)**: observer watch. Campaign w1s18 opens on: (1) DE-v1's consensus
+  pass then -kba then U adoption pass 3; (2) the capture residues -1v7/-j10 + the
+  cross-cutting criterion-6 gate; (3) capture 4/4 (drsq/zigzag/replacement — the last
+  untouched decision-15 pillar); (4) -ngt/-lfa/-0en; frozen-P1 erratum -bc6 for TJO.
+  Round 18 sync at open.
 - Governance held: anti-Zeno (one review + one repair); ~19 worker dispatches (11 codex, 4
   claude-opus verification/endorsement, zero collisions, zero fabricated identities); every
   orchestrator mechanical edit stated; two faithfulness defects self-surfaced to review N.
 
 ## Next steps
 
-1. Campaign w1s17 per the campaign HANDOFF (af06bc1).
+1. Campaign w1s18 per the campaign HANDOFF (3e8a84a).
 2. rk-side new P2 feature bead: host-wide codex dispatch lockfile (kill-pattern durable fix;
    peer session pre-committed) — natural wave-3 worker-contract work (rk-4w2y adjacent).
 3. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
@@ -112,8 +122,8 @@ rk source changes.
 
 - L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
 - D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s11-w1s16 closed and committed; audit counter
-  6/10; TWO protocol-valid proved-mod-audit results on the books; w1s17 opens on the DE-v1
-  review + -kba + -rqs; sole Fable seat; codex-preferred lanes per decision 16; codex xhigh
+  between windows 1 and 2, D mid-window-1 (w1s11-w1s17 closed and committed; audit counter
+  7/10; TWO proved-mod-audit results + CRITERION 2 FORMALLY MET; w1s18 opens on the DE-v1
+  consensus pass + -kba + the capture residues; sole Fable seat; codex-preferred lanes per decision 16; codex xhigh
   reviews; observer = rk main session; TJO continue-authorization standing — campaign PRD
   decisions 15+16).
