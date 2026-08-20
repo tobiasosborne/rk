@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "path": "sources/widget.txt",
+      "sha256": "5eb8349700edfa04ca501a15536bcab9aaf069be182f387669a3343edfe58392",
+      "source_id": "widget-2026",
+      "fetch": null
+    },
+    {
+      "path": "sources/other.txt",
+      "sha256": "a11078720fedd1eaee6c06db1db5635cd1cb44644531d074e1332438932c554a",
+      "source_id": "other-2026",
+      "fetch": null
+    }
+  ]
+}

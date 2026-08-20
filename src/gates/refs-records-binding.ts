@@ -18,6 +18,59 @@ import type { LockFacts } from "./refs-extraction";
 import { recordError, type L1Record, type RecordSet } from "./refs-records";
 import type { Range } from "./refs-records-verify";
 
+/** BL1 (Tier A review, 2026-08-20). THE SOURCE BINDING: an extraction record filed under
+ * `refs/records/<source-id>/` may anchor ONLY payloads `refs/manifest/sources.lock.json`
+ * attributes to that same `source_id`. Without it the gate accepted the reviewer's constructed
+ * triple — a record filed as paper-A whose range, payload hash, quotation and theorem all came
+ * from paper-B — with zero findings and `1/1 shard-record joins`, because every OTHER clause is
+ * internally consistent when the wrong paper is quoted consistently.
+ *
+ * FAIL-CLOSED IN BOTH DIRECTIONS: a lock entry that records no `source_id` at all cannot attribute
+ * its payload, so it is an ERROR rather than an unchecked pass — a manifest that does not say which
+ * paper a file is cannot be used to prove which paper it is. (An absent or ambiguous pin is left to
+ * the anchor check, which already reports it; reporting it twice under two names would be noise.)
+ * One finding per offending payload, deduplicated by path, so a record with ten hypotheses in the
+ * wrong paper names that paper once. */
+export function checkSourceBinding(record: L1Record, anchoredPaths: readonly string[], lock: LockFacts): Finding[] {
+  if (lock.error !== undefined) return [];
+  const findings: Finding[] = [];
+  const seen = new Set<string>();
+  for (const refsPath of anchoredPaths) {
+    if (seen.has(refsPath)) continue;
+    seen.add(refsPath);
+    const relative = refsPath.startsWith("refs/") ? refsPath.slice("refs/".length) : refsPath;
+    const pins = lock.entries.filter((e) => e.path === relative);
+    if (pins.length !== 1) continue;
+    const declared = pins[0]!.sourceId;
+    if (declared === undefined) {
+      findings.push(
+        recordError(
+          record.path,
+          "source-mismatch",
+          `record declares source ${JSON.stringify(record.source)} and anchors ${refsPath}, but ` +
+            "refs/manifest/sources.lock.json records NO source_id for that payload — nothing attributes " +
+            "those bytes to that paper, and a record whose source cannot be established is not a record " +
+            "of that source. Re-adopt the payload ('rk refs adopt') so the manifest names its source-id",
+        ),
+      );
+      continue;
+    }
+    if (declared !== record.source) {
+      findings.push(
+        recordError(
+          record.path,
+          "source-mismatch",
+          `record declares source ${JSON.stringify(record.source)} but anchors ${refsPath}, which ` +
+            `refs/manifest/sources.lock.json attributes to source ${JSON.stringify(declared)} — the ` +
+            "statement, its hypotheses and its quoted bytes must all come from the paper the record " +
+            "claims to extract, or a review vouched for one paper's text under another paper's name",
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
 export function checkStaleness(record: L1Record, range: Range | undefined, lock: LockFacts): Finding[] {
   // The payload a record's staleness is measured against is the payload its OWN statement range
   // names — the record's `source` is a source-id and the lock is keyed by path, so the anchor is

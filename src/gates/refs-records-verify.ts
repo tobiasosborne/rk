@@ -27,7 +27,7 @@ import type { Finding } from "./framework";
 import { verifyAnchor } from "./refs-anchor";
 import type { LockFacts } from "./refs-extraction";
 import { resolveQuotableText } from "./refs-extraction";
-import { checkReview, checkStaleness } from "./refs-records-binding";
+import { checkReview, checkSourceBinding, checkStaleness } from "./refs-records-binding";
 import { LINE_ANCHOR_RE, RANGE_ANCHOR_RE, recordError, type L1Record, type RecordSet } from "./refs-records";
 import type { RepoSnapshot } from "./snapshot";
 
@@ -181,6 +181,17 @@ export function verifyRecords(snapshot: RepoSnapshot, lock: LockFacts, records: 
       }
     }
 
+    // BL1: every payload this record anchors — the statement range, every hypothesis anchor, and
+    // the L0 standing-assumptions range it leans on — must be attributed by the lock to the
+    // record's own source.
+    const anchoredPaths: string[] = [];
+    if (range) anchoredPaths.push(range.sourcePath);
+    for (const hypothesis of record.hypotheses) {
+      const hm = LINE_ANCHOR_RE.exec(hypothesis.anchor);
+      if (hm) anchoredPaths.push(hm[1]!);
+    }
+    if (standing) anchoredPaths.push(standing.sourcePath);
+    findings.push(...checkSourceBinding(record, anchoredPaths, lock));
     findings.push(...checkStaleness(record, range, lock));
     const review = checkReview(record, records);
     findings.push(...review.findings);

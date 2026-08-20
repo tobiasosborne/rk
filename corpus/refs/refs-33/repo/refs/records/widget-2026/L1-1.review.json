@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "card_sha256": "5b9a678f78701df7174eec557ff2d4d6116f302e9cc48a6296351b3b0992c7a2",
+  "verdict": "VALID",
+  "reviewer": {
+    "family": "gpt",
+    "backend": "codex",
+    "model": "gpt-5.6-sol",
+    "session": "019fe0f0-f003-7eb0-b754-3a856f591a8c"
+  },
+  "checked": {
+    "statement_complete": {
+      "value": true,
+      "note": "read the full statement range against the record"
+    },
+    "hypotheses_complete": {
+      "value": true,
+      "note": "every printed hypothesis is anchored inside the range"
+    },
+    "translation_faithful": {
+      "value": true,
+      "note": "statement_blessed carries both the conclusion and the hypothesis"
+    },
+    "signature_faithful": {
+      "value": true,
+      "note": "pre names the bounded-degree widget graph"
+    }
+  },
+  "findings": []
+}

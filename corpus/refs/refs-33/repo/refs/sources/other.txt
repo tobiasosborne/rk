@@ -1,0 +1,6 @@
+Section 1. Gadgets
+
+Theorem 9.9. Every gadget is square,
+where the gadget is bipartite.
+
+Proof. Omitted.

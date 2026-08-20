@@ -296,3 +296,65 @@ describe("schema anti-drift", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// BL1 (Tier A review, 2026-08-20): the record's `source` must bind to the LOCK's `source_id`
+// for every payload it anchors. The reviewer's constructed triple — a record filed as paper-A
+// whose range, payload hash, quotation and theorem all come from paper-B — produced zero
+// findings and `1/1 shard-record joins`.
+// ---------------------------------------------------------------------------------------
+describe("Check 11 — clause (g): every anchored payload belongs to record.source", () => {
+  const OTHER = ["Section 1", "Theorem 9.9. Every gadget is square,", "where the gadget is bipartite.", "", "Proof. Omitted.", ""].join("\n");
+
+  function twoSourceRepo(recordOver: Record<string, unknown> = {}): Record<string, string> {
+    const rec = {
+      ...BASE_RECORD,
+      source: "widget-2026",
+      payload_sha256: hashOf(OTHER),
+      result_label: "Theorem 9.9",
+      statement_range: "refs/sources/other.txt:2-3",
+      statement_verbatim: "Theorem 9.9. Every gadget is square,\nwhere the gadget is bipartite.",
+      hypotheses: [{ text: "where the gadget is bipartite", anchor: "refs/sources/other.txt:3" }],
+      ...recordOver,
+    };
+    return {
+      "refs/sources/widget.txt": PAPER,
+      "refs/sources/other.txt": OTHER,
+      "refs/manifest/sources.lock.json": lock([
+        { path: "sources/widget.txt", sha256: hashOf(PAPER), source_id: "widget-2026", fetch: null },
+        { path: "sources/other.txt", sha256: hashOf(OTHER), source_id: "other-2026", fetch: null },
+      ]),
+      "refs/records/widget-2026/L1-1.json": JSON.stringify(rec, null, 2),
+      "refs/records/widget-2026/L1-1.review.json": reviewFor(rec),
+    };
+  }
+
+  test("a record filed as paper-A whose statement range is paper-B's bytes is [source-mismatch]", () => {
+    const finding = expectCode(run(twoSourceRepo()).findings, "source-mismatch");
+    expect(finding.message).toContain("other-2026");
+  });
+
+  test("a hypothesis anchored in another paper is [source-mismatch]", () => {
+    const files = twoSourceRepo({
+      statement_range: "refs/sources/widget.txt:3-4",
+      statement_verbatim: "Theorem 1.1. Every widget is round,\nwhere the widget graph is d-regular.",
+      result_label: "Theorem 1.1",
+      payload_sha256: hashOf(PAPER),
+      hypotheses: [{ text: "where the gadget is bipartite", anchor: "refs/sources/other.txt:3" }],
+    });
+    expectCode(run(files).findings, "source-mismatch");
+  });
+
+  test("a lock entry with NO source_id cannot bind and is [source-mismatch], never a silent pass", () => {
+    const files = repo({
+      "refs/records/widget-2026/L1-1.json": JSON.stringify(BASE_RECORD, null, 2),
+      "refs/records/widget-2026/L1-1.review.json": reviewFor(BASE_RECORD),
+    });
+    files["refs/manifest/sources.lock.json"] = lock([{ path: "sources/widget.txt", sha256: hashOf(PAPER), fetch: null }]);
+    expectCode(run(files).findings, "source-mismatch");
+  });
+
+  test("the golden record, whose lock entry declares source_id widget-2026, is unaffected", () => {
+    expectNoCode(run(recordRepo(BASE_RECORD)).findings, "source-mismatch");
+  });
+});

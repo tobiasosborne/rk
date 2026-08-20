@@ -1,0 +1,20 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[source-mismatch]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[record-review-unusable]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 1/1 shard citations", "0/1 shard-record joins"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL1 — the reviewer's own constructed triple, transcribed. The record is filed at refs/records/widget-2026/L1-1.json and declares `source: \"widget-2026\"`, and every byte in it comes from a DIFFERENT paper: `payload_sha256`, `statement_range`, `statement_verbatim`, the hypothesis anchor, the blessed statement and the proof locus are all `sources/other.txt`, which the manifest attributes to `other-2026`. Before this repair every clause passed — the anchors verify (against the wrong paper), the verbatim matches (the wrong paper's bytes), the payload hash matches its own lock entry (the wrong paper's entry), and the review is hash-bound and VALID — so the tree produced ZERO findings and `1/1 shard-record joins`: a `status: cited` theorem attributed to a paper that does not contain it. Nothing detected it because internal consistency is exactly what a wholesale substitution preserves. The repair keeps `source_id` in `LockEntryFacts` (src/gates/refs-extraction.ts) and requires every anchored payload — statement range, every hypothesis, and any L0 standing-assumptions range — to be attributed by the lock to the record's own source (Check 11 clause (g), src/gates/refs-records-binding.ts's `checkSourceBinding`). The join's `[record-review-unusable]` is the consequence, not a second fault: a record that fails any Check 11 clause is not a weaker record, it is no record, so the shard citing it loses its cited backing too — both findings are asserted here so the fixture pins the propagation as well as the detection. `aism_behavior: n/a`. Mutation-proof: dropping the `checkSourceBinding` call returns this tree to zero findings, exit 0, `1/1 shard-record joins` — the exact pre-repair false green; observed and reverted. Fail-closed sibling case (a lock entry carrying no `source_id` at all, which also cannot attribute its bytes) is covered in test/gates/refs-records.test.ts rather than a second tree."
+}

@@ -1319,6 +1319,10 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   - Anything else under `refs/records/` (a typo'd name, a scratch file, `L1-2.reviewed.json`) is
     an ERROR `[record-unrecognized]`: an unclassified file is indistinguishable from a review
     record the gate failed to read.
+  **Source attribution.** `refs/manifest/sources.lock.json`'s per-entry `source_id` is retained by
+  `readLockFacts` (`LockEntryFacts.sourceId`) for exactly one consumer: Check 11 clause (g). It is
+  the only fact in the repo that attributes BYTES to a PAPER, and without it a record can quote any
+  acquired paper under any other paper's name.
   **Canonical bytes.** Every hash OF a record — the review's `card_sha256`, a shard's
   `record_sha256:` — is the sha256 of `canonicalRecordBytes(record)`: the PARSED JSON re-serialized
   with recursively sorted keys, two-space indent and one trailing newline (`src/gates/
@@ -1536,6 +1540,19 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
       tripwire on the cheapest omission, never a proof of completeness — and its sufficiency
       against a deliberately truncated range is an open residual recorded on bead rk-nsex for the
       next milestone review (`docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`, Residuals).
+    - (g) **The source binding** (Tier A review 2026-08-20, landing-blocker BL1). Every payload the
+      record anchors — its `statement_range`, every hypothesis anchor, and the L0
+      `standing_assumptions_range` it leans on — must be attributed by
+      `refs/manifest/sources.lock.json` to the record's OWN `source` ⇒ otherwise **ERROR
+      `[source-mismatch]`**. A lock entry that records no `source_id` at all also fails: a manifest
+      that does not say which paper a file is cannot be used to prove which paper it is. **The hole
+      this closes**: the reviewer filed a record as paper-A whose range, payload hash, quotation,
+      hypotheses and theorem all came from paper-B, and every other clause passed — anchors verify
+      (against the wrong paper), verbatim matches (the wrong paper's bytes), the payload satisfies
+      its own pin (the wrong paper's pin), the review is hash-bound and VALID — for zero findings
+      and `1/1 shard-record joins`. Internal consistency is exactly what a wholesale substitution
+      preserves, so the only thing that can catch it is an EXTERNAL attribution of bytes to papers,
+      which is what the manifest's `source_id` is. Fixture: `refs-33`.
     - **Shape and discovery** (`src/gates/refs-records.ts` / `refs-records-schema.ts`):
       unparseable or non-object JSON ⇒ **ERROR `[record-unparseable]`**; a violation of
       `schemas/extraction-record.v1.json` ⇒ **ERROR `[record-malformed]`** naming every offending
@@ -1784,6 +1801,7 @@ changed across AISM's history at time of reading.
 | `refs-30` | **review bound to the pre-edit bytes** [rk-nsex] — complete VALID review whose `card_sha256` is the record's digest from before its `statement_blessed` was edited ⇒ Check 11 clause (d) ERROR `[review-stale]`. The digest is over CANONICAL bytes, so a reformat does not fire it and a one-word edit always does |
 | `refs-31` | **structural in exploration** [rk-nsex, review finding LB4] — fabricated `statement_verbatim` behind a hash-bound VALID review, in a repo declaring `phase: exploration` ⇒ ERROR, verdict fail. Proves the ERROR is RAISED (and carried `structural: true`) under exploration; survival through `applyPhase` is proven in `test/gates/refs-records.test.ts` / `test/gates/refs-card-join.test.ts`, since the corpus harness never applies the phase matrix |
 | `refs-32` | **records golden case** [rk-nsex] — complete record + hash-bound VALID review + `cited` shard joined by canonical `record_sha256` with a matching contract ⇒ PASS, `checked 1/1 shard citations`, `1 L1 records / 1 reviewed-VALID / 2 anchors verified`, `1/1 shard-record joins`. Every red sibling above is this tree with exactly one thing changed |
+| `refs-33` | **wholesale source substitution** [rk-nsex, Tier A review BL1] — record filed under `refs/records/widget-2026/` declaring `source: widget-2026`, every anchor and byte taken from a second acquired paper the manifest attributes to `other-2026` ⇒ Check 11 clause (g) ERROR `[source-mismatch]`, plus the join's consequent `[record-review-unusable]`. Passed at zero findings and `1/1 shard-record joins` before the repair |
 
 ---
 

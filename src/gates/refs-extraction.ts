@@ -32,6 +32,14 @@ export interface LockEntryFacts {
   /** Lock-relative path, exactly as recorded (`sources/paper.pdf`). */
   path: string;
   sha256: string;
+  /** The manifest's own `source_id` for this payload, when it records one (bead rk-nsex, Tier A
+   * review BL1). Gate 3 Check 11 clause (g) is the only consumer: an extraction record filed under
+   * `refs/records/<source-id>/` may anchor ONLY payloads this lock attributes to that same
+   * source-id. Without this field the gate accepted a record filed as paper-A whose range, payload
+   * hash, quotation and theorem all came from paper-B, at `1/1 shard-record joins`. Optional
+   * because the field is optional in the manifest — and an absent `source_id` is fail-closed at
+   * the consumer (nothing can be bound to it), never a pass. */
+  sourceId?: string;
   extraction?: ExtractionRecord;
 }
 
@@ -59,12 +67,18 @@ export function readLockFacts(snapshot: RepoSnapshot): LockFacts {
       if (entry === null || typeof entry !== "object") {
         return { entries: [], error: `${LOCK_PATH} malformed (non-object files[] entry)` };
       }
-      const row = entry as { path?: unknown; sha256?: unknown; extraction?: unknown };
+      const row = entry as { path?: unknown; sha256?: unknown; source_id?: unknown; extraction?: unknown };
       if (typeof row.path !== "string" || typeof row.sha256 !== "string") {
         return { entries: [], error: `${LOCK_PATH} malformed (each entry needs string path and sha256)` };
       }
       const extraction = readExtractionRecord(row.extraction);
-      entries.push({ path: row.path, sha256: row.sha256, ...(extraction ? { extraction } : {}) });
+      const sourceId = typeof row.source_id === "string" && row.source_id.length > 0 ? row.source_id : undefined;
+      entries.push({
+        path: row.path,
+        sha256: row.sha256,
+        ...(sourceId !== undefined ? { sourceId } : {}),
+        ...(extraction ? { extraction } : {}),
+      });
     }
     return { entries };
   } catch (error) {
