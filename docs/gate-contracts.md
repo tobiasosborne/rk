@@ -330,7 +330,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
-| **Gate 7 — freshness** (M2.6) | (none) | manifest-malformation findings, per-entry STALE, per-entry declared-but-missing | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. Classified WHOLE-GATE non-structural for the same reason Gates 4-6 are: the subject matter (a repo's own adopted generated-output convention) is consolidation-shaped by construction, not a per-check carve-out |
+| **Gate 7 — freshness** (M2.6) | **every `cards-v1` finding** — per-entry STALE, declared-but-missing, cannot-be-regenerated, and both halves of the card bijection (`[card-unadopted]`, `[card-undeclared]`) [rk-nsex / BL4] | manifest-malformation findings, and per-entry STALE / declared-but-missing for every OTHER generator (`linker-index`, `linker-dag`, `render-site-v1`) | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. That reasoning held while every generated artifact was a VIEW of data checked elsewhere (`INDEX.md`, `DAG.md`, the site). **`cards-v1` is the exception and gets a carve-out** [rk-nsex / BL4]: a card is the artifact AGENTS ANSWER FROM, so its freshness is the only thing standing between a hand-edited card and a claim about the literature entering the DAG — and admission is phase-independent (campaign memo section 2a). Demoting it would mean `rk check` exits green on an edited card during the exact phase in which admission happens, which is landing-blocker BL4 of the 2026-08-20 Tier A review verbatim. This is a per-generator carve-out, deliberately narrow: nothing about `linker-index`/`linker-dag`/`render-site-v1` changes |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
 ids/aliases" class, and Gate 2's Check 12 (brittleness) and Check 15 (mandatory review, M3 review
@@ -2743,6 +2743,25 @@ that rule for any artifact a repo opts into declaring.
    binary) is no longer accepted: a typo'd or genuinely-unregistered id is indistinguishable from
    that forward-declaration case either way, so the safe direction is to ERROR both, never to
    green-light either.
+
+5. **The card bijection** (rk-nsex / BL4 — `cards-v1` only). Regenerate-and-diff verifies only what
+   the manifest DECLARES, which left three states unchecked: a reviewed extraction record with no
+   manifest at all, an empty manifest with records present, and an undeclared file sitting under
+   `refs/cards/`. Each is a card an agent can read that nothing regenerates. So, independently of
+   checks 1-4 and **before** check 2's presence-conditional early return:
+   - every `refs/records/<source-id>/L1-<n>.json` carrying a hash-bound VALID review must have a
+     `cards-v1` manifest entry for its card path ⇒ otherwise **ERROR `[card-unadopted]`**
+     (`freshness-12` with no manifest, `freshness-13` with an empty one);
+   - every `*.md` under `refs/cards/` must be declared by a `cards-v1` entry ⇒ otherwise **ERROR
+     `[card-undeclared]`** (`freshness-14`);
+   - the third direction — a declared entry with no record behind it — is check 3's
+     "cannot be regenerated for verification" (`freshness-15`).
+   Review validity is decided by the SAME function Gate 3 Check 11 clause (d) uses
+   (`src/gates/refs-records-binding.ts`'s `checkReview`), never a second copy of the rule: a record
+   whose review is absent, stale or not VALID renders only a refusal stub and is not required to be
+   adopted. Presence-conditional: a repo with no records and no `refs/cards/` files gets nothing
+   from this check, and the manifest-absent coverage line names any bijection findings rather than
+   reporting a bare non-adoption.
 
 **Coverage line.** `checked freshness: <checked>/<total> generated artifacts[ (<K> unrecognized
 generator: <path> (generator '<id>'), ...)]`. `total` is every well-formed manifest entry;

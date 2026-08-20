@@ -43,7 +43,9 @@ import type { GateConfig } from "./config";
 import type { RepoSnapshot } from "./snapshot";
 import { parseRegistry } from "./linker-parse";
 import { renderDag, renderIndex } from "./linker-render";
-import { CARD_GENERATOR, renderCardForPath } from "../render/cards";
+import { CARD_GENERATOR, CARDS_PREFIX, cardPathForRecord, renderCardForPath } from "../render/cards";
+import { collectRecords } from "./refs-records";
+import { checkReview } from "./refs-records-binding";
 
 export const MANIFEST_PATH = ".rk/generated.json";
 export const MANIFEST_SCHEMA_VERSION = "1";
@@ -281,12 +283,23 @@ function snippet(line: string | undefined): string {
   return line.length > 80 ? `${line.slice(0, 80)}…` : line;
 }
 
+/** rk-nsex / BL4: a `cards-v1` finding is STRUCTURAL, unlike every other Gate 7 finding. Gate 7 is
+ * classified whole-gate non-structural because a stale build output is a completeness-class defect
+ * over a repo's own adopted convention — but a CARD is the artifact agents answer from, and its
+ * freshness is the only thing standing between an edited card and a claim about the literature.
+ * Demoting it in exploration would mean `rk check` exits green on a hand-edited card during the
+ * exact phase in which admission happens (Tier A review BL4; campaign memo section 2a). */
+function isStructuralGenerator(generatorId: string): boolean {
+  return generatorId === CARD_GENERATOR;
+}
+
 function missingFinding(path: string, generatorId: string): Finding {
   return {
     severity: "ERROR",
     path,
     line: 1,
     message: `${path} is declared in ${MANIFEST_PATH} (generator '${generatorId}') but is absent from the repo — regenerate it or remove the manifest entry`,
+    ...(isStructuralGenerator(generatorId) ? { structural: true as const } : {}),
   };
 }
 
@@ -301,6 +314,7 @@ function staleFinding(path: string, generatorId: string, have: string, want: str
     message:
       `${path} is STALE (regenerate via '${generatorId}') — first difference at line ${line}: ` +
       `have "${snippet(haveLines[line - 1])}", want "${snippet(wantLines[line - 1])}"`,
+    ...(isStructuralGenerator(generatorId) ? { structural: true as const } : {}),
   };
 }
 
@@ -336,24 +350,96 @@ function unattributableFinding(path: string, generatorId: string, have: string, 
  * still be called directly (the corpus harness, `src/gates/index.ts`'s registry) — under that
  * default, ANY declared `render-site-v1` entry reports "cannot be regenerated for verification",
  * never a silent pass, because this pure function never regenerates it itself. */
+/** BL4 — THE CARD BIJECTION. Regenerate-and-diff only ever verifies what the manifest DECLARES, so
+ * three states slipped through it entirely: a record with a VALID review and no manifest at all, an
+ * empty manifest with records present, and an undeclared file sitting under `refs/cards/`. Each is
+ * an unchecked card an agent can read — the last one is literally a stale card the gate cannot see.
+ *
+ * The rule is a bijection between {L1 records with a hash-bound VALID review} and {cards-v1
+ * manifest entries}: every such record must be declared (`[card-unadopted]`), and every file under
+ * `refs/cards/` must be declared (`[card-undeclared]`). The third direction — a declared entry with
+ * no record behind it — is already the per-entry "cannot be regenerated" ERROR.
+ *
+ * Review validity is decided by `checkReview` (src/gates/refs-records-binding.ts), the SAME
+ * function Gate 3 Check 11 clause (d) uses, never a second copy of the rule: a record whose review
+ * is absent, stale or not VALID renders only a refusal stub, so it is not required to be adopted.
+ * Presence-conditional: a repo with no records and no `refs/cards/` files gets nothing from this. */
+function checkCardBijection(snapshot: RepoSnapshot, entries: readonly ManifestEntry[]): Finding[] {
+  const declared = new Set(entries.filter((e) => e.generator === CARD_GENERATOR).map((e) => e.path));
+  const cardFiles = [...snapshot.keys()].filter((k) => k.startsWith(CARDS_PREFIX) && k.endsWith(".md")).sort();
+  if (cardFiles.length === 0 && !hasAnyRecord(snapshot)) return [];
+
+  const findings: Finding[] = [];
+  const records = collectRecords(snapshot);
+  for (const record of records.l1) {
+    if (!checkReview(record, records).valid) continue;
+    const cardPath = cardPathForRecord(record.path);
+    if (cardPath === undefined || declared.has(cardPath)) continue;
+    findings.push({
+      severity: "ERROR",
+      path: record.path,
+      line: 1,
+      structural: true,
+      message:
+        `[card-unadopted] ${record.path} carries a hash-bound VALID review but ${cardPath} is not declared in ` +
+        `${MANIFEST_PATH} (generator '${CARD_GENERATOR}') — an undeclared card is never regenerated and never ` +
+        "diffed, so the artifact agents read is outside the freshness mechanism entirely. Run 'rk render cards', " +
+        "which writes every card and adopts it",
+    });
+  }
+  for (const cardFile of cardFiles) {
+    if (declared.has(cardFile)) continue;
+    findings.push({
+      severity: "ERROR",
+      path: cardFile,
+      line: 1,
+      structural: true,
+      message:
+        `[card-undeclared] ${cardFile} sits under ${CARDS_PREFIX} but no ${MANIFEST_PATH} entry declares it — this ` +
+        "file is a card-shaped document no generator produced and no diff checks. Either adopt it with " +
+        "'rk render cards' (which will overwrite it with the record's own rendering) or delete it",
+    });
+  }
+  return findings;
+}
+
+function hasAnyRecord(snapshot: RepoSnapshot): boolean {
+  for (const key of snapshot.keys()) {
+    if (key.startsWith("refs/records/") && key.endsWith(".json")) return true;
+  }
+  return false;
+}
+
 export function runFreshnessGate(
   snapshot: RepoSnapshot,
   _config: GateConfig,
   externalRegen: ReadonlyMap<string, ExternalRegenResult> = new Map(),
 ): GateResult {
+  // BL4: the bijection runs BEFORE the manifest-absence early return. "No manifest" is a legitimate
+  // non-adoption of the freshness mechanism in general, but it is NOT a licence to hold reviewed
+  // extraction records whose cards nothing checks.
+  const bijection = checkCardBijection(snapshot, []);
+
   if (!snapshot.has(MANIFEST_PATH)) {
     // Presence-conditional, whole-mechanism (generalizing the per-file precedent set by Gate 2
     // Check 11 / Gate 6's report/ guard — linker-25, shards-15): a repo that has never adopted
     // the freshness manifest has nothing declared to check. Never a finding; the non-adoption
     // is named on the coverage line, never a silent skip (CLAUDE.md L2).
     const coverage: CoverageLine[] = [
-      { gate: "freshness", unit: `generated artifacts (manifest not adopted: ${MANIFEST_PATH} absent)`, checked: 0, total: 0 },
+      {
+        gate: "freshness",
+        unit:
+          `generated artifacts (manifest not adopted: ${MANIFEST_PATH} absent)` +
+          (bijection.length > 0 ? `, ${bijection.length} card(s) unadopted/undeclared` : ""),
+        checked: 0,
+        total: 0,
+      },
     ];
-    return { findings: [], coverage };
+    return { findings: bijection, coverage };
   }
 
   const { entries, findings: manifestFindings } = parseManifest(snapshot);
-  const findings: Finding[] = [...manifestFindings];
+  const findings: Finding[] = [...manifestFindings, ...checkCardBijection(snapshot, entries)];
   let checked = 0;
   const unrecognized: string[] = [];
 
@@ -376,6 +462,7 @@ export function runFreshnessGate(
           path: entry.path,
           line: 1,
           message: `${entry.path} cannot be regenerated for verification (generator '${entry.generator}'): ${want.reason}`,
+          ...(isStructuralGenerator(entry.generator) ? { structural: true as const } : {}),
         });
         continue;
       }

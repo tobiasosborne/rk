@@ -12,6 +12,7 @@ import { renderCard, renderCardForPath, cardPathForRecord, recordPathForCard } f
 import { collectRecords } from "../../src/gates/refs-records";
 import { canonicalRecordSha256 } from "../../src/gates/canonical-json";
 import { freshnessGate } from "../../src/gates/freshness";
+import { applyPhase } from "../../src/gates/phase";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { sha256Hex } from "../../src/gates/sha256";
@@ -165,5 +166,81 @@ describe("collectRecords is the one parser both the gate and the renderer use", 
     const records = collectRecords(snapshotFromFiles(files()));
     expect(records.l1).toHaveLength(1);
     expect(renderCard(records.l1[0]!, records.reviews.get("refs/records/widget-2026/L1-1.json"))).toBe(cardBytes());
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// BL4 (Tier A review, 2026-08-20): "`cards-v1` inherits Gate 7's non-structural policy and
+// lacks inverse completeness. A declared hand-edited card becomes only WARN in exploration, so
+// `rk check` exits green; a valid record with no manifest or an empty manifest yields clean
+// `0/0`, as does an undeclared stale card."
+// ---------------------------------------------------------------------------------------
+describe("Gate 7 — cards-v1 is structural and the card set is a bijection", () => {
+  const entry = { path: "refs/cards/widget-2026/L1-1.md", generator: "cards-v1" };
+  const manifest = (entries: unknown[]) => JSON.stringify({ schema_version: "1", entries });
+
+  function findingFor(result: { findings: { message: string; severity: string; structural?: boolean }[] }, code: string) {
+    const hit = result.findings.find((f) => f.message.includes(`[${code}]`));
+    if (!hit) throw new Error(`no [${code}]; got ${JSON.stringify(result.findings.map((f) => f.message.slice(0, 80)))}`);
+    return hit;
+  }
+
+  test("a hand-edited declared card is STALE and STRUCTURAL (survives exploration)", () => {
+    const edited = cardBytes().replace("Every widget is round when d-regular.", "Every widget is round, no conditions.");
+    const snap = snapshotFromFiles(files({ ".rk/generated.json": manifest([entry]), "refs/cards/widget-2026/L1-1.md": edited }));
+    const result = freshnessGate.run(snap, DEFAULT_GATE_CONFIG);
+    const stale = result.findings.find((f) => f.message.includes("STALE"))!;
+    expect(stale.structural).toBe(true);
+    expect(applyPhase(result.findings, "exploration").find((f) => f.message.includes("STALE"))!.severity).toBe("ERROR");
+  });
+
+  test("a declared card that is absent from the repo is STRUCTURAL too", () => {
+    const snap = snapshotFromFiles(files({ ".rk/generated.json": manifest([entry]) }));
+    const result = freshnessGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.findings.find((f) => f.message.includes("is absent from the repo"))!.structural).toBe(true);
+  });
+
+  test("a manifest entry whose record does not exist is STRUCTURAL", () => {
+    const base = files({ ".rk/generated.json": manifest([entry]), "refs/cards/widget-2026/L1-1.md": cardBytes() });
+    delete base["refs/records/widget-2026/L1-1.json"];
+    const result = freshnessGate.run(snapshotFromFiles(base), DEFAULT_GATE_CONFIG);
+    expect(result.findings.find((f) => f.message.includes("cannot be regenerated"))!.structural).toBe(true);
+  });
+
+  test("bijection: a record with a VALID review and NO manifest at all is [card-unadopted]", () => {
+    const result = freshnessGate.run(snapshotFromFiles(files()), DEFAULT_GATE_CONFIG);
+    expect(findingFor(result, "card-unadopted").severity).toBe("ERROR");
+  });
+
+  test("bijection: an EMPTY manifest with records present is [card-unadopted]", () => {
+    const snap = snapshotFromFiles(files({ ".rk/generated.json": manifest([]) }));
+    expect(findingFor(freshnessGate.run(snap, DEFAULT_GATE_CONFIG), "card-unadopted").structural).toBe(true);
+  });
+
+  test("bijection: an undeclared file under refs/cards/ is [card-undeclared]", () => {
+    const snap = snapshotFromFiles(
+      files({
+        ".rk/generated.json": manifest([entry]),
+        "refs/cards/widget-2026/L1-1.md": cardBytes(),
+        "refs/cards/widget-2026/L1-9.md": "# a card nobody declared\n",
+      }),
+    );
+    expect(findingFor(freshnessGate.run(snap, DEFAULT_GATE_CONFIG), "card-undeclared").structural).toBe(true);
+  });
+
+  test("bijection: a record whose review is NOT valid needs no card entry (no [card-unadopted])", () => {
+    const snap = snapshotFromFiles(files({ "refs/records/widget-2026/L1-1.review.json": review({ verdict: "INVALID" }) }));
+    const result = freshnessGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.findings.filter((f) => f.message.includes("[card-unadopted]"))).toEqual([]);
+  });
+
+  test("bijection: the fully adopted repo is clean", () => {
+    const snap = snapshotFromFiles(files({ ".rk/generated.json": manifest([entry]), "refs/cards/widget-2026/L1-1.md": cardBytes() }));
+    expect(freshnessGate.run(snap, DEFAULT_GATE_CONFIG).findings).toEqual([]);
+  });
+
+  test("a repo with no records and no cards is untouched by the bijection", () => {
+    const snap = snapshotFromFiles({ "argument/lem-a.md": "---\nid: lem-a\nkind: lemma\nstatus: open\naf: none\ncontract: c\n---\n" });
+    expect(freshnessGate.run(snap, DEFAULT_GATE_CONFIG).findings).toEqual([]);
   });
 });

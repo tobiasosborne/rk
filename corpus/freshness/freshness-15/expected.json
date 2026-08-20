@@ -1,0 +1,21 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/cards/widget-2026/L1-1.md",
+      "message_pattern": "cannot be regenerated for verification"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": [
+      "generated artifacts"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, BL4 — the third direction of the bijection: a declared `cards-v1` entry whose extraction record does not exist. The card file is present and internally plausible (it is a real rendering, kept verbatim), so a presence-only check would pass it; what is missing is the AUTHORED record it claims to be a view of, which means nothing can say what the card should contain. Reported as `cannot be regenerated for verification` and counted in `checked` — the binary recognized the generator and attempted verification — never as a pass. This is also the fixture that pins `cards-v1` findings as STRUCTURAL: unlike every other Gate 7 finding it must not demote to WARN in exploration, because a card is the artifact agents answer from and admission is phase-independent (campaign memo section 2a). The survival-through-`applyPhase` proof lives in test/render/cards.test.ts, since the corpus harness never applies the phase matrix. `aism_behavior: n/a`."
+}
