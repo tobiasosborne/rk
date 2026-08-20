@@ -189,7 +189,9 @@ Every field is runtime-validated before use (`src/gates/config.ts`'s `validateCo
 enum membership for `phase`, positive-finite-number for the numeric fields
 (`linkerBrittlenessSoftCap`, `shardsMaxLines`, `refsMinRunReportingLength`,
 `refsLocusToleranceLines`), non-empty-string for
-`provenanceStatusTableFile`/`shardsPrefix`, and unknown-key detection. A malformed or unknown
+`provenanceStatusTableFile`/`shardsPrefix`/`conventionProfile`, enum membership for `signatures`
+(`required` | `optional`; ABSENT is the third, distinct state — signatures not adopted, rk-8805,
+Gate 2 Check 17), and unknown-key detection. A malformed or unknown
 field is NEVER silently accepted and NEVER silently kept — it is dropped (falling back to
 `DEFAULT_GATE_CONFIG`'s strict value, so a typo can only ever make checking STRICTER, never
 weaker) and produces exactly one loud, `structural: true` (blocking in both phases) ERROR at
@@ -319,7 +321,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | gate | structural (blocks in both phases) | non-structural (demoted to WARN in exploration) | rationale |
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
-| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id), **Check 14's STORE-INTEGRITY half** (a corrupt `.rk/l5-verdicts.jsonl`) and **Check 16's STORE-INTEGRITY half** (a corrupt `.rk/retractions.jsonl`) — including the `proved-mod-audit`-unconfirmable ERROR that exists only as a consequence of either [LB5] | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), **Check 14's PROMOTION semantics** (promotable WARN, promoted-but-unsupported ERROR over a READABLE store), **Check 16's RETRACTION-STATUS semantics** (the unconditional veto itself, over a READABLE ledger) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and the two ledger checks' STATUS semantics are likewise consolidation-weight validity concerns over a claim. **The split inside Checks 14/16 [LB5]**: a ledger that cannot be PARSED is the same class as a shard that cannot be parsed — the Phase matrix's own "parse errors" bullet — and demoting it would let `rk check` print OK on a corrupt validity ledger in exploration while `rk render` refuses the same tree, with the stamped pre-commit hook running the permissive surface. What a READABLE ledger MEANS for a declared status is a different question, and stays demotable |
+| **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id), **Check 14's STORE-INTEGRITY half** (a corrupt `.rk/l5-verdicts.jsonl`) and **Check 16's STORE-INTEGRITY half** (a corrupt `.rk/retractions.jsonl`) — including the `proved-mod-audit`-unconfirmable ERROR that exists only as a consequence of either [LB5], **and ALL of Check 17's ERRORs** (signature/entailment, rk-8805) | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), **Check 14's PROMOTION semantics** (promotable WARN, promoted-but-unsupported ERROR over a READABLE store), **Check 16's RETRACTION-STATUS semantics** (the unconditional veto itself, over a READABLE ledger). Check 17's `post-unsupported` is WARN-only in both phases, so there is nothing there to demote | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and the two ledger checks' STATUS semantics are likewise consolidation-weight validity concerns over a claim. **The split inside Checks 14/16 [LB5]**: a ledger that cannot be PARSED is the same class as a shard that cannot be parsed — the Phase matrix's own "parse errors" bullet — and demoting it would let `rk check` print OK on a corrupt validity ledger in exploration while `rk render` refuses the same tree, with the stamped pre-commit hook running the permissive surface. What a READABLE ledger MEANS for a declared status is a different question, and stays demotable. **Check 17 [rk-8805]** is structural for a different reason from the rest of that column, and it is worth stating: not because a bad signature breaks the DAG's shape, but because ADMISSION IS PHASE-INDEPENDENT (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 2a, repairing the qPCP plan review's LB4). Conjecture admission happens DURING exploration — the phase that demotes everything else — so a demotable signature barrier is an advisory barrier at exactly the moment it is load-bearing. Fixture `linker-56` pins the gate's own phase-independent verdict; `test/gates/phase-classification.test.ts` pins the `structural` flag |
 | **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all". Checks 8-9 (rk-uqxh: argument-shard source/hash/locus/quote verification and its zero-coverage guard) join the same non-structural column |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
@@ -616,6 +618,15 @@ burying the signal in noise. Fixed by hoisting both to one shared constant,
 | `provenance` | freeform | no | not parsed here — see the **provenance** gate |
 | `owner` | freeform | no | not validated |
 | `workspace` | string | no (but load-bearing) | `proofs/<id>` path; used by orphan/contract/brittleness checks |
+
+**Signature block (rk-8805, OPTIONAL, body not frontmatter).** A Layer 1 shard may carry one
+fenced ```` ```signature ```` block in its BODY — canonical JSON per `schemas/signature.v1.json`,
+read by Check 17 below. It is deliberately NOT a frontmatter field: the grammar above is flat
+`key: value` and cannot express a list of maps. Two per-repo parameters govern it, both in
+`.rk/config.json`: `signatures` (`required` | `optional` | absent = not adopted) and
+`conventionProfile` (the profile name resolved to `.rk/conventions/<name>.json`, which the snapshot
+loader includes one level deep). Neither has a default — a general tool never guesses a campaign's
+adoption state or its vocabulary.
 
 `routes:` grammar (argument.py:68-90, `aism-3ne`): each bracketed group is one route (a
 *conjunction* of its members); groups are separated by `|` (the *disjunction* — any one route
@@ -952,6 +963,96 @@ is stale against the code and must not be treated as ground truth).
       stricter reading of an existing check. Fixtures: `linker-44` (the incident, both domains),
       `linker-45` (the store-absent hole, LB3), `linker-46` (fail-closed corrupt ledger,
       gates-F14).
+
+17. **Signature and route-scoped entailment** (rk-8805, `src/gates/linker-signature.ts`; design
+    `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md` section 6, repairing the 2026-08-20 Tier A
+    review's LB2/LB6, plus the codex Tier A review of the campaign's convention-profile draft,
+    findings 10-13). Number 17, not 12: **12 is brittleness** (review follow-up FU1).
+    - **What a signature is, and where it lives.** A Layer 1 shard may carry ONE fenced
+      ```` ```signature ```` block in its BODY, canonical JSON per `schemas/signature.v1.json`:
+      `pre` (what the result REQUIRES of its context), `post` (what it PROVIDES), `regime`
+      (predicates on the ambient parameters), `profile`, `schema_version`, optional `hardness`.
+      NOT frontmatter: `parseFrontmatter` (Gate 1/2 Inputs above) is a flat `key: value` subset
+      whose only nesting is a `- item` list flattened to a `;`-separated string, and a list of maps
+      cannot be expressed in it at all; widening that grammar to real YAML would change the parse of
+      every shard in every gate.
+    - **The failure mode guarded.** `contract` is one line of prose, so "this result is being
+      applied outside the regime it was proved in" is invisible to every other check in rk. The
+      review's concrete false-green: `lem-amp` holds at qudit dimension `qdim = poly` and produces
+      `gap = const`; `thm-qpcp` runs at `qdim = const` and consumes `gap = const` AND `qdim = const`.
+      ATOM-WISE matching passes — the gap atom comes from the dependency, the dimension atom from
+      the parent's own regime — although the dependency is UNAVAILABLE in the parent's regime.
+      Fixture `linker-47`.
+    - **Values are INTERVALS; entailment is CONTAINMENT.** A predicate value is `[lo, hi]` over its
+      key's declared order, either endpoint `null` for unbounded; a bare string is the point
+      interval AND its canonical spelling. A CONTEXT interval entails a REQUIREMENT interval iff the
+      context is CONTAINED in it. One rule covers both readings the corpus needs — "at least an
+      inverse-polynomial gap" is the requirement `["inv-poly", "const"]` (fixture `linker-47`), "the
+      dimension is at most constant" is `[null, "const"]` (fixture `linker-48`) — so no key carries
+      a direction flag that could be set wrongly. An interval whose lower endpoint is not at or
+      below its upper one is `signature-malformed`, not a regime clash (fixture `linker-58`).
+    - **Orders are CHAINS or POSETS.** The convention profile declares each key's order as a chain
+      (total, weakest to strongest) or a genuine poset (`{kind, values, edges}`, `a <= b`). Some
+      vocabularies are not totally ordered — `reduction`'s `quasi-poly` is a time bound and `turing`
+      a query-model widening, neither implying the other — and linearising them ACCEPTS pairs a
+      partial order rejects, which is quiet over-acceptance on a validity surface. INCOMPARABLE
+      means NOT ENTAILED, in both directions (fixture `linker-57`). An unordered enum is the
+      degenerate poset with no edges, so equality-only comparison is not a second code path.
+    - **The entailment rule, as a FIXED POINT.** For shard P and route R (each declared route UNION
+      P's `deps`, which are required under every route — Inputs above; `deps` alone as the single
+      implicit route when none is declared): the context starts as P's own `regime` (ambient scope)
+      plus P's own `pre` (object scopes); repeatedly, any member whose ENTIRE `pre`+`regime` the
+      context entails becomes AVAILABLE and contributes its ENTIRE `post` to the context; iterate to
+      a fixed point. A member never made available is `regime-unentailed`, reported against the
+      FINAL context and naming the member, the scope, the key, the required interval and what the
+      context holds. Listing ORDER cannot change the verdict (it is not a fact about the
+      mathematics), and mutual dependencies cannot bootstrap, because availability is only ever
+      granted from the already-available context.
+    - **Scopes never cross.** `regime` predicates live in an AMBIENT scope; `pre`/`post` predicates
+      live in their object's scope, keyed by Layer 0 id. An ambient `qdim: const` does not satisfy
+      `{obj: def-local-hamiltonian, qdim: const}`, or vice versa. That separation IS the repair of
+      LB2: atom-wise matching let each required atom be satisfied by whatever source happened to
+      carry it.
+    - **The four sub-checks.** (a) every object id in `pre`/`post` resolves to a `definitions/*.md`
+      shard (`dangling-object`, `linker-50`); (b) entailment on EVERY route (`regime-unentailed`);
+      (c) CLOSED vocabulary — keys, endpoints and orders come from the profile (`unknown-key`,
+      `linker-51`; `unknown-value`, `linker-52`); (d) canonical encoding — the block text must equal
+      `canonicalSignatureText` byte for byte (`signature-noncanonical`), because canonical identity
+      is the whole basis on which two signatures are compared at all (`src/graph/bite.ts`).
+    - **Fail-closed, twice.** A malformed or unparseable block is `signature-malformed` and NEVER
+      "no signature" (`linker-53`) — degraded to "absent" it would skip the entailment check
+      entirely and, under `signatures: required`, be reported under a different name. And a repo
+      with signatures present but no readable profile gets ONE `profile-unreadable` ERROR and NO
+      vocabulary or entailment checking: checking a predicate against a guessed order is worse than
+      not checking it, because it reports green. A signature naming a different profile from the
+      repo's is `profile-mismatch`.
+    - **Required-ness is per-repo, and has THREE states** (`.rk/config.json`'s `signatures`):
+      `"required"` ⇒ a `lemma`/`proposition`/`theorem`/`corollary` with no block is a structural
+      ERROR (`signature-missing`, `linker-54`); `"optional"` ⇒ the same shard is a WARN (adopted,
+      still being filled in); ABSENT ⇒ the repo has NOT adopted signatures, no missing-signature
+      finding is produced at all, and the coverage line says `signatures: absent (not adopted)` out
+      loud. The third state is not a spelling of the second: rk is a general tool, and a WARN on
+      every result shard of every existing repo is the aism-s64 noise failure. A signature that IS
+      present is always checked in all three states — adoption governs whether one is DEMANDED,
+      never whether a present one is validated.
+    - **`post-unsupported` is a WARN, deliberately** (`linker-55`). A shard's own `post` may
+      legitimately be supplied by its PROOF rather than by any dependency — that is what proving
+      something means. The signal still ships, because the same shape is what a shard claiming more
+      than its route provides looks like.
+    - **STRUCTURAL, in both phases** (memo section 2a, repairing review LB4): admission of a
+      conjecture happens DURING exploration, the phase that demotes everything else, so a demotable
+      signature barrier is advisory at precisely the moment it is load-bearing. Fixture
+      `linker-56`; the `structural: true` flag itself is pinned in
+      `test/gates/phase-classification.test.ts`.
+    - **HONEST SCOPE.** This is shallow typing. It does not check proofs; it checks that no result
+      is applied outside its declared regime and that the regime bookkeeping is closed under the
+      DAG.
+    - Coverage line: `signatures: <S> shards / <R> routes / <E> entailments (<mode>, profile
+      '<name>': ok)`, or `signatures: absent (not adopted)`, or `signatures: <mode>, 0 shards carry
+      one` — four distinguishable states, never one that could be mistaken for another.
+    - `aism_behavior: differs` — AISM has no signature vocabulary, no convention profile and no
+      regime reasoning of any kind, so this is an rk-only mechanism the review argues for, not a
+      stricter reading of an existing check. Fixtures `linker-47` through `linker-58`.
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set
