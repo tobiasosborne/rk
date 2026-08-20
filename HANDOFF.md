@@ -43,7 +43,11 @@ Repair-wave state at cut (bead notes carry the same; worktree dirs may be gone, 
   comment holds the worked repair plan (B2 before B1; fixtures linker-59..62; two points to
   surface to the reviewer: gating `kind-status-incoherent` on adoption, and a test-only JSON
   Schema subset validator since L4 forbids a dep).
-- **rk-5lzf**: see bead note / branch log (reply pending at cut).
+- **rk-5lzf** tip `359cba6`, GREEN (3169 tests, 190/190): B6 REPAIRED (canonical recursive
+  `definitions-scan.ts`, `def-id-collision`, shared non-shard policy, NULs removed) and B1 code
+  done (`meaning-anchor:` block byte-verified; translation quote must contain the symbol;
+  source-id owns the path) but B1's four corpus fixtures OWED. B2-B5 NOT started; 280-cap
+  splits, `allowed_translations` uniqueness, `expansion:` binding outstanding.
 Corpus counts COLLIDE across the three branches (each bumped from 176 independently; 5lzf and
 8805 both claim 188; 5lzf also changed the corpus runner to apply `applyPhase`, and added a
 `notation` GATE_DIR) — integration reconciles `test/corpus.test.ts` (title + assertion +
