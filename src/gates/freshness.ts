@@ -43,6 +43,7 @@ import type { GateConfig } from "./config";
 import type { RepoSnapshot } from "./snapshot";
 import { parseRegistry } from "./linker-parse";
 import { renderDag, renderIndex } from "./linker-render";
+import { CARD_GENERATOR, renderCardForPath } from "../render/cards";
 
 export const MANIFEST_PATH = ".rk/generated.json";
 export const MANIFEST_SCHEMA_VERSION = "1";
@@ -83,9 +84,20 @@ export type ExternalRegenResult =
  * entries below are the pre-existing AISM-mirror generators Gate 2 Check 11 already renders;
  * M2.4's HTML outputs (a different worktree, not integrated here by design) add their own entries
  * later without touching anything else in this file. */
-const GENERATORS: Record<string, (snapshot: RepoSnapshot) => string> = {
-  "linker-index": (snapshot) => renderIndex(parseRegistry(snapshot).lemmas),
-  "linker-dag": (snapshot) => renderDag(parseRegistry(snapshot).lemmas),
+/** A pure generator's answer for ONE declared path. `ok: false` is the fail-closed case (rk-nsex):
+ * a generator that recognizes the path but cannot produce its bytes — a `cards-v1` entry whose
+ * extraction record is absent or malformed — reports a named ERROR, exactly like an edge-supplied
+ * generator that could not run. It is never bytes, and never a silent pass. */
+export type PureRegenResult = { ok: true; bytes: string } | { ok: false; reason: string };
+
+/** rk-nsex widened the signature from `(snapshot) => string` to `(snapshot, path) => PureRegenResult`.
+ * The two AISM-mirror generators are functions of the snapshot alone (one manifest entry, one
+ * artifact); `cards-v1` is one generator over MANY artifacts — `refs/cards/<source-id>/L1-<n>.md`,
+ * one per extraction record — so it must see which card it is being asked for. */
+const GENERATORS: Record<string, (snapshot: RepoSnapshot, path: string) => PureRegenResult> = {
+  "linker-index": (snapshot) => ({ ok: true, bytes: renderIndex(parseRegistry(snapshot).lemmas) }),
+  "linker-dag": (snapshot) => ({ ok: true, bytes: renderDag(parseRegistry(snapshot).lemmas) }),
+  [CARD_GENERATOR]: (snapshot, path) => renderCardForPath(snapshot, path),
 };
 
 interface ParsedManifest {
@@ -354,8 +366,20 @@ export function runFreshnessGate(
         findings.push(missingFinding(entry.path, entry.generator));
         continue;
       }
-      const want = pureGenerate(snapshot);
-      if (have !== want) findings.push(staleFinding(entry.path, entry.generator, have, want));
+      const want = pureGenerate(snapshot, entry.path);
+      if (!want.ok) {
+        // rk-nsex: recognized, but this run cannot say what the artifact SHOULD contain (the
+        // record behind a card is gone or malformed). Counted in `checked` — the binary did
+        // recognize the generator and attempt verification — and reported, never passed.
+        findings.push({
+          severity: "ERROR",
+          path: entry.path,
+          line: 1,
+          message: `${entry.path} cannot be regenerated for verification (generator '${entry.generator}'): ${want.reason}`,
+        });
+        continue;
+      }
+      if (have !== want.bytes) findings.push(staleFinding(entry.path, entry.generator, have, want.bytes));
       continue;
     }
 

@@ -115,6 +115,13 @@ function renderHelp(out: Out): number {
   out.log("  --out defaults to build/site (relative to --root). Writes index.html: dashboard,");
   out.log("  AND/OR DAG, and a drill-down panel per node. No server, no CDN; open the file directly.");
   out.log("  next: 'rk render' in a stamped repo, then open build/site/index.html.");
+  out.log("");
+  out.log("rk render cards — regenerate the source cards from the extraction records (rk-nsex)");
+  out.log("  usage: rk render cards [--root <dir>]");
+  out.log("  Writes refs/cards/<source-id>/L1-<n>.md from refs/records/<source-id>/L1-<n>.json plus");
+  out.log("  its review record, and adopts each card in .rk/generated.json (generator 'cards-v1') so");
+  out.log("  Gate 7 byte-diffs it. A record with no usable review renders an empty NOT ADMISSIBLE");
+  out.log("  card. The records are the truth; the cards are the view agents read.");
   return 0;
 }
 
@@ -153,6 +160,7 @@ function topHelp(out: Out): number {
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
+  out.log("  rk render cards [--root <dir>]  regenerate refs/cards/** from the extraction records (rk-nsex)");
   out.log("  rk verify --af <id> [--dry-run]  hard-tier verification driver over an af workspace (M3.6, PRD C9)");
   out.log("  rk frontier <goal-id>      the GOAL frontier: obligations, dead-ends, prospecting pool (S0)");
   out.log("  rk reward report [--strict]  fold .rk/reward-ledger.jsonl into shadow payouts (S0, prereg v1)");

@@ -35,6 +35,9 @@ export interface L1Record {
   statementVerbatim: string;
   statementBlessed: string;
   hypotheses: Hypothesis[];
+  conclusion: string;
+  proofLocus: string;
+  profile: string;
 }
 
 export interface L0Record {
@@ -43,13 +46,26 @@ export interface L0Record {
   standingAssumptionsRange?: string;
 }
 
+export interface ReviewClause {
+  name: string;
+  value: boolean;
+  note: string;
+}
+
 export interface ReviewRecord {
   path: string;
   /** The L1 record path this review is bound to by name (`L1-<n>.review.json` -> `L1-<n>.json`). */
   recordPath: string;
   cardSha256: string;
   verdict: string;
+  /** Clause names answered `false`. A non-empty list alongside `verdict: "VALID"` is
+   * `[review-inconsistent]`. */
   falseClauses: string[];
+  /** The reviewer seam, verbatim — carried so the GENERATED card can name who reviewed it
+   * (src/render/cards.ts) without re-parsing the review file. */
+  reviewer: { family: string; backend: string; model: string; session: string };
+  clauses: ReviewClause[];
+  findings: string[];
 }
 
 /** Every record finding is STRUCTURAL (docs/gate-contracts.md "Phase matrix"): admission of a
@@ -85,10 +101,13 @@ export function validateL1(path: string, sourceId: string, label: string, o: Rec
   if (statementVerbatim === undefined) missing.push("statement_verbatim");
   const statementBlessed = str(o, "statement_blessed");
   if (!statementBlessed) missing.push("statement_blessed");
-  if (!str(o, "conclusion")) missing.push("conclusion");
+  const conclusion = str(o, "conclusion");
+  if (!conclusion) missing.push("conclusion");
   if (!isObject(o.signature)) missing.push("signature (an object; schemas/signature.v1.json is rk-8805)");
-  if (!str(o, "profile")) missing.push("profile");
-  if (!str(o, "proof_locus")) missing.push("proof_locus");
+  const profile = str(o, "profile");
+  if (!profile) missing.push("profile");
+  const proofLocus = str(o, "proof_locus");
+  if (!proofLocus) missing.push("proof_locus");
 
   const statementRange = str(o, "statement_range");
   const rawHypotheses = Array.isArray(o.hypotheses) ? o.hypotheses : undefined;
@@ -154,6 +173,9 @@ export function validateL1(path: string, sourceId: string, label: string, o: Rec
     statementVerbatim: statementVerbatim!,
     statementBlessed: statementBlessed!,
     hypotheses,
+    conclusion: conclusion!,
+    proofLocus: proofLocus!,
+    profile: profile!,
   };
 }
 
@@ -190,6 +212,7 @@ export function validateReview(path: string, recordPath: string, o: Record<strin
   }
   const checked = o.checked;
   const falseClauses: string[] = [];
+  const clauses: ReviewClause[] = [];
   if (!isObject(checked)) missing.push("checked (the four review clauses)");
   else {
     for (const clause of REVIEW_CLAUSES) {
@@ -198,6 +221,7 @@ export function validateReview(path: string, recordPath: string, o: Record<strin
         missing.push(`checked.${clause} ({value: boolean, note: non-empty string})`);
         continue;
       }
+      clauses.push({ name: clause, value: c.value, note: c.note as string });
       if (c.value === false) falseClauses.push(clause);
     }
   }
@@ -205,6 +229,16 @@ export function validateReview(path: string, recordPath: string, o: Record<strin
   if (missing.length > 0) {
     return recordError(path, "review-malformed", `review record violates schemas/card-review.v1.json: ${missing.join("; ")}`);
   }
-  return { path, recordPath, cardSha256: cardSha256!, verdict: verdict!, falseClauses };
+  const r = reviewer as Record<string, string>;
+  return {
+    path,
+    recordPath,
+    cardSha256: cardSha256!,
+    verdict: verdict!,
+    falseClauses,
+    reviewer: { family: r.family!, backend: r.backend!, model: r.model!, session: r.session! },
+    clauses,
+    findings: o.findings as string[],
+  };
 }
 

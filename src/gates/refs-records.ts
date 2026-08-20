@@ -26,7 +26,7 @@ import {
 } from "./refs-records-schema";
 
 export { RECORDS_PREFIX, RANGE_ANCHOR_RE, LINE_ANCHOR_RE, recordError } from "./refs-records-schema";
-export type { Hypothesis, L0Record, L1Record, ReviewRecord } from "./refs-records-schema";
+export type { Hypothesis, L0Record, L1Record, ReviewClause, ReviewRecord } from "./refs-records-schema";
 
 const L1_PATH_RE = /^refs\/records\/([^/]+)\/(L1-[1-9][0-9]*)\.json$/;
 const L0_PATH_RE = /^refs\/records\/([^/]+)\/(L0)\.json$/;
