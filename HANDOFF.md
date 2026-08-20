@@ -3,108 +3,85 @@
 
 # HANDOFF
 
-## State (2026-08-19, session close — campaign-D w1s19 orchestrated ALL-OPUS; TJO ruled decisions 17+18 in-conversation)
+## State (2026-08-20, session close — quantum-PCP campaign (rk-campaign-E) bootstrapped; three Tier A rk items in repair waves on branches)
 
-One Fable session (dual role: rk observer + campaign-D orchestrator; TJO present at open)
-ran campaign w1s19 in ../rk-campaign-D end to end. TJO's two in-conversation rulings,
-both recorded verbatim as PRD decision rows:
+TJO directives this session (in-conversation): target = quantum PCP, HAMILTONIAN version,
+north star a complete rigorous proof; signature schema + notation register are rk-OWNED; roster
+per orchestrator recommendation; orchestrate with ZERO Fable subagents, codex gpt-5.6-sol xhigh
+for reviews/hard lanes, opus for heavy cognition, sonnet for mundane. TJO's own idea, the
+flow-expanderisation note (`../codex-scratch/flow-expanderisation.tex`), is a pre-registered arm
+candidate, ingested as `kind: original` content only.
 
-- **Decision 17 — the clause-(d) admissibility fork is CLOSED.** A target-coinciding
-  declared encoding is NOT admissible for criterion 6(i) ("I did want something that would
-  auto-provide dinur powering"); the walk-record expressivity capture is blessed and now
-  RECORDED as a trivial observation (obs-walk-record-expressivity-capture, stated).
-  Criterion 6 closes only via a non-degenerate corner occupant or obstruction (ii).
-- **Decision 18 — codex quota empty; opus substitutes** for codex lanes/reviews, records
-  state the substitution, zero Fable workers. HARD LIMIT: cross-vendor banking is NOT
-  substitutable — the ENTIRE w1s19 mathematical output (all claude-proved) is honestly
-  unbanked until codex-family passes are possible. Banking attempt 2 deferred (campaign
-  bead -e59); the powering axis needs its own fourth chain (-660; review P found the
-  "capture 4/4 after three attests" claim was an overclaim — audit half is 0/4 today).
+Design record: `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md` v2 — phases 0-4 with
+mechanical acceptance bars; authored hash-bound extraction + review records with GENERATED cards;
+convention profile + notation register + Gate 9; interval-valued signatures over chain|poset
+lattices with least-fixed-point route entailment (Check 17); mechanical bite core; admission is
+phase-independent (new checks structural). v1 was REJECTED by codex xhigh (9 blockers); v2 is the
+single repair wave (`docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`, verification table).
 
-w1s19 outcomes (ninth cycle; anti-Zeno held; four commits + close on campaign HEAD 281a772):
+Landed on master this session (all pushed): campaign-D restored from its bundle (bd dolt state
+for D is NOT bundled — empty bd there); `rk refs snowball` (rk-hzla, CLOSED: S2 citation closure
++ triage ledger; unauthenticated S2 throttles to ~1 paper/min); vendor wiring for campaigns D+E;
+four review records under `docs/reviews/`.
 
-- **Review P (opus substitution, hostile)**: w1s18 ACCEPT-WITH-REPAIRS — the mathematics
-  HOLDS under full re-derivation + extended probes (non-abelian to dim 8192); all four
-  landing-blockers were record hygiene (phantom provenance declarations, a PHANTOM sha
-  triple, the audit-half overclaim, paper labels), repaired same sitting by the single
-  RP-1 wave and verified mechanically by the orchestrator against file:line claims.
-- **The corner hunt (lane B)**: REDUCTION + a first-class negative result — the w1s18
-  non-degeneracy bar A(Pow) != A(C) is refuted AS SUFFICIENT (a stage-flagged encoding
-  meets it by point placement alone). Three structural results at stated: m=1 checks are
-  affine-trapped (predicate-importing is a THEOREM in that class); unreset multi-checks
-  compute parity, never conjunction (resets are the 2^t source); an endpoint-correlating
-  conjunct is forced. Residual question sharply posed (campaign bead -zkw).
-- **DE-v1**: the fresh consensus pass ran (cross-family confirmed — all DE-v1 bytes are
-  OpenAI-authored, so opus is the favourable direction); AMEND with one provenance-only
-  blocker, repaired line-7-only (body byte-identical, proved), verdict CARRIES FORWARD.
-  Status flip per review O's consensus-gate row is w1s20's act.
-- One transient API kill (review P's first launch, no work lost, resume clean — the
-  retry-survives protocol now 8/8 lifetime).
+**NOT landed — three Tier A branches, each REJECTED once by codex xhigh and now in their SINGLE
+repair wave (anti-Zeno: verify mechanically against file:line claims, then merge; no re-review):**
 
-rk-side: no rk source changes. New rk bead **rk-rz74** (P2): provenance-existence check —
-`rk check` passed while three shards declared provenance files that did not exist; the gate
-should ERROR on dangling `provenance:` declarations (red fixture first; Tier A review).
+| bead | branch (worktree under .claude/worktrees/) | first impl | review record |
+|---|---|---|---|
+| rk-nsex records gate (Check 11/12, cards-v1, schemas extraction-record/card-review) | `worktree-agent-a9f0e64703ddb02bd` | 186 fixtures | `2026-08-20-rk-nsex-tierA-codex.md` (6 blockers: source binding, statement envelope, join optional at promotion, cards-v1 non-structural, lossy canonical JSON, schema under-enforced) |
+| rk-5lzf profile schema + notation shards + Gate 9 + recursive defs discovery | `worktree-agent-a54164d035c96a7d3` | 188 fixtures | `2026-08-20-rk-5lzf-tierA-codex.md` (6 MAJOR: meaning not byte-bound, blessed not tied to register/overlap false green, quoted-line bypass, vacuous class coverage, evadable compat check, ambiguous recursive ids) |
+| rk-8805 signature schema + Check 17 + graph v3 + bite core | `worktree-agent-a642886cb46efe3cc` | 188 fixtures | `2026-08-20-rk-8805-tierA-codex.md` (6 MAJOR: duplicate predicates any-match, canonical non-unique, `required` evaded via kind, projection drops signature, v3 schema rejects intervals, bite clauses incomplete; ENTAILMENT CORE CONFIRMED) |
 
-**CAMPAIGN AUDIT DUE**: cycles-since-last-audit is 9 of 10 — the NEXT campaign session
-close is BLOCKED until the manual audit pass (w1s11..w1s20 read-back) is recorded.
+Each lane was told at wind-up to commit WIP on its branch and note state on its bead. Branch
+tips and bead notes are the ground truth for what got repaired; the worktree dirs may be gone.
+Corpus counts COLLIDE across the three branches (each bumped from 176 independently; 5lzf and
+8805 both claim 188; 5lzf also changed the corpus runner to apply `applyPhase`, and added a
+`notation` GATE_DIR) — integration reconciles `test/corpus.test.ts` (title + assertion +
+EXPECTED_FIXTURE_COUNT) and `corpus/README.md` Totals ONCE, after all three repair waves.
 
 ## Current work
 
-- **Observer watch.** Campaign w1s20 opens on: (1) codex-quota check FIRST — if restored,
-  banking attempt 2 (-e59, compute shas at declaration, pre-banking prose sweep), the
-  powering-axis chain (-660), and codex verification passes over the w1s19 opus-proved
-  stock; (2) the -zkw residual question; (3) DE-v1 status flip then -kba then U adoption
-  pass 3; (4) review Q incl. the R3-vs-bar-insufficiency reconciliation (-9d7);
-  (5) THE MANDATORY AUDIT at close.
+Integration of the three Tier A branches, in this order: rk-nsex (phase 0b needs it) ->
+rk-5lzf -> rk-8805. For each: read the bead note + branch log; verify each blocker's fixture
+exists and fails on its code; `timeout 300 bun test` + `timeout 120 bun run selftest` on the
+branch; merge to master; reconcile counts; append the verification table to the review record.
 
 ## Next steps
 
-1. Campaign w1s20 per the campaign HANDOFF (codex-quota gate decides the lane split).
-2. rk-side: rk-rz74 (provenance-existence gate) — natural pairing with rk-6jih (host-wide
-   codex dispatch lockfile) as wave-3 worker-contract work (rk-4w2y adjacent).
-3. rk-side P2 items unchanged: rk-pxkk / rk-ahe9 / rk-40k2 citation-kind schema.
-4. Wave 3 — worker contract / unattended operation (rk-4w2y, rk-p037, rk-j8xo), then wave 4
-   (rk-5man), wave 5 (rk-czzc/rk-g7fc + Tier C batch). rk-mief and rk-afyf still gate
-   campaign C window 2 if unattended.
-5. rk-0s3u (P3) remains open, unblocking no one.
+1. Finish/verify the three repair waves (above); merge; rebuild `dist/rk`; push.
+2. New bead from this session: phase-matrix amendment (new checks structural) — folded into the
+   three branches; close it at integration if covered.
+3. Campaign E (`../rk-campaign-E/HANDOFF.md`): resume depth-1 closure (41/149 cached), bless the
+   profile after rk-5lzf, records after rk-nsex.
+4. Tier C beads from this session: refs payload gitignore stamp; `arXiv:` locator case.
+5. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — now a HARD prerequisite for
+   campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (its bead is MISSING on this
+   device — re-file: provenance-existence gate).
 
-## TJO decision queue (rk-side, carried)
+## TJO decision queue
 
-1. rk-cz1h memo §6.1 — four questions.
-2. rk-23pr — ratify remaining autonomy plan items (Q1-Q4, PRD §5/§6 amendment text).
-3. rk-mief — campaign C: attest backfill vs waiver for the 6 window-1 closes.
-4. Roster policy: window-5 same-family waiver — standing or per-campaign?
-5. Campaign codas (decaying): rk-2h33, rk-iup9, rk-mxl3.
-6. Campaign-D frozen-P1 erratum (campaign bead -1v7): erratum record vs recipe re-run.
-7. Standing FYI: the promotion permission-hold question (harness-config decision) — the
-   w1s16 status write was not permission-held; unchanged since last close.
+1. Campaign E D1: north-star reduction class — Karp (in force) vs AAV's quantum poly-time.
+2. Campaign E D7: Gate 9 exemption for settled `contract:` lines (likely moot as built).
+3. Semantic Scholar API key for the closure crawl.
+4. Carried: rk-cz1h memo §6.1; rk-23pr ratification; rk-mief; window-5 waiver; campaign codas;
+   campaign-D frozen-P1 erratum; promotion permission-hold FYI.
 
-## Key facts for the next session
+## Key facts
 
-- **Corpus counts are 176** in all three places (test/corpus.test.ts title+assertion,
-  EXPECTED_FIXTURE_COUNT, corpus/README.md Totals). Keep them in step.
-- Campaign-D roster: decision 16 (codex-preferred, per-claim cross-vendor pairing) is the
-  STANDING policy; decision 18 (opus substitution) is TEMPORARY while codex quota is empty
-  and does not reach banking. No Fable workers ever.
-- Campaign bead-id ground truth is the TRACKER: -j10 = alpha, -bc6 = beta (both closed),
-  -1v7 = frozen-P1 erratum (open). Review O's mapping is swapped; notes on all three beads.
-- Codex kill pattern: rk-qe0j protocol unchanged (serialize windows via SendMessage; never
-  `&`; stdin /dev/null; retry on kill — 8/8 survive incl. one claude-task API kill w1s19).
-- Codex review invocation (when quota returns): `codex exec -s read-only -c
-  model_reasoning_effort="xhigh" -o <scratch> "<prompt>" < /dev/null`, tracked task,
-  timeout 5400.
-- Campaign probe-channel exit codes (1.8.0): 2 validation, 3 output exists, 4 already
-  ledgered, 5 busy (retry safe), 6 poisoned. Ledger ts NON-MONOTONE; order by append
-  position (rk-ahe9). Heredoc writes CAN fail silently — always verify with a read-back.
-- `make refresh-bundles` runs FROM THE rk REPO ROOT (bundles ../rk-campaign-D).
-- Repo self-contained since fed740c; full suite still needs `../vibefeld` (2 seam tests).
+- **Corpus count on master is 176**; the three branches each carry their own count.
+- Codex invocation that worked all session (5 reviews, 0 kills): `codex exec -s read-only
+  [-C <dir>] -c model_reasoning_effort="xhigh" -o <file> "<prompt>" < /dev/null`, tracked
+  background task, `timeout 5400`. For branch reviews run it from inside the worktree.
+- Opus implementers in `isolation: worktree` worked well; the hazard is exactly the shared count
+  files (memory: rk-orchestration-shared-file-writers).
+- Campaign-D bd is EMPTY on this device (dolt state never bundled; vendor/README documents it).
+  rk-rz74 is likewise absent here. `make refresh-bundles` now bundles D and E.
+- Campaign E roster: Fable sole seat, zero Fable workers; prover codex / verifier opus in
+  `.rk/config.json`; consolidation phase; TJO note source id `tjo-flow-expanderisation-2026`.
 
 ## Governance (standing)
 
-- L1/L2 never relaxed; corpus 176/176 + selftest are the standing guard between reviews.
-- D1-D8 + Amendment A1 stand. bd for all tracking. Campaign A wound down, B closed, C
-  between windows 1 and 2, D mid-window-1 (w1s11-w1s19 closed and committed; audit counter
-  9/10 — AUDIT DUE next close; TWO proved-mod-audit results; criteria: 2 MET, 1 equality
-  half 4/4 with audit half 0/4 pending codex, 6 an open corner question with two honest
-  exits; sole Fable seat; decisions 15-18; observer = rk main session; TJO
-  continue-authorization standing).
+L1/L2 never relaxed; 176/176 + selftest green on master at close. D1-D9 + A1 stand. bd for all
+tracking. Campaigns: A wound down, B closed, C between windows, D restored here (audit due at its
+next close, counter 9/10), E session 1 closed (audit counter 1/10).
