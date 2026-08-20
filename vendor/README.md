@@ -14,7 +14,7 @@ have their own remotes and are cloned separately (D6).
 ## Contents
 
 - `bundles/rk-campaign-A.bundle`, `bundles/rk-campaign-C.bundle`,
-  `bundles/rk-campaign-D.bundle` — full-history `git bundle --all` snapshots of
+  `bundles/rk-campaign-D.bundle`, `bundles/rk-campaign-E.bundle` — full-history `git bundle --all` snapshots of
   the campaign repositories (none has a remote). History matters: e.g. the campaign-A backing waiver reasons from
   specific historical commits. Both campaign working trees are fully tracked
   and clean at bundle time, so a bundle restore reproduces the working tree

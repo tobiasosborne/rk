@@ -38,4 +38,5 @@ restore-siblings:
 # Delete-then-copy for evidence so deletions propagate; bundles carry all refs.
 refresh-bundles:
 	git -C ../rk-campaign-D bundle create "$(CURDIR)/vendor/bundles/rk-campaign-D.bundle" --all
+	git -C ../rk-campaign-E bundle create "$(CURDIR)/vendor/bundles/rk-campaign-E.bundle" --all
 	@echo "refresh-bundles: done — commit vendor/ if anything changed"
