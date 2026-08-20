@@ -1,0 +1,25 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[record-required]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked 1/1 shard citations",
+      "0/1 shard-record joins"
+    ]
+  },
+  "config_override": {
+    "records": "required"
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL3, the half that makes the origin declaration mean something. The shard is `status: proved-mod-audit` and honestly declares `origin: literature` — so by the campaign memo's own rule ('proved-mod-audit on a literature result requires the same join; it is a literature claim, not a campaign proof') it must join to an extraction record, and it names none. It is held to exactly the same standard as a cited shard: same code `[record-required]`, same denominator, same structural classification. Without this clause the origin field would be a label with no consequence, which is worse than no label at all. The complementary case — `origin: campaign` needing no record and drawing no finding — is pinned in test/gates/refs-card-join.test.ts and appears live in `refs-40`. `aism_behavior: n/a`. Mutation-proof: dropping the literature-implies-join clause returns this tree to zero findings, exit 0, `0/0 joins`; observed and reverted."
+}

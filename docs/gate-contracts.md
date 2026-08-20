@@ -175,6 +175,12 @@ global constants — the first two ported from AISM's hardcoded defaults, the th
 - **Report-shard PREFIX** (no default — amended 2026-07-18, R12; was "AISM" in the AISM source)
   and **MAX_LINES** (280, already an env-var override in AISM) — see the report-shards gate
   section.
+- **Records mode** (`records`, refs gate Check 12): `"legacy"` (default) or `"required"`. Legacy
+  keeps the pre-record behavior — a `status: cited` shard naming no extraction record draws a WARN
+  and the run stays green — and exists ONLY as a migration path for campaigns that predate
+  records; `required` makes the join mandatory for every cited shard and every
+  `origin: literature` proved-mod-audit shard. An invalid value falls back to the default with one
+  loud config ERROR: a typo must never silently switch off a requirement a campaign opted into.
 - **Refs quote-at-locus tolerance** (`refsLocusToleranceLines`, refs gate): default **50** lines,
   added by P2/rk-wkzh (2026-08-03) with Gate 3 check 6. The claimed `refs/<path>:<lines>` window is
   widened by this many lines in each direction before the matched quote's position is tested
@@ -1602,7 +1608,8 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
     mean a second, weaker copy of "is this record usable".
 
     For every `argument/**/*.md` shard (Check 8's discovery boundary) whose `status` is `cited` or
-    `proved-mod-audit`:
+    `proved-mod-audit` — and, for the PMA half, whose declared `origin` says it is a literature
+    claim (see "The origin discriminator" below):
     - `record:` names an extraction record and `record_sha256:` its canonical digest. A `record:`
       with no valid 64-hex `record_sha256:` ⇒ **ERROR `[record-sha-absent]`**; a `record_sha256:`
       with no `record:` ⇒ **ERROR `[record-missing]`**; a `record:` naming a path that does not
@@ -1618,17 +1625,32 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
       `src/gates/linker-graph.ts`'s `normalizeContract`, imported, never re-derived) ⇒ otherwise
       **ERROR `[contract-mismatch]`**. This is the clause that rejects the review's own exploit: "a
       `status: cited` shard can carry one genuine but irrelevant quote and an arbitrary contract."
-    - **The migration path, deliberately soft.** A `status: cited` shard with NO `record:` keeps
-      exactly its pre-rk-nsex behavior (Checks 8-9 alone) and draws a **WARN `[record-absent]`**.
-      Every existing rk campaign predates records; making their absence an ERROR would turn every
-      cited shard red on the day this lands, which is how a gate gets switched off. The WARN is the
-      campaign's visible backlog. A shard that DOES name a record is held to the full join — opting
-      in is total.
-    - **Scope limit, stated honestly.** The memo requires the same join for a `proved-mod-audit`
-      claim about the literature. rk cannot mechanically distinguish a literature PMA claim from a
-      campaign's own proof-mod-audit, so a PMA shard is held to the full join when it names a
-      record and draws no finding when it does not; the distinction lives in the campaign's own
-      review. Inventing a proxy for it here would produce confident nonsense.
+    - **TWO MODES** (`.rk/config.json`'s `records`, Tier A review 2026-08-20 landing-blocker BL3 —
+      "Check 12 remains optional at the exact promotion boundary it is meant to protect"):
+      - **`"legacy"` (the default)** — a `status: cited` shard with NO `record:` keeps its
+        pre-rk-nsex behavior (Checks 8-9 alone) and draws a **WARN `[record-absent]`**. Every
+        existing rk campaign predates records; making their absence an ERROR on day one is how a
+        gate gets switched off. This is a MIGRATION setting and the WARN is the campaign's visible
+        backlog — **not a resting state**. Fixture: `refs-40`.
+      - **`"required"`** — the state a campaign that has adopted records runs in. A shard that must
+        join and names no record is a structural **ERROR `[record-required]`** (`refs-37`).
+    - **The origin discriminator** (BL3). rk cannot mechanically tell a literature
+      `proved-mod-audit` claim — which the campaign memo requires to join, "it is a literature
+      claim, not a campaign proof" — from the campaign's own proof-mod-audit, which has no record
+      to join to. The pre-repair gate resolved that by checking neither, i.e. by inferring
+      "campaign" from silence, and a PMA shard with no record and no citation produced no finding
+      at all. The repair does not invent a proxy: under `records: "required"` every
+      `proved-mod-audit` shard must declare `origin: literature | campaign` in its frontmatter ⇒
+      otherwise **ERROR `[origin-required]`** (`refs-38`), an unrecognized value included; and
+      `origin: literature` is then held to the full join on exactly the same terms as `cited`
+      (`refs-39`), while `origin: campaign` needs no record and draws no finding. In `legacy` mode
+      the declaration is not demanded and an undeclared PMA shard stays silent.
+    - **The denominator counts the population, not the opt-ins** (BL3). `D` counts every `cited`
+      shard and every `origin: literature` PMA shard, whether or not it names a record — in BOTH
+      modes. Before this repair a cited shard with no `record:` was excluded, so a repo whose every
+      cited shard was unrecorded reported `0/0 shard-record joins`: full coverage of a population
+      the check had defined to be empty. `refs-40` (legacy) therefore reads `0/1`, which is the
+      number a campaign watches go to zero before flipping to `required`.
     - Fixtures: `refs-24` (irrelevant-quote shard), `refs-32` (green control).
 
 **Known limitations / incident history.**
@@ -1825,6 +1847,10 @@ changed across AISM's history at time of reading.
 | `refs-34` | **leading-clause omission** [rk-nsex, Tier A review BL2] — the hypothesis is printed on the result's label line and the range starts on the line below it ⇒ Check 11 clause (f) START ERROR `[range-start-unlabelled]`. Passed cleanly before the repair: the verbatim matched, no anchor fell outside the range, and the terminator after the range was well-formed |
 | `refs-35` | **capitalised continuation** [rk-nsex, Tier A review BL2] — the statement continues on the next line as `Consequently …`, capitalised and outside the continuation word list ⇒ `[statement-range-truncated]` via the structural rule (no blank separation, no new labelled block), not via the word list |
 | `refs-36` | **EOF-truncated range** [rk-nsex, Tier A review BL2] — the quotable text ends exactly where the range ends and no L0 record declares `ends_at_eof` for the label ⇒ `[range-ends-at-eof]`. `refs-27` is the positive control for the declaration |
+| `refs-37` | **cited shard with no record, records: required** [rk-nsex, Tier A review BL3] — a complete reviewed record for the theorem exists and the shard does not name it ⇒ structural ERROR `[record-required]`, and the join denominator now counts it (`0/1`, where the pre-repair gate reported `0/0`) |
+| `refs-38` | **proved-mod-audit with no origin, records: required** [rk-nsex, Tier A review BL3] ⇒ ERROR `[origin-required]`. Pre-repair such a shard produced no finding at all: 'campaign' was inferred from silence |
+| `refs-39` | **origin: literature with no record** [rk-nsex, Tier A review BL3] ⇒ ERROR `[record-required]` — the declaration has consequences, or it is a label worth nothing |
+| `refs-40` | **the legacy control** [rk-nsex, Tier A review BL3] — the byte-identical tree to `refs-37` with no `.rk/config.json` ⇒ WARN `[record-absent]`, exit 0, and still `0/1 shard-record joins` so the backlog is visible; a second `origin: campaign` PMA shard proves that half stays silent |
 
 ---
 

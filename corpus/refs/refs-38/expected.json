@@ -1,0 +1,25 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[origin-required]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked 1/1 shard citations",
+      "0/0 shard-record joins"
+    ]
+  },
+  "config_override": {
+    "records": "required"
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL3, the ORIGIN half: 'a proved-mod-audit shard without a record or citation produces no finding at all.' rk cannot mechanically tell a literature PMA claim (which must join to an extraction record) from the campaign's own proof-mod-audit (which has no record to join to), and the pre-repair code resolved that by checking neither — inferring 'campaign' from silence, which is exactly how a literature claim passes with no citation at all. The repair does not invent a proxy: under `records: \"required\"` the campaign must SAY which it is, in one frontmatter field, and an undeclared or unrecognized `origin:` is an ERROR rather than a guess. Note the denominator: `0/0 shard-record joins`, correctly — until the shard declares itself a literature claim it is not yet in the join population, and the finding is precisely that it has not declared. `aism_behavior: n/a`. Mutation-proof: treating an undeclared origin as `campaign` returns this tree to zero findings, exit 0 — the pre-repair silence; observed and reverted. An invalid origin value (`origin: folklore`) is pinned in test/gates/refs-card-join.test.ts rather than a second tree."
+}

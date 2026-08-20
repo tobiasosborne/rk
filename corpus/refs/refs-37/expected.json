@@ -1,0 +1,25 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[record-required]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked 1/1 shard citations",
+      "0/1 shard-record joins"
+    ]
+  },
+  "config_override": {
+    "records": "required"
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL3 — 'Check 12 remains optional at the exact promotion boundary it is meant to protect.' The repo has a complete, reviewed extraction record for exactly this theorem, and the `status: cited` shard simply does not name it: it carries a genuine citation pair (Check 8 passes, `1/1 shard citations`) and an arbitrary contract. Pre-repair that exited 0 with a WARN and — worse — was excluded from the join denominator entirely, so the coverage line read `0/0 shard-record joins`: the check reported full coverage of a population it had defined to be empty. Two repairs, both visible here. (1) `.rk/config.json` `records: \"required\"` (declared in config_override) makes the absent join a structural ERROR `[record-required]`. (2) The denominator now counts every cited shard whether or not it names a record, so the same tree reads `0/1`. `aism_behavior: n/a`. Mutation-proof: setting the mode back to legacy returns this tree to WARN + exit 0 (that is `refs-40`, kept as its own fixture precisely so the two modes are pinned separately); dropping the denominator change restores the `0/0` blind spot with the ERROR still firing — the two are separately breakable and separately asserted. Siblings: `refs-38` (PMA with no origin), `refs-39` (literature PMA with no record), `refs-40` (the legacy control)."
+}

@@ -162,3 +162,97 @@ describe("Phase matrix — Check 12 is STRUCTURAL", () => {
     expect(expectCode(applyPhase(findings, "exploration"), "contract-mismatch").severity).toBe("ERROR");
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// BL3 (Tier A review, 2026-08-20): "Check 12 remains optional at the exact promotion boundary
+// it is meant to protect." A `cited` shard without `record:` exited green with a WARN and was
+// excluded from the join denominator; a `proved-mod-audit` shard produced no finding at all.
+// ---------------------------------------------------------------------------------------
+describe("Check 12 — records: required mode", () => {
+  const REQUIRED = { ...DEFAULT_GATE_CONFIG, records: "required" as const };
+
+  function runWith(files: Record<string, string>, config = REQUIRED): { findings: Finding[]; unit: string } {
+    const result = refsGate.run(snapshotFromFiles(files), config);
+    return { findings: result.findings, unit: result.coverage[0]!.unit };
+  }
+
+  const body = ["", "# Widgets", "", "    refs/sources/widget.txt:2", '    "Theorem 1.1. Every widget is round,"', ""].join("\n");
+  const shardWith = (fm: string[]) => ["---", ...fm, "---", ...body.split("\n")].join("\n");
+
+  test("required: a cited shard with no record: is ERROR [record-required], not a WARN", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith(["id: thm-widget", "kind: theorem", "status: cited", "af: none", "contract: c"]),
+    });
+    const finding = expectCode(runWith(files).findings, "record-required");
+    expect(finding.severity).toBe("ERROR");
+    expect(finding.structural).toBe(true);
+  });
+
+  test("legacy (the default): the same shard is a WARN and the run stays green", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith(["id: thm-widget", "kind: theorem", "status: cited", "af: none", "contract: c"]),
+    });
+    const { findings } = runWith(files, DEFAULT_GATE_CONFIG);
+    expect(expectCode(findings, "record-absent").severity).toBe("WARN");
+    expectNoCode(findings, "record-required");
+    expect(findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+  });
+
+  test("the join DENOMINATOR counts every cited shard, recorded or not, in both modes", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith(["id: thm-widget", "kind: theorem", "status: cited", "af: none", "contract: c"]),
+    });
+    expect(runWith(files, DEFAULT_GATE_CONFIG).unit).toContain("0/1 shard-record joins");
+    expect(runWith(files).unit).toContain("0/1 shard-record joins");
+  });
+
+  test("required: a proved-mod-audit shard with no origin: is ERROR [origin-required]", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith(["id: thm-widget", "kind: theorem", "status: proved-mod-audit", "af: none", "contract: c"]),
+    });
+    expect(expectCode(runWith(files).findings, "origin-required").structural).toBe(true);
+  });
+
+  test("required: origin: literature with no record is ERROR [record-required]", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith([
+        "id: thm-widget", "kind: theorem", "status: proved-mod-audit", "af: none", "contract: c", "origin: literature",
+      ]),
+    });
+    expectCode(runWith(files).findings, "record-required");
+  });
+
+  test("required: origin: campaign needs no record and is silent", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith([
+        "id: thm-widget", "kind: theorem", "status: proved-mod-audit", "af: none", "contract: c", "origin: campaign",
+      ]),
+    });
+    const { findings } = runWith(files);
+    expectNoCode(findings, "record-required");
+    expectNoCode(findings, "origin-required");
+  });
+
+  test("required: an invalid origin: value is ERROR [origin-required]", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith([
+        "id: thm-widget", "kind: theorem", "status: proved-mod-audit", "af: none", "contract: c", "origin: folklore",
+      ]),
+    });
+    expectCode(runWith(files).findings, "origin-required");
+  });
+
+  test("required: a correctly joined cited shard is still clean", () => {
+    const files = recordRepo(BASE_RECORD, {
+      "argument/thm-widget.md": shardWith([
+        "id: thm-widget", "kind: theorem", "status: cited", "af: none",
+        `contract: ${BASE_RECORD.statement_blessed}`,
+        "record: refs/records/widget-2026/L1-1.json",
+        `record_sha256: ${canonicalRecordSha256(BASE_RECORD)}`,
+      ]),
+    });
+    const { findings, unit } = runWith(files);
+    expect(findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+    expect(unit).toContain("1/1 shard-record joins");
+  });
+});

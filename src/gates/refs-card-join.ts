@@ -16,18 +16,33 @@
 // has no access to the refs/ payloads, the lock, or the records; putting the join there would mean
 // a second, weaker copy of "is this record usable".
 //
-// THE MIGRATION PATH, DELIBERATELY SOFT. A `status: cited` shard with NO `record:` keeps exactly
-// today's behavior (Checks 8/9 alone) and draws a WARN `[record-absent]`. Every rk campaign
-// predates records; making their absence an ERROR would turn every existing cited shard red on the
-// day this lands, which is how a gate gets switched off. The WARN is the campaign's visible
-// backlog. A shard that DOES name a record is held to the full join — opting in is total.
+// TWO MODES, because a migration setting and a validity barrier are different things (Tier A
+// review 2026-08-20, landing-blocker BL3: "Check 12 remains optional at the exact promotion
+// boundary it is meant to protect"). `.rk/config.json`'s `records`:
 //
-// `proved-mod-audit` joins on the same terms WHEN it names a record. It is not required to name
-// one, because rk cannot mechanically tell a literature PMA claim (which the memo says must join)
-// from a campaign's own proof-mod-audit (which has no record to join to); that distinction lives
-// in the campaign's own review, and inventing a proxy for it here would produce confident nonsense.
+//   "legacy" (the DEFAULT) — a `status: cited` shard with NO `record:` keeps exactly the
+//     pre-record behavior (Checks 8/9 alone) and draws a WARN `[record-absent]`. Every rk campaign
+//     predates records; making their absence an ERROR on day one is how a gate gets switched off.
+//     This is a MIGRATION setting and the WARN is the campaign's visible backlog — not a resting
+//     state, and documented as such in the Gate 3 contract.
+//   "required" — the state a campaign that has adopted records runs in. A cited shard with no
+//     valid join is a structural ERROR `[record-required]`; every `proved-mod-audit` shard must
+//     declare `origin: literature | campaign` (`[origin-required]`), and `origin: literature`
+//     requires the join too.
+//
+// THE ORIGIN DISCRIMINATOR (BL3). rk cannot mechanically tell a literature PMA claim (which the
+// memo says must join) from a campaign's own proof-mod-audit (which has no record to join to).
+// The pre-repair code inferred nothing and therefore checked nothing — a PMA shard with neither a
+// record nor a citation produced no finding at all. The repair does not invent a proxy: it makes
+// the campaign SAY which it is, in one required frontmatter field, and holds the literature answer
+// to the full join. An undeclared or unrecognized `origin:` is an ERROR, never a guess.
+//
+// THE DENOMINATOR counts every cited shard and every literature-PMA shard, whether or not it names
+// a record — before this, a cited shard with no `record:` was excluded from `0/0`, so the coverage
+// line's own numbers hid exactly the population the check exists for.
 
 import type { Finding } from "./framework";
+import type { RecordsMode } from "./config";
 import { normalizeContract } from "./linker-graph";
 import type { L1Record } from "./refs-records";
 import { RECORDS_PREFIX } from "./refs-records";
@@ -43,18 +58,29 @@ export interface CardJoinResult {
   declared: number;
 }
 
-const JOINING_STATUSES = new Set(["cited", "proved-mod-audit"]);
 const SHA256_RE = /^[0-9a-fA-F]{64}$/;
+const ORIGINS = new Set(["literature", "campaign"]);
 
 function joinError(path: string, code: string, message: string): Finding {
   // Structural: admission of a cited claim is phase-independent (campaign memo section 2a).
   return { severity: "ERROR", path, line: 1, message: `[${code}] ${message}`, structural: true };
 }
 
-/** Joins every `status: cited` / `proved-mod-audit` shard to the extraction record it names.
- * `usable` holds ONLY records that passed every Check 11 clause — a record with any defect is not
- * a weaker record here, it is no record at all. */
-export function checkCardJoin(snapshot: RepoSnapshot, usable: Map<string, L1Record>, known: Set<string>): CardJoinResult {
+/** Which shards this check holds to the join, and why. `cited` always; `proved-mod-audit` only
+ * when the campaign has declared it a LITERATURE claim. In required mode an undeclared origin on a
+ * PMA shard is itself the finding — the one thing that must never happen is silently deciding the
+ * shard is a campaign proof because nobody said otherwise. */
+function originOf(fields: Record<string, string>): string | undefined {
+  const raw = fields.origin;
+  return raw !== undefined && raw !== "" ? raw : undefined;
+}
+
+export function checkCardJoin(
+  snapshot: RepoSnapshot,
+  usable: Map<string, L1Record>,
+  known: Set<string>,
+  mode: RecordsMode,
+): CardJoinResult {
   const findings: Finding[] = [];
   let joined = 0;
   let declared = 0;
@@ -62,30 +88,82 @@ export function checkCardJoin(snapshot: RepoSnapshot, usable: Map<string, L1Reco
   for (const path of shardPaths(snapshot)) {
     const fm = parseFrontmatter(snapshot.get(path)!);
     const status = fm.fields.status;
-    if (status === undefined || !JOINING_STATUSES.has(status)) continue;
+    if (status !== "cited" && status !== "proved-mod-audit") continue;
+
+    // BL3: does this shard have to join at all? `cited` always does. `proved-mod-audit` does when
+    // the campaign declares it a literature claim — and in required mode it must make that
+    // declaration, because "nobody said" is exactly how the pre-repair silence arose.
+    const origin = originOf(fm.fields);
+    let mustJoin = status === "cited";
+    if (status === "proved-mod-audit") {
+      if (origin === undefined) {
+        if (mode === "required") {
+          findings.push(
+            joinError(
+              path,
+              "origin-required",
+              "status: proved-mod-audit shard declares no origin: — under .rk/config.json records: \"required\" every " +
+                "proved-mod-audit claim must say whether it is a LITERATURE claim (origin: literature, which must join " +
+                "to an extraction record exactly like a cited claim) or the campaign's own proof (origin: campaign, " +
+                "which has no record to join to). rk cannot tell them apart mechanically, and inferring 'campaign' " +
+                "from silence is what let a literature claim through with no citation at all",
+            ),
+          );
+        }
+      } else if (!ORIGINS.has(origin)) {
+        if (mode === "required") {
+          findings.push(
+            joinError(
+              path,
+              "origin-required",
+              `status: proved-mod-audit shard declares origin: ${JSON.stringify(origin)}, which is neither ` +
+                '"literature" nor "campaign" — an unrecognized origin is never read as either one',
+            ),
+          );
+        }
+      } else if (origin === "literature") {
+        mustJoin = true;
+      }
+    }
 
     const recordPath = fm.fields.record;
     const recordSha = fm.fields.record_sha256;
     if (recordPath === undefined || recordPath === "") {
       if (recordSha !== undefined && recordSha !== "") {
-        declared += 1;
+        if (mustJoin) declared += 1;
         findings.push(
           joinError(path, "record-missing", `shard declares record_sha256: but no record: path — the digest names nothing`),
         );
         continue;
       }
-      if (status === "cited") {
-        findings.push({
-          severity: "WARN",
-          path,
-          line: 1,
-          message:
-            "[record-absent] status: cited shard names no extraction record (record: + record_sha256: frontmatter). " +
-            "Its contract is byte-verified against nothing: Checks 8/9 confirm the quote occurs where it claims, not " +
-            "that the contract is what the paper proves. This is the pre-record legacy path — file an extraction " +
-            `record under ${RECORDS_PREFIX}<source-id>/ and join it (docs/gate-contracts.md Gate 3 Check 12)`,
-        });
+      if (!mustJoin) continue;
+      // BL3: counted in the denominator whether or not it names a record — the pre-repair `0/0`
+      // hid exactly the population this check exists for.
+      declared += 1;
+      if (mode === "required") {
+        findings.push(
+          joinError(
+            path,
+            "record-required",
+            `status: ${status} shard names no extraction record (record: + record_sha256: frontmatter) and ` +
+              '.rk/config.json sets records: "required". Its contract is byte-verified against nothing: Checks 8/9 ' +
+              "confirm a quote occurs where it claims, never that the contract is what the paper proves. File an " +
+              `extraction record under ${RECORDS_PREFIX}<source-id>/, have it reviewed, and join it by canonical hash`,
+          ),
+        );
+        continue;
       }
+      findings.push({
+        severity: "WARN",
+        path,
+        line: 1,
+        message:
+          `[record-absent] status: ${status} shard names no extraction record (record: + record_sha256: frontmatter). ` +
+          "Its contract is byte-verified against nothing: Checks 8/9 confirm the quote occurs where it claims, not " +
+          "that the contract is what the paper proves. This is the pre-record LEGACY path, kept green only because " +
+          '.rk/config.json leaves records: "legacy" — a migration setting, not a resting state. File an extraction ' +
+          `record under ${RECORDS_PREFIX}<source-id>/ and join it, then set records: "required"`,
+      });
       continue;
     }
 

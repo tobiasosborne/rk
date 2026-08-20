@@ -137,7 +137,7 @@ export const refsGate: Gate = {
     // `0 L1 records` on the coverage line rather than skipping silently (L2).
     const records = collectRecords(snapshot);
     const recordVerdict = verifyRecords(snapshot, lockFacts, records);
-    const cardJoin = checkCardJoin(snapshot, recordVerdict.usable, new Set(records.discoveredL1));
+    const cardJoin = checkCardJoin(snapshot, recordVerdict.usable, new Set(records.discoveredL1), config.records);
     const findings: Finding[] = [];
 
     let passed = 0;
