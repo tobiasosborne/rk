@@ -19,7 +19,6 @@ import type { Finding } from "./framework";
 import type { GateConfig } from "./config";
 import type { RepoSnapshot } from "./snapshot";
 import type { Lemma } from "./linker-lemma";
-import { allDepIds } from "./linker-lemma";
 import { extractSignatureBlock, type Signature } from "./signature";
 import { conventionProfilePath, parseConventionProfile, type ConventionProfile } from "./signature-profile";
 import { checkRoute, scopeLabel, validateSignatureVocabulary } from "./signature-entail";
@@ -133,7 +132,6 @@ export function checkSignatures(
 
   const mode = config.signatures;
   const pathOf = new Map(lemmas.map((l) => [l.id, l.path]));
-  const depsById = new Map(lemmas.map((l) => [l.id, allDepIds(l)]));
 
   // Required-ness (memo section 6). A shard whose block is present-but-malformed is NOT also
   // reported as missing: one fault, one finding.
@@ -193,14 +191,7 @@ export function checkSignatures(
     const line = lineOf.get(l.id);
     for (const route of routesOf(l)) {
       routesChecked++;
-      const r = checkRoute({
-        shardId: l.id,
-        signature: sig,
-        route,
-        signatureOf: signatures,
-        profile,
-        depsOf: (id) => depsById.get(id) ?? [],
-      });
+      const r = checkRoute({ shardId: l.id, signature: sig, route, signatureOf: signatures, profile });
       entailmentsChecked += r.entailmentsChecked;
       const routeLabel = route.length === 0 ? "(no dependencies)" : `[${route.join("; ")}]`;
       for (const { memberId, failure } of r.failures) {
@@ -210,7 +201,7 @@ export function checkSignatures(
             line,
             "regime-unentailed",
             `${l.id}: on route ${routeLabel}, dependency '${memberId}' requires ${scopeLabel(failure.scope)} ` +
-              `'${failure.key}' = '${failure.required}', which the context does not entail ` +
+              `'${failure.key}' = ${failure.required}, which the context does not entail ` +
               `(context holds: ${failure.available.length === 0 ? "nothing for that key" : failure.available.join(", ")}) — ` +
               `'${memberId}' is unavailable here, so its post is NOT added to the context`,
           ),
@@ -223,7 +214,7 @@ export function checkSignatures(
             line,
             "post-unsupported",
             `${l.id}: on route ${routeLabel}, its own post ${scopeLabel(failure.scope)} '${failure.key}' = ` +
-              `'${failure.required}' is not supplied by the route (context holds: ` +
+              `${failure.required} is not supplied by the route (context holds: ` +
               `${failure.available.length === 0 ? "nothing for that key" : failure.available.join(", ")}) — ` +
               `WARN, not ERROR: a PROOF may legitimately supply what no dependency does`,
           ),

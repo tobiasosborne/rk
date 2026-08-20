@@ -16,9 +16,8 @@ const PROFILE_PATH = ".rk/conventions/rk-test.v1.json";
 const PROFILE = JSON.stringify({
   schema_version: "1",
   name: "rk-test.v1",
-  lattices: { gap: ["inv-poly", "inv-log", "const"], d: ["const", "poly"] },
+  lattices: { gap: ["inv-poly", "inv-log", "const"], qdim: { kind: "chain", values: ["const", "poly"] } },
   enums: { norm: ["relative", "absolute"] },
-  key_polarity: { gap: "afforded", d: "afforded", norm: "equality" },
 });
 
 const ADOPTED: Partial<GateConfig> = { conventionProfile: "rk-test.v1", signatures: "optional" };
@@ -64,16 +63,16 @@ const REVIEW_PAIR = {
   "argument/lem-amp.md": shard(
     "lem-amp",
     {},
-    signatureBody({ regime: [{ d: "poly" }], post: [{ gap: "const", obj: "def-promise-gap" }] }),
+    signatureBody({ regime: [{ qdim: "poly" }], post: [{ gap: "const", obj: "def-promise-gap" }] }),
   ),
   "argument/thm-qpcp.md": shard(
     "thm-qpcp",
     { kind: "theorem", deps: "lem-amp" },
     signatureBody({
-      regime: [{ d: "const" }],
+      regime: [{ qdim: "const" }],
       pre: [
-        { d: "const", obj: "def-local-hamiltonian" },
         { gap: "const", obj: "def-promise-gap" },
+        { obj: "def-local-hamiltonian", qdim: "const" },
       ],
       post: [{ gap: "const", obj: "def-promise-gap" }],
     }),
@@ -91,13 +90,13 @@ function withCode(findings: Finding[], code: string): Finding[] {
 describe("Check 17 — the review's exact pair is REJECTED", () => {
   const { findings, coverage } = run(REVIEW_PAIR);
 
-  test("one regime-unentailed ERROR, naming lem-amp and the `d` key", () => {
+  test("one regime-unentailed ERROR, naming lem-amp and the `qdim` key", () => {
     const hits = withCode(findings, "regime-unentailed");
     expect(hits).toHaveLength(1);
     expect(hits[0]!.severity).toBe("ERROR");
     expect(hits[0]!.path).toBe("argument/thm-qpcp.md");
     expect(hits[0]!.message).toContain("lem-amp");
-    expect(hits[0]!.message).toContain("'d'");
+    expect(hits[0]!.message).toContain("'qdim'");
     expect(hits[0]!.message).toContain("poly");
     expect(hits[0]!.message).toContain("const");
   });
@@ -120,8 +119,8 @@ describe("Check 17 — the same chain with the amplifier available in context", 
       "thm-ok",
       { kind: "theorem", deps: "lem-amp" },
       signatureBody({
-        regime: [{ d: "poly" }],
-        pre: [{ d: "poly", obj: "def-local-hamiltonian" }],
+        regime: [{ qdim: "poly" }],
+        pre: [{ obj: "def-local-hamiltonian", qdim: "poly" }],
         post: [{ gap: "const", obj: "def-promise-gap" }],
       }),
     ),

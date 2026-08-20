@@ -1,12 +1,12 @@
 ---
-id: lem-amp
+id: lem-cap
 kind: lemma
 status: stated
 af: none
-contract: Gap amplification: a constant promise gap, at polynomial qudit dimension.
+contract: A construction valid at constant qudit dimension, in the relative normalisation.
 ---
 
-Gap amplification: a constant promise gap, at polynomial qudit dimension.
+A construction valid at constant qudit dimension, in the relative normalisation.
 
 ```signature
 {
@@ -21,8 +21,10 @@ Gap amplification: a constant promise gap, at polynomial qudit dimension.
   "regime": [
     {
       "norm": "relative",
-      "qdim": "poly",
-      "qdim_cap": "poly"
+      "qdim": [
+        null,
+        "const"
+      ]
     }
   ],
   "schema_version": "1"

@@ -19,5 +19,5 @@
     "conventionProfile": "rk-corpus.v1"
   },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
-  "notes": "Check 17(c), value half. 'inverse-polynomial' is the profile's 'inv-poly' spelled the way a human would write it -- exactly the near-miss a substring or fuzzy comparison would silently accept. The lattice is CLOSED: an undeclared value has no rank, so it can neither entail nor be entailed, and saying so loudly is the only honest outcome."
+  "notes": "Check 17(c), value half. 'inverse-polynomial' is the profile's 'inv-poly' spelled the way a human would write it -- exactly the near-miss a substring or fuzzy comparison would silently accept. The vocabulary is CLOSED: an undeclared value has no place in its key's order, so it can neither entail nor be entailed. BOTH endpoints of an interval are checked this way, not just the first."
 }

@@ -7,20 +7,37 @@
       "inv-log",
       "const"
     ],
-    "qdim": [
-      "const",
-      "polylog",
-      "poly"
-    ],
-    "qdim_cap": [
-      "const",
-      "polylog",
-      "poly"
-    ],
-    "degree": [
-      "bounded",
-      "unbounded"
-    ]
+    "qdim": {
+      "kind": "chain",
+      "values": [
+        "const",
+        "polylog",
+        "poly"
+      ]
+    },
+    "reduction": {
+      "kind": "poset",
+      "values": [
+        "karp",
+        "quasi-poly",
+        "quantum-poly",
+        "turing"
+      ],
+      "edges": [
+        [
+          "karp",
+          "quasi-poly"
+        ],
+        [
+          "karp",
+          "quantum-poly"
+        ],
+        [
+          "karp",
+          "turing"
+        ]
+      ]
+    }
   },
   "enums": {
     "norm": [
@@ -31,13 +48,5 @@
       "finite",
       "to-infinity"
     ]
-  },
-  "key_polarity": {
-    "gap": "afforded",
-    "qdim": "afforded",
-    "qdim_cap": "capped",
-    "degree": "afforded",
-    "norm": "equality",
-    "n_regime": "equality"
   }
 }

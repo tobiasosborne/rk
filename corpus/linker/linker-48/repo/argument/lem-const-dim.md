@@ -3,10 +3,10 @@ id: lem-const-dim
 kind: lemma
 status: stated
 af: none
-contract: A construction valid only when the qudit dimension is capped at a constant.
+contract: A construction valid only when the qudit dimension is at most constant.
 ---
 
-A construction valid only when the qudit dimension is capped at a constant.
+A construction valid only when the qudit dimension is at most constant.
 
 ```signature
 {
@@ -20,7 +20,10 @@ A construction valid only when the qudit dimension is capped at a constant.
   "profile": "rk-corpus.v1",
   "regime": [
     {
-      "qdim_cap": "const"
+      "qdim": [
+        null,
+        "const"
+      ]
     }
   ],
   "schema_version": "1"

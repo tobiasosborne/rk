@@ -3,11 +3,11 @@ id: thm-loose
 kind: theorem
 status: stated
 af: none
-contract: A theorem whose ambient only caps the qudit dimension at polylog.
+contract: A theorem whose ambient runs at polynomial qudit dimension.
 deps: lem-const-dim
 ---
 
-A theorem whose ambient only caps the qudit dimension at polylog.
+A theorem whose ambient runs at polynomial qudit dimension.
 
 ```signature
 {
@@ -21,7 +21,7 @@ A theorem whose ambient only caps the qudit dimension at polylog.
   "profile": "rk-corpus.v1",
   "regime": [
     {
-      "qdim_cap": "polylog"
+      "qdim": "poly"
     }
   ],
   "schema_version": "1"

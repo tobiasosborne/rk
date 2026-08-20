@@ -10,7 +10,7 @@
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-loose.md",
-      "message_pattern": "'qdim_cap' = 'const'"
+      "message_pattern": "'qdim' = [*, const]"
     }
   ],
   "exit_code": 1,
@@ -19,5 +19,5 @@
     "conventionProfile": "rk-corpus.v1"
   },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
-  "notes": "POLARITY, capped half (campaign profile draft conventions-qpcp-v1-draft.md 9.1 / D4). The memo's single-direction rule is unsound for CAPPED constraints: read literally it lets a polylog-capped ambient discharge a requirement of 'dimension is at most constant'. Under polarity `qdim_cap` is capped, so entailment runs the OTHER way -- the context's guarantee must be at least as TIGHT as the requirement -- and a polylog cap does not meet a const cap. Green twin: linker-49's chain, where the tight guarantee meets the loose requirement. The lattice values are in the SAME parameter order as the afforded `qdim` key; a profile that also reverses a `_cap` array is refused outright (the double-flip trap)."
+  "notes": "The CAPPED reading of a parameter, and the reason predicate values are INTERVALS rather than points with a per-key polarity flag (codex Tier A review of the convention-profile draft, findings 10-11). `lem-const-dim` needs the dimension capped at a constant: its requirement is the interval [*, const]. `thm-loose` runs at qdim=poly, whose point interval is NOT contained in it, so the lemma is unavailable. The SAME containment rule produces linker-47's afforded-style rejection -- one rule, both readings, and no key needs a direction flag that could be set wrongly."
 }

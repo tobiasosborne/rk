@@ -19,5 +19,5 @@
     "conventionProfile": "rk-corpus.v1"
   },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
-  "notes": "Check 17(c), closed vocabulary, key half: 'sparsity' is not in the profile, so it has no declared polarity and no declared order -- there is no rule by which it could be compared. An undeclared key must be an ERROR and never merely 'unmet': reported as unmet it would read as a substantive regime clash, and silently ignored it would let an author express any constraint they liked and have it checked by nothing."
+  "notes": "Check 17(c), closed vocabulary, key half: 'sparsity' is not in the profile, so it has no declared order -- there is no rule by which it could be compared. An undeclared key must be an ERROR and never merely 'unmet': reported as unmet it would read as a substantive regime clash, and silently ignored it would let an author express any constraint they liked and have it checked by nothing."
 }

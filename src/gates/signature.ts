@@ -18,6 +18,10 @@
 // receives a `malformed` state carrying its own error code, so an authoring typo can never
 // silently skip the entailment check.
 
+import { validateSignatureShape } from "./signature-shape";
+
+export { validateParsedSignature, validateSignatureShape } from "./signature-shape";
+
 /** `schema_version` every signature block must carry, as a STRING (rule 10 — a version field a
  * consumer checks before parsing the rest). */
 export const SIGNATURE_SCHEMA_VERSION = "1";
@@ -25,13 +29,25 @@ export const SIGNATURE_SCHEMA_VERSION = "1";
 /** The fenced block's info string: ```` ```signature ````. */
 export const SIGNATURE_FENCE_INFO = "signature";
 
+/** One endpoint of a predicate interval. `null` means UNBOUNDED on that side. */
+export type Bound = string | null;
+
+/** A predicate VALUE is an INTERVAL `[lo, hi]` over its key's declared order (codex Tier A review
+ * of the convention-profile draft, findings 10-11). A bare string `x` is the point interval
+ * `[x, x]`, and is its canonical spelling. Entailment is CONTAINMENT: a context interval entails a
+ * requirement interval iff the context is contained in it. That one rule covers both readings the
+ * corpus needs — "at least this much is available" (`gap: [inv-poly, const]` as a requirement) and
+ * "the parameter is at most this" (`qdim: [null, const]`) — which an earlier draft needed two keys
+ * and a polarity flag to express. */
+export type PredicateValue = string | [Bound, Bound];
+
 /** One `pre`/`post` entry: a predicate on ONE Layer 0 object. `obj` is the object's
- * `definitions/*.md` id; `keys` are the profile-declared predicate keys and their lattice/enum
- * values (`{obj: def-promise-gap, gap: const, norm: relative}` parses to
- * `{obj: "def-promise-gap", keys: {gap: "const", norm: "relative"}}`). */
+ * `definitions/*.md` id; `keys` are the profile-declared predicate keys and their interval values
+ * (`{obj: def-promise-gap, gap: const}` parses to
+ * `{obj: "def-promise-gap", keys: {gap: "const"}}`). */
 export interface SignaturePredicate {
   obj: string;
-  keys: Record<string, string>;
+  keys: Record<string, PredicateValue>;
 }
 
 /** The parsed signature. `regime` entries are OBJECT-FREE predicates on the ambient parameters —
@@ -42,7 +58,7 @@ export interface Signature {
   profile: string;
   pre: SignaturePredicate[];
   post: SignaturePredicate[];
-  regime: Record<string, string>[];
+  regime: Record<string, PredicateValue>[];
   hardness?: string;
 }
 
@@ -54,8 +70,7 @@ export type SignatureBlock =
   | { state: "ok"; signature: Signature; line: number };
 
 const FENCE = "```";
-const REQUIRED_KEYS = ["post", "pre", "profile", "regime", "schema_version"] as const;
-const OPTIONAL_KEYS = ["hardness"] as const;
+
 
 interface RawFence {
   /** 1-indexed line of the opening fence. */
@@ -91,129 +106,34 @@ function findFences(content: string): RawFence[] {
   return out;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-/** True iff `v` contains a numeric value anywhere. Signature values are STRINGS — which is how
- * the memo's "no floats" becomes mechanical rather than a float/int judgement call at every
- * nesting level. */
-function containsNumber(v: unknown): boolean {
-  if (typeof v === "number") return true;
-  if (Array.isArray(v)) return v.some(containsNumber);
-  if (isPlainObject(v)) return Object.values(v).some(containsNumber);
-  return false;
-}
-
-function parsePredicateList(raw: unknown, field: string): { ok: true; value: SignaturePredicate[] } | { ok: false; why: string } {
-  if (!Array.isArray(raw)) return { ok: false, why: `"${field}" must be an array` };
-  const out: SignaturePredicate[] = [];
-  for (const [i, entry] of raw.entries()) {
-    if (!isPlainObject(entry)) return { ok: false, why: `"${field}"[${i}] must be an object` };
-    const obj = entry.obj;
-    if (typeof obj !== "string" || obj.length === 0) {
-      return { ok: false, why: `"${field}"[${i}] must carry a non-empty "obj" (the Layer 0 object id)` };
-    }
-    const keys: Record<string, string> = {};
-    for (const [k, v] of Object.entries(entry)) {
-      if (k === "obj") continue;
-      if (typeof v !== "string" || v.length === 0) {
-        return { ok: false, why: `"${field}"[${i}]."${k}" must be a non-empty string value` };
-      }
-      keys[k] = v;
-    }
-    if (Object.keys(keys).length === 0) {
-      return { ok: false, why: `"${field}"[${i}] carries "obj" but no predicate key — an empty claim about an object` };
-    }
-    out.push({ obj, keys });
-  }
-  return { ok: true, value: out };
-}
-
-function parseRegimeList(raw: unknown): { ok: true; value: Record<string, string>[] } | { ok: false; why: string } {
-  if (!Array.isArray(raw)) return { ok: false, why: `"regime" must be an array` };
-  const out: Record<string, string>[] = [];
-  for (const [i, entry] of raw.entries()) {
-    if (!isPlainObject(entry)) return { ok: false, why: `"regime"[${i}] must be an object` };
-    const keys: Record<string, string> = {};
-    for (const [k, v] of Object.entries(entry)) {
-      if (k === "obj") {
-        return {
-          ok: false,
-          why: `"regime"[${i}] carries "obj" — regime predicates are AMBIENT (object-free) by construction; an object-scoped claim belongs in pre/post`,
-        };
-      }
-      if (typeof v !== "string" || v.length === 0) {
-        return { ok: false, why: `"regime"[${i}]."${k}" must be a non-empty string value` };
-      }
-      keys[k] = v;
-    }
-    if (Object.keys(keys).length === 0) return { ok: false, why: `"regime"[${i}] is empty` };
-    out.push(keys);
-  }
-  return { ok: true, value: out };
-}
-
-/** Validates one already-JSON-parsed signature value against schemas/signature.v1.json's shape.
- * CLOSED: an unknown top-level key is a malformation, not tolerated forward compatibility — a
- * version field exists precisely so vocabulary growth is a bump, never a silent widening
- * (rule 10). */
-export function validateSignatureShape(raw: unknown): { ok: true; value: Signature } | { ok: false; why: string } {
-  if (!isPlainObject(raw)) return { ok: false, why: "the signature block must be a JSON object" };
-  if (containsNumber(raw)) {
-    return { ok: false, why: "numeric values are not permitted (every signature value is a string — the canonical form has no floats)" };
-  }
-  const known = new Set<string>([...REQUIRED_KEYS, ...OPTIONAL_KEYS]);
-  for (const k of Object.keys(raw)) {
-    if (!known.has(k)) {
-      return { ok: false, why: `unknown top-level key "${k}" (known: ${[...known].sort().join(", ")})` };
-    }
-  }
-  for (const k of REQUIRED_KEYS) {
-    if (!(k in raw)) return { ok: false, why: `missing required field "${k}"` };
-  }
-  if (raw.schema_version !== SIGNATURE_SCHEMA_VERSION) {
-    return { ok: false, why: `"schema_version" is ${JSON.stringify(raw.schema_version)}, must be the string "${SIGNATURE_SCHEMA_VERSION}"` };
-  }
-  if (typeof raw.profile !== "string" || raw.profile.length === 0) {
-    return { ok: false, why: `"profile" must be a non-empty string naming the convention profile` };
-  }
-  if ("hardness" in raw && (typeof raw.hardness !== "string" || raw.hardness.length === 0)) {
-    return { ok: false, why: `"hardness" must be a non-empty string when present` };
-  }
-  const pre = parsePredicateList(raw.pre, "pre");
-  if (!pre.ok) return pre;
-  const post = parsePredicateList(raw.post, "post");
-  if (!post.ok) return post;
-  const regime = parseRegimeList(raw.regime);
-  if (!regime.ok) return regime;
-
-  const value: Signature = {
-    schema_version: SIGNATURE_SCHEMA_VERSION,
-    profile: raw.profile,
-    pre: pre.value,
-    post: post.value,
-    regime: regime.value,
-  };
-  if (typeof raw.hardness === "string") value.hardness = raw.hardness;
-  return { ok: true, value };
-}
-
 /** The signature's canonical JSON VALUE: every object's keys sorted, every array's elements
  * sorted by their own canonical rendering. Two signatures making the same claim canonicalise to
  * byte-identical text — that is what makes bite's "same claim" test (src/graph/bite.ts) immune to
  * reordering and re-nesting. */
 function canonicalValue(sig: Signature): Record<string, unknown> {
-  const predicate = (p: SignaturePredicate): Record<string, string> => sortKeys({ obj: p.obj, ...p.keys });
+  const predicate = (p: SignaturePredicate): Record<string, unknown> =>
+    sortKeys({ obj: p.obj, ...normaliseValues(p.keys) } as Record<string, unknown>);
   const value: Record<string, unknown> = {
     post: sortByText(sig.post.map(predicate)),
     pre: sortByText(sig.pre.map(predicate)),
     profile: sig.profile,
-    regime: sortByText(sig.regime.map((r) => sortKeys(r))),
+    regime: sortByText(sig.regime.map((r) => sortKeys(normaliseValues(r)))),
     schema_version: sig.schema_version,
   };
   if (sig.hardness !== undefined) value.hardness = sig.hardness;
   return sortKeys(value);
+}
+
+/** Collapses every point interval `[x, x]` to its canonical bare-string spelling. Applied before
+ * sorting, so two signatures that differ only in which spelling they used canonicalise to the same
+ * bytes — one value, one encoding. (`readPredicateValue` in signature-shape.ts refuses the verbose
+ * spelling outright, so this is belt-and-braces for values constructed in memory.) */
+function normaliseValues(keys: Record<string, PredicateValue>): Record<string, PredicateValue> {
+  const out: Record<string, PredicateValue> = {};
+  for (const [k, v] of Object.entries(keys)) {
+    out[k] = Array.isArray(v) && v[0] !== null && v[0] === v[1] ? v[0] : v;
+  }
+  return out;
 }
 
 function sortKeys<T extends Record<string, unknown>>(o: T): T {

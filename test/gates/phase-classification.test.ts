@@ -186,13 +186,7 @@ describe("Gate 2 Check 17 (signature/entailment) structural classification [rk-8
   // STRUCTURAL and are never demoted. Admission of a conjecture happens DURING exploration — the
   // phase that demotes everything else — so a demotable signature barrier is an advisory barrier
   // at precisely the moment it is load-bearing.
-  // Polarity is declared for every key (profile draft 9.1/D4) — a profile that omits it is
-  // refused outright, so there is no such thing as an accidentally-unpolarised test profile.
-  const PROFILE = JSON.stringify({
-    lattices: { gap: ["inv-poly", "const"], d: ["const", "poly"] },
-    enums: {},
-    key_polarity: { gap: "afforded", d: "afforded" },
-  });
+  const PROFILE = JSON.stringify({ lattices: { gap: ["inv-poly", "const"], qdim: ["const", "poly"] } });
   const sigBlock = (value: unknown): string => "```signature\n" + JSON.stringify(value, null, 2) + "\n```\n";
   const ADOPTED = { ...DEFAULT_GATE_CONFIG, conventionProfile: "p.v1", signatures: "required" as const };
 
@@ -205,10 +199,10 @@ describe("Gate 2 Check 17 (signature/entailment) structural classification [rk-8
       "definitions/def-g.md": "---\nid: def-g\nterm: G\nkind: original\nstatus: locked\nconsensus: x\n---\n",
       "argument/lem-amp.md":
         "---\nid: lem-amp\nkind: lemma\n---\n\n" +
-        sigBlock({ post: [{ gap: "const", obj: "def-g" }], pre: [], profile: "p.v1", regime: [{ d: "poly" }], schema_version: "1" }),
+        sigBlock({ post: [{ gap: "const", obj: "def-g" }], pre: [], profile: "p.v1", regime: [{ qdim: "poly" }], schema_version: "1" }),
       "argument/thm-q.md":
         "---\nid: thm-q\nkind: theorem\ndeps: lem-amp\n---\n\n" +
-        sigBlock({ post: [], pre: [{ gap: "const", obj: "def-g" }], profile: "p.v1", regime: [{ d: "const" }], schema_version: "1" }),
+        sigBlock({ post: [], pre: [{ gap: "const", obj: "def-g" }], profile: "p.v1", regime: [{ qdim: "const" }], schema_version: "1" }),
     });
     const { findings } = linkerGate.run(snap, ADOPTED);
     expectPresent(findings, "[regime-unentailed]");

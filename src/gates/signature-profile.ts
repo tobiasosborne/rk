@@ -1,66 +1,53 @@
-// PURITY: pure — no fs/network/clock (L3). The CONVENTION PROFILE accessor: the closed
-// vocabulary a signature's predicate keys and values are drawn from, and the POLARITY that fixes
-// each key's comparison direction. Ground truth:
-// docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md sections 5 and 6, the campaign profile draft
-// `../rk-campaign-E/docs/conventions-qpcp-v1-draft.md` sections 9.1-9.3 + decision D4, and
-// docs/gate-contracts.md Gate 2 Check 17(c).
+// PURITY: pure — no fs/network/clock (L3). The CONVENTION PROFILE accessor: the closed vocabulary
+// a signature's predicate keys and values are drawn from, the ORDER on each key, and the interval
+// containment rule entailment is defined by. Ground truth:
+// docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md sections 5-6, the campaign profile draft
+// `../rk-campaign-E/docs/conventions-qpcp-v1-draft.md` section 9 AND the codex Tier A review of
+// that draft (findings 10-13), and docs/gate-contracts.md Gate 2 Check 17(c).
 //
 // SCOPE BOUNDARY (deliberate, recorded): the profile's own SCHEMA
 // (`schemas/convention-profile.v1.json`) and its campaign content (gap normalisation, term
 // conventions, NLTS phrasing, tracked symbol classes) belong to the notation/profile work item
-// (memo section 5, bead rk-5lzf), NOT to this one. This module therefore reads the profile through
-// the SMALLEST shape Check 17 actually needs — `lattices`, `enums`, and each key's polarity — and
-// IGNORES every other top-level key, so the richer profile that lane lands validates here
-// unchanged. What it does NOT do is guess: a profile with no usable vocabulary, or with a key
-// whose polarity is undeclared, is refused outright (fail closed), never silently treated as an
-// empty vocabulary (which would make every key "unknown") or a default polarity (which would
-// silently pick a comparison direction on a validity surface).
+// (memo section 5, bead rk-5lzf), NOT to this one. This module reads the profile through the
+// SMALLEST shape Check 17 needs — the per-key ORDER — and IGNORES every other top-level key, so the
+// richer profile that lane lands validates here unchanged. What it does NOT do is guess: a profile
+// with no usable vocabulary, an edge naming an undeclared value, or a cyclic order is refused
+// outright (fail closed), never silently treated as an empty or partial vocabulary.
 //
-// POLARITY — the whole reason this module is not just a map of arrays. The memo declared ONE rule
-// ("context value at or above the required value") over lattices like `d: const < poly`. The
-// profile lane showed that rule is unsound for CAPPED constraints: read literally, a context of
-// `qdim: poly` would satisfy a requirement of `qdim: const`, i.e. "this result holds only when the
-// dimension is constant" would be discharged by a polynomial-dimension ambient. Two readings are
-// genuinely needed by the corpus (amplification needs dimension ROOM; the north star CAPS
-// dimension), so each key declares which it is:
+// TWO ORDER KINDS, because one of them was a lie:
+//   - `chain`  — a total order, written weakest -> strongest: `gap: inv-poly < inv-log < const`.
+//   - `poset`  — a PARTIAL order, declared by its cover edges `[a, b]` meaning `a <= b`. The
+//                review's finding 12: `reduction` is genuinely not totally ordered (`quasi-poly`
+//                is a time bound, `quantum-poly` a model widening; neither implies the other), and
+//                linearising it ACCEPTS pairs a partial order rejects — quiet over-acceptance on a
+//                validity surface. An unordered enum is the degenerate case: a poset with no
+//                edges, on which entailment is equality.
 //
-//   - `afforded`  — "at least this much of the parameter is available".
-//                   Entailed iff rank(context) >= rank(required).
-//   - `capped`    — "the parameter is guaranteed to be at most this".
-//                   Entailed iff rank(context) <= rank(required)  (a tighter guarantee is stronger).
-//   - `equality`  — an unordered enum; entailed iff the values are equal. Putting a false order on
-//                   these (pretending `energy-density-qudit` is "above" `relative`) is exactly the
-//                   quiet coercion the profile exists to forbid.
+// ONE ENTAILMENT RULE, because two were a lie too. Every predicate value is an INTERVAL over its
+// key's order (see `PredicateValue`, src/gates/signature.ts). A CONTEXT interval C entails a
+// REQUIREMENT interval R iff C is CONTAINED in R: `R.lo <= C.lo` and `C.hi <= R.hi`, with a `null`
+// endpoint meaning unbounded on that side. This subsumes the afforded/capped/equality polarity an
+// earlier draft carried as a per-key flag — "at least a constant gap" is the requirement
+// `[inv-poly, const]`, "dimension at most constant" is `[null, const]`, and an enum requirement is
+// a point interval — so the flag is GONE, and a profile still carrying `key_polarity` is refused
+// rather than read under semantics its author did not intend.
 //
-// ORDER DIRECTION, stated once and binding on every profile: `values` is ALWAYS ordered by the
-// underlying PARAMETER, smallest/weakest -> largest/strongest, WHATEVER the polarity. Polarity
-// picks the comparison; it never re-reads the array backwards. The draft's alternative convention
-// (write a `_cap` lattice reversed and keep one comparison) is REJECTED here because combined with
-// a polarity field it double-flips — and silently, since both spellings parse. `parseConventionProfile`
-// therefore REFUSES a profile in which `<key>_cap` is the reverse of its base `<key>`, naming the
-// trap, rather than accepting an ordering whose meaning depends on which convention the author had
-// in mind. The memo's own red pair is unaffected: it is a clash on the AFFORDED key (a result
-// needing poly-dimension room, consumed in a constant-dimension context), not on a capped key.
+// On a poset, containment uses the partial order and INCOMPARABLE means NOT ENTAILED — which is
+// the whole point: a `quasi-poly` result does not discharge a `turing` requirement, nor the
+// reverse.
 
-/** Which comparison rule a key obeys. */
-export const POLARITIES = ["afforded", "capped", "equality"] as const;
-export type Polarity = (typeof POLARITIES)[number];
-export type OrderedPolarity = "afforded" | "capped";
+import type { Bound, PredicateValue } from "./signature";
 
-export interface LatticeEntry {
-  /** Ordered by the underlying parameter, weakest -> strongest, whatever the polarity. */
-  values: readonly string[];
-  polarity: OrderedPolarity;
-}
+export type LatticeSpec =
+  | { kind: "chain"; values: readonly string[] }
+  | { kind: "poset"; values: readonly string[]; edges: readonly (readonly [string, string])[] };
 
-/** The subset of the convention profile Check 17 consumes. Extra keys in the on-disk profile are
- * ignored by construction (see the header's scope boundary). */
+/** The subset of the convention profile Check 17 consumes: one ORDER per predicate key. Extra
+ * top-level keys in the on-disk profile are ignored by construction (see the header). */
 export interface ConventionProfile {
   /** The profile's name as configured, e.g. "qpcp.v1" — carried so a finding can name it. */
   name: string;
-  lattices: Record<string, LatticeEntry>;
-  /** key -> unordered closed value set; polarity `equality`. */
-  enums: Record<string, readonly string[]>;
+  keys: Record<string, LatticeSpec>;
 }
 
 export type ProfileParse = { ok: true; profile: ConventionProfile } | { ok: false; why: string };
@@ -75,91 +62,89 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-interface RawEntry {
-  values: string[];
-  /** Polarity declared INLINE on the entry, when the `{values, polarity}` spelling is used. */
-  inline?: Polarity;
-}
-
-function readValues(raw: unknown, field: string, key: string): { ok: true; entry: RawEntry } | { ok: false; why: string } {
-  let values: unknown = raw;
-  let inline: Polarity | undefined;
-  if (isPlainObject(raw)) {
-    values = raw.values;
-    const p = raw.polarity;
-    if (p !== undefined) {
-      if (typeof p !== "string" || !(POLARITIES as readonly string[]).includes(p)) {
-        return { ok: false, why: `"${field}.${key}.polarity" must be one of ${POLARITIES.join(", ")}` };
-      }
-      inline = p as Polarity;
-    }
+function readValues(raw: unknown, where: string): { ok: true; values: string[] } | { ok: false; why: string } {
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || v.length === 0)) {
+    return { ok: false, why: `${where} must be an array of non-empty strings` };
   }
-  if (!Array.isArray(values) || values.some((v) => typeof v !== "string" || v.length === 0)) {
-    return { ok: false, why: `"${field}.${key}" must be an array of non-empty strings (or {values, polarity})` };
-  }
+  const values = raw as string[];
   if (values.length === 0) {
-    return { ok: false, why: `"${field}.${key}" is empty — a key with no admissible value can never be entailed` };
+    return { ok: false, why: `${where} is empty — a key with no admissible value can never be entailed` };
   }
-  if (new Set(values as string[]).size !== values.length) {
-    return { ok: false, why: `"${field}.${key}" repeats a value — the order would then be ambiguous` };
+  if (new Set(values).size !== values.length) {
+    return { ok: false, why: `${where} repeats a value — the order would then be ambiguous` };
   }
-  return { ok: true, entry: { values: values as string[], inline } };
+  return { ok: true, values };
 }
 
-function readMap(
-  raw: unknown,
-  field: string,
-): { ok: true; value: Record<string, RawEntry> } | { ok: false; why: string } {
-  if (raw === undefined) return { ok: true, value: {} };
-  if (!isPlainObject(raw)) return { ok: false, why: `"${field}" must be an object mapping key -> value list` };
-  const out: Record<string, RawEntry> = {};
-  for (const [key, values] of Object.entries(raw)) {
-    const entry = readValues(values, field, key);
-    if (!entry.ok) return entry;
-    out[key] = entry.entry;
+function readSpec(raw: unknown, key: string): { ok: true; spec: LatticeSpec } | { ok: false; why: string } {
+  // Sugar: a bare array is a CHAIN, the spelling the memo and the campaign draft both use.
+  if (Array.isArray(raw)) {
+    const v = readValues(raw, `"lattices.${key}"`);
+    return v.ok ? { ok: true, spec: { kind: "chain", values: v.values } } : v;
   }
-  return { ok: true, value: out };
-}
-
-function readPolarityMap(raw: unknown): { ok: true; value: Record<string, Polarity> } | { ok: false; why: string } {
-  if (raw === undefined) return { ok: true, value: {} };
-  if (!isPlainObject(raw)) return { ok: false, why: `"key_polarity" must be an object mapping key -> polarity` };
-  const out: Record<string, Polarity> = {};
-  for (const [key, p] of Object.entries(raw)) {
-    if (typeof p !== "string" || !(POLARITIES as readonly string[]).includes(p)) {
-      return { ok: false, why: `"key_polarity.${key}" must be one of ${POLARITIES.join(", ")}` };
+  if (!isPlainObject(raw)) return { ok: false, why: `"lattices.${key}" must be an array (a chain) or {kind, values, edges}` };
+  const kind = raw.kind ?? "chain";
+  if (kind !== "chain" && kind !== "poset") {
+    return { ok: false, why: `"lattices.${key}.kind" must be "chain" or "poset"` };
+  }
+  const v = readValues(raw.values, `"lattices.${key}.values"`);
+  if (!v.ok) return v;
+  if (kind === "chain") {
+    if (raw.edges !== undefined) {
+      return { ok: false, why: `"lattices.${key}" is a chain but declares "edges" — a chain's order IS its array order` };
     }
-    out[key] = p as Polarity;
+    return { ok: true, spec: { kind: "chain", values: v.values } };
   }
-  return { ok: true, value: out };
+  const rawEdges = raw.edges;
+  if (!Array.isArray(rawEdges)) return { ok: false, why: `"lattices.${key}.edges" must be an array of [a, b] pairs meaning a <= b` };
+  const declared = new Set(v.values);
+  const edges: [string, string][] = [];
+  for (const [i, e] of rawEdges.entries()) {
+    if (!Array.isArray(e) || e.length !== 2 || e.some((x) => typeof x !== "string")) {
+      return { ok: false, why: `"lattices.${key}.edges"[${i}] must be a two-element [a, b] pair of strings` };
+    }
+    const [a, b] = e as [string, string];
+    if (!declared.has(a) || !declared.has(b)) {
+      return { ok: false, why: `"lattices.${key}.edges"[${i}] names a value not in "values": ${!declared.has(a) ? a : b}` };
+    }
+    if (a === b) return { ok: false, why: `"lattices.${key}.edges"[${i}] is the self-edge [${a}, ${a}] — reflexivity is implicit` };
+    edges.push([a, b]);
+  }
+  const spec: LatticeSpec = { kind: "poset", values: v.values, edges };
+  const cycle = findCycle(spec);
+  if (cycle) {
+    return { ok: false, why: `"lattices.${key}" has a cycle in its order (${cycle.join(" <= ")}) — distinct values that are mutually <= are one value, not an order` };
+  }
+  return { ok: true, spec };
 }
 
-/** Resolves one key's polarity from the two accepted spellings, refusing a contradiction. */
-function resolvePolarity(
-  key: string,
-  entry: RawEntry,
-  declared: Record<string, Polarity>,
-): { ok: true; polarity: Polarity } | { ok: false; why: string } {
-  const fromMap = declared[key];
-  if (entry.inline !== undefined && fromMap !== undefined && entry.inline !== fromMap) {
-    return { ok: false, why: `key '${key}' declares polarity '${entry.inline}' inline and '${fromMap}' in "key_polarity" — they must agree` };
+function findCycle(spec: Extract<LatticeSpec, { kind: "poset" }>): string[] | undefined {
+  for (const v of spec.values) {
+    for (const w of reachable(spec, v)) {
+      if (w !== v && reachable(spec, w).has(v)) return [v, w, v];
+    }
   }
-  const polarity = entry.inline ?? fromMap;
-  if (polarity === undefined) {
-    return {
-      ok: false,
-      why:
-        `key '${key}' declares no polarity — every key must state 'afforded', 'capped', or ` +
-        `'equality' (profile draft section 9.1 / D4). There is no default: guessing a comparison ` +
-        `direction on a validity surface is how a capped constraint silently reads as an afforded one`,
-    };
+  return undefined;
+}
+
+function reachable(spec: Extract<LatticeSpec, { kind: "poset" }>, from: string): Set<string> {
+  const seen = new Set<string>([from]);
+  const stack = [from];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    for (const [a, b] of spec.edges) {
+      if (a === cur && !seen.has(b)) {
+        seen.add(b);
+        stack.push(b);
+      }
+    }
   }
-  return { ok: true, polarity };
+  return seen;
 }
 
 /** Parses profile TEXT into the accessor shape. Fails closed: an unparseable, non-object, or
- * structurally unusable profile yields `ok: false` and NO partial vocabulary — a half-read
- * profile is how "unknown key" silently becomes "no key is known" (CLAUDE.md L2). */
+ * structurally unusable profile yields `ok: false` and NO partial vocabulary — a half-read profile
+ * is how "unknown key" silently becomes "no key is known" (CLAUDE.md L2). */
 export function parseConventionProfile(name: string, text: string): ProfileParse {
   let raw: unknown;
   try {
@@ -168,109 +153,110 @@ export function parseConventionProfile(name: string, text: string): ProfileParse
     return { ok: false, why: `not parseable JSON: ${e instanceof Error ? e.message : String(e)}` };
   }
   if (!isPlainObject(raw)) return { ok: false, why: "the profile must be a JSON object" };
-  const rawLattices = readMap(raw.lattices, "lattices");
-  if (!rawLattices.ok) return rawLattices;
-  const rawEnums = readMap(raw.enums, "enums");
-  if (!rawEnums.ok) return rawEnums;
-  const declared = readPolarityMap(raw.key_polarity);
-  if (!declared.ok) return declared;
-
-  const both = Object.keys(rawLattices.value).filter((k) => k in rawEnums.value);
-  if (both.length > 0) {
-    return { ok: false, why: `key(s) declared as BOTH a lattice and an enum: ${both.sort().join(", ")} — the comparison rule would be ambiguous` };
+  if (raw.key_polarity !== undefined) {
+    return {
+      ok: false,
+      why:
+        `the profile declares "key_polarity", which this version does not implement. Predicate ` +
+        `values are INTERVALS and entailment is containment (codex Tier A review of the profile ` +
+        `draft, findings 10-11), so a capped constraint is written as the requirement ` +
+        `[null, <bound>] rather than as a second key with a polarity flag. Reading a polarised ` +
+        `profile under interval semantics would silently apply an order the author did not intend`,
+    };
   }
-  if (Object.keys(rawLattices.value).length === 0 && Object.keys(rawEnums.value).length === 0) {
+
+  const keys: Record<string, LatticeSpec> = {};
+  const lattices = raw.lattices;
+  if (lattices !== undefined) {
+    if (!isPlainObject(lattices)) return { ok: false, why: `"lattices" must be an object mapping key -> order` };
+    for (const [key, value] of Object.entries(lattices)) {
+      const spec = readSpec(value, key);
+      if (!spec.ok) return spec;
+      keys[key] = spec.spec;
+    }
+  }
+  const enums = raw.enums;
+  if (enums !== undefined) {
+    if (!isPlainObject(enums)) return { ok: false, why: `"enums" must be an object mapping key -> value list` };
+    for (const [key, value] of Object.entries(enums)) {
+      if (key in keys) return { ok: false, why: `key '${key}' is declared as BOTH a lattice and an enum — the order would be ambiguous` };
+      const v = readValues(value, `"enums.${key}"`);
+      if (!v.ok) return v;
+      // An enum is the DEGENERATE poset: no edges, so entailment on it is equality. One
+      // representation, one comparison function — never a second "unordered" code path.
+      keys[key] = { kind: "poset", values: v.values, edges: [] };
+    }
+  }
+  if (Object.keys(keys).length === 0) {
     return { ok: false, why: `neither "lattices" nor "enums" declares a single key — there is no vocabulary to check against` };
   }
-
-  const lattices: Record<string, LatticeEntry> = {};
-  for (const [key, entry] of Object.entries(rawLattices.value)) {
-    const p = resolvePolarity(key, entry, declared.value);
-    if (!p.ok) return p;
-    if (p.polarity === "equality") {
-      return { ok: false, why: `key '${key}' is declared under "lattices" but with polarity 'equality' — an unordered key belongs under "enums"` };
-    }
-    lattices[key] = { values: entry.values, polarity: p.polarity };
-  }
-  const enums: Record<string, readonly string[]> = {};
-  for (const [key, entry] of Object.entries(rawEnums.value)) {
-    const p = resolvePolarity(key, entry, declared.value);
-    if (!p.ok) return p;
-    if (p.polarity !== "equality") {
-      return { ok: false, why: `key '${key}' is declared under "enums" but with polarity '${p.polarity}' — an ordered key belongs under "lattices"` };
-    }
-    enums[key] = entry.values;
-  }
-
-  // The double-flip trap (see the header): a `_cap` key written as the REVERSE of its base key
-  // means the author used the "reversed array + one comparison" convention, which combined with a
-  // polarity field compares backwards — silently, since both spellings parse.
-  for (const key of Object.keys(lattices)) {
-    if (!key.endsWith("_cap")) continue;
-    const base = lattices[key.slice(0, -"_cap".length)];
-    if (!base) continue;
-    const capValues = lattices[key]!.values;
-    if (capValues.length === base.values.length && capValues.every((v, i) => v === base.values[base.values.length - 1 - i])) {
-      return {
-        ok: false,
-        why:
-          `'${key}' is written as the REVERSE of '${key.slice(0, -"_cap".length)}'. Every lattice — ` +
-          `capped ones included — is ordered by the underlying parameter, weakest -> strongest; ` +
-          `polarity 'capped' flips the COMPARISON, so a reversed array flips it twice and the key ` +
-          `silently compares backwards`,
-      };
-    }
-  }
-
-  return { ok: true, profile: { name, lattices, enums } };
+  return { ok: true, profile: { name, keys } };
 }
 
-/** Which comparison rule `key` obeys, or `undefined` when the profile declares it nowhere
- * (⇒ `unknown-key`). */
-export function keyPolarity(profile: ConventionProfile, key: string): Polarity | undefined {
-  if (key in profile.lattices) return profile.lattices[key]!.polarity;
-  if (key in profile.enums) return "equality";
-  return undefined;
+/** `key`'s declared order, or `undefined` when the profile declares it nowhere (⇒ `unknown-key`). */
+export function keySpec(profile: ConventionProfile, key: string): LatticeSpec | undefined {
+  return profile.keys[key];
 }
 
-/** The declared values for `key`, in profile order (weakest -> strongest for a lattice). */
+/** The declared values for `key`, in profile order. */
 export function keyValues(profile: ConventionProfile, key: string): readonly string[] | undefined {
-  return profile.lattices[key]?.values ?? profile.enums[key];
+  return profile.keys[key]?.values;
 }
 
-/** `value`'s position in `key`'s lattice, or `undefined` when the key is not a lattice or the
- * value is not declared. */
-export function valueRank(profile: ConventionProfile, key: string, value: string): number | undefined {
-  const lattice = profile.lattices[key];
-  if (!lattice) return undefined;
-  const i = lattice.values.indexOf(value);
-  return i === -1 ? undefined : i;
+/** True iff `a <= b` in `key`'s order. Reflexive. On a chain, index comparison; on a poset,
+ * reachability over the declared edges. Either value undeclared ⇒ false (an unknown value is
+ * reported separately and must never also read as satisfaction). */
+export function leq(profile: ConventionProfile, key: string, a: string, b: string): boolean {
+  const spec = profile.keys[key];
+  if (!spec) return false;
+  if (!spec.values.includes(a) || !spec.values.includes(b)) return false;
+  if (a === b) return true;
+  if (spec.kind === "chain") return spec.values.indexOf(a) <= spec.values.indexOf(b);
+  return reachable(spec, a).has(b);
 }
 
-/** True iff SOME value the context holds for `key` meets the `required` value, under `key`'s
- * declared POLARITY (see this file's header). An unknown key or unknown value never entails —
- * vocabulary errors are reported separately (Check 17(c)) and must not also read as satisfaction.
- * A context holding NOTHING for the key never entails either, in either polarity: an undeclared
- * cap is not a guarantee. */
+export interface Interval {
+  lo: Bound;
+  hi: Bound;
+}
+
+/** A value as its interval. A bare string is the point interval. */
+export function intervalOf(value: PredicateValue): Interval {
+  return typeof value === "string" ? { lo: value, hi: value } : { lo: value[0], hi: value[1] };
+}
+
+/** True iff the interval is consistent in `key`'s order: an unbounded endpoint always is, and a
+ * bounded pair must satisfy `lo <= hi`. On a poset, INCOMPARABLE endpoints are inconsistent — an
+ * interval between two incomparable values names no set of values anyone can reason about. */
+export function intervalConsistent(profile: ConventionProfile, key: string, iv: Interval): boolean {
+  if (iv.lo === null || iv.hi === null) return true;
+  return leq(profile, key, iv.lo, iv.hi);
+}
+
+/** ENTAILMENT: the context interval `ctx` entails the requirement interval `req` iff `ctx` is
+ * CONTAINED in `req` — `req.lo <= ctx.lo` and `ctx.hi <= req.hi`, a `null` requirement endpoint
+ * being unbounded (satisfied by anything) and a `null` CONTEXT endpoint being unbounded (satisfied
+ * only by an equally unbounded requirement). On a poset, incomparable endpoints are NOT entailed. */
+export function intervalEntails(profile: ConventionProfile, key: string, ctx: Interval, req: Interval): boolean {
+  const loOk = req.lo === null || (ctx.lo !== null && leq(profile, key, req.lo, ctx.lo));
+  const hiOk = req.hi === null || (ctx.hi !== null && leq(profile, key, ctx.hi, req.hi));
+  return loOk && hiOk;
+}
+
+/** True iff SOME value the context holds for `key` entails `required`. A context holding nothing
+ * for the key never entails (fail closed: an undeclared bound is not a guarantee), and an unknown
+ * key or value never entails either — vocabulary errors are reported separately (Check 17(c)) and
+ * must not also read as satisfaction. */
 export function keyEntailed(
   profile: ConventionProfile,
   key: string,
-  available: Iterable<string>,
-  required: string,
+  available: Iterable<PredicateValue>,
+  required: PredicateValue,
 ): boolean {
-  const polarity = keyPolarity(profile, key);
-  if (polarity === undefined) return false;
-  if (polarity === "equality") {
-    if (!(profile.enums[key] ?? []).includes(required)) return false;
-    for (const v of available) if (v === required) return true;
-    return false;
-  }
-  const need = valueRank(profile, key, required);
-  if (need === undefined) return false;
+  if (!profile.keys[key]) return false;
+  const req = intervalOf(required);
   for (const v of available) {
-    const have = valueRank(profile, key, v);
-    if (have === undefined) continue;
-    if (polarity === "afforded" ? have >= need : have <= need) return true;
+    if (intervalEntails(profile, key, intervalOf(v), req)) return true;
   }
   return false;
 }

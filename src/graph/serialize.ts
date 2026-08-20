@@ -22,6 +22,7 @@
 // `fullTiebreak`, which compares the COMPLETE canonicalized JSON text of the two elements — a
 // total order over any two distinct values, with no field left unconsidered.
 
+import { canonicalSignature } from "../gates/signature";
 import type {
   AfEdge,
   BdEdge,
@@ -76,6 +77,10 @@ function canonicalizeNode(n: RegistryNode): RegistryNode {
     routes: n.routes.map((r) => [...r].sort(cmp)).sort((a, b) => cmp(routeKey(a), routeKey(b))),
     defs: [...n.defs].sort(cmp),
     balloons: { count: n.balloons.count, classifications: [...n.balloons.classifications].sort(cmp) },
+    // rk-8805 (v3): the signature is a set-valued field like `deps`/`routes`/`defs` — canonicalised
+    // through the ONE canonicaliser (src/gates/signature.ts), never a second sort written here that
+    // could drift from the shard-level canonical bytes.
+    ...(n.signature === undefined ? {} : { signature: canonicalSignature(n.signature) }),
   };
 }
 

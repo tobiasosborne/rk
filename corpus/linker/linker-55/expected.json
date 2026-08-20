@@ -14,5 +14,5 @@
     "conventionProfile": "rk-corpus.v1"
   },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
-  "notes": "The deliberate WARN of Check 17, and the reason it is not an ERROR: a shard's own `post` may legitimately be supplied by its PROOF rather than by any dependency -- that is what proving something means. The signal is still worth emitting, because the same shape is what a shard claiming more than its route provides looks like, so the reader is told and the gate still exits 0. Nothing to demote in exploration: a WARN is already advisory in both phases."
+  "notes": "The deliberate WARN of Check 17, and the reason it is not an ERROR: a shard's own `post` may legitimately be supplied by its PROOF rather than by any dependency -- that is what proving something means. The signal still ships, because the same shape is what a shard claiming more than its route provides looks like, so the reader is told and the gate still exits 0. Nothing to demote in exploration: a WARN is already advisory in both phases."
 }

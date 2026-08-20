@@ -23,7 +23,7 @@
     },
     "post": {
       "type": "array",
-      "description": "What the result PROVIDES. On a route, a dependency's ENTIRE `post` becomes available to later members only after its entire `pre`+`regime` is entailed by the context built so far (docs/gate-contracts.md Gate 2 Check 17). The shard's own `post` must be entailed by its final route context plus its own `pre`; when it is not, the check reports `post-unsupported` as a WARN — a proof, not the route, may legitimately supply the gap.",
+      "description": "What the result PROVIDES. On a route, a dependency's ENTIRE `post` becomes available only after its entire `pre`+`regime` is entailed by the context, and the route is evaluated to a FIXED POINT rather than in listing order (docs/gate-contracts.md Gate 2 Check 17): the order an author happens to list route members in is not a fact about the mathematics, so it may not change the verdict. A consequence worth stating: two members that each need the other's post are both refused, because availability is only ever granted from the already-available context. The shard's own `post` must be entailed by its final route context plus its own `pre`; when it is not, the check reports `post-unsupported` as a WARN — a proof, not the route, may legitimately supply the gap.",
       "items": { "$ref": "#/$defs/objectPredicate" }
     },
     "regime": {
@@ -34,13 +34,13 @@
     "hardness": {
       "type": "string",
       "minLength": 1,
-      "description": "OPTIONAL. A value from the profile's `enums.hardness` (e.g. \"QMA-hard\"). Present-but-unknown is `unknown-value`; absent is a legitimate state, not a finding."
+      "description": "OPTIONAL. A value from the profile's `hardness` key (e.g. \"QMA-hard\"). Present-but-unknown is `unknown-value`; absent is a legitimate state, not a finding."
     }
   },
   "$defs": {
     "objectPredicate": {
       "type": "object",
-      "description": "One predicate on ONE Layer 0 object: the required `obj` (a `definitions/*.md` id — an id naming no Layer 0 shard is `dangling-object`) plus AT LEAST ONE predicate key. Every additional property is a profile-declared key (`lattices` or `enums`) with a string value from that key's declared vocabulary; an unlisted key is `unknown-key` and an unlisted value is `unknown-value`. Each key also declares a POLARITY in the profile (campaign profile draft section 9.1, decision D4), which fixes its comparison direction: `afforded` (the context must supply at least the required value), `capped` (the context's guarantee must be at least as tight), or `equality` (an unordered enum). A lattice's values are ALWAYS ordered by the underlying parameter, weakest to strongest, whatever the polarity — polarity flips the comparison, never the array, and a profile that also reverses a `_cap` array is refused because the two conventions would flip it twice. Values are always STRINGS — that is how the memo's \"no floats\" is made mechanical: a numeric value anywhere in the block is `signature-malformed`, so there is no float/int judgement call at any nesting level.",
+      "description": "One predicate on ONE Layer 0 object: the required `obj` (a `definitions/*.md` id — an id naming no Layer 0 shard is `dangling-object`) plus AT LEAST ONE predicate key. Every additional property is a profile-declared key (`lattices` or `enums`) with a string value from that key's declared vocabulary; an unlisted key is `unknown-key` and an unlisted endpoint is `unknown-value`. A value is an INTERVAL over its key's declared order (codex Tier A review of the convention profile draft, findings 10-11): either the bare string `x`, which IS the point interval [x, x] and is its canonical spelling, or a two-element `[lo, hi]` in which either endpoint may be `null` for unbounded. ENTAILMENT IS CONTAINMENT: a context interval entails a requirement interval iff the context is CONTAINED in it. One rule covers both readings the corpus needs -- \"at least an inverse-polynomial gap\" is the requirement [\"inv-poly\", \"const\"], \"the dimension is at most constant\" is [null, \"const\"] -- so no key carries a direction flag that could be set wrongly. The key's order is a CHAIN or a genuine POSET (the profile decides); on a poset, INCOMPARABLE values do not entail each other in either direction, and an interval between two incomparable endpoints is `signature-malformed`, as is any interval whose lower endpoint is not at or below its upper one. Endpoints are always STRINGS (or `null` for unbounded) — that is how the memo's \"no floats\" is made mechanical: a numeric value anywhere in the block is `signature-malformed`, so there is no float/int judgement call at any nesting level.",
       "required": ["obj"],
       "minProperties": 2,
       "properties": {
@@ -50,14 +50,26 @@
           "description": "The Layer 0 (`definitions/*.md`) id this predicate constrains. Objects are compared by ID, never by name — which is what makes bite's canonical identity immune to renaming (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 8, src/graph/bite.ts)."
         }
       },
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "additionalProperties": { "$ref": "#/$defs/predicateValue" }
+    },
+    "predicateValue": {
+      "description": "An INTERVAL over the key's declared order. The bare-string form is the point interval and is the CANONICAL spelling of one -- the two-element form with lo equal to hi is refused, so every value has exactly one encoding. A null endpoint is unbounded on that side; an unbounded CONTEXT endpoint is entailed only by an equally unbounded requirement.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+        }
+      ]
     },
     "regimePredicate": {
       "type": "object",
       "description": "An ambient predicate: profile-declared keys to string values, and NO `obj` key.",
       "minProperties": 1,
       "not": { "required": ["obj"] },
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "additionalProperties": { "$ref": "#/$defs/predicateValue" }
     }
   },
   "$comment": "CANONICAL ENCODING (Check 17(d), enforced byte-for-byte by src/gates/signature.ts's `canonicalSignatureText`): the block text must equal `JSON.stringify(value, null, 2)` over the value with every object's keys sorted and every array's entries sorted by their own rendering. Indented rather than compact so the authored artifact stays readable — the anti-drift property is that the encoding is DETERMINED, not that it is dense. A well-formed but non-canonical block is `signature-noncanonical` (ERROR), refused rather than normalised silently, because canonical identity is the whole basis on which two signatures are compared at all (subsumption/partial order, src/graph/bite.ts)."

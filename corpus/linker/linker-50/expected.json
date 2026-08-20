@@ -19,5 +19,5 @@
     "conventionProfile": "rk-corpus.v1"
   },
   "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
-  "notes": "Check 17(a): every object id in pre/post must resolve to a `definitions/*.md` shard. Without this, a signature can constrain a plausible-sounding object that does not exist -- which is also the shape review LB3 named for bite's clause (iii) ('passes after adding a fresh but irrelevant def-spectator-register'), so the fixture uses that exact id. Structural: a signature naming an unresolvable object is a broken cross-shard reference, the Phase matrix's own fourth structural class."
+  "notes": "Check 17(a): every object id in pre/post must resolve to a `definitions/*.md` shard. Without this, a signature can constrain a plausible-sounding object that does not exist -- also the shape review LB3 named for bite's clause (iii) ('passes after adding a fresh but irrelevant def-spectator-register'), so the fixture uses that exact id. Structural: a signature naming an unresolvable object is a broken cross-shard reference, the Phase matrix's own fourth structural class."
 }
