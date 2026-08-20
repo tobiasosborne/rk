@@ -33,8 +33,17 @@ repair wave (anti-Zeno: verify mechanically against file:line claims, then merge
 | rk-5lzf profile schema + notation shards + Gate 9 + recursive defs discovery | `worktree-agent-a54164d035c96a7d3` | 188 fixtures | `2026-08-20-rk-5lzf-tierA-codex.md` (6 MAJOR: meaning not byte-bound, blessed not tied to register/overlap false green, quoted-line bypass, vacuous class coverage, evadable compat check, ambiguous recursive ids) |
 | rk-8805 signature schema + Check 17 + graph v3 + bite core | `worktree-agent-a642886cb46efe3cc` | 188 fixtures | `2026-08-20-rk-8805-tierA-codex.md` (6 MAJOR: duplicate predicates any-match, canonical non-unique, `required` evaded via kind, projection drops signature, v3 schema rejects intervals, bite clauses incomplete; ENTAILMENT CORE CONFIRMED) |
 
-Each lane was told at wind-up to commit WIP on its branch and note state on its bead. Branch
-tips and bead notes are the ground truth for what got repaired; the worktree dirs may be gone.
+Repair-wave state at cut (bead notes carry the same; worktree dirs may be gone, branches stay):
+- **rk-nsex** tip `998725a`, GREEN (3145 tests, 198/198 fixtures): BL1-BL4 REPAIRED (source
+  binding `source-mismatch`; statement envelope `range-start-unlabelled` / `statement-range-
+  truncated` / `range-ends-at-eof`; `records: legacy|required` + `origin` discriminator;
+  cards-v1 structural + bijection). BL5 code-complete (`scanCanonicalJson`), OWED: fixture
+  refs-41 + contract text. BL6 (exact schema enforcement) NOT started. Follow-ups 2/4 not applied.
+- **rk-8805** tip `e686b49`, GREEN (3151 tests, 188/188): ZERO repair edits made; the bead
+  comment holds the worked repair plan (B2 before B1; fixtures linker-59..62; two points to
+  surface to the reviewer: gating `kind-status-incoherent` on adoption, and a test-only JSON
+  Schema subset validator since L4 forbids a dep).
+- **rk-5lzf**: see bead note / branch log (reply pending at cut).
 Corpus counts COLLIDE across the three branches (each bumped from 176 independently; 5lzf and
 8805 both claim 188; 5lzf also changed the corpus runner to apply `applyPhase`, and added a
 `notation` GATE_DIR) — integration reconciles `test/corpus.test.ts` (title + assertion +
