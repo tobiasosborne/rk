@@ -189,4 +189,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
  * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
  * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
-export const EXPECTED_FIXTURE_COUNT = 176;
+export const EXPECTED_FIXTURE_COUNT = 186;

@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "card_sha256": "36b5a1cce66e41dc742640a3e0e02272d6b183fbfa7e8ca8e658c3a8a499e9f6",
+  "verdict": "VALID",
+  "reviewer": {
+    "family": "gpt",
+    "backend": "codex",
+    "model": "gpt-5.6-sol",
+    "session": "019fe0f0-f003-7eb0-b754-3a856f591a8c"
+  },
+  "checked": {
+    "statement_complete": {
+      "value": true,
+      "note": "read refs/sources/widget.txt:3-4 in full against the record"
+    },
+    "hypotheses_complete": {
+      "value": false,
+      "note": "the d-regularity clause is not in the record"
+    },
+    "translation_faithful": {
+      "value": true,
+      "note": "statement_blessed carries both the conclusion and the hypothesis"
+    },
+    "signature_faithful": {
+      "value": true,
+      "note": "pre names the bounded-degree widget graph"
+    }
+  },
+  "findings": []
+}

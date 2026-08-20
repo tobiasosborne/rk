@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[review-absent]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 0 reviewed-VALID / 2 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, REVIEW ABSENT — the whole record is mechanically perfect and nobody has read it. Both anchors verify, the verbatim matches, the payload is current: `2 anchors verified`, and still `0 reviewed-VALID`. That gap is the point of the coverage line's three numbers. Mechanical anchoring establishes that the record QUOTES the paper correctly; only a second reader establishes that `statement_blessed` says what the paper says, and the memo's design (section 4) makes that reader's verdict an artifact rather than an assumption. The card `rk render cards` renders for this record is the NOT ADMISSIBLE stub — no statement, no hypotheses, no restatement — so an agent reading the card cannot answer from an unreviewed extraction either (test/render/cards.test.ts). `aism_behavior: n/a`. Mutation-proof: making a missing review silent (treating `reviews.get(...) === undefined` as 'nothing to check') returns this fixture to zero findings, exit 0 — an unreviewed extraction backing a cited claim, LB1's headline false green; observed and reverted. Siblings: refs-29 (a review that exists and does not say VALID), refs-30 (a review bound to other bytes)."
+}
