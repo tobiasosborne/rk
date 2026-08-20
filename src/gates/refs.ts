@@ -1,5 +1,10 @@
-// ROLE: Gate 3 — refs (proofs/<ws>/externals/*.json). Contract: docs/gate-contracts.md
-// "Gate 3 — refs" (Checks 1-7); corpus/refs/*'s 11 fixtures. Calls src/refs/quote.ts's
+// ROLE: Gate 3 — refs. Contract: docs/gate-contracts.md "Gate 3 — refs"; corpus/refs/*'s fixtures.
+// FOUR populations, one gate: the externals JSON (`proofs/<ws>/externals/*.json`, Checks 1-7), the
+// argument-shard citations (Checks 8-9, ./refs-shard-citations.ts), the extraction records under
+// `refs/records/` (Check 11, ./refs-records.ts + ./refs-records-verify.ts — bead rk-nsex), and the
+// card->shard hash join those records back (Check 12, ./refs-card-join.ts). Every one of them asks
+// the same question — are these claimed source bytes really those bytes? — so they share one
+// resolver (./refs-extraction.ts) and one anchor rule (./refs-anchor.ts). Calls src/refs/quote.ts's
 // `wholeQuoteMatch` for the PASS/FAIL verdict — never re-derives the whole-quote-match rule
 // (Tier-A boundary-review carry-forward, docs/reviews/2026-07-17-tier-a-boundary-review.md).
 // The ">=40-char best matched run" FAIL diagnostic below is a longest-run computation for the
@@ -17,6 +22,9 @@ import { normalizeQuoteText, wholeQuoteMatch } from "../refs/quote";
 import { checkQuoteAtLocus } from "./refs-locus";
 import { checkShardCitations } from "./refs-shard-citations";
 import { readLockFacts, resolveQuotableText } from "./refs-extraction";
+import { collectRecords } from "./refs-records";
+import { verifyRecords } from "./refs-records-verify";
+import { checkCardJoin } from "./refs-card-join";
 
 /** check-refs.py:44 — a refs/ locus embedded in freeform source text, e.g.
  * "refs/hos/joa-m.md:2300" or "refs/kitaev-2405.02434/approximate_algebras.tex:503-532". No
@@ -124,6 +132,12 @@ export const refsGate: Gate = {
     const externals = collectExternals(snapshot);
     const lockFacts = readLockFacts(snapshot);
     const shardCitations = checkShardCitations(snapshot);
+    // Checks 11-12 (rk-nsex): the extraction records under refs/records/ and the card->shard hash
+    // join. Both run unconditionally and presence-conditionally — a repo with no records reports
+    // `0 L1 records` on the coverage line rather than skipping silently (L2).
+    const records = collectRecords(snapshot);
+    const recordVerdict = verifyRecords(snapshot, lockFacts, records);
+    const cardJoin = checkCardJoin(snapshot, recordVerdict.usable, new Set(records.discoveredL1));
     const findings: Finding[] = [];
 
     let passed = 0;
@@ -261,6 +275,7 @@ export const refsGate: Gate = {
     }
 
     findings.push(...shardCitations.findings);
+    findings.push(...records.findings, ...recordVerdict.findings, ...cardJoin.findings);
     const total = externals.length;
     return {
       findings,
@@ -269,7 +284,11 @@ export const refsGate: Gate = {
           gate: "refs",
           checked: passed,
           total,
-          unit: `externals byte-verified, ${failed} failed, ${importSkipped} import-skipped, ${noQuoteSkipped} no-quote-skipped; checked ${shardCitations.checked}/${shardCitations.total} shard citations`,
+          unit:
+            `externals byte-verified, ${failed} failed, ${importSkipped} import-skipped, ${noQuoteSkipped} no-quote-skipped; ` +
+            `checked ${shardCitations.checked}/${shardCitations.total} shard citations; ` +
+            `checked records: ${recordVerdict.records} L1 records / ${recordVerdict.reviewedValid} reviewed-VALID / ` +
+            `${recordVerdict.anchorsVerified} anchors verified; ${cardJoin.joined}/${cardJoin.declared} shard-record joins`,
         },
       ],
     };
