@@ -11,6 +11,10 @@ import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
 import { baseName, hasPath, listFilesRecursive, parseFrontmatter } from "./snapshot";
 import type { GateConfig } from "./config";
+// rk-5lzf (LB5): the notation register's own checks, split out to keep both shards inside the
+// ~200-line rule. Pure, snapshot-only, same as this file.
+import { checkNotationRegister } from "./defs-notation";
+import { validateConventionProfile } from "./profile";
 
 const KINDS = ["cited", "consensus", "original"] as const;
 const KIND_SET = new Set<string>(KINDS);
@@ -118,7 +122,10 @@ export function checkShard(
   // DEDUP/DRIFT — check-defs.py:98-107: one lower-cased name namespace (term + aliases) across
   // every shard; a name already owned by a DIFFERENT shard is DRIFT.
   for (const nm of dedupNames(fields.term, fields.aliases)) {
-    const key = nm.toLowerCase();
+    // rk-5lzf: the map now carries THREE keyspaces — `term:` here, plus `symbol:` and `xlat:`
+    // (src/gates/defs-notation.ts). Prefixed so a term and a blessed macro spelled the same way are
+    // not conflated, while all three still share one namespace and one collision rule.
+    const key = `term:${nm.toLowerCase()}`;
     const owner = aliasOwner.get(key);
     if (owner !== undefined && owner !== path) {
       // structural: duplicate ids/aliases (docs/gate-contracts.md "Phase matrix").
@@ -191,10 +198,13 @@ export function checkShard(
 
 export const defsGate: Gate = {
   name: "defs",
-  run(snapshot: RepoSnapshot, _config: GateConfig): GateResult {
-    // Gate 1 carves out no per-repo GateConfig parameter (contract's "Per-repo parameters"
-    // section names only the linker soft cap, provenance status-table file, and shards
-    // PREFIX/MAX_LINES) — config is accepted for interface uniformity, unused here.
+  run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
+    // rk-5lzf: `config` is read for exactly one thing — `conventionProfile`, which supplies the
+    // tracked class list a notation shard's `class:` must name. Every OTHER per-repo parameter
+    // still bypasses this gate (the contract's "Per-repo parameters" section names only the linker
+    // soft cap, the provenance status-table file, and the shards PREFIX/MAX_LINES). The profile's
+    // own validity findings are the CONFIG gate's to report; this gate consumes the parsed result
+    // and says, in its coverage line, when there is none.
     const findings: Finding[] = [];
     const manifest = loadManifest(snapshot);
     if (!manifest.present) {
@@ -216,6 +226,7 @@ export const defsGate: Gate = {
     );
 
     const aliasOwner = new Map<string, string>();
+    const shardTypes = new Map<string, string>();
     let citedCount = 0;
     let hashVerifiedCount = 0;
 
@@ -245,10 +256,20 @@ export const defsGate: Gate = {
         });
       }
 
+      const shardType = fm.fields.shard_type?.trim();
+      if (shardType) shardTypes.set(path, shardType);
+
       const { cited, hashVerified } = checkShard(path, fm.fields, manifest, snapshot, aliasOwner, findings);
       if (cited) citedCount++;
       if (hashVerified) hashVerifiedCount++;
     }
+
+    // rk-5lzf: the notation register. Runs AFTER the per-shard loop so it shares that loop's
+    // `aliasOwner` map — symbol and translation collisions land in the same DRIFT namespace as
+    // term/alias ones, never in a private one that could disagree with it.
+    const { profile } = validateConventionProfile(snapshot, config.conventionProfile);
+    const notation = checkNotationRegister(snapshot, profile, shardTypes, aliasOwner);
+    findings.push(...notation.findings);
 
     const total = shardPaths.length;
     let unit = "shards";
@@ -256,6 +277,12 @@ export const defsGate: Gate = {
       unit += manifest.present
         ? `, ${hashVerifiedCount}/${citedCount} cited shards hash-verified`
         : `, 0/${citedCount} cited shards hash-verified — manifest absent`;
+    }
+    if (notation.shards > 0) {
+      unit +=
+        `, ${notation.shards} notation shard${notation.shards === 1 ? "" : "s"}` +
+        `, ${notation.verified}/${notation.rows} translations verified` +
+        (profile === undefined ? " — no convention profile configured, classes unchecked" : "");
     }
     const coverage: CoverageLine[] = [{ gate: "defs", unit, checked: total, total }];
 

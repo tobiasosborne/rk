@@ -5,21 +5,24 @@
   "tracked_classes": [
     {
       "class": "promise-gap",
-      "description": "the promise gap of a local-Hamiltonian promise problem, relative (fraction of m)",
-      "symbols": ["\\epsilon", "\\gamma"],
+      "description": "Thresholds and the gap between them, for a promise problem. Canonical normalisation is relative (fraction of m).",
+      "symbols": ["\\epsilon", "\\varepsilon", "\\gamma", "c"],
+      "blessed": "\\gapfrac",
       "symbols_must_be_registered": true
     }
   ],
   "lattices": {
-    "gap": ["inv-poly", "inv-log", "const"]
+    "gap": { "kind": "chain", "values": ["inv-poly", "inv-log", "const"] },
+    "qdim_cap": { "kind": "chain", "values": ["poly", "polylog", "const"] }
   },
   "choices": {
-    "promise-gap-normalisation": {
+    "promise_gap_normalisation": {
       "canonical": "relative",
-      "allowed_translations": ["absolute", "energy-density"]
+      "allowed_translations": ["absolute", "energy-density-term"],
+      "notes": "gapfrac := (B-A)/m, dimensionless in [0,1]."
     }
   },
   "enums": {
-    "hardness_class": ["QMA", "QMA_1", "QCMA"]
+    "hardness": ["QMA-hard", "QMA-complete", "open", "no-go"]
   }
 }

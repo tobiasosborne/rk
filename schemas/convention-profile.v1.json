@@ -28,11 +28,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["class", "description", "symbols", "symbols_must_be_registered"],
+        "required": ["class", "description", "symbols", "blessed"],
         "properties": {
           "class": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
             "description": "Class id, unique within the profile. A notation shard's `class:` frontmatter field must name one of these."
           },
           "description": {
@@ -44,24 +44,66 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "description": "The raw LaTeX macro tokens considered tracked for this class, each including its leading backslash, e.g. [\"\\\\epsilon\", \"\\\\gamma\", \"\\\\delta\", \"\\\\Delta\"]. A token appearing here must be a registered `symbol:` of a notation shard in this class wherever Gate 9 scans, or it is an `unregistered-symbol` ERROR.",
-            "items": { "type": "string", "pattern": "^\\\\[A-Za-z]+$" }
+            "description": "The raw tokens considered tracked for this class, verbatim as the literature writes them — e.g. [\"\\\\epsilon\", \"\\\\varepsilon\", \"\\\\lambda_{\\\\min}\", \"c\", \"QMA\"]. Whitespace is forbidden (a token is one lexical unit); everything else is admitted, because a source's notation is not rk's to constrain. Gate 9's LEXICAL enforcement covers exactly the subset that is a plain LaTeX macro token `\\name`: those must be a registered `symbol:` of a notation shard in this class wherever Gate 9 scans, or it is an `unregistered-symbol` ERROR. Tokens outside that shape (bare identifiers, brace/subscript forms) cannot be scanned for reliably and are counted, per class, in Gate 9's coverage line as NOT lexically enforceable — visible, never silently dropped.",
+            "items": { "type": "string", "minLength": 1, "pattern": "^\\S+$" }
+          },
+          "blessed": {
+            "type": "string",
+            "pattern": "^\\\\[A-Za-z]+$",
+            "description": "The campaign's single blessed macro for this class, e.g. \"\\\\gapfrac\" — the one form shards and records are meant to write. Always a plain macro token, so it is always lexically enforceable, and it is tracked whether or not it also appears in `symbols`."
           },
           "symbols_must_be_registered": {
             "const": true,
-            "description": "Always true in v1. Present as an explicit, readable declaration rather than an implicit rule, and reserved as the extension point if a later schema version ever admits an advisory class — v1 admits none, so any other value is a malformed profile, never a quiet opt-out of Gate 9."
+            "description": "OPTIONAL, and always true when present. v1 admits no advisory class — the rule holds for every tracked class whether or not this field is written — so any value other than true is a malformed profile, never a quiet opt-out of Gate 9. Kept as an explicit, readable declaration and as the extension point if a later schema version ever admits an advisory class."
           }
         }
       }
     },
     "lattices": {
       "type": "object",
-      "description": "Named ordered value lattices, WEAKEST FIRST (e.g. `gap: [\"inv-poly\", \"inv-log\", \"const\"]`). The order is the contract: a consumer compares positions, never strings. Gate 9 does not read these; the signature entailment check (rk-8805, Check 17) does.",
+      "description": "Named value orders. Each is an object tagged by `kind`, never a bare array — an untagged list cannot say whether its middle is honestly comparable. `chain` is a total order, written WEAKEST FIRST. `poset` is a partial order given by explicit covering `edges`, for a key whose middle is genuinely incomparable (e.g. reduction classes: quasi-poly and quantum-poly are not ordered, and linearising them silently over-accepts). There is no polarity field: direction is expressed on the signature side, where a parameter is an INTERVAL over these values rather than a point (rk-8805). Gate 9 does not read lattices; the signature entailment check (Check 17) does.",
       "additionalProperties": {
-        "type": "array",
-        "minItems": 2,
-        "uniqueItems": true,
-        "items": { "type": "string", "minLength": 1 }
+        "type": "object",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "required": ["kind", "values"],
+            "properties": {
+              "kind": { "const": "chain" },
+              "values": {
+                "type": "array",
+                "minItems": 2,
+                "uniqueItems": true,
+                "description": "Ordered WEAKEST FIRST (e.g. [\"inv-poly\", \"inv-log\", \"const\"]). The order is the contract: a consumer compares positions, never strings.",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "required": ["kind", "values", "edges"],
+            "properties": {
+              "kind": { "const": "poset" },
+              "values": {
+                "type": "array",
+                "minItems": 2,
+                "uniqueItems": true,
+                "description": "The carrier set. Unordered here — `edges` carries the order.",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "edges": {
+                "type": "array",
+                "description": "Covering relations as `[weaker, stronger]` pairs. Both endpoints must be declared in `values`, and the relation must be a DAG — a cycle would make two distinct values mutually entailing, which is not an order at all.",
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "choices": {
@@ -77,6 +119,10 @@
             "type": "array",
             "uniqueItems": true,
             "items": { "type": "string", "minLength": 1 }
+          },
+          "notes": {
+            "type": "string",
+            "description": "OPTIONAL prose: the conversion formulas, the checked source divergences, what a record must state. Read by humans and by model lanes; never a validity input — a gate never parses this."
           }
         }
       }

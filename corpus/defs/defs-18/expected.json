@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-specgap.md",
+      "message_pattern": "translation-anchor-missing"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-specgap.md",
+      "message_pattern": "an unanchored translation claims a source says something and offers no bytes for it"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["1 notation shard", "0/1 translations verified"] },
+  "aism_behavior": "n/a: AISM has no notation register; its check-defs.py never reads a shard body at all.",
+  "notes": "rk-5lzf (Tier A, LB5): a translation row states that a named source writes a named symbol for this object. Without the `\"<quote>\"` anchor on the next line there is nothing to byte-verify, and the register's central claim — this paper's Delta is a SPECTRAL gap, not a promise gap — rests on a lane's assertion. The row is still counted (`0/1 translations verified`), never dropped: the denominator is what makes an unanchored row visible rather than absent. The check is Gate 1's; the byte verification of an ANCHORED row is delegated to Gate 3's own `verifyCitationClaim` (src/gates/refs-shard-citations.ts) so there is exactly one quote semantics in the codebase."
+}

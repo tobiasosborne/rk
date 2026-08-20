@@ -16,13 +16,20 @@ const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
 const POINTER_RE = /^\s*(refs\/[A-Za-z0-9_./-]+)(?::([^\s]+))?\s*$/;
 const FULL_SHA256_RE = /^[0-9a-fA-F]{64}$/;
 
-interface CitationClaim {
+/** One `refs/<path>:<line>` + `"<quote>"` pair claimed somewhere in a shard. Exported (rk-5lzf)
+ * so Gate 1's notation-translation rows can be verified by the SAME code path, byte-for-byte:
+ * a translation row is a `rk refs quote` pair like any other, and a second quote semantics is
+ * exactly the kind of drift a shared verifier exists to prevent. */
+export interface CitationClaim {
   shardPath: string;
   line: number;
   sourcePath: string;
   locusText?: string;
   quote?: string;
   decorated?: boolean;
+  /** What to call this claim in a finding. Defaults to `"shard citation"` (Gate 3's own wording);
+   * Gate 1 passes `"notation translation"` so a reader can tell which check spoke. */
+  kindLabel?: string;
 }
 
 export interface ShardCitationResult {
@@ -98,8 +105,14 @@ function claimError(claim: CitationClaim, message: string): Finding {
   return { severity: "ERROR", path: claim.shardPath, line: claim.line, message };
 }
 
-function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFacts): Finding | undefined {
-  const label = `shard citation ${claim.sourcePath}${claim.locusText ? `:${claim.locusText}` : ""}`;
+/** Gate 3 Checks 8-9's verification of ONE claim, in full: strict grammar, safe path, resolvable
+ * positive line locus, a recognizable quote, payload present, hash-pinned to the ADOPTED lock
+ * entry, and the quote found byte-for-byte at the recorded locus in whichever layer that locus
+ * indexes (payload, or a PDF's chained extraction). Exported under this name (rk-5lzf) as the ONE
+ * quote-verification path in the codebase: Gate 1's notation-translation rows call it directly
+ * rather than forking a second, quietly divergent semantics. Returns `undefined` on success. */
+export function verifyCitationClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFacts): Finding | undefined {
+  const label = `${claim.kindLabel ?? "shard citation"} ${claim.sourcePath}${claim.locusText ? `:${claim.locusText}` : ""}`;
   if (claim.decorated) {
     return claimError(
       claim,
@@ -182,7 +195,7 @@ export function checkShardCitations(snapshot: RepoSnapshot): ShardCitationResult
   const lock = readLockFacts(snapshot);
   let checked = 0;
   for (const claim of claims) {
-    const error = verifyClaim(claim, snapshot, lock);
+    const error = verifyCitationClaim(claim, snapshot, lock);
     if (error) findings.push(error);
     else checked++;
   }

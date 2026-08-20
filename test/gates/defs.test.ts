@@ -340,6 +340,162 @@ describe("defsGate.run — coverage line composition", () => {
   });
 });
 
+// rk-5lzf (Tier A, LB5): the notation register. `shard_type: notation` is ORTHOGONAL to `kind` —
+// `kind` keeps its provenance meaning, so the MEANING is what gets provenanced, not merely the
+// symbol's occurrence. Contract: docs/gate-contracts.md Gate 1, "Notation shards".
+describe("defsGate.run — notation shards (rk-5lzf)", () => {
+  const PROFILE = JSON.stringify({
+    schema_version: "1",
+    name: "qpcp",
+    version: 1,
+    tracked_classes: [
+      { class: "promise-gap", description: "the promise gap", symbols: ["\\epsilon"], blessed: "\\gapfrac", symbols_must_be_registered: true },
+    ],
+    lattices: {},
+    choices: {},
+    enums: {},
+  });
+  const CONFIG = { ...DEFAULT_GATE_CONFIG, conventionProfile: "qpcp.v1" };
+
+  function notationShard(fields: Record<string, string>, body = ""): string {
+    const all = { shard_type: "notation", kind: "consensus", consensus: "campaign", status: "locked", ...fields };
+    return `---\n${Object.entries(all).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${body}`;
+  }
+
+  function errorsFor(files: Record<string, string>, config = CONFIG) {
+    const snap = snapshotFromFiles({ ".rk/conventions/qpcp.v1.json": PROFILE, ...files });
+    return defsGate.run(snap, config).findings.filter((f) => f.severity === "ERROR");
+  }
+
+  test("an unknown shard_type value is an ERROR (v1 admits only 'notation')", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", shard_type: "glossary", symbol: "\\epsilon", class: "promise-gap" }),
+    });
+    expect(errs.some((e) => e.message.includes("shard_type"))).toBe(true);
+  });
+
+  test("a notation shard without symbol: or class: is an ERROR — it registers nothing", () => {
+    const errs = errorsFor({ "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a" }) });
+    expect(errs.some((e) => e.message.includes("'symbol:'"))).toBe(true);
+    expect(errs.some((e) => e.message.includes("'class:'"))).toBe(true);
+  });
+
+  test("a symbol without its leading backslash is an ERROR", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "epsilon", class: "promise-gap" }),
+    });
+    expect(errs.some((e) => e.message.includes("LaTeX macro token"))).toBe(true);
+  });
+
+  test("a class not in the configured profile is a STRUCTURAL ERROR (broken cross-reference)", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "no-such-class" }),
+    });
+    const hit = errs.find((e) => e.message.includes("no-such-class"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("with NO profile configured the class cannot be checked — and the coverage line says so", () => {
+    const snap = snapshotFromFiles({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "anything" }),
+    });
+    const result = defsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+    expect(result.coverage[0]!.unit).toContain("no convention profile");
+  });
+
+  test("DRIFT: two shards claiming the same symbol is a structural ERROR", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" }),
+      "definitions/notation/sym-b.md": notationShard({ id: "sym-b", term: "b", symbol: "\\epsilon", class: "promise-gap" }),
+    });
+    const hit = errs.find((e) => e.message.includes("DRIFT: symbol"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("translation-collision: two shards claiming the SAME (source-id, their-symbol) pair", () => {
+    const row = '- kit-1: \\eps @ refs/kit-1/p.tex:3\n  "q"\n';
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" }, row),
+      "definitions/notation/sym-b.md": notationShard({ id: "sym-b", term: "b", symbol: "\\gamma", class: "promise-gap" }, row),
+    });
+    const hit = errs.find((e) => e.message.includes("translation-collision"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("the SAME pair twice in ONE shard is also a collision (no self-exemption)", () => {
+    const row = '- kit-1: \\eps @ refs/kit-1/p.tex:3\n  "q"\n- kit-1: \\eps @ refs/kit-1/p.tex:9\n  "q2"\n';
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" }, row),
+    });
+    expect(errs.some((e) => e.message.includes("translation-collision"))).toBe(true);
+  });
+
+  test("a DIFFERENT symbol from the same source is not a collision", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard(
+        { id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" },
+        '- kit-1: \\eps @ refs/kit-1/p.tex:3\n  "q"\n- kit-1: \\gam @ refs/kit-1/p.tex:4\n  "q2"\n',
+      ),
+    });
+    expect(errs.some((e) => e.message.includes("translation-collision"))).toBe(false);
+  });
+
+  test("a translation row with no quote anchor is an ERROR naming the row", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard(
+        { id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" },
+        "- kit-1: \\eps @ refs/kit-1/p.tex:3\nordinary prose, not an anchor\n",
+      ),
+    });
+    const hit = errs.find((e) => e.message.includes("translation-anchor-missing"));
+    expect(hit).toBeDefined();
+    expect(hit!.line).toBeGreaterThan(0);
+  });
+
+  test("an anchored row whose payload is absent is an ERROR from the SHARED refs verifier", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard(
+        { id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" },
+        '- kit-1: \\eps @ refs/kit-1/p.tex:3\n  "the promise gap"\n',
+      ),
+    });
+    expect(errs.some((e) => e.message.includes("ABSENT"))).toBe(true);
+  });
+
+  test("translations: in the FRONTMATTER is an ERROR — the rows would vanish silently", () => {
+    const snap = snapshotFromFiles({
+      ".rk/conventions/qpcp.v1.json": PROFILE,
+      "definitions/notation/sym-a.md":
+        "---\nid: sym-a\nterm: a\nshard_type: notation\nsymbol: \\epsilon\nclass: promise-gap\n" +
+        "kind: consensus\nconsensus: c\nstatus: locked\ntranslations:\n- kit-1: \\eps @ refs/kit-1/p.tex:3\n---\nbody\n",
+    });
+    const errs = defsGate.run(snap, CONFIG).findings.filter((f) => f.severity === "ERROR");
+    expect(errs.some((e) => e.message.includes("translations-in-frontmatter"))).toBe(true);
+  });
+
+  test("kind stays orthogonal: a cited notation shard still needs source:/sha256:", () => {
+    const errs = errorsFor({
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap", kind: "cited" }),
+    });
+    expect(errs.some((e) => e.message.includes("missing required 'source:'"))).toBe(true);
+    expect(errs.some((e) => e.message.includes("missing required 'sha256:'"))).toBe(true);
+  });
+
+  test("the coverage line reports the notation sub-counts", () => {
+    const snap = snapshotFromFiles({
+      ".rk/conventions/qpcp.v1.json": PROFILE,
+      "definitions/notation/sym-a.md": notationShard({ id: "sym-a", term: "a", symbol: "\\epsilon", class: "promise-gap" }),
+    });
+    const result = defsGate.run(snap, CONFIG);
+    expect(result.coverage[0]!.unit).toContain("1 notation shard");
+    expect(result.coverage[0]!.unit).toContain("0/0 translations verified");
+  });
+});
+
 describe("defsGate.run — frontmatter presence/termination gates the rest of the shard's checks", () => {
   function snapshot(files: Record<string, string>): RepoSnapshot {
     return snapshotFromFiles(files);

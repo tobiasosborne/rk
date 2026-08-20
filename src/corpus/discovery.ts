@@ -201,5 +201,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * the "no profile configured" state; `config-07`: a profile that drops a tracked class relative to
  * its predecessor without bumping its own `version` field is `class-removed-without-bump`, the
  * coverage-shrink LB5 names ("letting the register itself declare tracked classes also lets
- * deletion of a class shrink coverage"). */
-export const EXPECTED_FIXTURE_COUNT = 179;
+ * deletion of a class shrink coverage").
+ * 183 (+4 over the then-pinned 179): rk-5lzf, the notation register itself — `defs-17`
+ * (translation-collision: two shards claiming the same (source-id, their-symbol) pair), `defs-18`
+ * (a translation row with no byte-verbatim quote anchor), `defs-19` (the GOLDEN PASS: nested
+ * notation shard, `shard_type` orthogonal to `kind: cited`, class in the configured profile, one
+ * translation byte-verified through Gate 3's own verifier), `defs-20` (`translations:` written in
+ * the FRONTMATTER, where the flat grammar silently drops every row — the zero-rows false-green,
+ * same shape as dogfood-2's silent-empty-`deps:`). */
+export const EXPECTED_FIXTURE_COUNT = 183;

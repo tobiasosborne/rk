@@ -226,7 +226,7 @@ describe("configGate — convention profile (rk-5lzf)", () => {
     name: "qpcp",
     version: 1,
     tracked_classes: [
-      { class: "promise-gap", description: "the promise gap", symbols: ["\\epsilon"], symbols_must_be_registered: true },
+      { class: "promise-gap", description: "the promise gap", symbols: ["\\epsilon"], blessed: "\\gapfrac", symbols_must_be_registered: true },
     ],
     lattices: {},
     choices: {},
