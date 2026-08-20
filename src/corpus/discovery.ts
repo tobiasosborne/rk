@@ -181,6 +181,20 @@ export function totalFixtureCount(corpusRoot: string): number {
  * unpinned bytes are not adopted evidence). The pin now runs for every payload kind before the
  * PDF/non-PDF split, which is why `refs-02`/`03`/`07`/`09`/`11` gained locks — see
  * corpus/README.md's rk-r0j3 paragraph.
+ * 186 (+10 over the then-pinned 176): bead rk-8805 (P1, Tier A) — Gate 2 CHECK 17, the signature +
+ * route-scoped entailment check (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6,
+ * repairing the 2026-08-20 Tier A review's LB2). `linker-47` is the review's OWN pair, which v1's
+ * atom-wise matcher passed: a lemma holding only at `qdim: poly` silently backing a theorem stated
+ * at `qdim: const`, because the gap atom came from the dependency and the dimension atom from the
+ * parent's own regime. `linker-48` is the CAPPED-polarity half (a loose ambient cannot discharge a
+ * tight cap — the profile lane's finding that the memo's single-direction rule is unsound for
+ * capped constraints), `linker-49` the golden pass over all three polarities, `linker-50`..`52` the
+ * object/key/value vocabulary classes, `linker-53` the fail-closed "malformed is never absent"
+ * rule, `linker-54` required-ness with its open-problem discriminator, `linker-55` the deliberate
+ * post-unsupported WARN, and `linker-56` the phase-independence of the whole check (memo section
+ * 2a / review LB4). Nine of the ten go red the moment Check 17 is unwired from src/gates/linker.ts;
+ * `linker-49`, the green one, is exactly the fixture that cannot detect that — which is why it
+ * exists.
  * 176 (+2 over the then-pinned 174): bead rk-yic3 (P1, Tier A) — Check 4b's two backing routes were
  * asymmetric about WITHDRAWAL. `l5Decision` refused backing on a live retraction or an unhealthy
  * retraction ledger; `provenanceDecision` read neither, and `pmaBackingDecision` tried the
@@ -189,4 +203,4 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
  * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
  * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
-export const EXPECTED_FIXTURE_COUNT = 176;
+export const EXPECTED_FIXTURE_COUNT = 186;

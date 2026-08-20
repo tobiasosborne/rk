@@ -1,0 +1,18 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-broken.md",
+      "message_pattern": "[signature-malformed]"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": {
+    "signatures": "required",
+    "conventionProfile": "rk-corpus.v1"
+  },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
+  "notes": "The fail-closed rule of memo section 6 (review LB6): a malformed or unparseable signature is an ERROR, NEVER 'no signature'. Here one trailing comma inside `pre` makes the block unparseable JSON. If the parser degraded that to 'absent', the shard would silently skip the entailment check entirely -- and under `signatures: required` it would be reported under a DIFFERENT name (`signature-missing`), sending the author to look for a block that is right there. The gate therefore reports the malformation and does NOT also report it missing: one fault, one finding."
+}

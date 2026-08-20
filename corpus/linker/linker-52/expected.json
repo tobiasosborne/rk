@@ -1,0 +1,23 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-value.md",
+      "message_pattern": "[unknown-value]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/lem-value.md",
+      "message_pattern": "inverse-polynomial"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": {
+    "signatures": "required",
+    "conventionProfile": "rk-corpus.v1"
+  },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
+  "notes": "Check 17(c), value half. 'inverse-polynomial' is the profile's 'inv-poly' spelled the way a human would write it -- exactly the near-miss a substring or fuzzy comparison would silently accept. The lattice is CLOSED: an undeclared value has no rank, so it can neither entail nor be entailed, and saying so loudly is the only honest outcome."
+}

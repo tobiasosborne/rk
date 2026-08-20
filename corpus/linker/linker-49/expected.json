@@ -1,0 +1,20 @@
+{
+  "gate": "linker",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "config_override": {
+    "signatures": "required",
+    "conventionProfile": "rk-corpus.v1"
+  },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
+  "notes": "The GREEN chain, and the no-false-positive guard for all three polarities at once: `qdim` (afforded) reaches poly in the context; `qdim_cap` (capped) is guaranteed at const, which is TIGHTER than the required poly cap and therefore entails it; `norm` (equality) matches exactly. lem-amp's post then becomes available and supplies thm-ok's own post. Editing any one of the three predicates flips this fixture red -- which is the point: linker-47 and linker-48 must not be passing merely because the checker rejects everything.",
+  "coverage": {
+    "checked": 2,
+    "total": 2,
+    "unit_patterns": [
+      "signatures: 2 shards / 2 routes / 1 entailment",
+      "profile 'rk-corpus.v1': ok"
+    ]
+  }
+}

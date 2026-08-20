@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "name": "rk-corpus.v1",
+  "lattices": {
+    "gap": [
+      "inv-poly",
+      "inv-log",
+      "const"
+    ],
+    "qdim": [
+      "const",
+      "polylog",
+      "poly"
+    ],
+    "qdim_cap": [
+      "const",
+      "polylog",
+      "poly"
+    ],
+    "degree": [
+      "bounded",
+      "unbounded"
+    ]
+  },
+  "enums": {
+    "norm": [
+      "relative",
+      "absolute"
+    ],
+    "n_regime": [
+      "finite",
+      "to-infinity"
+    ]
+  },
+  "key_polarity": {
+    "gap": "afforded",
+    "qdim": "afforded",
+    "qdim_cap": "capped",
+    "degree": "afforded",
+    "norm": "equality",
+    "n_regime": "equality"
+  }
+}

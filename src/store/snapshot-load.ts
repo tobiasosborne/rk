@@ -101,6 +101,15 @@ const ROOT_SKIP_DIR = ".git";
  *                                       is exactly the loader's job, not kitchen-sink bloat.
  * - `runs/**`                        — runs gate (Gate 5 Inputs)
  * - `report/**\/*.{tex,md}`          — provenance + report-shards gates (Gate 4 / Gate 6 Inputs)
+ * - `.rk/conventions/` (one level)    — rk-8805: the convention profile Gate 2 Check 17 reads its
+ *                                       closed vocabulary from (`.rk/conventions/<name>.json`,
+ *                                       named by `.rk/config.json`'s `conventionProfile`;
+ *                                       src/gates/signature-profile.ts). A SEPARATE, targeted rule
+ *                                       rather than making the `.rk` rule recursive: `.rk/` also
+ *                                       holds append-only validity stores and worker scratch, and
+ *                                       widening one rule to sweep all of it in would change what
+ *                                       every `.rk`-reading gate sees for the sake of one
+ *                                       directory the memo names explicitly.
  * - `.rk/` (one level only)          — M2.6: the freshness gate's declared manifest,
  *                                       `.rk/generated.json` (Gate 7 Inputs, src/gates/
  *                                       freshness.ts). Non-recursive: the manifest is a single
@@ -130,6 +139,7 @@ const INCLUDE_RULES: IncludeRule[] = [
   { dir: "runs", recursive: true },
   { dir: "report", recursive: true, extensions: [".tex", ".md"] },
   { dir: ".rk", recursive: false },
+  { dir: ".rk/conventions", recursive: false },
 ];
 
 interface Accum {

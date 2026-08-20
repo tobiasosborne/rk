@@ -1,0 +1,19 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-qpcp.md",
+      "message_pattern": "[regime-unentailed]"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": {
+    "signatures": "required",
+    "conventionProfile": "rk-corpus.v1",
+    "phase": "exploration"
+  },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, no convention profile, and no regime reasoning of any kind).",
+  "notes": "linker-47's clash in a repo whose `.rk/config.json` sets `phase: \"exploration\"`. Memo section 2a (repair of review LB4): the checks this plan introduces are STRUCTURAL and are never demoted, because admission of a conjecture happens DURING exploration -- the phase that demotes everything else -- so a demotable signature barrier is an advisory barrier at precisely the moment it is load-bearing. NOTE the harness boundary: src/corpus/run.ts calls `gate.run` directly and never passes through src/gates/phase.ts's `applyPhase`, so what this fixture proves mechanically is that the gate's OWN verdict is phase-independent; the `structural: true` flag that makes `applyPhase` leave it alone is pinned in test/gates/phase-classification.test.ts's Check 17 block, in the same commit (the three-way mutation-proof discipline the Phase matrix requires)."
+}
