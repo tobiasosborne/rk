@@ -50,6 +50,20 @@ export interface SnowballOptions {
   minYear?: number;
 }
 
+/** Parses a seeds file: one arXiv id per line. Blank lines are dropped; a `#` starts a comment
+ * that runs to end of line, whether the whole line is a comment or it trails an id (e.g.
+ * `2402.07476  # gap amplification paper`). Order is preserved — callers that care about
+ * duplicate seeds (`snowballClosure` collapses them) get them in file order. */
+export function parseSeedsFile(text: string): string[] {
+  const ids: string[] = [];
+  for (const rawLine of text.split("\n")) {
+    const withoutComment = rawLine.split("#")[0]!;
+    const id = withoutComment.trim();
+    if (id !== "") ids.push(id);
+  }
+  return ids;
+}
+
 interface NodeInternal {
   canonical: string;
   arxiv?: string;

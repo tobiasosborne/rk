@@ -5,7 +5,7 @@
 // rows, never adds one back and never drops an unknown-year row.
 
 import { describe, expect, test } from "bun:test";
-import { snowballClosure, type OracleResult, type SnowballPaper } from "../src/refs/snowball-closure";
+import { parseSeedsFile, snowballClosure, type OracleResult, type SnowballPaper } from "../src/refs/snowball-closure";
 
 type Fixture = Record<string, OracleResult>;
 
@@ -157,6 +157,25 @@ describe("snowballClosure — duplicate seeds", () => {
     const result = snowballClosure(["S1", "S1"], 0, oracleFrom(graph()));
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe("S1");
+  });
+});
+
+describe("parseSeedsFile", () => {
+  test("one id per line, blank lines and '#' comments dropped, trailing inline comments trimmed", () => {
+    const text = [
+      "# QPCP campaign seed list",
+      "2510.01333",
+      "",
+      "2402.07476  # gap amplification paper",
+      "   ",
+      "# another comment",
+      "1801.00001",
+    ].join("\n");
+    expect(parseSeedsFile(text)).toEqual(["2510.01333", "2402.07476", "1801.00001"]);
+  });
+
+  test("an all-comments/blank file yields no seeds", () => {
+    expect(parseSeedsFile("# nothing here\n\n  \n")).toEqual([]);
   });
 });
 

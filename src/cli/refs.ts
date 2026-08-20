@@ -16,6 +16,7 @@ import { locateQuoteInRepo } from "../refs/quote-locate";
 import { sourceId } from "../types";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
+import { refsSnowball } from "./refs-snowball";
 
 /** rk-54a: warns ONCE, clearly, when a cache env var is being honored only via its deprecated
  * old name — the one path where that name is actually steering behavior (see
@@ -197,11 +198,17 @@ async function refsQuote(args: string[], out: Out): Promise<number> {
   }
 }
 
+// rk-hzla: `refsSnowball` (`rk refs snowball`) now lives in src/cli/refs-snowball.ts (CLAUDE.md
+// Rule 4's 280-line shard cap — see that file's header), re-exported here so the public import
+// path `../src/cli/refs` is unchanged, the same way check.ts re-exports from check-regen.ts.
+export { refsSnowball } from "./refs-snowball";
+
 const REFS_COMMANDS: Record<string, SubHandler> = {
   status: refsStatus,
   add: refsAdd,
   adopt: refsAdopt,
   quote: refsQuote,
+  snowball: refsSnowball,
 };
 
 export function refsHelp(out: Out): number {
@@ -210,6 +217,14 @@ export function refsHelp(out: Out): number {
   out.log("  rk refs add <locator>       fetch/hash/install + update the manifest");
   out.log("  rk refs adopt <path>        register an already-downloaded refs/ payload (offline)");
   out.log("  rk refs quote <id> <pat>    byte-verbatim quote with a path:line anchor");
+  out.log("  rk refs snowball --seeds <file> [--depth N] [--min-year YYYY] [--out <path>]");
+  out.log("                              forward+backward citation closure (Semantic Scholar) over");
+  out.log("                              a seed list; writes refs/snowball/closure.json and merges a");
+  out.log("                              triage.md skeleton (existing triage/reason rows survive a");
+  out.log("                              rerun). Caches every raw response under");
+  out.log("                              refs/snowball/cache/ so reruns are offline. Optional");
+  out.log("                              S2_API_KEY env var lifts the rate limit above the ~100");
+  out.log("                              req/5min unauthenticated default (sent as x-api-key).");
   out.log("  next: run 'rk refs status' first on a fresh checkout.");
   return 0;
 }
