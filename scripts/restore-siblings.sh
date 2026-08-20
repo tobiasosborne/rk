@@ -8,7 +8,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-for name in rk-campaign-A rk-campaign-C; do
+for name in rk-campaign-A rk-campaign-C rk-campaign-D; do
   if [ -e "../$name" ]; then
     echo "restore: ../$name exists — skipped"
   else
