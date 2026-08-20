@@ -34,6 +34,18 @@ export const SYMBOL_RE = /^\\[A-Za-z]+$/;
  * detector turns arbitrary prose into an unverifiable citation-shaped claim). */
 const ROW_RE = /^-\s+([A-Za-z0-9][A-Za-z0-9._-]*):\s*(\S+)\s+@\s+(refs\/[A-Za-z0-9_./-]+):([0-9]+)\s*$/;
 
+/** The MEANING-ANCHOR marker line (rk-5lzf B1). Its own line, exactly `meaning-anchor:`, followed
+ * by the strict `refs/<path>:<line>` pointer and its `"<quote>"` — the same two-line `rk refs
+ * quote` pair a translation row uses, and the same verifier.
+ *
+ * WHY A MARKER RATHER THAN "the first anchor pair in the body": the two candidate conventions are
+ * not equally safe. "First pair wins" makes the meaning's provenance depend on the ORDER of prose
+ * a human edits, so moving a paragraph silently re-points what the shard claims its source says.
+ * An explicit marker is inert under reordering and reads as a declaration. */
+const MEANING_MARKER = "meaning-anchor:";
+/** The strict standalone pointer line, identical in shape to Gate 3 Check 8's own grammar. */
+const POINTER_RE = /^(refs\/[A-Za-z0-9_./-]+):([0-9]+)$/;
+
 export interface TranslationRow {
   /** 1-indexed line of the ROW within the shard file. */
   line: number;
@@ -48,6 +60,18 @@ export interface TranslationRow {
   anchorQuote?: string;
 }
 
+/** The `meaning-anchor:` block a `kind: cited` notation shard must carry (rk-5lzf B1). Present
+ * with `sourcePath`/`locusText`/`quote` when the marker is followed by a well-formed pointer+quote
+ * pair; present with them absent when the marker is there but the pair is not (which is its own
+ * ERROR, distinct from "no marker at all"). */
+export interface MeaningAnchor {
+  /** 1-indexed line of the marker within the shard file. */
+  line: number;
+  sourcePath?: string;
+  locusText?: string;
+  quote?: string;
+}
+
 export interface NotationShard {
   path: string;
   /** Frontmatter fields verbatim (Gate 1 validates them; this module only carries them). */
@@ -55,6 +79,8 @@ export interface NotationShard {
   symbol?: string;
   className?: string;
   translations: TranslationRow[];
+  /** The `meaning-anchor:` block, when the marker line is present in the body. */
+  meaningAnchor?: MeaningAnchor;
   /** True when a `translations:` key appears in the FRONTMATTER — always an authoring error (see
    * this file's header): the rows and their anchors cannot survive the flat frontmatter grammar. */
   translationsInFrontmatter: boolean;
@@ -108,6 +134,25 @@ export function parseTranslationRows(content: string): TranslationRow[] {
   return rows;
 }
 
+/** The `meaning-anchor:` block, if any. Reads the marker line, then the next two NON-BLANK body
+ * lines as the pointer and its quote. Returns `undefined` when there is no marker at all — Gate 1
+ * turns that into `meaning-anchor-missing` for a `kind: cited` shard. */
+export function parseMeaningAnchor(content: string): MeaningAnchor | undefined {
+  const body = bodyLines(content);
+  for (let i = 0; i < body.length; i++) {
+    if (body[i]!.text.trim() !== MEANING_MARKER) continue;
+    const rest = body.slice(i + 1).filter((l) => l.text.trim() !== "");
+    const pointer = POINTER_RE.exec(rest[0]?.text.trim() ?? "");
+    const quote = anchorOf(rest[1]?.text);
+    return {
+      line: body[i]!.line,
+      ...(pointer ? { sourcePath: pointer[1]!, locusText: pointer[2]! } : {}),
+      ...(pointer && quote !== undefined ? { quote } : {}),
+    };
+  }
+  return undefined;
+}
+
 /** Every `definitions/**\/*.md` shard declaring `shard_type: notation`, in path order. A shard
  * whose frontmatter is absent/unterminated is NOT a notation shard here (Gate 1 has already
  * ERRORed on the parse and skipped it) — this module never invents structure from unparseable
@@ -126,6 +171,9 @@ export function parseNotationShards(snapshot: RepoSnapshot): NotationShard[] {
       ...(symbol ? { symbol } : {}),
       ...(className ? { className } : {}),
       translations: parseTranslationRows(shard.content),
+      ...(parseMeaningAnchor(shard.content) !== undefined
+        ? { meaningAnchor: parseMeaningAnchor(shard.content)! }
+        : {}),
       translationsInFrontmatter: "translations" in shard.fields,
     });
   }

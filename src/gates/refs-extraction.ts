@@ -32,6 +32,12 @@ export interface LockEntryFacts {
   /** Lock-relative path, exactly as recorded (`sources/paper.pdf`). */
   path: string;
   sha256: string;
+  /** `files[].source_id` when the lock records one (rk-5lzf B1). The ONLY mechanical answer to
+   * "which source owns this payload path": a notation translation row names a source-id and an
+   * anchored path, and without this the two are unrelated strings, so a genuine quote from paper
+   * A could be filed under paper B's name with every byte check still passing. Absent is a real
+   * state (older locks) and is FAIL-CLOSED at the consumer: ownership unproven is not ownership. */
+  sourceId?: string;
   extraction?: ExtractionRecord;
 }
 
@@ -59,12 +65,17 @@ export function readLockFacts(snapshot: RepoSnapshot): LockFacts {
       if (entry === null || typeof entry !== "object") {
         return { entries: [], error: `${LOCK_PATH} malformed (non-object files[] entry)` };
       }
-      const row = entry as { path?: unknown; sha256?: unknown; extraction?: unknown };
+      const row = entry as { path?: unknown; sha256?: unknown; source_id?: unknown; extraction?: unknown };
       if (typeof row.path !== "string" || typeof row.sha256 !== "string") {
         return { entries: [], error: `${LOCK_PATH} malformed (each entry needs string path and sha256)` };
       }
       const extraction = readExtractionRecord(row.extraction);
-      entries.push({ path: row.path, sha256: row.sha256, ...(extraction ? { extraction } : {}) });
+      entries.push({
+        path: row.path,
+        sha256: row.sha256,
+        ...(typeof row.source_id === "string" && row.source_id.length > 0 ? { sourceId: row.source_id } : {}),
+        ...(extraction ? { extraction } : {}),
+      });
     }
     return { entries };
   } catch (error) {

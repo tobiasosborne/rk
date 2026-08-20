@@ -10,6 +10,8 @@ import { describe, expect, test } from "bun:test";
 import { checkShard, dedupNames, defsGate } from "../../src/gates/defs";
 import type { Finding } from "../../src/gates/framework";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
+import { applyPhase } from "../../src/gates/phase";
+import { sha256Hex } from "../../src/gates/sha256";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import type { RepoSnapshot } from "../../src/gates/snapshot";
 
@@ -515,5 +517,150 @@ describe("defsGate.run — frontmatter presence/termination gates the rest of th
     const errors = result.findings.filter((f) => f.severity === "ERROR");
     expect(errors).toHaveLength(1);
     expect(errors[0]!.message).toBe("missing/unterminated frontmatter");
+  });
+});
+
+// ===========================================================================================
+// rk-5lzf repair wave, blocker B1 (Tier A review 2026-08-20, finding 1): CITED MEANINGS ARE
+// PROVENANCED. The review's exploit: "wrong meaning with verified translation anchors passes".
+// A notation shard could carry `kind: cited` with a shard-level source/sha256 pair and say the
+// symbol means anything at all — the legacy Layer 0 checks bind the SHARD to a source, never the
+// MEANING to a passage. Translation rows had the mirror hole: a genuine quote from a genuine
+// paper that neither contains the symbol being translated nor comes from the source the row names.
+// ===========================================================================================
+describe("Gate 1 — cited notation meanings are byte-bound (rk-5lzf B1)", () => {
+  const PAYLOAD = "line one\nWe write $\\eps$ for the promise gap, a fraction of $m$.\nline three\n";
+
+  function repo(shardBody: string, fm: Record<string, string> = {}): Record<string, string> {
+    const fields = {
+      id: "sym-gapfrac",
+      term: "relative promise gap",
+      shard_type: "notation",
+      symbol: "\\gapfrac",
+      class: "promise-gap",
+      kind: "cited",
+      source: "aav",
+      sha256: "0000000000000000",
+      status: "locked",
+      ...fm,
+    };
+    const shard = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${shardBody}`;
+    return {
+      "definitions/notation/sym-gapfrac.md": shard,
+      "refs/aav/paper.tex": PAYLOAD,
+      "refs/manifest/sources.lock.json": JSON.stringify({
+        files: [{ path: "aav/paper.tex", sha256: sha256Hex(new TextEncoder().encode(PAYLOAD)), source_id: "aav" }],
+      }),
+    };
+  }
+
+  function errorsFor(files: Record<string, string>) {
+    return defsGate.run(snapshotFromFiles(files), DEFAULT_GATE_CONFIG).findings.filter((f) => f.severity === "ERROR");
+  }
+
+  const GOOD_MEANING =
+    "meaning-anchor:\nrefs/aav/paper.tex:2\n\"We write $\\eps$ for the promise gap, a fraction of $m$.\"\n";
+
+  test("kind: cited with NO meaning: is a structural ERROR", () => {
+    const errs = errorsFor(repo(GOOD_MEANING));
+    const hit = errs.find((e) => e.message.includes("meaning-missing"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("kind: cited with a meaning but NO meaning anchor is a structural ERROR", () => {
+    const errs = errorsFor(repo("Body with no anchor at all.\n", { meaning: "the relative promise gap" }));
+    const hit = errs.find((e) => e.message.includes("meaning-anchor-missing"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("a meaning anchor whose quote is not at the recorded locus is a structural ERROR", () => {
+    const body = 'meaning-anchor:\nrefs/aav/paper.tex:1\n"We write $\\eps$ for the promise gap"\n';
+    const errs = errorsFor(repo(body, { meaning: "the relative promise gap" }));
+    const hit = errs.find((e) => e.message.includes("notation meaning"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+  });
+
+  test("a well-anchored cited meaning passes", () => {
+    const errs = errorsFor(repo(GOOD_MEANING, { meaning: "the relative promise gap" }));
+    expect(errs).toEqual([]);
+  });
+
+  test("a NON-cited notation shard needs no meaning anchor (nothing is claimed of a source)", () => {
+    const errs = errorsFor(
+      repo("Just prose.\n", { kind: "consensus", consensus: "campaign", source: "", sha256: "" }),
+    );
+    expect(errs.filter((e) => e.message.includes("meaning"))).toEqual([]);
+  });
+});
+
+describe("Gate 1 — translation rows bind symbol and source (rk-5lzf B1)", () => {
+  const PAYLOAD = "line one\nWe write $\\eps$ for the promise gap.\nA sentence with no symbol at all.\n";
+
+  function repo(row: string, lockSourceId = "aav"): Record<string, string> {
+    const fields = {
+      id: "sym-gapfrac",
+      term: "relative promise gap",
+      shard_type: "notation",
+      symbol: "\\gapfrac",
+      class: "promise-gap",
+      kind: "consensus",
+      consensus: "campaign",
+      status: "locked",
+    };
+    const shard = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${row}`;
+    return {
+      "definitions/notation/sym-gapfrac.md": shard,
+      "refs/aav/paper.tex": PAYLOAD,
+      "refs/manifest/sources.lock.json": JSON.stringify({
+        files: [{ path: "aav/paper.tex", sha256: sha256Hex(new TextEncoder().encode(PAYLOAD)), source_id: lockSourceId }],
+      }),
+    };
+  }
+
+  function errorsFor(files: Record<string, string>) {
+    return defsGate.run(snapshotFromFiles(files), DEFAULT_GATE_CONFIG).findings.filter((f) => f.severity === "ERROR");
+  }
+
+  test("a row whose quote does NOT contain theirSymbol is a structural ERROR", () => {
+    const row = '- aav: \\eps @ refs/aav/paper.tex:3\n  "A sentence with no symbol at all."\n';
+    const errs = errorsFor(repo(row));
+    const hit = errs.find((e) => e.message.includes("translation-symbol-not-in-quote"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+    expect(hit!.message).toContain("\\eps");
+  });
+
+  test("a row whose source-id does not own the anchored path is a structural ERROR", () => {
+    const row = '- bmvz: \\eps @ refs/aav/paper.tex:2\n  "We write $\\eps$ for the promise gap."\n';
+    const errs = errorsFor(repo(row));
+    const hit = errs.find((e) => e.message.includes("translation-source-path-mismatch"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
+    expect(hit!.message).toContain("bmvz");
+  });
+
+  test("a lock entry with NO source_id cannot establish ownership — fail closed", () => {
+    const files = repo('- aav: \\eps @ refs/aav/paper.tex:2\n  "We write $\\eps$ for the promise gap."\n');
+    files["refs/manifest/sources.lock.json"] = JSON.stringify({
+      files: [{ path: "aav/paper.tex", sha256: sha256Hex(new TextEncoder().encode(PAYLOAD)) }],
+    });
+    const errs = errorsFor(files);
+    expect(errs.some((e) => e.message.includes("translation-source-path-mismatch"))).toBe(true);
+  });
+
+  test("a row that is byte-verified, symbol-bearing and source-owned passes", () => {
+    const row = '- aav: \\eps @ refs/aav/paper.tex:2\n  "We write $\\eps$ for the promise gap."\n';
+    expect(errorsFor(repo(row))).toEqual([]);
+  });
+
+  test("every notation provenance failure survives exploration (structural)", () => {
+    const row = '- aav: \\eps @ refs/aav/paper.tex:3\n  "A sentence with no symbol at all."\n';
+    const { findings } = defsGate.run(snapshotFromFiles(repo(row)), DEFAULT_GATE_CONFIG);
+    const demoted = applyPhase(findings, "exploration");
+    const hit = demoted.find((f) => f.message.includes("translation-symbol-not-in-quote"));
+    expect(hit!.severity).toBe("ERROR");
   });
 });
