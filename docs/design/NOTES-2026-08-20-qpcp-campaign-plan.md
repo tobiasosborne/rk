@@ -190,20 +190,24 @@ signature:
   hardness: QMA-hard                 # optional, enum from the profile
 ```
 
-Each predicate key has a typed LATTICE declared in the profile with an explicit POLARITY
-(`afforded`: the context must supply at least the required strength, e.g. gap; `capped`: the
-context must stay within the required bound, e.g. qudit dimension, locality; `equality`), so
-"atom satisfies atom" is a directed lattice comparison, not string equality. Polarity was
-added by the profile draft (campaign docs/conventions-qpcp-v1-draft.md section 9, entry D4):
-without it a single-direction rule would let a `qdim: poly` context satisfy a `qdim: const`
-requirement.
+Each predicate key has a typed LATTICE (chain or poset) declared in the profile, and values
+are intervals over it, so "atom satisfies atom" is interval containment, not string equality.
+(The profile draft's intermediate polarity scheme was rejected in its review for admitting an
+inconsistent `qdim: poly` with `qdim_cap: const`; intervals replace it.)
 
-**Entailment rule (replaces v1's atom-wise matching, which review broke with a concrete pair).**
-For a shard P with dependency D on a route R: D's ENTIRE `pre` and `regime` must be entailed by
-P's CONTEXT ON R, where the context is P's own `regime` and `pre` plus the `post` of
-dependencies earlier on R; only then does D's entire `post` become available to later members
-of R and to P. Entailment is per-object: every key of D's predicate on object X must be met by
-the context's predicate on the same X (lattice-wise). The review's pair — `lem-amp` with
+**Entailment rule (replaces v1's atom-wise matching, which review broke with a concrete pair;
+route semantics made order-independent after the profile review's finding 13).** Parameter
+values are INTERVALS over a chain (a point is `[x, x]`); a context interval entails a
+requirement interval iff it is contained in it, which subsumes the afforded/capped polarity of
+the draft (`qdim: [const, const]` does not entail a dependency regime `qdim: [poly, poly]`).
+Lattices are chains or posets (`reduction` is a poset: karp <= turing, karp <= quasi-poly-karp,
+turing and quasi-poly incomparable; incomparable is never entailed). For a shard P and route R
+the evaluation is a FIXED POINT: context := P.regime ∪ P.pre; repeatedly mark any not-yet-
+available member D whose entire `pre` ∪ `regime` is entailed by the context and add D's `post`
+to the context, until nothing changes. A member never marked available is `regime-unentailed`.
+Listing order cannot affect the verdict (property-tested); mutual dependency cannot bootstrap
+because availability is granted only from the already-available context. Entailment is
+per-object: every key of D's predicate on object X must be met by the context's predicate on X. The review's pair — `lem-amp` with
 `regime: d=poly(n)` producing `gap=const`; `thm-qpcp` with `regime: d=const` consuming
 `gap=const, d=const` — is rejected because `lem-amp`'s regime `d=poly(n)` is not entailed by
 `thm-qpcp`'s context `d=const` (const is below poly in the lattice, so a result that needs
