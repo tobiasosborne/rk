@@ -13,6 +13,7 @@
 
 import type { Finding } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
+import { scanCanonicalJson } from "./canonical-json";
 import {
   RECORDS_PREFIX,
   isObject,
@@ -54,6 +55,25 @@ function parseJsonObject(path: string, raw: string, code: string): ParseResult {
     parsed = JSON.parse(raw);
   } catch (e) {
     return { ok: false, finding: recordError(path, code, `not valid JSON (${(e as Error).message}) — a record that cannot be parsed backs nothing`) };
+  }
+  // BL5 (Tier A review): syntactically valid is not the same as LOSSLESSLY canonicalizable.
+  // `JSON.parse` collapses duplicate keys and rounds unsafe numbers, so a document it accepts may
+  // be one this gate cannot hash faithfully — `9007199254740992` and `...993` parse to the same
+  // double, which is how a record could be edited without changing its canonical digest, carrying
+  // its review and its shard join forward onto bytes nobody read. Such a record is rejected
+  // outright rather than hashed approximately. Runs AFTER the parse so a plain syntax error keeps
+  // its own code (`[record-unparseable]`) and this reports only genuine canonicalization faults.
+  const scan = scanCanonicalJson(raw);
+  if (!scan.ok) {
+    const malformedCode = code === "record-unparseable" ? "record-malformed" : "review-malformed";
+    return {
+      ok: false,
+      finding: recordError(
+        path,
+        malformedCode,
+        `parses, but cannot be canonicalized losslessly and therefore cannot be hash-bound: ${scan.reason}`,
+      ),
+    };
   }
   if (!isObject(parsed)) {
     const shape = parsed === null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed;
