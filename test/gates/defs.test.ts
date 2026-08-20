@@ -295,6 +295,39 @@ describe("defsGate.run — coverage line composition", () => {
     expect(result.findings.filter((f) => f.path.includes("README") || f.path.includes("INDEX"))).toHaveLength(0);
   });
 
+  // rk-5lzf (LB5): `definitions/` discovery is RECURSIVE. Before this bead a shard under
+  // `definitions/notation/` was never listed, so every check below (id/stem, DRIFT, cited
+  // provenance) silently never ran on it — `checked defs: 1/1 shards` over a tree holding two.
+  test("NESTED shards are discovered and checked (definitions/**/*.md, rk-5lzf)", () => {
+    const snap = snapshotFromFiles({
+      "definitions/def-a.md": shardText({ id: "def-a", term: "A", kind: "original", status: "locked", consensus: "x" }),
+      "definitions/notation/sym-eps.md": shardText({ id: "sym-eps", term: "eps", kind: "cited", status: "locked" }),
+    });
+    const result = defsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.coverage[0]!.checked).toBe(2);
+    expect(
+      result.findings.filter((f) => f.path === "definitions/notation/sym-eps.md" && f.severity === "ERROR").length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("id must equal the filename STEM, not the nested path (rk-5lzf)", () => {
+    const snap = snapshotFromFiles({
+      "definitions/notation/sym-eps.md": shardText({ id: "sym-eps", term: "eps", kind: "original", status: "locked", consensus: "x" }),
+    });
+    const result = defsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.findings.filter((f) => f.message.includes("filename stem"))).toHaveLength(0);
+  });
+
+  test("README.md/INDEX.md are skipped at ANY depth (rk-5lzf)", () => {
+    const snap = snapshotFromFiles({
+      "definitions/notation/README.md": "not a shard\n",
+      "definitions/notation/INDEX.md": "not a shard\n",
+      "definitions/def-a.md": shardText({ id: "def-a", term: "A", kind: "original", status: "locked", consensus: "x" }),
+    });
+    const result = defsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expect(result.coverage[0]!.checked).toBe(1);
+  });
+
   test("a fully-empty definitions/ tree is a legitimate 0/0 pass, not an error", () => {
     const result = defsGate.run(snapshotFromFiles({}), DEFAULT_GATE_CONFIG);
     expect(result.coverage).toEqual([{ gate: "defs", unit: "shards", checked: 0, total: 0 }]);

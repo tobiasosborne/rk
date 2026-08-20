@@ -141,6 +141,29 @@ export function listDir(snapshot: RepoSnapshot, dir: string): string[] {
   return [...names].sort();
 }
 
+/** Every snapshot key at ANY depth under `dir` (repo-relative, sorted), optionally filtered to a
+ * filename suffix. The recursive sibling of `listDir` above: `listDir` returns immediate CHILD
+ * NAMES (one level, directories collapsed to their own name), this returns full PATHS to files at
+ * every depth. Added by rk-5lzf (LB5) for `definitions/**\/*.md` — the notation register lives at
+ * `definitions/notation/<symbol-id>.md`, and a one-level lister silently skipped it. Returns `[]`
+ * when nothing lives under `dir`, the same legitimate "this tree has none of these" state
+ * `listDir` reports. */
+export function listFilesRecursive(snapshot: RepoSnapshot, dir: string, suffix?: string): string[] {
+  const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+  const out: string[] = [];
+  for (const path of snapshot.keys()) {
+    if (!path.startsWith(prefix)) continue;
+    if (suffix !== undefined && !path.endsWith(suffix)) continue;
+    out.push(path);
+  }
+  return out.sort();
+}
+
+/** The basename of a repo-relative path (`definitions/notation/x.md` -> `x.md`). */
+export function baseName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
 /** True iff `path` is present in `snapshot` verbatim. */
 export function hasPath(snapshot: RepoSnapshot, path: string): boolean {
   return snapshot.has(path);

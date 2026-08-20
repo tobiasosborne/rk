@@ -401,7 +401,7 @@ first production fence supplier must satisfy (rk-tracked productionization bead)
 
 ---
 
-## Gate 1 — defs (`definitions/*.md`)
+## Gate 1 — defs (`definitions/**/*.md`, recursive)
 
 **Purpose.** Guard the project's vocabulary against drift: no two shards may define the same
 term, or silently annex each other's alias, and every `cited` definition must be traceable to a
@@ -417,7 +417,16 @@ class-driven, not incident-driven — record this honestly rather than inventing
 incident.
 
 **Inputs.**
-- Glob: `definitions/*.md`, excluding `README.md`, `INDEX.md` (check-defs.py:27,80).
+- Glob: `definitions/**/*.md` — **RECURSIVE** (rk-5lzf, 2026-08-20), excluding `README.md` and
+  `INDEX.md` by BASENAME at any depth (check-defs.py:27,80 globs one level; this is a deliberate
+  widen, triaged **rk-stricter-intended**). The notation register (below) lives at
+  `definitions/notation/<symbol-id>.md`, and under the former one-level rule those shards reached
+  neither the snapshot (`src/store/snapshot-load.ts`'s `definitions` include rule was
+  `recursive: false`) nor this gate's own scan — so a nested shard carried any violation at all
+  while the coverage line reported a denominator that excluded it. Same shape, same fix, as the
+  rk-9pk widen of Gate 2's `argument/` glob. Ids stay FLAT: `id` must equal the filename STEM, never
+  the nested path, so a nested shard is addressed by other gates exactly as a root-level one is.
+  Fixture: `defs-16`.
 - Frontmatter: flat `key: value` per line, terminated by a second `---` line (check-defs.py:30-50).
   Amendment (rk-wc3, dogfood-2): a list-valued field may equivalently be written as a natural
   multi-line YAML block list — a `key:` line with an empty value followed by `- item`
@@ -562,6 +571,7 @@ N/A for this gate; nothing to tolerate.
 | `defs-13` | `status: draft` baseline (WARN, golden non-error case) |
 | `defs-14` | manifest file entirely absent (WARN, and checks 8–9 coverage count reads `0/K`) |
 | `defs-15` | **F5 reversed** [M0.7] — `cited` shard, `source:` and `sha256:` BOTH entirely absent ⇒ ERROR (AISM's script passes this silently, check-defs.py:112-118) |
+| `defs-16` | **nested shard invisible** [rk-5lzf] — a shard at `definitions/notation/<id>.md` carrying `defs-15`'s violation ⇒ ERROR + `checked 1/1`; pre-fix it produced zero findings at `checked 0/0` |
 
 ---
 

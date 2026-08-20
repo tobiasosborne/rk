@@ -41,6 +41,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `defs-13` | defs | `status: draft` golden case (WARN) | baseline, not a violation | landed |
 | `defs-14` | defs | manifest file entirely absent (WARN) | class-driven; same shape as `refs-01` at smaller scale | landed |
 | `defs-15` [TJO] | defs | `cited` shard, `source:`/`sha256:` BOTH entirely absent — strict ERROR | 2026-07-17 TJO premise correction (CLAUDE.md L5 amendment, commit 542197c; F5 reversed in the Fable-review addendum), contract amendment **landed in M0.7**: AISM's own script passes this silently (check-defs.py:112-118) — characterized prior art, not the spec; `docs/gate-contracts.md` Gate 1 checks 8-9 now require `source:`/`sha256:` for `kind=cited`, and Gate 1's "Corpus fixtures required" table now lists this fixture directly. Contract-backed and M0.3-enforceable (no longer anticipatory). Triage: rk-stricter-intended. | landed |
+| `defs-16` | defs | nested shard invisible — a `definitions/notation/<symbol-id>.md` shard carrying `defs-15`'s violation produced ZERO findings at `checked defs: 0/0 shards`, exit 0 | **rk-5lzf**, LB5 of `docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md` ("Notation shards are outside the current definition namespace"): `src/store/snapshot-load.ts`'s `definitions` include rule was `recursive: false` and `src/gates/defs.ts` listed one level, so the register the qPCP campaign's Gate 9 checks against was not in the snapshot at all. Red pre-fix on BOTH halves (no findings AND coverage `0/0` instead of `1/1`); mutation-proven by flipping the include rule back. | landed |
 | `linker-01` | argument/linker | missing/unterminated frontmatter | class-driven (no incident on record) | landed |
 | `linker-02` | argument/linker | `id` != filename stem | class-driven (no incident on record) | landed |
 | `linker-03` | argument/linker | bad `kind` enum value | class-driven (no incident on record) | landed |
@@ -203,11 +204,12 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `reward-27` | reward | proved-mod-audit close on a claim carrying a LIVE `l5-shard-bytes` retraction, backed by an otherwise impeccable `.rk/` provenance record ⇒ structural ERROR `[reward-tier-unbacked]` naming the retraction, its domain, issuer and reason | **rk-yic3 (P1, Tier A):** Check 4b's two routes were asymmetric about withdrawal. `l5Decision` refused backing on a live retraction in either hash domain; `provenanceDecision` consulted the retraction ledger not at all, and `pmaBackingDecision` tried the provenance route FIRST and returned the moment it backed — so a retracted claim banked through route (i), the weaker sibling of a rule route (ii) already enforced. Retraction is a fact about the CLAIM, so it now binds both routes from one shared precondition. Red against pre-repair source (pass, exit 0, zero findings), green after. The shard bytes are hashed TWICE here (the record's `claimSha256` and the retraction's `contentHash`); editing the shard requires recomputing BOTH, or the fixture passes for the wrong reason. | landed |
 | `reward-28` | reward | same close, same impeccable record, but the retraction ledger has a truncated append (no live retraction at all) ⇒ structural ERROR `[reward-tier-unbacked]`: unknowable withdrawal status never reads as "nothing is retracted" | **rk-yic3, the half `reward-27` cannot catch:** `readRetractionFacts` fails closed by emptying BOTH live maps on a poisoned store, so removing the health clause alone leaves `reward-27` green while this fixture goes red — the two failure modes are separately breakable and therefore separately fixtured. Same corruption shape as `linker-46`. | landed |
 
-Totals: 5 config + 15 defs + 46 argument/linker + 22 refs + 24 provenance + 10 runs +
-15 report-shards + 11 freshness + 28 reward = **176 fixtures** (reconciled 2026-08-10,
+Totals: 5 config + 16 defs + 46 argument/linker + 22 refs + 24 provenance + 10 runs +
+15 report-shards + 11 freshness + 28 reward = **177 fixtures** (reconciled 2026-08-10,
 rk-sp3n closed; the wave-1 panel's reviewer C recomputed the true counts; +2 rk-io5l,
 +2 rk-tlwb, +1 rk-xrgn, 2026-08-12; +3 rk-we5i, +2 rk-z93m, 2026-08-14;
-+1 refs-20 review repair 2026-08-14; +2 rk-r0j3, +2 rk-yic3 2026-08-14) across the gates named in
++1 refs-20 review repair 2026-08-14; +2 rk-r0j3, +2 rk-yic3 2026-08-14; +1 rk-5lzf `defs-16`
+2026-08-20) across the gates named in
 `docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
 with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
 are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).

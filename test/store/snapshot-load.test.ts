@@ -21,15 +21,33 @@ describe("loadSnapshot", () => {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });
   });
 
-  test("loads definitions/*.md non-recursively", () => {
+  // rk-5lzf: `definitions/` was NON-recursive until this bead — a notation shard at
+  // `definitions/notation/<symbol-id>.md` was invisible to Gate 1, the linker's def-id lookup, and
+  // Gate 9, so it could carry any violation at all and `rk check` stayed green (LB5 of
+  // docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md). Corpus fixture: `defs-16`.
+  test("loads definitions/**/*.md RECURSIVELY (rk-5lzf)", () => {
     const root = makeTree({
       "definitions/a.md": "A",
-      "definitions/sub/nested.md": "should not be loaded (definitions/ is non-recursive)",
+      "definitions/notation/sym-eps.md": "nested notation shard",
+      "definitions/sub/deep/x.md": "two levels deep",
     });
     dirs.push(root);
     const snap = loadSnapshot(root);
     expect(snap.get("definitions/a.md")).toBe("A");
-    expect(snap.has("definitions/sub/nested.md")).toBe(false);
+    expect(snap.get("definitions/notation/sym-eps.md")).toBe("nested notation shard");
+    expect(snap.get("definitions/sub/deep/x.md")).toBe("two levels deep");
+  });
+
+  // rk-5lzf: the convention profile lives at `.rk/conventions/<name>.v<n>.json`, one level BELOW
+  // the non-recursive `.rk` rule, so a pure gate could not read it at all before this bead.
+  test("loads .rk/conventions/*.json (rk-5lzf convention profiles)", () => {
+    const root = makeTree({
+      ".rk/config.json": "{}",
+      ".rk/conventions/qpcp.v1.json": '{"schema_version":"1"}',
+    });
+    dirs.push(root);
+    const snap = loadSnapshot(root);
+    expect(snap.get(".rk/conventions/qpcp.v1.json")).toBe('{"schema_version":"1"}');
   });
 
   test("loads argument/{INDEX,DAG}.md, argument/lemmas/*.md, root-level argument/*.md shards, " +

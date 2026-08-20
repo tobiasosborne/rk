@@ -9,7 +9,7 @@
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
-import { hasPath, listDir, parseFrontmatter } from "./snapshot";
+import { baseName, hasPath, listFilesRecursive, parseFrontmatter } from "./snapshot";
 import type { GateConfig } from "./config";
 
 const KINDS = ["cited", "consensus", "original"] as const;
@@ -205,16 +205,21 @@ export const defsGate: Gate = {
       });
     }
 
-    const shardNames = listDir(snapshot, "definitions")
-      .filter((n) => n.endsWith(".md") && !SKIP_FILES.has(n))
-      .sort();
+    // rk-5lzf (LB5): RECURSIVE over `definitions/**\/*.md`. The notation register lives at
+    // `definitions/notation/<symbol-id>.md`; under the former one-level scan those shards were
+    // never listed, so every check in this gate silently never ran on them while the coverage line
+    // reported a denominator that excluded them — a shard nobody reads carries no violations.
+    // README.md/INDEX.md are excluded by BASENAME, at any depth (`definitions/notation/README.md`
+    // is documentation the same way `definitions/README.md` is).
+    const shardPaths = listFilesRecursive(snapshot, "definitions", ".md").filter(
+      (p) => !SKIP_FILES.has(baseName(p)),
+    );
 
     const aliasOwner = new Map<string, string>();
     let citedCount = 0;
     let hashVerifiedCount = 0;
 
-    for (const name of shardNames) {
-      const path = `definitions/${name}`;
+    for (const path of shardPaths) {
       const content = snapshot.get(path) ?? "";
       const fm = parseFrontmatter(content);
 
@@ -245,7 +250,7 @@ export const defsGate: Gate = {
       if (hashVerified) hashVerifiedCount++;
     }
 
-    const total = shardNames.length;
+    const total = shardPaths.length;
     let unit = "shards";
     if (citedCount > 0) {
       unit += manifest.present

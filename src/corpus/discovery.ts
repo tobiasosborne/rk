@@ -188,5 +188,11 @@ export function totalFixtureCount(corpusRoot: string): number {
  * proved-mod-audit through a hand-written `.rk/` record. `reward-27` is the live-retraction case;
  * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
  * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
- * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
-export const EXPECTED_FIXTURE_COUNT = 176;
+ * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition.
+ * 177 (+1 over the then-pinned 176): rk-5lzf (Tier A, LB5 of docs/reviews/
+ * 2026-08-20-qpcp-plan-tierA-codex.md) — `defs-16`: a definitions shard one level down
+ * (`definitions/notation/<symbol-id>.md`) was invisible to BOTH the snapshot loader's
+ * non-recursive `definitions` include rule and Gate 1's one-level `listDir` scan, so it could
+ * carry any violation at all at `checked defs: 0/0 shards`, exit 0. Discovery is now recursive on
+ * both sides. */
+export const EXPECTED_FIXTURE_COUNT = 177;
