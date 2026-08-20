@@ -1,0 +1,25 @@
+{
+  "gate": "notation",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-amplified.md",
+      "message_pattern": "unregistered-symbol: '\\epsilon'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-amplified.md",
+      "message_pattern": "unregistered-symbol: '\\Delta'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 2,
+    "unit_patterns": ["symbols in 2 classes over 1 file"]
+  },
+  "config_override": { "phase": "exploration", "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no phase matrix and no notation check.",
+  "notes": "rk-5lzf (Tier A) + campaign plan section 2a, 'Admission is phase-independent'. Byte-identical repo to notation-01 except `.rk/config.json` sets `phase: exploration`, and the expectation is byte-identical too: severity ERROR, verdict fail, exit 1. LB4's finding was that the validity barrier becomes advisory exactly when admission begins — phase 3's conjecture lanes run in exploration, so a notation check that demotes there is unenforced precisely where conjectures are admitted. Note this fixture is only meaningful BECAUSE the corpus runner now applies the phase matrix (src/corpus/run.ts, this bead): before that it ran gates raw, so no fixture could express a phase claim at all and `structural: true` was unit-tested only — which under L2 means the phase classification of every check had no red fixture behind it. Mutation-proven: dropping `structural: true` from the unregistered-symbol finding leaves notation-01 green and turns THIS fixture red (severity WARN, verdict pass, exit 0)."
+}

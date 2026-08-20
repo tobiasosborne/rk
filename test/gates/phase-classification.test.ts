@@ -9,6 +9,8 @@ import { defsGate } from "../../src/gates/defs";
 import { linkerGate } from "../../src/gates/linker";
 import { refsGate } from "../../src/gates/refs";
 import { freshnessGate } from "../../src/gates/freshness";
+import { notationGate } from "../../src/gates/notation";
+import { applyPhase } from "../../src/gates/phase";
 import { DEFAULT_GATE_CONFIG } from "../../src/gates/config";
 import { sha256Hex } from "../../src/gates/sha256";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
@@ -302,5 +304,50 @@ describe("Gate 3 (refs) structural classification", () => {
     const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
     expectPresent(findings, "zero byte-verified shard citations");
     expect(structuralOf(findings, "zero byte-verified shard citations")).toBeFalsy();
+  });
+});
+
+// rk-5lzf (Tier A, LB5) + campaign plan section 2a ("Admission is phase-independent"): Gate 9's
+// unregistered-symbol ERROR is STRUCTURAL and therefore survives exploration. LB4's finding was
+// that the validity barrier becomes advisory exactly when admission begins; a notation check that
+// demotes in exploration is that failure, in the phase where conjecture lanes actually run.
+describe("Gate 9 (notation) structural classification [rk-5lzf / plan 2a]", () => {
+  const NOTATION_PROFILE = JSON.stringify({
+    schema_version: "1",
+    name: "qpcp",
+    version: 1,
+    tracked_classes: [
+      { class: "promise-gap", description: "the promise gap", symbols: ["\\epsilon"], blessed: "\\gapfrac" },
+    ],
+    lattices: {},
+    choices: {},
+    enums: {},
+  });
+
+  function unregisteredSnap(): RepoSnapshot {
+    return snapshotFromFiles({
+      ".rk/conventions/qpcp.v1.json": NOTATION_PROFILE,
+      "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\epsilon is constant.\n",
+    });
+  }
+
+  test("unregistered-symbol is STRUCTURAL (blocks in both phases)", () => {
+    const { findings } = notationGate.run(unregisteredSnap(), { ...DEFAULT_GATE_CONFIG, conventionProfile: "qpcp.v1" });
+    expectPresent(findings, "unregistered-symbol");
+    expect(structuralOf(findings, "unregistered-symbol")).toBe(true);
+  });
+
+  test("applyPhase leaves it an ERROR in exploration", () => {
+    const { findings } = notationGate.run(unregisteredSnap(), { ...DEFAULT_GATE_CONFIG, conventionProfile: "qpcp.v1" });
+    const demoted = applyPhase(findings, "exploration");
+    const hit = demoted.find((f) => f.message.includes("unregistered-symbol"));
+    expect(hit!.severity).toBe("ERROR");
+    expect(hit!.message).not.toContain("advisory in exploration phase");
+  });
+
+  test("the no-profile state is a WARN in BOTH phases (nothing to demote, nothing hidden)", () => {
+    const { findings } = notationGate.run(snapshotFromFiles({}), DEFAULT_GATE_CONFIG);
+    expect(findings.every((f) => f.severity === "WARN")).toBe(true);
+    expect(applyPhase(findings, "exploration")).toEqual(findings);
   });
 });

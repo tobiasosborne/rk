@@ -395,6 +395,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
+| **Gate 9 — notation** (rk-5lzf) | Check 1 (`unregistered-symbol`) — the WHOLE blocking surface of the gate | (none; Check 2's profile-presence findings are WARN in both phases, nothing to demote) | the FIRST whole-gate STRUCTURAL classification, and the reason is admission, not registry coherence. Campaign plan section 2a: admission of a conjecture or a cited result is a transaction over one candidate whose notation must be ERROR-free regardless of phase. LB4 of the 2026-08-20 Tier A review named the failure exactly — "the validity barrier becomes advisory exactly when admission begins" — and phase 3's conjecture lanes run in `exploration`, so a demotable notation check would be unenforced precisely where conjectures are admitted. Fixture `notation-02` |
 | **Gate 7 — freshness** (M2.6) | (none) | manifest-malformation findings, per-entry STALE, per-entry declared-but-missing | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. Classified WHOLE-GATE non-structural for the same reason Gates 4-6 are: the subject matter (a repo's own adopted generated-output convention) is consolidation-shaped by construction, not a per-check carve-out |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
@@ -404,6 +405,14 @@ already WARN-only in both phases (nothing to demote) — noted here so their abs
 above reads as a deliberate, considered call, not an oversight: the WHOLE-GATE non-structural
 classification for Gates 4-6 (and now Gate 7) is a deliberate policy choice (their subject matter
 is inherently consolidation-shaped), not a per-check omission.
+
+**Corpus enforcement of this table (rk-5lzf).** The corpus runner (`src/corpus/run.ts`) applies
+`applyPhase` to every gate result, exactly as `src/cli/check.ts` does, so a fixture can assert a
+phase claim directly (`notation-02`). Before this it ran gates RAW, which meant no fixture could
+express "this ERROR survives exploration" at all and every `structural: true` flag was unit-tested
+only — under L2 that is a classification with no red fixture behind it. In `consolidation` (every
+pre-rk-5lzf fixture, and the default) `applyPhase` is the identity function, so the change is
+byte-identical for them by construction.
 
 The synthetic `config` gate (M1, rk-xbm) is deliberately absent from this table: its one finding
 class (a malformed/unknown `.rk/config.json` field) is unconditionally `structural: true` — see
@@ -2981,3 +2990,78 @@ absent or `"1"` and accept v2 records; writers emit only `"2"`. A `demote` witho
 as an unknown no-op. The current schema-v2 demote shape additionally requires `nodeId`,
 `priorStatus`, and `priorAf` (2026-08-10 review R1). This is an in-session amendment of the
 unpushed v2 demote compatibility event, not a new record version.
+
+---
+
+## Gate 9 — notation (`definitions/**/*.md`, `argument/**/*.md`, `refs/records/**/*.json`)
+
+NEW in rk-5lzf (Tier A; LB5/LB8 of `docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`; campaign
+plan `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md` section 5) — no AISM counterpart. A
+LEXICAL check, deliberately: it does not read mathematics, it reads tokens.
+
+**Purpose.** Make one failure class impossible: a symbol whose meaning nobody wrote down. The
+qPCP literature writes `\Delta` for a promise gap in one paper and a spectral gap in another, `d`
+for a code distance and a qudit dimension, `\epsilon` for a gap and an energy density. A campaign
+that lets those tokens into its own prose unregistered is building on sentences that cannot be
+read back — LB8's "the trap list is mathematically incomplete", made mechanical.
+
+**Failure mode guarded.** An unregistered tracked symbol: a token the convention profile says is
+load-bearing, used in a shard body or a blessed statement, with no notation shard saying which
+quantity it denotes. Class-driven (the campaign is new); the source incident is the literature
+itself, enumerated in the profile draft's checked divergences.
+
+**Inputs.**
+- The convention profile named by `.rk/config.json`'s `conventionProfile` — see "Convention
+  profile" above. It is the ONLY source of what is tracked.
+- `definitions/**/*.md` and `argument/**/*.md` shard BODIES (frontmatter excluded — a `symbol:`
+  line is a declaration, not a usage), excluding `README.md`/`INDEX.md`/`DAG.md` at any depth.
+  Conjecture shards need no special case: they are argument shards.
+- `refs/records/**/*.json`, field `statement_blessed` (the extraction records of rk-nsex). The
+  directory may not exist yet — it is DISCOVERED, never required. A record whose JSON does not
+  parse is a WARN naming it, never a silent skip.
+
+**Reach, stated rather than implied.** The profile's tracked tokens are raw literature notation:
+some are plain macro tokens (`\epsilon`), some are bare identifiers (`c`, `k`) or brace/subscript
+forms (`\lambda_{\min}`). Only the macro-token subset can be scanned for reliably — searching prose
+for a bare `c` produces noise, not signal. Gate 9 enforces that subset and COUNTS the rest in its
+coverage line. A gate that quietly claimed the wider reach would be the more dangerous artifact.
+
+**Quoted source text is exempt.** A translation row in a notation shard, its quote anchor, and any
+standalone `"<quote>"` line in an argument shard are the SOURCE's notation, verbatim. Recording a
+foreign convention is the register's whole job; flagging it would make the register unwritable.
+Everything else in a shard body is campaign prose and is scanned. Fixture `notation-04` pins this.
+
+**Checks.**
+1. **Unregistered tracked symbol.** A tracked macro token appearing in any scanned artifact must be
+   the `symbol:` of a notation shard whose `class:` is one of the classes that track that token
+   (a token claimed by several classes is cleared by a register entry in ANY of them — the overlap
+   is real and the register is what resolves it). Otherwise ERROR `unregistered-symbol`, naming the
+   token, its tracking classes, and whether it is unregistered outright or registered only in some
+   other class. **STRUCTURAL** — see below. One finding per (file, symbol): ten usages in one file
+   are one defect, reported at the first.
+2. **Profile presence.** No `conventionProfile` configured ⇒ one WARN and `checked 0/0 (no profile
+   configured)`. A profile configured but UNUSABLE ⇒ a different WARN naming it and
+   `(profile "<ref>" unusable, nothing enforced)`. The two are never collapsed: a campaign that
+   believes it is being checked must not read the same output as one that knows it is not. The
+   config gate's own ERROR is what blocks the run in the second case. Fixture `notation-03`.
+
+**Phase classification. STRUCTURAL, never demoted.** Campaign plan section 2a: admission of a
+conjecture or a cited result is a transaction over one candidate, and its notation must be
+ERROR-free at admission regardless of phase. LB4's finding was that the validity barrier becomes
+advisory exactly when admission begins — phase 3's conjecture lanes run in `exploration`, so a
+notation check that demoted there would be unenforced precisely where conjectures are admitted.
+Fixture `notation-02` is `notation-01` under `phase: exploration` with a byte-identical
+expectation.
+
+**Coverage line.** `checked notation: <registered>/<encountered> symbols in <C> classes over <M>
+files`, plus `, <N> tracked tokens not lexically enforceable (<list>)` when the profile carries
+any. `checked` and `encountered` count DISTINCT tracked macro tokens across the whole scan.
+
+**Corpus fixtures required.**
+
+| id | violation |
+|---|---|
+| `notation-01` | two tracked symbols (`\epsilon`, `\Delta`) used in a conjecture shard, neither registered ⇒ 2 structural ERRORs, `checked 0/2` |
+| `notation-02` | `notation-01` under `phase: exploration` ⇒ byte-identical ERROR/fail/exit 1 (structural survives demotion) |
+| `notation-03` | no `conventionProfile` configured ⇒ WARN + `0/0 (no profile configured)`, never a silent pass |
+| `notation-04` | golden pass: blessed macros registered in their classes, `2/2`; a translation row and its quote anchor carry an unregistered source token and are NOT flagged |

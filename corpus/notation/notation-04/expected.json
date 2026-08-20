@@ -1,0 +1,14 @@
+{
+  "gate": "notation",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 2,
+    "total": 2,
+    "unit_patterns": ["symbols in 2 classes over 3 files", "1 tracked token not lexically enforceable"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation register and no lexical symbol check.",
+  "notes": "rk-5lzf (Tier A, LB5): the GOLDEN PASS for Gate 9 and the control notation-01 is read against. Same conjecture shard, rewritten in blessed macros with both register entries present, so every tracked macro token resolves to a shard in a class that tracks it: 2/2. The fixture also pins the two exemptions the check would be unusable without — a translation row and its quote anchor in sym-specgap.md carry the source's own `\\Delta`, a tracked-and-deliberately-UNregistered token, and are NOT flagged, because recording a foreign convention is the register's whole job. The coverage line still states the `c` token it cannot scan for lexically: a green run reports its reach as honestly as a red one."
+}

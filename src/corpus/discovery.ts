@@ -17,8 +17,10 @@ import { join } from "node:path";
 /** The gate directory names under corpus/ — matches each gate's `name` in src/gates/index.ts
  * and the fixture-id prefix (corpus/README.md: "<gate> is one of defs, linker, refs, provenance,
  * runs, shards"). `freshness` (M2.6, Gate 7, src/gates/freshness.ts) is the second synthetic
- * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. */
-export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards", "freshness", "reward"] as const;
+ * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. `notation`
+ * (rk-5lzf, Gate 9, src/gates/notation.ts) is the fourth synthetic entry, placed after `defs`
+ * to match src/gates/index.ts's own GATES order. */
+export const GATE_DIRS = ["config", "defs", "notation", "linker", "refs", "provenance", "runs", "shards", "freshness", "reward"] as const;
 export type GateDir = (typeof GATE_DIRS)[number];
 
 export function discoverFixtures(corpusRoot: string, gateDir: string): string[] {
@@ -213,5 +215,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * adopted under the new pure generator `notation-macros` and hand-edited so `\gapfrac` expands to
  * `\Delta` instead of the register's `\epsilon`. Without adoption this is invisible: the .tex
  * compiles, every shard writes the blessed macro, and the printed mathematics silently says
- * something else. */
-export const EXPECTED_FIXTURE_COUNT = 184;
+ * something else.
+ * 188 (+4 over the then-pinned 184): rk-5lzf, GATE 9 itself — `notation-01` (two tracked symbols
+ * used in a conjecture shard, neither registered), `notation-02` (the same under
+ * `phase: exploration`, byte-identical expectation: structural survives demotion — and the first
+ * fixture in the corpus able to make a PHASE claim at all, since `src/corpus/run.ts` now applies
+ * `applyPhase` the way `rk check` does), `notation-03` (no profile configured ⇒ visible WARN and
+ * `0/0`, never a silent pass), `notation-04` (golden pass, with the quoted-source exemption
+ * pinned). "notation" also added to GATE_DIRS as the fourth synthetic gate's corpus directory. */
+export const EXPECTED_FIXTURE_COUNT = 188;

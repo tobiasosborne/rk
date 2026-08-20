@@ -22,6 +22,7 @@
 import type { Gate } from "./framework";
 import { configGate } from "./config";
 import { defsGate } from "./defs";
+import { notationGate } from "./notation";
 import { refsGate } from "./refs";
 import { linkerGate } from "./linker";
 import { runsGate } from "./runs";
@@ -34,9 +35,15 @@ import { rewardGate } from "./reward";
 // synthetic entry with no check-all.sh counterpart — the payout ledger is rk-only (PRD Amendment
 // A1). Placed after shards (it consults parseRegistry, so registry parse findings appear first)
 // and before freshness (which stays last per its own note above).
+// rk-5lzf (Tier A, LB5): `notationGate` (src/gates/notation.ts, docs/gate-contracts.md Gate 9) is
+// the fourth synthetic entry — no check-all.sh counterpart; AISM has no notation register. Placed
+// immediately after `defsGate`, whose own shards ARE the register it checks against: a reader
+// scanning output top-to-bottom sees a malformed or colliding register entry before the
+// unregistered-symbol findings that follow from it.
 export const GATES: readonly Gate[] = [
   configGate,
   defsGate,
+  notationGate,
   refsGate,
   linkerGate,
   runsGate,
