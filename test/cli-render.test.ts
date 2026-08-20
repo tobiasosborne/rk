@@ -338,3 +338,86 @@ describe("rk render — CLI edge", () => {
     expect(lines.join("\n")).toContain("--out");
   });
 });
+
+// rk-5lzf (Tier A, LB5): `rk render macros` — the notation register's generated LaTeX. The pure
+// rendering is exhaustively tested in test/render/macros-tex.test.ts; this block proves the fs/CLI
+// edge and, above all, the ADOPTION that makes Gate 7 byte-diff the file from then on.
+describe("rk render macros — CLI edge (rk-5lzf)", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  function repoWithRegister(): string {
+    const root = mkdtempSync(join(tmpdir(), "rk-macros-cli-"));
+    dirs.push(root);
+    mkdirSync(join(root, "definitions", "notation"), { recursive: true });
+    writeFileSync(
+      join(root, "definitions", "notation", "sym-gapfrac.md"),
+      "---\nid: sym-gapfrac\nterm: relative promise gap\nshard_type: notation\nsymbol: \\gapfrac\n" +
+        "class: promise-gap\nexpansion: \\ensuremath{\\epsilon}\nkind: consensus\nconsensus: campaign\nstatus: locked\n---\nbody\n",
+    );
+    return root;
+  }
+
+  test("writes macros.tex and adopts it in .rk/generated.json under 'notation-macros'", async () => {
+    const root = repoWithRegister();
+    const { out, lines } = capture();
+    const code = await renderCommand(["macros", "--root", root], out);
+    expect(code).toBe(0);
+
+    const tex = readFileSync(join(root, "definitions", "notation", "macros.tex"), "utf8");
+    expect(tex).toContain("\\newcommand{\\gapfrac}{\\ensuremath{\\epsilon}}");
+
+    const manifest = JSON.parse(readFileSync(join(root, ".rk", "generated.json"), "utf8"));
+    expect(manifest.entries).toContainEqual({ path: "definitions/notation/macros.tex", generator: "notation-macros" });
+    expect(lines.join("\n")).toContain("for Gate 7");
+  });
+
+  test("re-running is idempotent — same bytes, one manifest entry, never a duplicate", async () => {
+    const root = repoWithRegister();
+    const { out } = capture();
+    await renderCommand(["macros", "--root", root], out);
+    const first = readFileSync(join(root, "definitions", "notation", "macros.tex"), "utf8");
+    await renderCommand(["macros", "--root", root], out);
+    const second = readFileSync(join(root, "definitions", "notation", "macros.tex"), "utf8");
+    expect(second).toBe(first);
+    const manifest = JSON.parse(readFileSync(join(root, ".rk", "generated.json"), "utf8"));
+    expect(manifest.entries.filter((e: { path: string }) => e.path.endsWith("macros.tex"))).toHaveLength(1);
+  });
+
+  test("an existing manifest entry from another generator is preserved untouched", async () => {
+    const root = repoWithRegister();
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(
+      join(root, ".rk", "generated.json"),
+      JSON.stringify({ schema_version: "1", entries: [{ path: "argument/INDEX.md", generator: "linker-index" }] }, null, 2),
+    );
+    const { out } = capture();
+    await renderCommand(["macros", "--root", root], out);
+    const manifest = JSON.parse(readFileSync(join(root, ".rk", "generated.json"), "utf8"));
+    expect(manifest.entries).toContainEqual({ path: "argument/INDEX.md", generator: "linker-index" });
+    expect(manifest.entries).toHaveLength(2);
+  });
+
+  test("an unparseable manifest is a loud failure, never a silent clobber", async () => {
+    const root = repoWithRegister();
+    mkdirSync(join(root, ".rk"), { recursive: true });
+    writeFileSync(join(root, ".rk", "generated.json"), "{ not json");
+    const { out, lines } = capture();
+    const code = await renderCommand(["macros", "--root", root], out);
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("not valid JSON");
+    expect(readFileSync(join(root, ".rk", "generated.json"), "utf8")).toBe("{ not json");
+  });
+
+  test("an empty register still writes a valid file and says the register is empty", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rk-macros-empty-"));
+    dirs.push(root);
+    const { out, lines } = capture();
+    const code = await renderCommand(["macros", "--root", root], out);
+    expect(code).toBe(0);
+    expect(existsSync(join(root, "definitions", "notation", "macros.tex"))).toBe(true);
+    expect(lines.join("\n")).toContain("register is empty");
+  });
+});

@@ -1,0 +1,13 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    { "severity": "ERROR", "path_pattern": "definitions/notation/macros.tex", "message_pattern": "is STALE" },
+    { "severity": "ERROR", "path_pattern": "definitions/notation/macros.tex", "message_pattern": "notation-macros" },
+    { "severity": "ERROR", "path_pattern": "definitions/notation/macros.tex", "message_pattern": "first difference at line 6" }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["generated artifacts"] },
+  "aism_behavior": "n/a: AISM has no notation register, no generated macro file, and no declared-manifest mechanism.",
+  "notes": "rk-5lzf (Tier A, LB5): `definitions/notation/macros.tex` is GENERATED from the register (`rk render macros`) and adopted under generator `notation-macros`, so Gate 7 byte-diffs it on every run. Here the register blesses `\\gapfrac` as `\\ensuremath{\\epsilon}` and the committed macro file expands it to `\\Delta` instead — the exact drift the register exists to prevent, in the one file every LaTeX source in the campaign reads. Without adoption this is invisible: the .tex compiles, every shard writes the blessed macro, and the printed mathematics silently says something else. Same failure mode as `freshness-02` (hand-edited generated file) on the notation artifact. Mutation-proven: removing the `notation-macros` entry from src/gates/freshness.ts's GENERATORS turns the finding into `unknown generator` (still red, differently), and short-circuiting the STALE comparison turns it green."
+}

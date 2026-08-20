@@ -208,5 +208,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * notation shard, `shard_type` orthogonal to `kind: cited`, class in the configured profile, one
  * translation byte-verified through Gate 3's own verifier), `defs-20` (`translations:` written in
  * the FRONTMATTER, where the flat grammar silently drops every row — the zero-rows false-green,
- * same shape as dogfood-2's silent-empty-`deps:`). */
-export const EXPECTED_FIXTURE_COUNT = 183;
+ * same shape as dogfood-2's silent-empty-`deps:`).
+ * 184 (+1 over the then-pinned 183): rk-5lzf — `freshness-12`: `definitions/notation/macros.tex`
+ * adopted under the new pure generator `notation-macros` and hand-edited so `\gapfrac` expands to
+ * `\Delta` instead of the register's `\epsilon`. Without adoption this is invisible: the .tex
+ * compiles, every shard writes the blessed macro, and the printed mathematics silently says
+ * something else. */
+export const EXPECTED_FIXTURE_COUNT = 184;

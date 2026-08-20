@@ -23,7 +23,7 @@
 // After writing the site, `rk render` upserts its OWN manifest entry
 // `{"path": "<out>/index.html", "generator": "render-site-v1"}` (freshness.ts's
 // `RENDER_SITE_GENERATOR`) — creating `.rk/generated.json` if absent, preserving every other entry
-// untouched. `RENDER_SITE_GENERATOR`/`MANIFEST_PATH`/`MANIFEST_SCHEMA_VERSION` are imported
+// `RENDER_SITE_GENERATOR`/`MANIFEST_PATH` are imported
 // read-only from src/gates/freshness.ts (the freshness lane's contract); this file never edits
 // that gate.
 //
@@ -50,7 +50,12 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
-import { MANIFEST_PATH, MANIFEST_SCHEMA_VERSION, RENDER_SITE_GENERATOR } from "../gates/freshness";
+import { MANIFEST_PATH, RENDER_SITE_GENERATOR } from "../gates/freshness";
+// rk-5lzf: the `.rk/generated.json` upsert this file used to own privately now lives in
+// src/cli/generated-manifest.ts, shared with `rk render macros` — one writer for Gate 7's declared
+// input, so two producers cannot disagree about its shape.
+import { adoptGeneratedEntry } from "./generated-manifest";
+import { renderMacrosCommand } from "./render-macros";
 import { loadDefsData } from "../render/defs-edge";
 import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
 import { loadFrResiduals } from "../render/fr-edge";
@@ -210,77 +215,11 @@ function toPosixPath(p: string): string {
   return p.split(sep).join("/");
 }
 
-interface GeneratedManifest {
-  schema_version: string;
-  entries: { path: string; generator: string }[];
-}
-
-type ManifestLoad = { manifest: GeneratedManifest; manifestPath: string } | { error: string };
-
-/** Loads `.rk/generated.json` for an in-place upsert. Absent -> a fresh empty manifest (the
- * legitimate presence-conditional case, same stance freshness.ts takes). Present-but-unparseable
- * or the wrong top-level shape -> a loud error and NO write (this command never silently clobbers
- * a manifest it cannot understand — CLAUDE.md L2); the caller surfaces the message and exits
- * nonzero. Present-and-well-shaped -> every existing entry is carried forward untouched; only this
- * command's OWN entry (matched by `path`) is inserted or replaced. */
-function loadManifestForUpsert(root: string): ManifestLoad {
-  const manifestPath = join(root, MANIFEST_PATH);
-  if (!existsSync(manifestPath)) {
-    return { manifest: { schema_version: MANIFEST_SCHEMA_VERSION, entries: [] }, manifestPath };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(manifestPath, "utf8"));
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return {
-      error: `rk render: ${MANIFEST_PATH} exists but is not valid JSON (${msg}) -- fix or remove it before 'rk render' can adopt its output there.`,
-    };
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    !Array.isArray((parsed as Record<string, unknown>).entries)
-  ) {
-    return {
-      error:
-        `rk render: ${MANIFEST_PATH} exists but is not the expected shape ` +
-        `({"schema_version": ..., "entries": [...]}) -- fix or remove it before 'rk render' can adopt its output there.`,
-    };
-  }
-  const obj = parsed as { schema_version?: unknown; entries: unknown[] };
-  const entries = obj.entries.filter(
-    (e): e is { path: string; generator: string } =>
-      typeof e === "object" && e !== null && typeof (e as Record<string, unknown>).path === "string" &&
-      typeof (e as Record<string, unknown>).generator === "string",
-  );
-  return {
-    manifest: {
-      schema_version: typeof obj.schema_version === "string" ? obj.schema_version : MANIFEST_SCHEMA_VERSION,
-      entries,
-    },
-    manifestPath,
-  };
-}
-
-/** Upserts `rk render`'s own entry into `.rk/generated.json` — creating the file if absent,
- * replacing an existing entry for the same `path` in place, appending otherwise. Returns an error
- * message (and writes nothing) when the existing manifest could not be understood. */
-function adoptGeneratedEntry(root: string, entryPath: string): string | undefined {
-  const loaded = loadManifestForUpsert(root);
-  if ("error" in loaded) return loaded.error;
-  const { manifest, manifestPath } = loaded;
-  const newEntry = { path: entryPath, generator: RENDER_SITE_GENERATOR };
-  const idx = manifest.entries.findIndex((e) => e.path === entryPath);
-  if (idx >= 0) manifest.entries[idx] = newEntry;
-  else manifest.entries.push(newEntry);
-  mkdirSync(dirname(manifestPath), { recursive: true });
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  return undefined;
-}
-
 export async function renderCommand(args: string[], out: Out, deps: RenderCommandDeps = {}): Promise<number> {
+  // rk-5lzf: `rk render macros` regenerates the notation macro file. A subcommand rather than a
+  // flag on the site render — the two write different artifacts under different generators, and a
+  // flag would make "which artifact did this adopt?" a matter of argument order.
+  if (args[0] === "macros") return renderMacrosCommand(args.slice(1), out);
   const { rest, root } = extractRoot(args);
   const { rest: r1, value: outFlag } = extractFlag(rest, "--out");
   const { rest: r2, value: northStarFlag } = extractFlag(r1, "--north-star");
@@ -327,7 +266,7 @@ export async function renderCommand(args: string[], out: Out, deps: RenderComman
   }
 
   const manifestEntryPath = toPosixPath(join(outDir, "index.html"));
-  const manifestError = adoptGeneratedEntry(root, manifestEntryPath);
+  const manifestError = adoptGeneratedEntry(root, manifestEntryPath, RENDER_SITE_GENERATOR, "rk render");
   if (manifestError) {
     out.log(manifestError);
     return 1;

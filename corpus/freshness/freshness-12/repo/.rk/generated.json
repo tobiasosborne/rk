@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "entries": [
+    { "path": "definitions/notation/macros.tex", "generator": "notation-macros" }
+  ]
+}

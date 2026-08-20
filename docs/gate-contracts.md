@@ -2565,7 +2565,10 @@ that rule for any artifact a repo opts into declaring.
   `(snapshot) => string` functions this gate calls itself: `linker-index` (renders
   `argument/INDEX.md` via `src/gates/linker-render.ts`'s `renderIndex`, over the same
   `parseRegistry` every Gate 2 run computes independently), `linker-dag` (`DAG.md` /
-  `renderDag`, same source). (b) `RENDER_SITE_GENERATOR` — `render-site-v1`, EDGE-SUPPLIED (see
+  `renderDag`, same source), and `notation-macros` (rk-5lzf: `definitions/notation/macros.tex` via
+  `src/render/macros-tex.ts`'s `renderMacros`, one `\newcommand` per `shard_type: notation` shard,
+  sorted by id, no timestamps — written by `rk render macros`, which calls the SAME pure function,
+  so producer and verifier cannot drift; fixture `freshness-12`). (b) `RENDER_SITE_GENERATOR` — `render-site-v1`, EDGE-SUPPLIED (see
   "Edge-supplied generators" above): recognized, but this gate never regenerates it itself. A
   manifest entry naming any OTHER generator id (neither (a) nor (b)) is now a BLOCKING ERROR —
   see Check 4, below (M2 boundary review blocker #3a; flipped from the pre-repair "not an error
@@ -2766,6 +2769,7 @@ yet applied here since both files are out of this repair wave's scope):
 | `freshness-09` | **blocker #4** — manifest `schema_version: "2"` (wrong version) ⇒ ERROR naming both the actual and expected value |
 | `freshness-10` | **blocker #4** — manifest carries an extra top-level property ⇒ ERROR (`additionalProperties:false`) |
 | `freshness-11` | **blocker #4** — a manifest entry carries an extra property beyond `path`/`generator` ⇒ per-entry ERROR, entry dropped entirely (`checked=0/0`) |
+| `freshness-12` | **rk-5lzf** — `definitions/notation/macros.tex` (generator `notation-macros`) hand-edited so a blessed macro expands to a different symbol than the register blesses ⇒ ERROR naming file, generator and first differing line |
 
 ## Gate 8 — reward (`.rk/reward-ledger.jsonl`)
 

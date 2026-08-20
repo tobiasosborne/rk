@@ -115,6 +115,12 @@ function renderHelp(out: Out): number {
   out.log("  --out defaults to build/site (relative to --root). Writes index.html: dashboard,");
   out.log("  AND/OR DAG, and a drill-down panel per node. No server, no CDN; open the file directly.");
   out.log("  next: 'rk render' in a stamped repo, then open build/site/index.html.");
+  out.log("");
+  out.log("rk render macros — regenerate definitions/notation/macros.tex from the notation register");
+  out.log("  usage: rk render macros [--root <dir>]");
+  out.log("  One \\newcommand per shard_type: notation shard, sorted by id, no timestamps. Adopts the");
+  out.log("  file in .rk/generated.json (generator 'notation-macros') so Gate 7 byte-diffs it.");
+  out.log("  next: \\input the file from the campaign preamble; never hand-edit it (rule 9).");
   return 0;
 }
 
@@ -153,6 +159,7 @@ function topHelp(out: Out): number {
   out.log("  rk phase [exploration|consolidation] [--root <dir>]  print/switch phase (M1.3, docs/gate-contracts.md)");
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
+  out.log("  rk render macros [--root <dir>]  regenerate definitions/notation/macros.tex from the register (rk-5lzf)");
   out.log("  rk verify --af <id> [--dry-run]  hard-tier verification driver over an af workspace (M3.6, PRD C9)");
   out.log("  rk frontier <goal-id>      the GOAL frontier: obligations, dead-ends, prospecting pool (S0)");
   out.log("  rk reward report [--strict]  fold .rk/reward-ledger.jsonl into shadow payouts (S0, prereg v1)");

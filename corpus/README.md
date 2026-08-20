@@ -181,6 +181,7 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `freshness-09` | freshness | manifest `schema_version: "2"` ⇒ loud manifest ERROR (a future incompatible manifest can never silently run under v1 semantics) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-10` | freshness | extra top-level manifest key ⇒ loud ERROR (`additionalProperties: false` enforced at runtime) | **M2 boundary review blocker 4** (613b304). | landed |
 | `freshness-11` | freshness | extra per-entry key ⇒ loud ERROR, entry never half-accepted | **M2 boundary review blocker 4** (613b304). | landed |
+| `freshness-12` | freshness | `definitions/notation/macros.tex` adopted under generator `notation-macros` and hand-edited so `\gapfrac` expands to `\Delta` instead of the register's `\epsilon` ⇒ ERROR naming the file, the generator, and the first differing line | **rk-5lzf** (Tier A, LB5): the macro file is the one artifact every LaTeX source in the campaign `\input`s, and without Gate 7 adoption a hand edit is invisible — the .tex compiles, every shard writes the blessed macro, and the printed mathematics silently says something else. Same failure mode as `freshness-02`, on the notation artifact; the generator is PURE (`src/render/macros-tex.ts`, called by both `rk render macros` and the gate) so there is no `externalRegen` detour and no way for producer and verifier to drift. | landed |
 | `reward-01` | reward | garbage line inside `.rk/reward-ledger.jsonl` ⇒ one structural ERROR per unreadable line, later lines stay checked | **N2 (rk-5man)**, distilled from the mip-re incident CLASS "every automated layer behaved correctly on a bad input" — the account book must be fully readable or loudly not. | landed |
 | `reward-02` | reward | duplicate CLOSE of one node ⇒ structural ERROR (the double-pay attempt; the fold ignores it, the gate names it) | **N2 (rk-5man)**. | landed |
 | `reward-03` | reward | CLOSE naming a ghost id ⇒ structural ERROR `[reward-unknown-target]` — the ledger may not pay ghosts | **N2 (rk-5man)**, the reward-events-for-work-that-never-entered-the-graph gaming class. | landed |
@@ -211,11 +212,11 @@ and `planned` becomes `landed` in a follow-up edit to this table.
 | `reward-28` | reward | same close, same impeccable record, but the retraction ledger has a truncated append (no live retraction at all) ⇒ structural ERROR `[reward-tier-unbacked]`: unknowable withdrawal status never reads as "nothing is retracted" | **rk-yic3, the half `reward-27` cannot catch:** `readRetractionFacts` fails closed by emptying BOTH live maps on a poisoned store, so removing the health clause alone leaves `reward-27` green while this fixture goes red — the two failure modes are separately breakable and therefore separately fixtured. Same corruption shape as `linker-46`. | landed |
 
 Totals: 7 config + 20 defs + 46 argument/linker + 22 refs + 24 provenance + 10 runs +
-15 report-shards + 11 freshness + 28 reward = **183 fixtures** (reconciled 2026-08-10,
+15 report-shards + 12 freshness + 28 reward = **184 fixtures** (reconciled 2026-08-10,
 rk-sp3n closed; the wave-1 panel's reviewer C recomputed the true counts; +2 rk-io5l,
 +2 rk-tlwb, +1 rk-xrgn, 2026-08-12; +3 rk-we5i, +2 rk-z93m, 2026-08-14;
-+1 refs-20 review repair 2026-08-14; +2 rk-r0j3, +2 rk-yic3 2026-08-14; +7 rk-5lzf `defs-16`..`defs-20`,
-`config-06`, `config-07` 2026-08-20) across the gates named in
++1 refs-20 review repair 2026-08-14; +2 rk-r0j3, +2 rk-yic3 2026-08-14; +8 rk-5lzf `defs-16`..`defs-20`,
+`config-06`, `config-07`, `freshness-12` 2026-08-20) across the gates named in
 `docs/gate-contracts.md`'s per-gate tables (`config` and `freshness` are the two synthetic gates
 with no AISM `check-all.sh` counterpart, added by rk-xbm and M2.6 respectively; both directories
 are wired into `src/corpus/discovery.ts`'s `GATE_DIRS`).

@@ -43,6 +43,7 @@ import type { GateConfig } from "./config";
 import type { RepoSnapshot } from "./snapshot";
 import { parseRegistry } from "./linker-parse";
 import { renderDag, renderIndex } from "./linker-render";
+import { MACROS_GENERATOR, renderMacros } from "../render/macros-tex";
 
 export const MANIFEST_PATH = ".rk/generated.json";
 export const MANIFEST_SCHEMA_VERSION = "1";
@@ -86,6 +87,12 @@ export type ExternalRegenResult =
 const GENERATORS: Record<string, (snapshot: RepoSnapshot) => string> = {
   "linker-index": (snapshot) => renderIndex(parseRegistry(snapshot).lemmas),
   "linker-dag": (snapshot) => renderDag(parseRegistry(snapshot).lemmas),
+  // rk-5lzf (LB5): `definitions/notation/macros.tex`, one \newcommand per notation-register
+  // shard. A PURE generator like the two above — src/render/macros-tex.ts reads the snapshot and
+  // nothing else — so this gate regenerates and byte-diffs it itself, with no `externalRegen`
+  // detour. That is what makes a hand-edited macro file a blocking ERROR instead of a silent
+  // divergence between the register and the campaign's LaTeX.
+  [MACROS_GENERATOR]: (snapshot) => renderMacros(snapshot),
 };
 
 interface ParsedManifest {
