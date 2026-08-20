@@ -1,4 +1,4 @@
-// EDGE — fs. Reads `definitions/*.md` frontmatter (Gate 1's own field set — id/term/kind/status/
+// EDGE — fs. Reads `definitions/**/*.md` frontmatter (Gate 1's own field set — id/term/kind/status/
 // aliases/source/sha256, src/gates/defs.ts) plus an optional repo-root CONVENTIONS.md, for the
 // richer definitions index + conventions ledger views (PRD C6). `GraphDocument.RegistryNode.defs`
 // carries only the IDS a shard cites (src/graph/types.ts) — none of term/kind/status/aliases/
@@ -22,10 +22,9 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { listDir, parseFrontmatter } from "../gates/snapshot";
+import { readDefinitionShards } from "../gates/definitions-scan";
 import { loadSnapshot } from "../store/snapshot-load";
 
-const SKIP_FILES = new Set(["README.md", "INDEX.md"]);
 const CONVENTIONS_PATH = "CONVENTIONS.md";
 
 export interface DefRecord {
@@ -59,17 +58,18 @@ function splitAliases(raw: string | undefined): string[] {
  * codebase takes), never a crash. */
 export function loadDefsData(root: string): DefsData {
   const snapshot = loadSnapshot(root);
-  const names = listDir(snapshot, "definitions")
-    .filter((n) => n.endsWith(".md") && !SKIP_FILES.has(n))
-    .sort();
 
-  const defs: DefRecord[] = names.map((name) => {
-    const path = `definitions/${name}`;
-    const fm = parseFrontmatter(snapshot.get(path) ?? "");
-    const f = fm.fields;
+  // rk-5lzf B6 (Tier A review 2026-08-20, finding 6): discovery, the non-shard policy, and the
+  // recursion come from the ONE canonical reader (src/gates/definitions-scan.ts). This view used
+  // to read one level while Gate 1 recursed, so a nested definition the gates validated and
+  // resolved was simply MISSING from the generated definitions index -- a rendered artifact
+  // quietly narrower than the repo it claims to display, which is the truthful-rendering concern
+  // of PRD SC2. The DISPLAY-ONLY stance above is unchanged: this still attaches no verdict.
+  const defs: DefRecord[] = readDefinitionShards(snapshot).map((shard) => {
+    const f = shard.fields;
     return {
-      id: f.id ?? name.slice(0, -".md".length),
-      path,
+      id: shard.id ?? shard.stem,
+      path: shard.path,
       term: f.term,
       kind: f.kind,
       status: f.status,

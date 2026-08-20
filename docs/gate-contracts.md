@@ -497,9 +497,23 @@ class-driven, not incident-driven — record this honestly rather than inventing
 incident.
 
 **Inputs.**
-- Glob: `definitions/**/*.md` — **RECURSIVE** (rk-5lzf, 2026-08-20), excluding `README.md` and
-  `INDEX.md` by BASENAME at any depth (check-defs.py:27,80 globs one level; this is a deliberate
-  widen, triaged **rk-stricter-intended**). The notation register (below) lives at
+- Glob: `definitions/**/*.md` — **RECURSIVE** (rk-5lzf, 2026-08-20), read through THE canonical
+  reader `src/gates/definitions-scan.ts`. That module is the single implementation of discovery,
+  the non-shard policy, and the id-collision rule, and it is reused by Gate 1, Gate 2's `defs:`
+  lookup, Gate 9, the notation-register parser, the live verifier's definition context
+  (`src/cli/verify-live-io.ts`) and the rendered definitions view (`src/render/defs-edge.ts`).
+  Two readers with different reach over one directory is a false-green generator — the gate
+  resolves a reference and the artifact built from it does not contain the definition — so there
+  is exactly one (repair-wave blocker B6).
+- **The non-shard policy, stated once and shared.** Never a shard, at ANY depth, by BASENAME:
+  `README.md`, `INDEX.md`, `DAG.md`, any basename starting with `_` (the scratch/partial
+  convention), any basename starting with `notes` (case-insensitive; lab-notebook files).
+  Everything else ending in `.md` IS a shard — a closed list, never a guess about what looks
+  authored, and the prefix rule is a PREFIX rule (`def-notes-on-gaps.md` is a shard). Gate 9 asks
+  the same function. Before the repair wave Gate 1 skipped only README/INDEX while Gate 9 also
+  skipped DAG, so one tree gave two answers to "is this a shard", and `DAG.md`/`notes.md` drew
+  spurious missing-frontmatter ERRORs. Fixture: `defs-22`. (check-defs.py:27,80 globs one level
+  with `SKIP = {README.md, INDEX.md}`; the widen is triaged **rk-stricter-intended**.) The notation register (below) lives at
   `definitions/notation/<symbol-id>.md`, and under the former one-level rule those shards reached
   neither the snapshot (`src/store/snapshot-load.ts`'s `definitions` include rule was
   `recursive: false`) nor this gate's own scan — so a nested shard carried any violation at all
@@ -606,6 +620,14 @@ Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `S
 4. `id == filename stem` ⇒ ERROR otherwise (check-defs.py:91-92).
 5. `kind ∈ {cited, consensus, original}` ⇒ ERROR otherwise (check-defs.py:93-94).
 6. `status ∈ {draft, locked}` ⇒ ERROR otherwise (check-defs.py:95-96).
+15. **`def-id-collision`** (rk-5lzf B6): a flat `id` claimed by more than one shard is a
+   **structural** ERROR on EVERY claiming path, naming all of them. `id` is the cross-reference
+   key every consumer addresses a definition by — Gate 2 check 7's `defs:`, the verifier's context
+   reader, the rendered view — and each keys by id alone, so two files answering to one id resolve
+   arbitrarily. Recursion is what made this reachable: in a flat directory two shards cannot share
+   a filename stem. A finding on one path only would leave a reader unable to find the other.
+   Fixture: `defs-21`.
+
 7. **DEDUP/DRIFT**: `term` + every `alias` (lower-cased) forms one global name namespace across
    all shards; a name claimed by two different shards ⇒ ERROR `DRIFT: name '<nm>' claimed by
    both <a> and <b>` (check-defs.py:98-107).
@@ -710,6 +732,8 @@ N/A for this gate; nothing to tolerate.
 | `defs-18` | **translation-anchor-missing** [rk-5lzf] — a translation row with no `"<quote>"` anchor line ⇒ ERROR, row still counted |
 | `defs-19` | **notation golden pass** [rk-5lzf] — `shard_type: notation` + `kind: cited`, class in the profile, translation byte-verified ⇒ zero findings |
 | `defs-20` | **translations-in-frontmatter** [rk-5lzf] — rows written in the frontmatter are destroyed by the flat grammar ⇒ ERROR, never a vacuous `0/0` pass |
+| `defs-21` | **def-id-collision** [rk-5lzf B6] — two shards at different depths claiming one flat `id` ⇒ structural ERROR on BOTH paths |
+| `defs-22` | **shared non-shard policy** [rk-5lzf B6] — nested `DAG.md`, `notes-*.md`, `_scratch.md` are not shards; `def-notes-on-gaps.md` is ⇒ zero findings, `checked 1/1` |
 
 ---
 

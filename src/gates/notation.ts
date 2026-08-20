@@ -23,9 +23,12 @@ import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
 import type { GateConfig } from "./config";
 import { baseName, listFilesRecursive, type RepoSnapshot } from "./snapshot";
 import { enforceableSymbolIndex, unenforceableSymbols, validateConventionProfile } from "./profile";
+// rk-5lzf B6: ONE shared non-shard policy, applied to definitions/ and argument/ alike, at any
+// depth. Before the repair wave Gate 1 skipped README/INDEX while Gate 9 skipped README/INDEX/DAG,
+// so the same file was a shard to one gate and not the other.
+import { isNonShardBasename } from "./definitions-scan";
 import { parseNotationShards } from "./notation-shards";
 
-const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
 const RECORDS_DIR = "refs/records";
 /** A plain LaTeX macro token as it appears in running text. */
 const MACRO_SCAN_RE = /\\[A-Za-z]+/g;
@@ -80,7 +83,7 @@ function collectOccurrences(snapshot: RepoSnapshot): { occurrences: Occurrence[]
 
   for (const prefix of ["definitions", "argument"]) {
     for (const path of listFilesRecursive(snapshot, prefix, ".md")) {
-      if (NON_SHARD_NAMES.has(baseName(path))) continue;
+      if (isNonShardBasename(baseName(path))) continue;
       files++;
       for (const { line, text } of bodyLines(snapshot.get(path)!)) {
         scanLine(path, line, text, "", occurrences);
@@ -169,7 +172,7 @@ export const notationGate: Gate = {
         if (isRegistered) ok++;
       }
       if (isRegistered) continue;
-      const key = `${occ.path} ${occ.token}`;
+      const key = `${occ.path}\u0000${occ.token}`;
       if (reported.has(key)) continue; // one finding per (file, symbol) — ten usages are one defect
       reported.add(key);
       const where = occ.where ? ` in ${occ.where}` : "";

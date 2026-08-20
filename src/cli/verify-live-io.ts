@@ -7,24 +7,26 @@
 import { mkdirSync, appendFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadSnapshot } from "../store/snapshot-load";
-import { listDir, parseFrontmatter } from "../gates/snapshot";
+import { readDefinitionShards } from "../gates/definitions-scan";
 import { driverLogPath } from "./verify-report";
 import type { DefinitionText } from "../drive/driver-prompts";
 
-/** Reads every `definitions/*.md` shard whose frontmatter `id:` is in `ids`, returning raw file
- * text keyed by id -- reuses the SAME snapshot/frontmatter primitives src/store/registry-load.ts
- * already relies on (never a second, forked frontmatter parser). */
+/** Reads every `definitions/**\/*.md` shard whose frontmatter `id:` is in `ids`, returning raw file
+ * text keyed by id -- through the ONE canonical reader (src/gates/definitions-scan.ts), the same
+ * one Gate 1 and Gate 2's `defs:` resolution use.
+ *
+ * rk-5lzf B6 (Tier A review 2026-08-20, finding 6): this reader was SHALLOW while the gates
+ * recursed, so a definition Gate 2 happily resolved -- `definitions/notation/sym-eps.md`, say --
+ * was silently absent from the context the prover actually sees. The verifier then reasoned about
+ * a term whose definition it had never been shown, and nothing in the run said so. Two readers with
+ * different reach over one directory is a false-green generator; there is now one reader. */
 export function readDefinitionTexts(root: string, ids: readonly string[]): DefinitionText[] {
   const wanted = new Set(ids);
   if (wanted.size === 0) return [];
   const snapshot = loadSnapshot(root);
   const out: DefinitionText[] = [];
-  for (const name of listDir(snapshot, "definitions")) {
-    if (name === "README.md" || name === "INDEX.md") continue;
-    const content = snapshot.get(`definitions/${name}`);
-    if (content === undefined) continue;
-    const fm = parseFrontmatter(content);
-    if (fm.present && fm.terminated && fm.fields.id && wanted.has(fm.fields.id)) out.push({ id: fm.fields.id, text: content });
+  for (const shard of readDefinitionShards(snapshot)) {
+    if (shard.id !== undefined && wanted.has(shard.id)) out.push({ id: shard.id, text: shard.content });
   }
   return out;
 }

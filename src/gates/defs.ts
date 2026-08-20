@@ -9,7 +9,8 @@
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
 import type { RepoSnapshot } from "./snapshot";
-import { baseName, hasPath, listFilesRecursive, parseFrontmatter } from "./snapshot";
+import { hasPath } from "./snapshot";
+import { idCollisions, readDefinitionShards } from "./definitions-scan";
 import type { GateConfig } from "./config";
 // rk-5lzf (LB5): the notation register's own checks, split out to keep both shards inside the
 // ~200-line rule. Pure, snapshot-only, same as this file.
@@ -21,7 +22,6 @@ const KIND_SET = new Set<string>(KINDS);
 const STATUSES = ["draft", "locked"] as const;
 const STATUS_SET = new Set<string>(STATUSES);
 const REQUIRED_FIELDS = ["id", "term", "kind", "status"] as const;
-const SKIP_FILES = new Set(["README.md", "INDEX.md"]);
 const MANIFEST_PATH = "refs/manifest/checksums.sha256";
 
 /** True iff a frontmatter field value is absent or blank — check-defs.py's `not fm.get(field)`
@@ -215,30 +215,26 @@ export const defsGate: Gate = {
       });
     }
 
-    // rk-5lzf (LB5): RECURSIVE over `definitions/**\/*.md`. The notation register lives at
-    // `definitions/notation/<symbol-id>.md`; under the former one-level scan those shards were
-    // never listed, so every check in this gate silently never ran on them while the coverage line
-    // reported a denominator that excluded them — a shard nobody reads carries no violations.
-    // README.md/INDEX.md are excluded by BASENAME, at any depth (`definitions/notation/README.md`
-    // is documentation the same way `definitions/README.md` is).
-    const shardPaths = listFilesRecursive(snapshot, "definitions", ".md").filter(
-      (p) => !SKIP_FILES.has(baseName(p)),
-    );
+    // rk-5lzf (LB5, then B6 of the Tier A repair wave): discovery, the shared non-shard policy,
+    // and the recursion all come from THE canonical reader, src/gates/definitions-scan.ts. The
+    // notation register lives at `definitions/notation/<symbol-id>.md`; under the original
+    // one-level scan those shards were never listed, so every check here silently never ran on
+    // them while the coverage line reported a denominator that excluded them.
+    const definitionShards = readDefinitionShards(snapshot);
 
     const aliasOwner = new Map<string, string>();
     const shardTypes = new Map<string, string>();
     let citedCount = 0;
     let hashVerifiedCount = 0;
 
-    for (const path of shardPaths) {
-      const content = snapshot.get(path) ?? "";
-      const fm = parseFrontmatter(content);
+    for (const shard of definitionShards) {
+      const path = shard.path;
 
       // check 1: present + terminated, or ERROR and skip the rest of this shard entirely —
       // check-defs.py:83-87 (`fm is None -> errors.append(...); continue`), same for an
       // unterminated block: malformed-line scanning below never ran to produce any lines to
       // report in that case (parse_frontmatter returns None before the line loop starts).
-      if (!fm.present || !fm.terminated) {
+      if (!shard.frontmatterOk) {
         // structural: parse error (docs/gate-contracts.md "Phase matrix").
         findings.push({ severity: "ERROR", path, message: "missing/unterminated frontmatter", structural: true });
         continue;
@@ -246,7 +242,7 @@ export const defsGate: Gate = {
 
       // check 2: a line with no ':' inside an otherwise well-terminated block. structural: parse
       // error.
-      for (const lineNo of fm.malformedLines) {
+      for (const lineNo of shard.malformedLines) {
         findings.push({
           severity: "ERROR",
           path,
@@ -256,12 +252,33 @@ export const defsGate: Gate = {
         });
       }
 
-      const shardType = fm.fields.shard_type?.trim();
+      const shardType = shard.fields.shard_type?.trim();
       if (shardType) shardTypes.set(path, shardType);
 
-      const { cited, hashVerified } = checkShard(path, fm.fields, manifest, snapshot, aliasOwner, findings);
+      const { cited, hashVerified } = checkShard(path, shard.fields, manifest, snapshot, aliasOwner, findings);
       if (cited) citedCount++;
       if (hashVerified) hashVerifiedCount++;
+    }
+
+    // check 15 (rk-5lzf B6; Tier A review 2026-08-20 finding 6): a flat `id` claimed by two shards
+    // at different paths. STRUCTURAL — `id` is the cross-reference key every other consumer
+    // addresses a definition by (Gate 2's `defs:`, the live verifier's context, the rendered
+    // definitions view), and each of them keys by id alone, so two files answering to one id means
+    // every consumer silently resolves to whichever it happened to see last. Recursion is what
+    // made this reachable: before it, two shards with the same id could not coexist in one flat
+    // directory.
+    for (const collision of idCollisions(definitionShards)) {
+      for (const path of collision.paths) {
+        findings.push({
+          severity: "ERROR",
+          path,
+          message:
+            `def-id-collision: id '${collision.id}' is claimed by ${collision.paths.length} shards ` +
+            `(${collision.paths.join(", ")}) — every consumer resolves a definition by id alone, so ` +
+            `two files answering to one id resolve arbitrarily`,
+          structural: true,
+        });
+      }
     }
 
     // rk-5lzf: the notation register. Runs AFTER the per-shard loop so it shares that loop's
@@ -271,7 +288,7 @@ export const defsGate: Gate = {
     const notation = checkNotationRegister(snapshot, profile, shardTypes, aliasOwner);
     findings.push(...notation.findings);
 
-    const total = shardPaths.length;
+    const total = definitionShards.length;
     let unit = "shards";
     if (citedCount > 0) {
       unit += manifest.present

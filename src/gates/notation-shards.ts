@@ -20,11 +20,10 @@
 // which destroys the row/anchor pairing outright. Gate 1 therefore treats a `translations:` key
 // appearing IN the frontmatter as an ERROR rather than letting the rows vanish silently.
 
-import { parseFrontmatter, type RepoSnapshot } from "./snapshot";
-import { baseName, listFilesRecursive } from "./snapshot";
+import type { RepoSnapshot } from "./snapshot";
+import { readDefinitionShards } from "./definitions-scan";
 
 export const NOTATION_SHARD_TYPE = "notation";
-const SKIP_FILES = new Set(["README.md", "INDEX.md"]);
 
 /** A blessed LaTeX macro token, backslash included — the same grammar the convention profile's
  * `symbols` lists use (schemas/convention-profile.v1.json). */
@@ -115,22 +114,19 @@ export function parseTranslationRows(content: string): TranslationRow[] {
  * text. */
 export function parseNotationShards(snapshot: RepoSnapshot): NotationShard[] {
   const out: NotationShard[] = [];
-  for (const path of listFilesRecursive(snapshot, "definitions", ".md")) {
-    if (SKIP_FILES.has(baseName(path))) continue;
-    const content = snapshot.get(path);
-    if (content === undefined) continue;
-    const fm = parseFrontmatter(content);
-    if (!fm.present || !fm.terminated) continue;
-    if (fm.fields.shard_type?.trim() !== NOTATION_SHARD_TYPE) continue;
-    const symbol = fm.fields.symbol?.trim();
-    const className = fm.fields.class?.trim();
+  // Discovery and the shared non-shard policy come from THE canonical reader (rk-5lzf B6).
+  for (const shard of readDefinitionShards(snapshot)) {
+    if (!shard.frontmatterOk) continue;
+    if (shard.fields.shard_type?.trim() !== NOTATION_SHARD_TYPE) continue;
+    const symbol = shard.fields.symbol?.trim();
+    const className = shard.fields.class?.trim();
     out.push({
-      path,
-      fields: fm.fields,
+      path: shard.path,
+      fields: shard.fields,
       ...(symbol ? { symbol } : {}),
       ...(className ? { className } : {}),
-      translations: parseTranslationRows(content),
-      translationsInFrontmatter: "translations" in fm.fields,
+      translations: parseTranslationRows(shard.content),
+      translationsInFrontmatter: "translations" in shard.fields,
     });
   }
   return out;

@@ -222,5 +222,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * fixture in the corpus able to make a PHASE claim at all, since `src/corpus/run.ts` now applies
  * `applyPhase` the way `rk check` does), `notation-03` (no profile configured ⇒ visible WARN and
  * `0/0`, never a silent pass), `notation-04` (golden pass, with the quoted-source exemption
- * pinned). "notation" also added to GATE_DIRS as the fourth synthetic gate's corpus directory. */
-export const EXPECTED_FIXTURE_COUNT = 188;
+ * pinned). "notation" also added to GATE_DIRS as the fourth synthetic gate's corpus directory.
+ * 190 (+2 over the then-pinned 188): the rk-5lzf Tier A repair wave, blocker B6 — `defs-21`
+ * (`def-id-collision`: two shards at different depths claiming one flat id, which recursion made
+ * reachable and which every id-keyed consumer resolves arbitrarily) and `defs-22` (the ONE shared
+ * non-shard policy: nested `DAG.md`/`notes-*.md`/`_scratch.md` drew spurious ERRORs from Gate 1
+ * while Gate 9 skipped `DAG.md` — one tree, two answers to "is this a shard"). */
+export const EXPECTED_FIXTURE_COUNT = 190;
