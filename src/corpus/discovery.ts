@@ -194,5 +194,12 @@ export function totalFixtureCount(corpusRoot: string): number {
  * (`definitions/notation/<symbol-id>.md`) was invisible to BOTH the snapshot loader's
  * non-recursive `definitions` include rule and Gate 1's one-level `listDir` scan, so it could
  * carry any violation at all at `checked defs: 0/0 shards`, exit 0. Discovery is now recursive on
- * both sides. */
-export const EXPECTED_FIXTURE_COUNT = 177;
+ * both sides.
+ * 179 (+2 over the then-pinned 177): rk-5lzf, the convention profile
+ * (`.rk/conventions/<name>.v<n>.json`, schemas/convention-profile.v1.json) — `config-06`: a
+ * `conventionProfile` naming a file that is not present is a structural ERROR, never degraded to
+ * the "no profile configured" state; `config-07`: a profile that drops a tracked class relative to
+ * its predecessor without bumping its own `version` field is `class-removed-without-bump`, the
+ * coverage-shrink LB5 names ("letting the register itself declare tracked classes also lets
+ * deletion of a class shrink coverage"). */
+export const EXPECTED_FIXTURE_COUNT = 179;

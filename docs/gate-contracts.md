@@ -210,7 +210,48 @@ optional per-assignment model override added so a `--live` run can pin the claud
 explicit model while the codex side stays on its own default; validated with the same
 non-blank-string discipline as `backend`; see `docs/worker-contract.md`'s isolation-tuple
 section and `src/drive/backend-registry.ts`'s `RoleTierAssignment`), `config-05` (rk-k0m1: zero
-`workers.assignments.<role>.<tier>.turnTimeoutMs` — see the timeout paragraph immediately below).
+`workers.assignments.<role>.<tier>.turnTimeoutMs` — see the timeout paragraph immediately below),
+`config-06`/`config-07` (rk-5lzf: an unknown `conventionProfile`, and a profile that drops a
+tracked class without bumping its `version` — see "Convention profile" below).
+
+**Convention profile (rk-5lzf, Tier A, LB5).** `.rk/config.json`'s OPTIONAL `conventionProfile`
+names the campaign's normalisation contract by reference key `<name>.v<n>`, resolving to
+`.rk/conventions/<name>.v<n>.json` and validated against `schemas/convention-profile.v1.json`
+(`src/gates/profile.ts`, surfaced by the `config` gate). It fixes what Gate 9 enforces
+(`tracked_classes`, with EXPLICIT symbol lists per class), the campaign's ordered value
+`lattices` (weakest first), its normalisation `choices` (canonical convention + allowed
+translations), and its closed `enums`.
+
+*Why it lives outside the register it validates.* LB5 of
+`docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`: "letting the register itself declare tracked
+classes also lets deletion of a class shrink coverage." A register that declares its own tracked
+classes can silently delete one and keep reporting green on every symbol that remains. The profile
+is therefore a separate, versioned, committed artifact, and shrinking it is a compat event.
+
+*Rules, all blocking (`structural: true` — a fault in the checking apparatus is never phase-demoted,
+same class as an unparseable `.rk/config.json`):*
+- Reference key must match `<name>.v<n>` — lowercase name, positive integer `n`, no path
+  separators, no `.json` suffix. Anything else is an ERROR, never a guessed path.
+- **An unknown profile is an ERROR**, never degraded to the unconfigured state. "The profile you
+  configured does not exist" and "you configured no profile" are different facts: the second means
+  Gate 9 has nothing to check against and says so in its own coverage line; the first means the
+  campaign believes it is being checked and is not. Fixture `config-06`.
+- Schema enforcement is total and fail-closed: wrong/missing `schema_version`, an unrecognized key
+  at any level, a `name` disagreeing with the filename, an empty `tracked_classes`, a symbol
+  without its leading backslash, `symbols_must_be_registered` anything but `true`, a duplicate
+  class id, one symbol claimed by two classes, a lattice with fewer than two values, a choice
+  missing `canonical`. ANY malformation drops the WHOLE profile (never a partially applied one — a
+  half-read tracked-class list is a silently shrunk one).
+- **`class-removed-without-bump`.** When `.rk/conventions/<name>.v<n-1>.json` is present, every
+  tracked class it declares must still be declared by `<name>.v<n>.json` UNLESS the latter's
+  `version` FIELD is strictly greater. The filename's `v<n>` is only the reference key; `version`
+  is the rule-10 compat counter, so renaming a file can never launder a shrink. An unparseable
+  predecessor is a WARN — the comparison genuinely could not run, and a skipped check is always
+  visible (L2), never a clean bill. Fixture `config-07`.
+
+The `config` gate's coverage line carries the profile as its own clause — `; convention profile
+"<ref>" <checked>/<total> valid`, or `; no convention profile configured` — so the unconfigured
+state is stated, never merely absent.
 
 **Worker timeouts (rk-k0m1, P2, live-fire RUN-REPORT-12).** `workers` carries two OPTIONAL
 positive-integer-millisecond fields, `turnTimeoutMs` (the per-turn wall-clock ceiling) and

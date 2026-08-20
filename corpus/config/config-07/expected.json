@@ -1,0 +1,25 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v2.json",
+      "message_pattern": "class-removed-without-bump"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v2.json",
+      "message_pattern": "\"locality\""
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 2,
+    "unit_patterns": ["convention profile \"qpcp.v2\" 0/1 valid"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v2" },
+  "aism_behavior": "n/a -- the convention profile and its coverage-shrink rule are rk-only concepts introduced by rk-5lzf; no AISM script has any equivalent.",
+  "notes": "rk-5lzf (Tier A, LB5): 'Letting the register itself declare tracked classes also lets deletion of a class shrink coverage.' The profile lives outside the register precisely so a shrink is visible — and a shrink is a compat event (CLAUDE.md rule 10), so it needs a deliberate bump of the profile's own `version` FIELD. Here qpcp.v2.json is qpcp.v1.json with the `locality` class deleted and `version` left at 1: the copy-paste-and-forget shape. Gate 9 would silently stop checking \\kloc/\\qdim and still report green. Red against the pre-fix source (no such check existed); mutation-proven by relaxing the comparison to `>=`, which drops the finding and passes this fixture. The filename's v2 is the reference key only — the `version` field is the counter the rule reads, so renaming the file can never launder a shrink."
+}

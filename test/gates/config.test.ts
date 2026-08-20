@@ -208,12 +208,83 @@ describe("configGate — surfaces _configValidation through the ordinary Gate pi
     expect(result.coverage[0]).toMatchObject({ gate: "config", checked: 2, total: 3 });
   });
 
-  test("snapshot content is irrelevant -- config validity never depends on repo files", () => {
+  test("snapshot content is irrelevant when no conventionProfile is configured", () => {
     const config = mergeGateConfig({});
     config._configValidation = { findings: [], checked: 0, total: 0 };
     const a = configGate.run(snapshotFromFiles({}), config);
     const b = configGate.run(snapshotFromFiles({ "foo.md": "bar" }), config);
     expect(a).toEqual(b);
+  });
+});
+
+// rk-5lzf (Tier A, LB5): `conventionProfile` is the ONE config value whose validity depends on repo
+// CONTENT, so it is checked inside the gate, against the snapshot — see src/gates/profile.ts for
+// the profile schema's own unit tests (test/gates/profile.test.ts).
+describe("configGate — convention profile (rk-5lzf)", () => {
+  const PROFILE = {
+    schema_version: "1",
+    name: "qpcp",
+    version: 1,
+    tracked_classes: [
+      { class: "promise-gap", description: "the promise gap", symbols: ["\\epsilon"], symbols_must_be_registered: true },
+    ],
+    lattices: {},
+    choices: {},
+    enums: {},
+  };
+
+  test("unconfigured: the coverage line SAYS so rather than staying silent", () => {
+    const result = configGate.run(snapshotFromFiles({}), mergeGateConfig({}));
+    expect(result.coverage[0]!.unit).toContain("no convention profile configured");
+    expect(result.findings).toEqual([]);
+  });
+
+  test("a valid profile adds one checked unit and names itself in the coverage line", () => {
+    const snap = snapshotFromFiles({ ".rk/conventions/qpcp.v1.json": JSON.stringify(PROFILE) });
+    const result = configGate.run(snap, mergeGateConfig({ conventionProfile: "qpcp.v1" }));
+    expect(result.findings).toEqual([]);
+    expect(result.coverage[0]).toMatchObject({ checked: 1, total: 1 });
+    expect(result.coverage[0]!.unit).toContain('convention profile "qpcp.v1" 1/1 valid');
+  });
+
+  test("an UNKNOWN profile is a structural ERROR, never degraded to the unconfigured state", () => {
+    const result = configGate.run(snapshotFromFiles({}), mergeGateConfig({ conventionProfile: "qpcp.v1" }));
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.severity).toBe("ERROR");
+    expect(result.findings[0]!.structural).toBe(true);
+    expect(result.coverage[0]).toMatchObject({ checked: 0, total: 1 });
+  });
+
+  test("profile findings compose with the ordinary config-field findings, both counted", () => {
+    const config = mergeGateConfig({ conventionProfile: "qpcp.v1" });
+    config._configValidation = {
+      findings: [{ severity: "ERROR", path: ".rk/config.json", line: 1, message: "phase: invalid", structural: true }],
+      checked: 1,
+      total: 2,
+    };
+    const result = configGate.run(snapshotFromFiles({}), config);
+    expect(result.findings).toHaveLength(2);
+    expect(result.coverage[0]).toMatchObject({ checked: 1, total: 3 });
+  });
+});
+
+describe("validateConfigOverrides — conventionProfile", () => {
+  test("a non-empty string passes through", () => {
+    const r = validateConfigOverrides({ conventionProfile: "qpcp.v1" });
+    expect(r.findings).toEqual([]);
+    expect(r.overrides.conventionProfile).toBe("qpcp.v1");
+    expect(r.checked).toBe(1);
+  });
+
+  test("an empty string / non-string is dropped with one loud ERROR, never a sentinel", () => {
+    for (const v of ["", 3, null, {}]) {
+      const r = validateConfigOverrides({ conventionProfile: v });
+      expect(r.findings).toHaveLength(1);
+      expect(r.findings[0]!.message).toContain("conventionProfile");
+      expect("conventionProfile" in r.overrides).toBe(false);
+      expect(r.checked).toBe(0);
+      expect(r.total).toBe(1);
+    }
   });
 });
 

@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rk.invalid/schemas/convention-profile.v1.json",
+  "title": "rk convention profile v1",
+  "description": "The versioned, committed normalisation contract a campaign checks its own notation and statements AGAINST. Lives at `.rk/conventions/<name>.v<n>.json` and is named in `.rk/config.json` as `conventionProfile: \"<name>.v<n>\"` (the reference key is the filename stem, no `.json`). Deliberately kept OUTSIDE the artifact being checked (LB5, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md): a register that declares its own tracked classes can shrink its own coverage silently. Gate 9 (notation) enforces `tracked_classes`; the config gate validates this file's shape and its coverage-shrink rule. Schema changes here are compat events (CLAUDE.md rule 10).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "version", "tracked_classes", "lattices", "choices", "enums"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Exactly the string \"1\". A future incompatible profile shape must never silently run under v1 semantics."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The profile family name. MUST equal the `<name>` part of the containing filename `<name>.v<n>.json` — a profile whose declared name disagrees with its own path cannot be referenced unambiguously."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The COMPAT COUNTER (CLAUDE.md rule 10's \"bumps a version field\"), not a restatement of the filename. Removing a `tracked_classes` entry present in `<name>.v<n-1>.json` is permitted ONLY when this number is strictly greater than that file's own `version` — the config gate's `class-removed-without-bump` check. Copying a profile to a new filename, deleting a class, and leaving `version` untouched is exactly the silent coverage shrink that rule exists to forbid."
+    },
+    "tracked_classes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The symbol classes Gate 9 enforces. EXPLICIT symbol lists, never patterns: a pattern silently widens or narrows what is tracked as the register grows, and a reader cannot tell which symbols a class covers by reading it.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["class", "description", "symbols", "symbols_must_be_registered"],
+        "properties": {
+          "class": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Class id, unique within the profile. A notation shard's `class:` frontmatter field must name one of these."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What the class is, in one line. Read by humans only; never a validity input."
+          },
+          "symbols": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The raw LaTeX macro tokens considered tracked for this class, each including its leading backslash, e.g. [\"\\\\epsilon\", \"\\\\gamma\", \"\\\\delta\", \"\\\\Delta\"]. A token appearing here must be a registered `symbol:` of a notation shard in this class wherever Gate 9 scans, or it is an `unregistered-symbol` ERROR.",
+            "items": { "type": "string", "pattern": "^\\\\[A-Za-z]+$" }
+          },
+          "symbols_must_be_registered": {
+            "const": true,
+            "description": "Always true in v1. Present as an explicit, readable declaration rather than an implicit rule, and reserved as the extension point if a later schema version ever admits an advisory class — v1 admits none, so any other value is a malformed profile, never a quiet opt-out of Gate 9."
+          }
+        }
+      }
+    },
+    "lattices": {
+      "type": "object",
+      "description": "Named ordered value lattices, WEAKEST FIRST (e.g. `gap: [\"inv-poly\", \"inv-log\", \"const\"]`). The order is the contract: a consumer compares positions, never strings. Gate 9 does not read these; the signature entailment check (rk-8805, Check 17) does.",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 2,
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
+    "choices": {
+      "type": "object",
+      "description": "Normalisation choices the campaign has fixed: which convention is CANONICAL, and which other conventions may appear as declared translations of it. A convention outside `allowed_translations` is not a translation, it is a different statement.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["canonical", "allowed_translations"],
+        "properties": {
+          "canonical": { "type": "string", "minLength": 1 },
+          "allowed_translations": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "enums": {
+      "type": "object",
+      "description": "Closed value sets the campaign's records and signatures draw from (hardness classes, reduction classes, ...). Empty object is legitimate on day one.",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

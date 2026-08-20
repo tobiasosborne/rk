@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 1,
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "the promise gap of a local-Hamiltonian promise problem, relative (fraction of m)",
+      "symbols": ["\\epsilon", "\\gamma"],
+      "symbols_must_be_registered": true
+    }
+  ],
+  "lattices": {
+    "gap": ["inv-poly", "inv-log", "const"]
+  },
+  "choices": {
+    "promise-gap-normalisation": {
+      "canonical": "relative",
+      "allowed_translations": ["absolute", "energy-density"]
+    }
+  },
+  "enums": {
+    "hardness_class": ["QMA", "QMA_1", "QCMA"]
+  }
+}
