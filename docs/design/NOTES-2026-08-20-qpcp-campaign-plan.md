@@ -143,7 +143,8 @@ statement. v2 separates authored records from generated views and binds a review
   default; Turing/randomised declared); code parameters (rate, distance, soundness —
   normalised how); NLTS stated correctly as: a family of bounded-degree local Hamiltonians
   with a constant energy-density window below which every state requires circuit depth
-  omega(log n) (circuit model, ancilla allowance, and approximation error all named), as
+  Omega(log n) as proved by Anshu-Breuckmann-Nirkhe (circuit model, ancilla allowance, and
+  approximation error all named; the profile records the exact bound, not a paraphrase), as
   opposed to NLSS/combinatorial NLTS variants, each a separate profile entry. The profile
   lists the TRACKED SYMBOL CLASSES Gate 9 enforces; a class can be removed only by a profile
   version bump, which is a compat event with a fixture, so coverage cannot silently shrink.
@@ -189,9 +190,13 @@ signature:
   hardness: QMA-hard                 # optional, enum from the profile
 ```
 
-Each predicate key has a typed LATTICE declared in the profile (e.g. `gap: const > inv-log >
-inv-poly`; `d: const < poly`; `degree: bounded < unbounded`), so "atom satisfies atom" is a
-lattice comparison, not string equality.
+Each predicate key has a typed LATTICE declared in the profile with an explicit POLARITY
+(`afforded`: the context must supply at least the required strength, e.g. gap; `capped`: the
+context must stay within the required bound, e.g. qudit dimension, locality; `equality`), so
+"atom satisfies atom" is a directed lattice comparison, not string equality. Polarity was
+added by the profile draft (campaign docs/conventions-qpcp-v1-draft.md section 9, entry D4):
+without it a single-direction rule would let a `qdim: poly` context satisfy a `qdim: const`
+requirement.
 
 **Entailment rule (replaces v1's atom-wise matching, which review broke with a concrete pair).**
 For a shard P with dependency D on a route R: D's ENTIRE `pre` and `regime` must be entailed by
