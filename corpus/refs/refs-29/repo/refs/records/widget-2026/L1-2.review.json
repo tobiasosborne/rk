@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "card_sha256": "36b5a1cce66e41dc742640a3e0e02272d6b183fbfa7e8ca8e658c3a8a499e9f6",
+  "card_sha256": "c4f2bb8c9bb0cbae4c3587ed430e6445246a27a9dc4f4bd241c59fc482153c9a",
   "verdict": "VALID",
   "reviewer": {
     "family": "gpt",
@@ -11,15 +11,15 @@
   "checked": {
     "statement_complete": {
       "value": true,
-      "note": "read refs/sources/widget.txt:3-4 in full against the record"
+      "note": "read the full statement range against the record"
     },
     "hypotheses_complete": {
       "value": false,
-      "note": "the d-regularity clause is not in the record"
+      "note": "the connectedness clause is not in the record"
     },
     "translation_faithful": {
       "value": true,
-      "note": "statement_blessed carries both the conclusion and the hypothesis"
+      "note": "statement_blessed carries the conclusion and every hypothesis"
     },
     "signature_faithful": {
       "value": true,

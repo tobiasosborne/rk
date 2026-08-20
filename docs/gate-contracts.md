@@ -1309,8 +1309,10 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
     shape is `schemas/signature.v1.json`, bead rk-8805, and is NOT validated here — stated plainly
     rather than implied to be checked), `profile`, `proof_locus`.
   - `refs/records/<source-id>/L0.json` — the per-paper analogue (`record_kind: "L0"`): `regime`,
-    `objects`, `results`, `profile`, and the optional `standing_assumptions_range`, the only place
-    outside its own statement range an L1 hypothesis anchor may legitimately point.
+    `objects`, `results`, `profile`, the optional `standing_assumptions_range` (the only place
+    outside its own statement range an L1 hypothesis anchor may legitimately point), and the
+    optional `ends_at_eof` — an object mapping a `result_label` to `true`, declaring that that
+    result's statement genuinely runs to the end of the quotable text (clause (f), terminator 3).
   - `refs/records/<source-id>/L1-<n>.review.json` — the **review record**, schema
     `schemas/card-review.v1.json`: `card_sha256`, `verdict: VALID|INVALID`, `reviewer`
     (`{family, backend, model, session}`), `checked` (the four clauses `statement_complete`,
@@ -1524,22 +1526,40 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
       disagree. Neither error says the record is WRONG; each says nothing in it can be trusted
       until it is re-checked, because re-acquisition and re-extraction both silently renumber a
       document while every anchor may still appear to verify (`refs-26`, `refs-27`).
-    - (f) **The range-extent check, WHICH IS A HEURISTIC.** A deliberately short `statement_range`
-      that stops before the statement's "where ..." clause satisfies (a)-(c) perfectly: every
-      anchor is real, the verbatim matches, and the omitted hypothesis is simply outside the range
-      no anchor points into. The only mechanical trace is the source text immediately after the
-      range, so: the first non-empty line after `to` must not begin with a lowercase letter and
-      must not begin (case-insensitively) with `where`, `assume`, `assuming`, `suppose`,
-      `such that`, `provided`, `here`, or `with the` ⇒ otherwise **ERROR
-      `[statement-range-truncated]`**. **What it cannot do, stated rather than implied**: it does
-      not detect a range truncated at a sentence boundary (a statement whose second sentence
-      carries a further hypothesis), and it fires on a genuinely complete statement whose next line
-      happens to begin lowercase (a wrapped display equation, a lowercase symbol opening the
-      proof). The false positive is repaired by extending the range and restating
-      `statement_verbatim`; the false negative is what clause (d)'s reviewer is for. It is a
-      tripwire on the cheapest omission, never a proof of completeness — and its sufficiency
-      against a deliberately truncated range is an open residual recorded on bead rk-nsex for the
-      next milestone review (`docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`, Residuals).
+    - (f) **The statement ENVELOPE — fail-closed at both ends** (Tier A review 2026-08-20,
+      landing-blocker BL2, replacing the extent-only heuristic that shipped first). A short
+      `statement_range` satisfies (a)-(c) perfectly — every anchor is real, the verbatim matches,
+      and an omitted hypothesis is simply outside the window no anchor points into — so the range
+      itself must be bounded mechanically.
+      **START (mechanical, not a heuristic).** The range's FIRST line must contain the record's own
+      `result_label` ⇒ otherwise **ERROR `[range-start-unlabelled]`**. A statement begins at its
+      label; a range beginning below the label has by construction dropped whatever the label line
+      carried, and in real papers that is exactly where the hypotheses are printed (`Theorem 1.2.
+      Assume the widget graph is d-regular.` / `Then every widget is round.`, ranged from the
+      second line — the reviewer's own example, `refs-34`).
+      **END.** Exactly three terminators are accepted: (1) the next non-empty line begins a new
+      labelled block — `Proof|Theorem|Lemma|Proposition|Corollary|Definition|Remark|…`, a LaTeX
+      `\section`/`\begin`-style command, or a numbered heading — with or without a blank line
+      before it; (2) a BLANK line followed by a capitalised sentence that is not one of the
+      continuation words (`where`, `assume`, `assuming`, `suppose`, `such that`, `provided`,
+      `here`, `with the`, `moreover`, `further`, `in addition`, …); (3) the end of the quotable
+      text, and ONLY when the source's L0 record declares `ends_at_eof` for this exact
+      `result_label`. Anything else is an ERROR: a lowercase continuation or a continuation word ⇒
+      **`[statement-range-truncated]`** (`refs-23`), a capitalised continuation not separated by a
+      blank line ⇒ the same code (`refs-35`), an undeclared EOF ⇒ **`[range-ends-at-eof]`**
+      (`refs-36`). The EOF rule matters because a truncated extraction of a longer document is
+      indistinguishable from a complete one at EOF; `ends_at_eof` makes the difference an author
+      statement a reviewer can check rather than an assumption this gate makes (`refs-27` is the
+      positive control).
+      **REMAINING HEURISTIC RESIDUE, stated plainly rather than implied away.** Terminator (2) is
+      the soft one: a genuine continuation that is capitalised, absent from the word list, and
+      separated by a blank line still passes — a display equation set off by blank lines followed
+      by `Then the conclusion holds` is the realistic shape. Terminator (1) can likewise be spoofed
+      by a truncation that happens to be followed by the next block's label. The START rule and the
+      EOF rule are mechanical and not heuristic at all, so what remains heuristic is strictly less
+      than what shipped first — and clause (d)'s reviewer, who is shown the whole range, remains
+      the semantic backstop. Sufficiency against a deliberately truncated range stays an open
+      residual on bead rk-nsex.
     - (g) **The source binding** (Tier A review 2026-08-20, landing-blocker BL1). Every payload the
       record anchors — its `statement_range`, every hypothesis anchor, and the L0
       `standing_assumptions_range` it leans on — must be attributed by
@@ -1802,6 +1822,9 @@ changed across AISM's history at time of reading.
 | `refs-31` | **structural in exploration** [rk-nsex, review finding LB4] — fabricated `statement_verbatim` behind a hash-bound VALID review, in a repo declaring `phase: exploration` ⇒ ERROR, verdict fail. Proves the ERROR is RAISED (and carried `structural: true`) under exploration; survival through `applyPhase` is proven in `test/gates/refs-records.test.ts` / `test/gates/refs-card-join.test.ts`, since the corpus harness never applies the phase matrix |
 | `refs-32` | **records golden case** [rk-nsex] — complete record + hash-bound VALID review + `cited` shard joined by canonical `record_sha256` with a matching contract ⇒ PASS, `checked 1/1 shard citations`, `1 L1 records / 1 reviewed-VALID / 2 anchors verified`, `1/1 shard-record joins`. Every red sibling above is this tree with exactly one thing changed |
 | `refs-33` | **wholesale source substitution** [rk-nsex, Tier A review BL1] — record filed under `refs/records/widget-2026/` declaring `source: widget-2026`, every anchor and byte taken from a second acquired paper the manifest attributes to `other-2026` ⇒ Check 11 clause (g) ERROR `[source-mismatch]`, plus the join's consequent `[record-review-unusable]`. Passed at zero findings and `1/1 shard-record joins` before the repair |
+| `refs-34` | **leading-clause omission** [rk-nsex, Tier A review BL2] — the hypothesis is printed on the result's label line and the range starts on the line below it ⇒ Check 11 clause (f) START ERROR `[range-start-unlabelled]`. Passed cleanly before the repair: the verbatim matched, no anchor fell outside the range, and the terminator after the range was well-formed |
+| `refs-35` | **capitalised continuation** [rk-nsex, Tier A review BL2] — the statement continues on the next line as `Consequently …`, capitalised and outside the continuation word list ⇒ `[statement-range-truncated]` via the structural rule (no blank separation, no new labelled block), not via the word list |
+| `refs-36` | **EOF-truncated range** [rk-nsex, Tier A review BL2] — the quotable text ends exactly where the range ends and no L0 record declares `ends_at_eof` for the label ⇒ `[range-ends-at-eof]`. `refs-27` is the positive control for the declaration |
 
 ---
 

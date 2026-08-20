@@ -1,7 +1,7 @@
 {
   "schema_version": "1",
-  "card_sha256": "b795a614ae4af15f17b54f69abf8ab8c5cf420bc14ba6b0f47127808a376fda5",
-  "verdict": "INVALID",
+  "card_sha256": "77a1831c1b90fd1b3bd857b8c5403255b86f60d63d791d3b67e059c1ce324ff6",
+  "verdict": "VALID",
   "reviewer": {
     "family": "gpt",
     "backend": "codex",
@@ -26,7 +26,5 @@
       "note": "pre names the bounded-degree widget graph"
     }
   },
-  "findings": [
-    "statement_blessed drops the d-regularity hypothesis"
-  ]
+  "findings": []
 }

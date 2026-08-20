@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[range-ends-at-eof]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 1 reviewed-VALID / 2 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL2, the EOF half. The quotable text ends exactly where the range ends, so nothing follows the statement to show that it ended — which is the shape a page-bounded or truncated extraction takes when the theorem continues onto a page that was never extracted. Pre-repair the check simply ran off the end of the line array and returned 'no problem', so every truncated-at-EOF extraction passed by construction. The rule is now fail-closed with an explicit, reviewable escape hatch: an EOF-terminated range is an ERROR unless the source's L0 record declares `ends_at_eof: {\"<result_label>\": true}` — an AUTHOR statement a reviewer can check, not an assumption the gate makes. `refs-27` is the positive control for that escape hatch (its L0 record declares `ends_at_eof` for `Lemma 4.2`, so its EOF-terminated range draws no envelope finding at all and only its intended `[stale-extraction]` fires); the declaration is also per-label, so an `ends_at_eof` naming a DIFFERENT result does not admit this one (test/gates/refs-records.test.ts). `aism_behavior: n/a`. Mutation-proof: treating an EOF-terminated range as unconditionally fine returns this tree to zero findings, exit 0; observed and reverted."
+}

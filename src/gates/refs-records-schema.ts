@@ -44,6 +44,11 @@ export interface L0Record {
   path: string;
   sourceId: string;
   standingAssumptionsRange?: string;
+  /** BL2: result labels whose statement legitimately runs to the end of the quotable text, e.g.
+   * `{"Lemma 4.2": true}`. An AUTHOR statement a reviewer can check, not an assumption the gate
+   * makes — without it an EOF-terminated range is an ERROR, because a truncated extraction of a
+   * longer document is indistinguishable from a complete one at EOF. */
+  endsAtEof?: Record<string, boolean>;
 }
 
 export interface ReviewClause {
@@ -193,10 +198,24 @@ export function validateL0(path: string, sourceId: string, o: Record<string, unk
   if (range !== undefined && !RANGE_ANCHOR_RE.test(range)) {
     missing.push(`standing_assumptions_range (must be refs/<path>:<from>-<to>, got ${JSON.stringify(range)})`);
   }
+  let endsAtEof: Record<string, boolean> | undefined;
+  if (o.ends_at_eof !== undefined) {
+    const raw = o.ends_at_eof;
+    if (!isObject(raw) || Object.values(raw).some((v) => v !== true)) {
+      missing.push('ends_at_eof (an object mapping result_label -> true, e.g. {"Lemma 4.2": true})');
+    } else {
+      endsAtEof = raw as Record<string, boolean>;
+    }
+  }
   if (missing.length > 0) {
     return recordError(path, "record-malformed", `L0 record violates schemas/extraction-record.v1.json: ${missing.join("; ")}`);
   }
-  return { path, sourceId, ...(range !== undefined ? { standingAssumptionsRange: range } : {}) };
+  return {
+    path,
+    sourceId,
+    ...(range !== undefined ? { standingAssumptionsRange: range } : {}),
+    ...(endsAtEof !== undefined ? { endsAtEof } : {}),
+  };
 }
 
 export function validateReview(path: string, recordPath: string, o: Record<string, unknown>): ReviewRecord | Finding {

@@ -61,38 +61,112 @@ export function parseRange(anchor: string): Range | undefined {
 }
 
 /** Words a following line starts with when the printed statement did NOT end where the range
- * stopped. Lowercase-initial continuation is the general rule; these are the capitalized forms of
+ * stopped. Lowercase-initial continuation is the general rule; these are the capitalised forms of
  * the same thing, which the general rule cannot see. */
-const CONTINUATION_WORDS = ["where", "assume", "assuming", "suppose", "such that", "provided", "here", "with the"];
+const CONTINUATION_WORDS = ["where", "assume", "assuming", "suppose", "such that", "provided", "here", "with the", "moreover", "further", "in addition", "and if", "if in addition"];
 
-/** THE RANGE-EXTENT HEURISTIC, AND IT IS A HEURISTIC (campaign memo section 4; residual recorded
- * on bead rk-nsex for the next milestone review). A deliberately short `statement_range` that
- * stops before the statement's "where ..." clause satisfies clauses (a)-(c) perfectly: every
- * anchor is real, the verbatim matches, and the omitted hypothesis is simply outside the range no
- * anchor points into. The only mechanical trace left is the SOURCE TEXT immediately after the
- * range: a statement that ended does not continue "where G is d-regular".
+/** A line that begins a NEW labelled block, i.e. an accepted terminator for the statement above
+ * it: a theorem-environment label, a LaTeX sectioning/environment command, or a numbered heading.
+ * Case-sensitive on the words because these are printed labels, and a lowercase `proof.` is
+ * caught by the lowercase-continuation rule instead — fail-closed, and repaired by extending the
+ * range or fixing the extraction. */
+const NEW_BLOCK_RE = /^(Proof|Theorem|Lemma|Proposition|Corollary|Definition|Remark|Example|Claim|Fact|Notation|Conjecture|Problem|Question|Algorithm|Table|Figure|Appendix|References|Acknowledg)|^\\(section|subsection|subsubsection|chapter|part|paragraph|begin|end)\b|^\d+(\.\d+)*\.?\s+\S/;
+
+export interface EnvelopeProblem {
+  code: string;
+  message: string;
+}
+
+/** THE STATEMENT ENVELOPE (Tier A review 2026-08-20, landing-blocker BL2). The pre-repair check
+ * looked only at the line AFTER the range, so three omissions passed cleanly: a hypothesis printed
+ * on the line ABOVE the range's first line ("Theorem 1.2. Assume d-regular." / "Then every widget
+ * is round.", ranged from the second line), a CAPITALISED continuation, and a range running to
+ * EOF. The envelope now fails closed at both ends.
  *
- * The rule: the first non-empty line after the range must not begin with a lowercase letter, and
- * must not begin (case-insensitively) with one of CONTINUATION_WORDS.
+ * START, and it is mechanical rather than heuristic: the range's first line must contain the
+ * record's own `result_label`. A statement begins at its label; a range that begins below the
+ * label has, by construction, dropped whatever the label line carried — which in real papers is
+ * exactly where the hypotheses live.
  *
- * What it cannot do, stated plainly rather than implied: it does not detect a range truncated at a
- * sentence boundary (a statement whose second sentence is a separate hypothesis), and it will fire
- * on a genuinely complete statement whose next line happens to start lowercase (a wrapped display
- * equation, a lowercase symbol beginning the proof). The false positive is repaired by extending
- * the range and re-stating `statement_verbatim`; the false negative is what clause (d)'s human
- * reviewer is for. It is a tripwire on the cheapest omission, not a proof of completeness. */
-function extentProblem(lines: string[], range: Range): string | undefined {
-  for (let i = range.to; i < lines.length; i++) {
-    const line = lines[i]!.trim();
-    if (line === "") continue;
-    const lower = line.toLowerCase();
-    if (/^[a-z]/.test(line)) return `the next non-empty line (line ${i + 1}) begins lowercase: ${JSON.stringify(line.slice(0, 60))}`;
-    for (const word of CONTINUATION_WORDS) {
-      if (lower.startsWith(word)) return `the next non-empty line (line ${i + 1}) begins ${JSON.stringify(line.slice(0, 60))}`;
-    }
-    return undefined;
+ * END, three accepted terminators and nothing else:
+ *   1. the next non-empty line begins a new labelled block (NEW_BLOCK_RE) — with or without a
+ *      blank line before it;
+ *   2. a BLANK line, then a capitalised sentence that is not one of CONTINUATION_WORDS;
+ *   3. end of the quotable text, ONLY when the source's L0 record declares `ends_at_eof` for this
+ *      exact `result_label` — an author's explicit, reviewable statement that the paper really
+ *      does end there, rather than the gate assuming it.
+ * Anything else — a lowercase continuation, a capitalised continuation word, a capitalised
+ * sentence NOT separated by a blank line, or an undeclared EOF — is an ERROR.
+ *
+ * REMAINING HEURISTIC RESIDUE, stated honestly. Terminator (2) is the soft one: a genuine
+ * continuation that is capitalised, not in the word list, and separated by a blank line still
+ * passes (a display equation set off by blank lines, then "Then the conclusion holds", is the
+ * realistic shape). Terminator (1) can also be spoofed by a paper whose next block label happens
+ * to follow a truncation. The START rule and the EOF rule are mechanical and not heuristic at all;
+ * what is left heuristic is strictly less than before, and clause (d)'s reviewer — who is shown
+ * the whole range — remains the semantic backstop. `refs-23`, `refs-34`, `refs-35` and `refs-36`
+ * pin the four caught shapes. */
+export function envelopeProblem(
+  lines: string[],
+  range: Range,
+  resultLabel: string,
+  endsAtEofDeclared: boolean,
+): EnvelopeProblem | undefined {
+  const firstLine = lines[range.from - 1] ?? "";
+  if (!firstLine.includes(resultLabel)) {
+    return {
+      code: "range-start-unlabelled",
+      message:
+        `statement_range starts at line ${range.from}, which does not contain the record's own ` +
+        `result_label ${JSON.stringify(resultLabel)}: ${JSON.stringify(firstLine.slice(0, 60))}. A statement ` +
+        "begins at its label, and a range that begins below the label has by construction dropped whatever " +
+        "the label line carried — in real papers that is exactly where the hypotheses are printed. Extend " +
+        "the range up to the label line and restate statement_verbatim",
+    };
   }
-  return undefined;
+
+  let idx = -1;
+  for (let i = range.to; i < lines.length; i++) {
+    if (lines[i]!.trim() !== "") {
+      idx = i;
+      break;
+    }
+  }
+  if (idx === -1) {
+    if (endsAtEofDeclared) return undefined;
+    return {
+      code: "range-ends-at-eof",
+      message:
+        `statement_range ends at line ${range.to}, the end of the quotable text, and nothing follows it to ` +
+        "show the statement ended there — a truncated extraction of a longer document is indistinguishable " +
+        "from a complete one at EOF. If the source really does end here (a page-bounded extraction, a final " +
+        `result), declare it in the source's L0 record: {"ends_at_eof": {${JSON.stringify(resultLabel)}: true}}, ` +
+        "which is an author statement a reviewer can check rather than an assumption this gate makes",
+    };
+  }
+
+  const line = lines[idx]!.trim();
+  if (NEW_BLOCK_RE.test(line)) return undefined;
+  const lower = line.toLowerCase();
+  const continuationWord = CONTINUATION_WORDS.some((w) => lower.startsWith(w));
+  const blankSeparated = idx > range.to;
+  if (blankSeparated && !continuationWord && /^[A-Z]/.test(line)) return undefined;
+
+  const why = continuationWord
+    ? "begins with a continuation word"
+    : /^[a-z]/.test(line)
+      ? "begins lowercase"
+      : "is not separated from the statement by a blank line and begins no new labelled block";
+  return {
+    code: "statement-range-truncated",
+    message:
+      `statement_range appears to stop before the printed statement ends: the next non-empty line ` +
+      `(line ${idx + 1}) ${why}: ${JSON.stringify(line.slice(0, 60))}. A range that stops short hides whatever ` +
+      "it excludes from both the reviewer and clause (c), which is exactly how a hypothesis goes missing. " +
+      "Extend the range to the end of the statement (including its where/assume clauses) and restate " +
+      "statement_verbatim. The accepted terminators are a new labelled block, or a blank line followed by a " +
+      "capitalised non-continuation sentence; see the Gate 3 contract for what this cannot see",
+  };
 }
 
 /** Verifies every shape-valid L1 record against its source and its review. */
@@ -135,19 +209,10 @@ export function verifyRecords(snapshot: RepoSnapshot, lock: LockFacts, records: 
           );
         } else {
           anchorsVerified += 1;
-          const problem = extentProblem(lines, range);
+          const declared = records.l0.get(record.sourceId)?.endsAtEof?.[record.resultLabel] === true;
+          const problem = envelopeProblem(lines, range, record.resultLabel, declared);
           if (problem !== undefined) {
-            findings.push(
-              recordError(
-                record.path,
-                "statement-range-truncated",
-                `statement_range ${record.statementRange} appears to stop before the printed statement ends: ${problem}. ` +
-                  "A range that stops short hides whatever it excludes from both the reviewer and clause (c), which is " +
-                  "exactly how a hypothesis goes missing. Extend the range to the end of the statement (including its " +
-                  "where/assume clauses) and restate statement_verbatim. This check is a heuristic: see the Gate 3 " +
-                  "contract for what it cannot see",
-              ),
-            );
+            findings.push(recordError(record.path, problem.code, `${record.statementRange}: ${problem.message}`));
           }
         }
       }

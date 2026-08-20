@@ -5,8 +5,8 @@
   "payload_sha256": "2e5f8c74c832a7a0cd54fe1225475798755d431c990922a56ce4549529579b86",
   "extraction_sha256": "dccdf7dfa75580025d874a305545cd75bd00f0dba99e12694bd5ea05294e95cd",
   "result_label": "Lemma 4.2",
-  "statement_range": "refs/sources/spectral.pdf:2-3",
-  "statement_verbatim": "the spectral gap of the transfer operator is uniformly bounded below\nby a constant independent of the system size.",
+  "statement_range": "refs/sources/spectral.pdf:1-3",
+  "statement_verbatim": "Lemma 4.2 (spectral gap).\nthe spectral gap of the transfer operator is uniformly bounded below\nby a constant independent of the system size.",
   "statement_blessed": "The transfer operator has a spectral gap bounded below uniformly in the system size.",
   "hypotheses": [
     {

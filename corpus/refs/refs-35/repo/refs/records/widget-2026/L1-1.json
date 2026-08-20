@@ -1,0 +1,29 @@
+{
+  "schema_version": "1",
+  "record_kind": "L1",
+  "source": "widget-2026",
+  "payload_sha256": "a77e20f696ed90dbecbad18e07fefb7395971d14200b2af4676ad35185aa3f75",
+  "result_label": "Theorem 1.1",
+  "statement_range": "refs/sources/widget.txt:3-3",
+  "statement_verbatim": "Theorem 1.1. Every widget is round,",
+  "statement_blessed": "Every widget is round.",
+  "hypotheses": [],
+  "conclusion": "The widget is round.",
+  "signature": {
+    "schema_version": "1",
+    "profile": "qpcp.v1",
+    "pre": [
+      {
+        "obj": "def-widget",
+        "degree": "bounded"
+      }
+    ],
+    "post": [
+      {
+        "obj": "def-round"
+      }
+    ]
+  },
+  "profile": "qpcp.v1",
+  "proof_locus": "refs/sources/widget.txt:6-6"
+}

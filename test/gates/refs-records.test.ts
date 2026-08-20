@@ -358,3 +358,127 @@ describe("Check 11 — clause (g): every anchored payload belongs to record.sour
     expectNoCode(run(recordRepo(BASE_RECORD)).findings, "source-mismatch");
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// BL2 (Tier A review, 2026-08-20): the statement ENVELOPE, fail-closed. The old check looked
+// only AFTER the range, so a leading hypothesis clause on the line above, a capitalised
+// continuation, and an EOF-terminated range all passed.
+// ---------------------------------------------------------------------------------------
+describe("Check 11 — clause (f): the statement envelope", () => {
+  const TWO_LINE = ["Section 2", "Theorem 1.2. Assume the widget graph is d-regular.", "Then every widget is round.", "", "Proof. Omitted.", ""].join("\n");
+
+  function envelopeRepo(paper: string, over: Record<string, unknown>): Record<string, string> {
+    const rec = { ...BASE_RECORD, payload_sha256: hashOf(paper), ...over };
+    return {
+      "refs/sources/widget.txt": paper,
+      "refs/manifest/sources.lock.json": lock([{ path: "sources/widget.txt", sha256: hashOf(paper), source_id: "widget-2026", fetch: null }]),
+      "refs/records/widget-2026/L1-1.json": JSON.stringify(rec, null, 2),
+      "refs/records/widget-2026/L1-1.review.json": reviewFor(rec),
+    };
+  }
+
+  test("START: a range beginning below the result's label line is [range-start-unlabelled]", () => {
+    const files = envelopeRepo(TWO_LINE, {
+      result_label: "Theorem 1.2",
+      statement_range: "refs/sources/widget.txt:3-3",
+      statement_verbatim: "Then every widget is round.",
+      hypotheses: [],
+    });
+    const finding = expectCode(run(files).findings, "range-start-unlabelled");
+    expect(finding.message).toContain("Theorem 1.2");
+  });
+
+  test("START: the label must appear in the range's FIRST line, and does in the golden record", () => {
+    expectNoCode(run(recordRepo(BASE_RECORD)).findings, "range-start-unlabelled");
+  });
+
+  test("END: a capitalised continuation with no blank line is [statement-range-truncated]", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round,", "Moreover the widget graph is d-regular.", "", "Proof. Omitted.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round,",
+      hypotheses: [],
+    });
+    expectCode(run(files).findings, "statement-range-truncated");
+  });
+
+  test("END: a blank line then a capitalised NON-continuation sentence terminates the statement", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round.", "", "This section collects the standard facts.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round.",
+      hypotheses: [],
+    });
+    expectNoCode(run(files).findings, "statement-range-truncated");
+  });
+
+  test("END: a new labelled block terminates the statement even with no blank line", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round.", "Proof. Omitted.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round.",
+      hypotheses: [],
+    });
+    expectNoCode(run(files).findings, "statement-range-truncated");
+  });
+
+  test("END: a range running to EOF is [range-ends-at-eof] with no L0 declaration", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round.",
+      hypotheses: [],
+    });
+    expectCode(run(files).findings, "range-ends-at-eof");
+  });
+
+  test("END: an L0 record declaring ends_at_eof for THAT label admits the EOF range", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round.",
+      hypotheses: [],
+    });
+    files["refs/records/widget-2026/L0.json"] = JSON.stringify(
+      {
+        schema_version: "1",
+        record_kind: "L0",
+        source: "widget-2026",
+        payload_sha256: hashOf(paper),
+        regime: "widgets",
+        objects: [],
+        results: ["Theorem 1.1"],
+        ends_at_eof: { "Theorem 1.1": true },
+        profile: "qpcp.v1",
+      },
+      null,
+      2,
+    );
+    expectNoCode(run(files).findings, "range-ends-at-eof");
+  });
+
+  test("END: an ends_at_eof declaration for a DIFFERENT label does not admit this one", () => {
+    const paper = ["Section 2", "Theorem 1.1. Every widget is round.", ""].join("\n");
+    const files = envelopeRepo(paper, {
+      statement_range: "refs/sources/widget.txt:2-2",
+      statement_verbatim: "Theorem 1.1. Every widget is round.",
+      hypotheses: [],
+    });
+    files["refs/records/widget-2026/L0.json"] = JSON.stringify(
+      {
+        schema_version: "1",
+        record_kind: "L0",
+        source: "widget-2026",
+        payload_sha256: hashOf(paper),
+        regime: "widgets",
+        objects: [],
+        results: ["Theorem 1.1"],
+        ends_at_eof: { "Theorem 9.9": true },
+        profile: "qpcp.v1",
+      },
+      null,
+      2,
+    );
+    expectCode(run(files).findings, "range-ends-at-eof");
+  });
+});
