@@ -35,6 +35,10 @@ import { freshnessSupersededPaths } from "./freshness";
 import { checkCriticalPathProvenance } from "./linker-crossvendor";
 import { checkL5Promotion } from "./linker-l5";
 import { checkRetractionVeto, readRetractionFacts, retractionStoreFindings } from "./linker-retraction";
+// rk-8805 (Check 17): signature + route-scoped entailment. Adoption-conditional on
+// `.rk/config.json`'s `signatures`/`conventionProfile`, and its own coverage fragment is emitted in
+// every state — including "not adopted" (CLAUDE.md L2).
+import { checkSignatures } from "./linker-signature";
 
 export const linkerGate: Gate = {
   name: "linker",
@@ -88,6 +92,10 @@ export const linkerGate: Gate = {
     // M3.8 (Check 14): L5 stated->proved-mod-audit promotion — presence-conditional on
     // `.rk/l5-verdicts.jsonl` (M3.7's store).
     const l5 = checkL5Promotion(snapshot, lemmas, retractions);
+    // rk-8805 (Check 17): every ERROR it raises is STRUCTURAL — admission is phase-independent
+    // (memo section 2a / review LB4), so the signature barrier may not soften in exploration,
+    // which is exactly the phase in which conjecture admission happens.
+    const signatures = checkSignatures(snapshot, lemmas, defIds, config);
 
     const findings = [
       ...parseErrors,
@@ -107,6 +115,7 @@ export const linkerGate: Gate = {
       ...checkMandatoryReview(lemmas),
       ...crossVendor.findings,
       ...l5.findings,
+      ...signatures.findings,
     ];
 
     // rk-9pk (dogfood-1): the count of README.md/INDEX.md/DAG.md files excluded from the
@@ -157,7 +166,7 @@ export const linkerGate: Gate = {
       coverage: [
         {
           gate: "linker",
-          unit: `lemma shards (${ignoredNote}); mirrors: ${mirrorsNote}; ${crossVendorNote}; ${l5Note}; ${retractionNote}`,
+          unit: `lemma shards (${ignoredNote}); mirrors: ${mirrorsNote}; ${crossVendorNote}; ${l5Note}; ${retractionNote}; ${signatures.note}`,
           checked: total,
           total,
         },

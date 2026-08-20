@@ -13,6 +13,7 @@ import { describe, expect, test } from "bun:test";
 import type { Signature } from "../../src/gates/signature";
 import {
   type ConventionProfile,
+  keyPolarity,
   parseConventionProfile,
   valueRank,
 } from "../../src/gates/signature-profile";
@@ -24,15 +25,30 @@ import {
   validateSignatureVocabulary,
 } from "../../src/gates/signature-entail";
 
+// Both on-disk profile spellings are accepted (see src/gates/signature-profile.ts): the
+// campaign draft's `lattices` + `key_polarity` maps, and the inline `{values, polarity}` entry.
+// POLARITY (campaign draft section 9.1, decision D4): `values` is ALWAYS ordered by the
+// underlying parameter, smallest -> largest, whatever the polarity; polarity picks the
+// comparison. `qdim` is AFFORDED (dimension ROOM a result needs) and `qdim_cap` is CAPPED (a
+// guarantee the ambient dimension stays at or below a bound).
 const PROFILE_TEXT = JSON.stringify({
   schema_version: "1",
   name: "rk-test.v1",
   lattices: {
     gap: ["inv-poly", "inv-log", "const"],
     d: ["const", "poly"],
+    d_cap: { values: ["const", "poly"], polarity: "capped" },
     degree: ["bounded", "unbounded"],
   },
   enums: { norm: ["relative", "absolute"], n: ["to-infinity"], hardness: ["QMA-hard", "NP-hard"] },
+  key_polarity: {
+    gap: "afforded",
+    d: "afforded",
+    degree: "afforded",
+    norm: "equality",
+    n: "equality",
+    hardness: "equality",
+  },
 });
 
 const profile: ConventionProfile = (() => {
@@ -99,6 +115,46 @@ describe("convention profile — the closed vocabulary", () => {
     expect(issues.find((i) => i.code === "unknown-value")!.message).toContain("enormous");
   });
 
+  test("polarity is REQUIRED for every key — an undeclared polarity refuses the profile", () => {
+    const p = parseConventionProfile(
+      "rk-test.v1",
+      JSON.stringify({ lattices: { gap: ["inv-poly", "const"] }, enums: {}, key_polarity: {} }),
+    );
+    expect(p.ok).toBe(false);
+    if (p.ok) throw new Error("unreachable");
+    expect(p.why).toContain("polarity");
+  });
+
+  test("a lattice key declared `equality`, or an enum key declared ordered, refuses the profile", () => {
+    expect(
+      parseConventionProfile("p", JSON.stringify({ lattices: { gap: ["a", "b"] }, enums: {}, key_polarity: { gap: "equality" } })).ok,
+    ).toBe(false);
+    expect(
+      parseConventionProfile("p", JSON.stringify({ lattices: {}, enums: { norm: ["a"] }, key_polarity: { norm: "afforded" } })).ok,
+    ).toBe(false);
+  });
+
+  test("a `<key>_cap` written in REVERSE of its base key refuses the profile (the double-flip trap)", () => {
+    const p = parseConventionProfile(
+      "p",
+      JSON.stringify({
+        lattices: { d: ["const", "poly"], d_cap: ["poly", "const"] },
+        enums: {},
+        key_polarity: { d: "afforded", d_cap: "capped" },
+      }),
+    );
+    expect(p.ok).toBe(false);
+    if (p.ok) throw new Error("unreachable");
+    expect(p.why).toContain("d_cap");
+  });
+
+  test("keyPolarity reads the declared polarity, and is undefined for an unknown key", () => {
+    expect(keyPolarity(profile, "gap")).toBe("afforded");
+    expect(keyPolarity(profile, "d_cap")).toBe("capped");
+    expect(keyPolarity(profile, "norm")).toBe("equality");
+    expect(keyPolarity(profile, "nope")).toBeUndefined();
+  });
+
   test("an enum key admits only its declared values, with no ordering", () => {
     const issues = validateSignatureVocabulary(sig({ regime: [{ norm: "relative" }] }), profile);
     expect(issues).toEqual([]);
@@ -136,6 +192,24 @@ describe("per-object entailment", () => {
     expect(fails[0]!.key).toBe("gap");
     expect(fails[0]!.required).toBe("const");
     expect(fails[0]!.available).toEqual(["inv-poly"]);
+  });
+
+  test("a CAPPED key entails in the OPPOSITE direction: a tighter guarantee meets a looser cap", () => {
+    // context guarantees d <= const; requirement asks for d <= poly. A tighter guarantee is
+    // stronger, so it entails.
+    const tight = buildContext([{ regime: [{ d_cap: "const" }] }]);
+    expect(tight.unmet(profile, { pre: [], regime: [{ d_cap: "poly" }] })).toEqual([]);
+    // ...and the reverse does NOT: a poly-dimension context cannot promise a constant cap.
+    const loose = buildContext([{ regime: [{ d_cap: "poly" }] }]);
+    const fails = loose.unmet(profile, { pre: [], regime: [{ d_cap: "const" }] });
+    expect(fails).toHaveLength(1);
+    expect(fails[0]!.key).toBe("d_cap");
+  });
+
+  test("polarity is load-bearing: the SAME values compare oppositely on an afforded vs a capped key", () => {
+    const ctx = buildContext([{ regime: [{ d: "poly", d_cap: "poly" }] }]);
+    expect(ctx.unmet(profile, { pre: [], regime: [{ d: "const" }] })).toEqual([]);
+    expect(ctx.unmet(profile, { pre: [], regime: [{ d_cap: "const" }] })).toHaveLength(1);
   });
 
   test("an enum key entails only on exact equality (no order to compare)", () => {

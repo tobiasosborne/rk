@@ -22,7 +22,7 @@
 // satisfy `{obj: def-local-hamiltonian, d: const}`, and vice versa. That separation IS the repair.
 
 import type { Signature, SignaturePredicate } from "./signature";
-import { keyEntailed, keyKind, keyValues, type ConventionProfile } from "./signature-profile";
+import { keyEntailed, keyPolarity, keyValues, type ConventionProfile } from "./signature-profile";
 
 /** The scope key for object-free (`regime`) predicates. Not a legal Layer 0 id, so it can never
  * collide with an object scope. */
@@ -130,8 +130,8 @@ export function validateSignatureVocabulary(sig: Signature, profile: ConventionP
   const check = (scope: string, keys: Record<string, string>): void => {
     for (const key of Object.keys(keys).sort()) {
       const value = keys[key]!;
-      const kind = keyKind(profile, key);
-      if (kind === undefined) {
+      const polarity = keyPolarity(profile, key);
+      if (polarity === undefined) {
         out.push({
           code: "unknown-key",
           scope,
@@ -150,7 +150,7 @@ export function validateSignatureVocabulary(sig: Signature, profile: ConventionP
           value,
           message:
             `value '${value}' for key '${key}' on ${scopeLabel(scope)} is not in profile ` +
-            `'${profile.name}'${kind === "lattice" ? "'s lattice" : "'s enum"} (${declared.join(" < ")})`,
+            `'${profile.name}' (${polarity} key '${key}': ${declared.join(polarity === "equality" ? " | " : " < ")})`,
         });
       }
     }

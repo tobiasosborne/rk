@@ -125,7 +125,7 @@ describe("rk check", () => {
     expect(text).toContain(
       "checked linker: 0/0 lemma shards (0 non-shard files ignored); mirrors: INDEX absent (not adopted), DAG absent (not adopted); " +
         "critical-path provenance: no north star configured; L5 store: absent (no promotions); " +
-        "retraction store: absent (nothing retracted) (0 errors, 0 warnings)",
+        "retraction store: absent (nothing retracted); signatures: absent (not adopted) (0 errors, 0 warnings)",
     );
 
     expect(code).toBe(0);

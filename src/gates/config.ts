@@ -45,6 +45,10 @@ import { DEFAULT_PHASE } from "./phase";
 // layer. Same rk-xbm discipline as every other field below: malformed input drops the WHOLE field.
 import { validateWorkersConfig, type WorkersConfig } from "../drive/backend-registry";
 
+/** rk-8805: `.rk/config.json`'s `signatures` adoption states (see `GateConfig.signatures`). */
+export const SIGNATURES_MODES = ["required", "optional"] as const;
+export type SignaturesMode = (typeof SIGNATURES_MODES)[number];
+
 export interface GateConfig {
   /** M1.3 (`rk phase exploration|consolidation`). Missing field = `"consolidation"` (the
    * strictest default — see src/gates/phase.ts's `DEFAULT_PHASE` doc comment). Selects between
@@ -109,6 +113,29 @@ export interface GateConfig {
    * driver-live.ts's `DEFAULT_*`. Present-but-invalid drops the whole field like any other
    * malformation (fixture `config-05`) — see docs/gate-contracts.md's "Worker timeouts". */
   workers?: WorkersConfig;
+  /** rk-8805 (Gate 2 Check 17, docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6): the
+   * repo's adoption state for Layer 1 SIGNATURES. THREE states, deliberately, and the third is not
+   * a fourth spelling of the second:
+   *   - `"required"` — a `lemma`/`proposition`/`theorem`/`corollary` shard with no signature is a
+   *     structural ERROR (`signature-missing`). This is the campaign-adopted state the memo names.
+   *   - `"optional"` — the same shard is a WARN: the repo has adopted signatures and is still
+   *     filling them in.
+   *   - ABSENT — the repo has NOT adopted signatures at all: no missing-signature finding is
+   *     produced, and the linker's coverage line says `signatures: absent (not adopted)` out loud
+   *     (never a silent skip, CLAUDE.md L2). This is the only honest default for a GENERAL tool:
+   *     rk is not the qPCP campaign, and a WARN on every result shard of every existing repo would
+   *     be noise that buries signal — the aism-s64 lesson.
+   * A signature that IS present is always checked, in all three states: adoption governs whether
+   * one is DEMANDED, never whether a present one is validated. */
+  signatures?: SignaturesMode;
+  /** rk-8805: the convention profile Check 17's closed vocabulary comes from, e.g. `"qpcp.v1"` ->
+   * `.rk/conventions/qpcp.v1.json` (the `.v<n>` suffix is part of the NAME, so a profile version
+   * bump is a different file, never an in-place edit). Optional, same "no default" stance as
+   * `shardsPrefix`/`northStarId`: a general tool must never guess a campaign's convention profile.
+   * Required-when-consumed and FAIL-CLOSED: a repo with signatures present but no readable profile
+   * gets one loud `profile-unreadable` ERROR and no vocabulary/entailment checking — checking a
+   * predicate against a guessed lattice is worse than not checking it, because it reports green. */
+  conventionProfile?: string;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
    * `validateConfigOverrides`'s findings (plus a checked/total pair) from the point they're
@@ -164,6 +191,8 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "refsLocusToleranceLines",
   "northStarId",
   "workers",
+  "signatures",
+  "conventionProfile",
 ]);
 
 /** Exported so `src/store/config-load.ts` (the impure edge that actually reads the file) can
@@ -376,6 +405,40 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
           `northStarId: invalid value ${JSON.stringify(v)} -- must be a non-empty string when ` +
             `set; treating as unconfigured (M2.5's own "no default" contract, never a malformed ` +
             `sentinel)`,
+        ),
+      );
+    }
+  }
+
+  if ("signatures" in raw) {
+    total++;
+    const v = raw.signatures;
+    if (typeof v === "string" && (SIGNATURES_MODES as readonly string[]).includes(v)) {
+      overrides.signatures = v as SignaturesMode;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `signatures: invalid value ${JSON.stringify(v)} -- must be ${SIGNATURES_MODES.map((m) => `"${m}"`).join(" or ")}; ` +
+            `treating as unconfigured (signatures NOT adopted) rather than guessing an adoption ` +
+            `state, which would silently decide whether a missing signature ERRORs or is ignored`,
+        ),
+      );
+    }
+  }
+
+  if ("conventionProfile" in raw) {
+    total++;
+    const v = raw.conventionProfile;
+    if (isNonEmptyString(v)) {
+      overrides.conventionProfile = v;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `conventionProfile: invalid value ${JSON.stringify(v)} -- must be a non-empty string ` +
+            `naming a profile under .rk/conventions/ (e.g. "qpcp.v1"); treating as unconfigured ` +
+            `(Check 17 then fails closed on any signature it finds, never guesses a lattice)`,
         ),
       );
     }
