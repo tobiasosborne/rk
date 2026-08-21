@@ -15,6 +15,7 @@
 // mistyped node.
 
 import type { Lemma } from "../gates/linker-parse";
+import { canonicalSignature } from "../gates/signature";
 import {
   AF_FLAGS,
   REGISTRY_KINDS,
@@ -71,6 +72,7 @@ export function convertLemma(l: Lemma): RegistryNode | null {
     routes: l.routes.map((r) => [...r]),
     defs: [...l.defs],
     balloons: { count: l.balloons.count, classifications: [...l.balloons.classifications] },
+    ...(l.signatureBlock?.state === "ok" ? { signature: canonicalSignature(l.signatureBlock.signature) } : {}),
   };
 }
 

@@ -19,7 +19,7 @@ import type { Finding } from "./framework";
 import type { GateConfig } from "./config";
 import type { RepoSnapshot } from "./snapshot";
 import type { Lemma } from "./linker-lemma";
-import { extractSignatureBlock, type Signature } from "./signature";
+import type { Signature } from "./signature";
 import { conventionProfilePath, parseConventionProfile, type ConventionProfile } from "./signature-profile";
 import { checkRoute, scopeLabel, validateSignatureVocabulary } from "./signature-entail";
 import { conjoinSignature, type ConjunctionIssue } from "./signature-context";
@@ -55,13 +55,13 @@ interface Loaded {
 /** Reads every shard's ```signature block. A malformed block yields its own ERROR and is NOT
  * registered as a signature — but the shard IS recorded as "has a block", so the missing-signature
  * rule below cannot report the same fault a second time under a different name. */
-function loadSignatures(snapshot: RepoSnapshot, lemmas: readonly Lemma[]): Loaded & { blockPresent: Set<string> } {
+function loadSignatures(lemmas: readonly Lemma[]): Loaded & { blockPresent: Set<string> } {
   const signatures = new Map<string, Signature>();
   const lineOf = new Map<string, number>();
   const blockPresent = new Set<string>();
   const findings: Finding[] = [];
   for (const l of lemmas) {
-    const block = extractSignatureBlock(snapshot.get(l.path) ?? "");
+    const block = l.signatureBlock ?? { state: "absent" };
     if (block.state === "absent") continue;
     blockPresent.add(l.id);
     if (block.state === "malformed") {
@@ -132,7 +132,7 @@ export function checkSignatures(
   config: GateConfig,
 ): SignatureCheckResult {
   const findings: Finding[] = [];
-  const { signatures, lineOf, blockPresent, findings: parseFindings } = loadSignatures(snapshot, lemmas);
+  const { signatures, lineOf, blockPresent, findings: parseFindings } = loadSignatures(lemmas);
   findings.push(...parseFindings);
 
   const mode = config.signatures;

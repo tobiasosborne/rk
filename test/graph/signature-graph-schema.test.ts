@@ -16,6 +16,9 @@ import { acceptGraphDocument, SUPPORTED_GRAPH_SCHEMA_VERSIONS } from "../../src/
 import { canonicalizeGraphDocument, serializeGraphDocument } from "../../src/graph/serialize";
 import { validateGraphDocument } from "../../src/graph/validate";
 import { canonicalSignature } from "../../src/gates/signature";
+import { parseRegistry } from "../../src/gates/linker-parse";
+import { snapshotFromFiles } from "../../src/gates/snapshot";
+import { assembleGraphDocument } from "../../src/graph/assemble";
 
 const CORPUS = join(import.meta.dir, "..", "..", "corpus", "graph");
 const LEGACY_V2 = join(CORPUS, "signature-legacy-v2", "graph.json");
@@ -101,6 +104,33 @@ describe("the v3 GOLDEN", () => {
       ),
     };
     expect(serializeGraphDocument(scrambled)).toBe(serializeGraphDocument(r.doc));
+  });
+});
+
+describe("authored shard -> registry -> graph v3 production seam", () => {
+  test("an authored canonical signature survives parseRegistry and assembleGraphDocument", () => {
+    const signature = {
+      post: [{ gap: "const", obj: "def-gap" }],
+      pre: [{ gap: ["inv-poly", "const"], obj: "def-gap" }],
+      profile: "test.v1",
+      regime: [{ qdim: "const" }],
+      schema_version: "1",
+    };
+    const shard = `---\nid: lem-signed\nkind: lemma\nstatus: stated\naf: none\ncontract: Signed claim.\n---\n\n` +
+      "```signature\n" + JSON.stringify(signature, null, 2) + "\n```\n";
+    const parsed = parseRegistry(snapshotFromFiles({ "argument/lem-signed.md": shard }));
+    expect(parsed.errors).toEqual([]);
+    const { doc } = assembleGraphDocument({
+      lemmas: parsed.lemmas, afRecords: [], frRecords: [], bdRecords: [],
+    });
+    expect(doc.schema_version).toBe("3");
+    expect(doc.nodes[0]!.signature).toEqual(canonicalSignature({
+      schema_version: "1",
+      profile: "test.v1",
+      pre: [{ obj: "def-gap", keys: { gap: ["inv-poly", "const"] } }],
+      post: [{ obj: "def-gap", keys: { gap: "const" } }],
+      regime: [{ qdim: "const" }],
+    }));
   });
 });
 
