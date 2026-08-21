@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { formatTriageDocument, parseTriageTable } from "../refs/snowball-triage";
+import { countTableLines, formatTriageDocument, parseTriageTable } from "../refs/snowball-triage";
 import { autoTriage, parseKeywordsFile, type AutoTriageOptions } from "../refs/triage-auto";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
@@ -67,7 +67,16 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
     opts.keywords = parseKeywordsFile(readFileSync(kwPath, "utf8"));
   }
 
-  const rows = parseTriageTable(readFileSync(ledgerPath, "utf8"));
+  const text = readFileSync(ledgerPath, "utf8");
+  const rows = parseTriageTable(text);
+  const present = countTableLines(text);
+  if (rows.length !== present) {
+    out.log(
+      `rk refs triage: ${ledgerRel} has ${present} table rows but only ${rows.length} parse — a malformed row ` +
+        "stops the parser; REFUSING to rewrite the ledger (that would delete every row after it). Fix the row first.",
+    );
+    return 1;
+  }
   if (rows.length === 0) {
     out.log(`rk refs triage: ${ledgerRel} has no triage table (0 rows) — nothing to band.`);
     return 2;

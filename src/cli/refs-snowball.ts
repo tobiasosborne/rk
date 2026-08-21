@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { parseSeedsFile, snowballClosure } from "../refs/snowball-closure";
 import { buildSnowballOracle } from "../refs/snowball-fetch";
-import { formatTriageDocument, mergeTriageRows, parseTriageTable } from "../refs/snowball-triage";
+import { countTableLines, formatTriageDocument, mergeTriageRows, parseTriageTable } from "../refs/snowball-triage";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
 
@@ -82,7 +82,18 @@ export async function refsSnowball(args: string[], out: Out, buildOracle = build
   );
 
   const triagePath = outFlag ? (isAbsolute(outFlag) ? outFlag : join(root, outFlag)) : join(root, "refs", "triage.md");
-  const existingRows = existsSync(triagePath) ? parseTriageTable(readFileSync(triagePath, "utf8")) : [];
+  const existingText = existsSync(triagePath) ? readFileSync(triagePath, "utf8") : "";
+  const existingRows = parseTriageTable(existingText);
+  const presentRows = countTableLines(existingText);
+  if (existingRows.length !== presentRows) {
+    // A partially parsed ledger must never be merged over: every unparsed row would be treated
+    // as brand-new and its authored triage/reason silently dropped (2026-08-21 incident).
+    out.log(
+      `rk refs snowball: ${relative(root, triagePath)} has ${presentRows} table rows but only ${existingRows.length} parse — ` +
+        "REFUSING to merge over a partially parsed ledger. Fix the malformed row first.",
+    );
+    return 1;
+  }
   const { rows, newCount } = mergeTriageRows(entries, existingRows);
   mkdirSync(dirname(triagePath), { recursive: true });
   writeFileSync(triagePath, formatTriageDocument(rows));

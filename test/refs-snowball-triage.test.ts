@@ -91,3 +91,40 @@ describe("mergeTriageRows — merge with existing", () => {
     expect(rows[2]).toEqual(existing[1]);
   });
 });
+
+describe("pipe characters in generated cells (2026-08-21 truncation incident)", () => {
+  // A title containing '|' (e.g. "Entanglement of |ψ⟩ states") used to split into an extra cell;
+  // parseTriageTable then stopped at that row and the next writer (`rk refs triage --auto`)
+  // rewrote a 6437-row ledger with 1478 rows. Writer escapes, parser unescapes, and a LEGACY
+  // unescaped row (written before this fix) is recovered by folding the extra cells into title.
+  test("formatTriageDocument escapes '|' and parseTriageTable round-trips it", () => {
+    const rows: TriageRow[] = [
+      { id: "a", title: "Entanglement of |psi> states", year: "2010", depth: "1", via: "s", triage: "", reason: "" },
+      { id: "b", title: "After the pipe row", year: "2011", depth: "1", via: "s", triage: "in", reason: "x | y" },
+    ];
+    const doc = formatTriageDocument(rows);
+    expect(doc).toContain("Entanglement of \\|psi> states");
+    expect(parseTriageTable(doc)).toEqual(rows);
+  });
+
+  test("a legacy unescaped pipe title is folded back into the title column and parsing continues", () => {
+    const legacy = [
+      "| id | title | year | depth | via | triage | reason |",
+      "|----|-------|------|-------|-----|--------|--------|",
+      "| a | Entanglement of |psi> states | 2010 | 1 | s |  |  |",
+      "| b | After | 2011 | 1 | s | in | ok |",
+    ].join("\n");
+    const rows = parseTriageTable(legacy);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+    // spacing around the folded pipe is not recoverable (cells are trimmed) and does not matter:
+    // the title column is regenerated from the closure on every rerun; alignment is what counts.
+    expect(rows[0]!.title).toMatch(/^Entanglement of \|\s?psi> states$/);
+    expect(rows[0]!.year).toBe("2010");
+    expect(rows[1]!.triage).toBe("in");
+  });
+
+  test("a row with FEWER than 7 cells is still a hard stop (malformed table, not a pipe title)", () => {
+    const doc = ["| id | title | year | depth | via | triage | reason |", "|----|---|---|---|---|---|---|", "| a | t |", "| b | t | 1 | 1 | s |  |  |"].join("\n");
+    expect(parseTriageTable(doc)).toEqual([]);
+  });
+});

@@ -65,3 +65,16 @@ describe("rk refs triage --auto", () => {
     expect(lines.join("\n")).toMatch(/--in-links/);
   });
 });
+
+describe("partial-parse refusal (2026-08-21 incident)", () => {
+  test("a ledger with a malformed row is NOT rewritten; exit 1 names both counts", async () => {
+    const root = tmpRoot();
+    const good = formatTriageDocument([row({ id: "a", via: "s" }), row({ id: "b", via: "s" })]);
+    const broken = good.replace("| b |", "| b"); // second row loses a cell -> parser stops at row 1
+    writeFileSync(join(root, "refs", "triage.md"), broken);
+    const { out, lines } = capture();
+    expect(await refsTriage(["--auto", "--root", root], out)).toBe(1);
+    expect(lines.join("\n")).toMatch(/has 2 table rows but only 1 parse/);
+    expect(readFileSync(join(root, "refs", "triage.md"), "utf8")).toBe(broken);
+  });
+});

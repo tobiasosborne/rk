@@ -26,11 +26,19 @@ export const TRIAGE_TABLE_HEADER = [
   "|----|-------|------|-------|-----|--------|--------|",
 ];
 
+/** A cell may contain a literal `|` (a title such as "t|ket>"); the writer escapes it as `\\|`
+ * and this split honours the escape. 2026-08-21 incident: an unescaped pipe split the row into
+ * eight cells, `parseTriageTable` stopped there, and the next writer rewrote a 6437-row ledger
+ * with 1478 rows. */
 function splitRow(line: string): string[] {
   return line
-    .split("|")
-    .map((c) => c.trim())
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim().replace(/\\\|/g, "|"))
     .slice(1, -1);
+}
+
+function escapeCell(s: string): string {
+  return s.replace(/\|/g, "\\|");
 }
 
 /** Parses the triage table out of an existing refs/triage.md. Returns `[]` if the file has no
@@ -44,15 +52,33 @@ export function parseTriageTable(text: string): TriageRow[] {
     const line = lines[i]!;
     if (!line.startsWith("|")) break; // table ends at the first non-table line
     const cells = splitRow(line);
-    if (cells.length !== 7) break;
-    const [id, title, year, depth, via, triage, reason] = cells as [string, string, string, string, string, string, string];
+    if (cells.length < 7) break; // genuinely malformed row: hard stop, never a guess
+    // > 7 cells: a LEGACY row written before pipes were escaped — the extra cells can only have
+    // come from the title (the generated column that carries free text), so fold them back in.
+    const id = cells[0]!;
+    const [year, depth, via, triage, reason] = cells.slice(-5) as [string, string, string, string, string];
+    const title = cells.slice(1, -5).join(" | ");
     rows.push({ id, title, year, depth, via, triage, reason });
   }
   return rows;
 }
 
+/** Number of table BODY lines present in the text (every `|`-prefixed line after the header
+ * pair), independent of whether they parse. A writer compares this with `parseTriageTable`'s
+ * row count and REFUSES to rewrite the file when they differ: a partially parsed ledger must
+ * never be written back, or every unparsed row is silently deleted (the 2026-08-21 incident). */
+export function countTableLines(text: string): number {
+  const lines = text.split("\n");
+  const headerIdx = lines.findIndex((l) => l.startsWith(TABLE_HEADER_MARKER));
+  if (headerIdx === -1) return 0;
+  let n = 0;
+  for (let i = headerIdx + 2; i < lines.length && lines[i]!.startsWith("|"); i++) n++;
+  return n;
+}
+
 function formatRow(r: TriageRow): string {
-  return `| ${r.id} | ${r.title} | ${r.year} | ${r.depth} | ${r.via} | ${r.triage} | ${r.reason} |`;
+  const c = [r.id, r.title, r.year, r.depth, r.via, r.triage, r.reason].map(escapeCell);
+  return `| ${c.join(" | ")} |`;
 }
 
 function fromClosureEntry(e: ClosureEntry, triage: string, reason: string): TriageRow {

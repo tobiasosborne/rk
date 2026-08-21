@@ -173,3 +173,24 @@ describe("refsSnowball — partial closure (network failure)", () => {
     expect(lines.some((l) => l.includes("HTTP 500"))).toBe(true);
   });
 });
+
+describe("partial-parse refusal (2026-08-21 incident)", () => {
+  test("an existing triage.md with a malformed row is never merged over: exit 1, file unchanged", async () => {
+    const root = tmpRoot();
+    const seeds = seedsFile(root, "s1\n");
+    mkdirSync(join(root, "refs"), { recursive: true });
+    const broken = [
+      "| id | title | year | depth | via | triage | reason |",
+      "|----|-------|------|-------|-----|--------|--------|",
+      "| old | kept | 2000 | 1 | s1 | in | authored |",
+      "| bad",
+      "| after | lost? | 2001 | 1 | s1 | in | authored too |",
+    ].join("\n") + "\n";
+    writeFileSync(join(root, "refs", "triage.md"), broken);
+    const { out, lines } = capture();
+    const code = await refsSnowball(["--seeds", seeds, "--depth", "1", "--root", root], out, fakeBuilder({ s1: { self: { id: "s1", title: "S" }, refs: [], cites: [] } }));
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toMatch(/has 3 table rows but only 1 parse/);
+    expect(readFileSync(join(root, "refs", "triage.md"), "utf8")).toBe(broken);
+  });
+});
