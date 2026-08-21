@@ -73,7 +73,7 @@ export function renderCardsCommand(args: string[], out: Out, adopt: CardsAdopter
   const unrendered = records.discoveredL1.length - records.l1.length;
   out.log(
     `rk render cards: ${written} card(s) written to refs/cards/ from ${records.discoveredL1.length} record(s)` +
-      `${notAdmissible > 0 ? `, ${notAdmissible} not admissible (no usable review — rendered as the refusal stub)` : ""}.`,
+      `${notAdmissible > 0 ? `, ${notAdmissible} not admissible (failed Gate 3 Check 11 — rendered as the refusal stub)` : ""}.`,
   );
   if (unrendered > 0) {
     out.log(`  ${unrendered} record(s) are not shape-valid and were NOT rendered — run 'rk check' for the [record-*] findings.`);

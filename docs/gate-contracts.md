@@ -2703,9 +2703,11 @@ that rule for any artifact a repo opts into declaring.
   `.rk/generated.json` (creating it if absent, preserving every other entry). From that point a
   hand-edited card is a STALE ERROR under Check 3, which is the whole mechanism by which "the
   records are the truth, the cards are the view agents read" is enforced rather than merely
-  asserted (campaign memo section 4). A record whose review is absent, stale or not VALID still
-  renders — as an empty NOT ADMISSIBLE card carrying no statement, hypothesis or restatement, so
-  an agent reading a card can never quote an unreviewed extraction. (b) `RENDER_SITE_GENERATOR` —
+  asserted (campaign memo section 4). A record absent from Gate 3 Check 11's `usable` map still
+  renders — as an empty NOT ADMISSIBLE card carrying no statement, hypothesis or restatement —
+  whether it failed source, anchor, staleness, envelope, or review verification. Thus an agent
+  reading a card can never quote an extraction the complete record check refused. (b)
+  `RENDER_SITE_GENERATOR` —
   `render-site-v1`, EDGE-SUPPLIED (see
   "Edge-supplied generators" above): recognized, but this gate never regenerates it itself. A
   manifest entry naming any OTHER generator id (neither (a) nor (b)) is now a BLOCKING ERROR —
@@ -2779,7 +2781,9 @@ that rule for any artifact a repo opts into declaring.
    Review validity is decided by the SAME function Gate 3 Check 11 clause (d) uses
    (`src/gates/refs-records-binding.ts`'s `checkReview`), never a second copy of the rule: a record
    whose review is absent, stale or not VALID renders only a refusal stub and is not required to be
-   adopted. Presence-conditional: a repo with no records and no `refs/cards/` files gets nothing
+   adopted. For a review-valid record the card remains required, but any OTHER Check 11 defect
+   makes that required card a refusal stub rather than a content-bearing artifact.
+   Presence-conditional: a repo with no records and no `refs/cards/` files gets nothing
    from this check, and the manifest-absent coverage line names any bijection findings rather than
    reporting a bare non-adoption.
 

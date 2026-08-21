@@ -8,8 +8,9 @@
 // byte-diffs it on every `rk check`. Hand-editing a card is therefore a freshness failure, not a
 // silent improvement of the truth an agent will read.
 //
-// THE REFUSAL STUB. A record whose review is absent, bound to other bytes, or not VALID renders a
-// card with NO mathematical content at all — just its identity and the reason. The alternative
+// THE REFUSAL STUB. A record that is absent from Check 11's `usable` map renders a card with NO
+// mathematical content at all — just its identity and the reason. This includes source/anchor/
+// staleness defects as well as a review that is absent, bound to other bytes, or not VALID. The alternative
 // (render the statement and mention the missing review in a footer) puts the exact text an agent
 // will quote in front of it and relies on the agent reading the caveat. An empty card cannot be
 // misread. Recomputing the record digest here rather than trusting the review's own `card_sha256`
@@ -19,8 +20,10 @@
 // the record's own field order is fixed by its schema and its `hypotheses` array order is data.
 
 import { canonicalRecordSha256 } from "../gates/canonical-json";
+import { readLockFacts } from "../gates/refs-extraction";
 import { collectRecords } from "../gates/refs-records";
 import type { L1Record, ReviewRecord } from "../gates/refs-records";
+import { verifyRecords } from "../gates/refs-records-verify";
 import type { RepoSnapshot } from "../gates/snapshot";
 
 export const CARDS_PREFIX = "refs/cards/";
@@ -55,9 +58,9 @@ function fence(text: string): string[] {
 
 /** The card an admissible record renders to, or the refusal stub when its review does not bind
  * it. `review` is the review record found for `record`, or undefined when none exists. */
-export function renderCard(record: L1Record, review: ReviewRecord | undefined): string {
+export function renderCard(record: L1Record, review: ReviewRecord | undefined, check11Usable: boolean): string {
   const digest = canonicalRecordSha256(record.value);
-  const refusal = refusalReason(review, digest);
+  const refusal = refusalReason(review, digest, check11Usable);
   const lines: string[] = [HEADER(record.path)];
 
   if (refusal !== undefined) {
@@ -118,7 +121,7 @@ export function renderCard(record: L1Record, review: ReviewRecord | undefined): 
   return lines.join("\n");
 }
 
-function refusalReason(review: ReviewRecord | undefined, digest: string): string | undefined {
+function refusalReason(review: ReviewRecord | undefined, digest: string, check11Usable: boolean): string | undefined {
   if (!review) return "this extraction record has no review record, so nothing has independently checked it against the source";
   if (review.cardSha256.toLowerCase() !== digest.toLowerCase()) {
     return `the review record (\`${review.path}\`) is bound to card_sha256 \`${review.cardSha256}\`, but the record's canonical bytes hash \`${digest}\` — the record was edited after it was reviewed`;
@@ -126,6 +129,9 @@ function refusalReason(review: ReviewRecord | undefined, digest: string): string
   if (review.verdict !== "VALID") return `the review record (\`${review.path}\`) records verdict ${review.verdict}`;
   if (review.falseClauses.length > 0) {
     return `the review record (\`${review.path}\`) says VALID while answering false to: ${review.falseClauses.join(", ")}`;
+  }
+  if (!check11Usable) {
+    return "this extraction record did not pass every Gate 3 Check 11 source, anchor, staleness, envelope and review clause";
   }
   return undefined;
 }
@@ -148,5 +154,6 @@ export function renderCardForPath(snapshot: RepoSnapshot, cardPath: string): Car
   if (!record) {
     return { ok: false, reason: `${recordPath} exists but is not a shape-valid extraction record (see this run's Gate 3 [record-*] findings)` };
   }
-  return { ok: true, bytes: renderCard(record, records.reviews.get(recordPath)) };
+  const verified = verifyRecords(snapshot, readLockFacts(snapshot), records);
+  return { ok: true, bytes: renderCard(record, records.reviews.get(recordPath), verified.usable.has(recordPath)) };
 }

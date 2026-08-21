@@ -53,7 +53,7 @@ describe("rk render cards — CLI edge", () => {
     writeFileSync(join(root, "refs", "sources", "widget.txt"), PAPER);
     writeFileSync(
       join(root, "refs", "manifest", "sources.lock.json"),
-      JSON.stringify({ files: [{ path: "sources/widget.txt", sha256: hashOf(PAPER) }] }, null, 2),
+      JSON.stringify({ files: [{ path: "sources/widget.txt", sha256: hashOf(PAPER), source_id: "widget-2026" }] }, null, 2),
     );
     writeFileSync(join(root, "refs", "records", "widget-2026", "L1-1.json"), JSON.stringify(RECORD, null, 2));
     if (opts.review !== false) {

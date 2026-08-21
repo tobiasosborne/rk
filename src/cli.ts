@@ -120,7 +120,7 @@ function renderHelp(out: Out): number {
   out.log("  usage: rk render cards [--root <dir>]");
   out.log("  Writes refs/cards/<source-id>/L1-<n>.md from refs/records/<source-id>/L1-<n>.json plus");
   out.log("  its review record, and adopts each card in .rk/generated.json (generator 'cards-v1') so");
-  out.log("  Gate 7 byte-diffs it. A record with no usable review renders an empty NOT ADMISSIBLE");
+  out.log("  Gate 7 byte-diffs it. A record that fails Gate 3 Check 11 renders an empty NOT ADMISSIBLE");
   out.log("  card. The records are the truth; the cards are the view agents read.");
   return 0;
 }

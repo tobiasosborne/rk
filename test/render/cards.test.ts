@@ -36,11 +36,11 @@ const RECORD = {
   proof_locus: "refs/sources/widget.txt:4-4",
 };
 
-function review(overrides: Record<string, unknown> = {}): string {
+function reviewFor(record: unknown, overrides: Record<string, unknown> = {}): string {
   const clause = (note: string) => ({ value: true, note });
   return JSON.stringify({
     schema_version: "1",
-    card_sha256: canonicalRecordSha256(RECORD),
+    card_sha256: canonicalRecordSha256(record),
     verdict: "VALID",
     reviewer: { family: "gpt", backend: "codex", model: "gpt-5.6-sol", session: "s1" },
     checked: {
@@ -54,10 +54,14 @@ function review(overrides: Record<string, unknown> = {}): string {
   });
 }
 
+function review(overrides: Record<string, unknown> = {}): string {
+  return reviewFor(RECORD, overrides);
+}
+
 function files(extra: Record<string, string> = {}): Record<string, string> {
   return {
     "refs/sources/widget.txt": PAPER,
-    "refs/manifest/sources.lock.json": JSON.stringify({ files: [{ path: "sources/widget.txt", sha256: hashOf(PAPER) }] }),
+    "refs/manifest/sources.lock.json": JSON.stringify({ files: [{ path: "sources/widget.txt", sha256: hashOf(PAPER), source_id: "widget-2026" }] }),
     "refs/records/widget-2026/L1-1.json": JSON.stringify(RECORD, null, 2),
     "refs/records/widget-2026/L1-1.review.json": review(),
     ...extra,
@@ -127,6 +131,24 @@ describe("renderCard — the refusal stub", () => {
     expect(card).not.toContain("Every widget is round when d-regular.");
   });
 
+  test("a source-stale record with a matching VALID review renders only the refusal stub", () => {
+    const staleLock = JSON.stringify({ files: [{ path: "sources/widget.txt", sha256: "b".repeat(64), source_id: "widget-2026" }] });
+    const card = cardBytes({ "refs/manifest/sources.lock.json": staleLock });
+    expect(card).toContain("NOT ADMISSIBLE");
+    expect(card).not.toContain("Every widget is round when d-regular.");
+  });
+
+  test("a verbatim-invalid record with a matching VALID review renders only the refusal stub", () => {
+    const invalid = { ...RECORD, statement_verbatim: "Theorem 1.1. Every widget is square." };
+    const card = cardBytes({
+      "refs/records/widget-2026/L1-1.json": JSON.stringify(invalid, null, 2),
+      "refs/records/widget-2026/L1-1.review.json": reviewFor(invalid),
+    });
+    expect(card).toContain("NOT ADMISSIBLE");
+    expect(card).not.toContain("Every widget is round when d-regular.");
+    expect(card).not.toContain("Every widget is square.");
+  });
+
   test("a card path with no record behind it cannot be regenerated (never an empty pass)", () => {
     const result = renderCardForPath(snapshotFromFiles(files()), "refs/cards/widget-2026/L1-9.md");
     expect(result.ok).toBe(false);
@@ -165,7 +187,7 @@ describe("collectRecords is the one parser both the gate and the renderer use", 
   test("the renderer reads the same record the gate does", () => {
     const records = collectRecords(snapshotFromFiles(files()));
     expect(records.l1).toHaveLength(1);
-    expect(renderCard(records.l1[0]!, records.reviews.get("refs/records/widget-2026/L1-1.json"))).toBe(cardBytes());
+    expect(renderCard(records.l1[0]!, records.reviews.get("refs/records/widget-2026/L1-1.json"), true)).toBe(cardBytes());
   });
 });
 
