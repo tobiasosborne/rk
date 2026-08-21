@@ -89,3 +89,28 @@ describe("parseKeywordsFile", () => {
     expect(parseKeywordsFile("# header\nPCP\n\nlocal Hamiltonian  # k-local\nNLTS\n")).toEqual(["PCP", "local Hamiltonian", "NLTS"]);
   });
 });
+
+describe("redoAuto: re-banding after tuning keywords/thresholds", () => {
+  test("with redoAuto, rows whose reason starts with 'auto:' are re-banded (including auto 'out'); human rows still untouched", () => {
+    const first = autoTriage([row({ id: "a", via: "s1", title: "Quantum PCP" }), row({ id: "h", via: "s1", triage: "out", reason: "human: junk" })], {});
+    expect(first.rows[0]!.triage).toBe("out"); // no keywords on the first pass
+    const second = autoTriage(first.rows, { keywords: ["PCP"], redoAuto: true });
+    expect(second.rows[0]!.triage).toBe("");
+    expect(second.rows[0]!.reason).toMatch(/^auto: review \(links=1, kw=1: PCP\)/);
+    expect(second.rows[1]).toEqual(first.rows[1]);
+    expect(second.counts).toEqual({ candidate: 0, review: 1, out: 0, untouched: 1 });
+  });
+
+  test("without redoAuto an auto row stays untouched (idempotent default)", () => {
+    const first = autoTriage([row({ id: "a", via: "s1", title: "Quantum PCP" })], {});
+    const second = autoTriage(first.rows, { keywords: ["PCP"] });
+    expect(second.rows).toEqual(first.rows);
+  });
+
+  test("an auto row whose triage a human later changed (e.g. auto out -> in) is NOT re-banded even with redoAuto", () => {
+    const edited = row({ id: "a", via: "s1", triage: "in", reason: "auto: out (links=1, kw=0)" });
+    const r = autoTriage([edited], { redoAuto: true });
+    expect(r.rows[0]).toEqual(edited);
+    expect(r.counts.untouched).toBe(1);
+  });
+});

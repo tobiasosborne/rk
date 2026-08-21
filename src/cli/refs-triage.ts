@@ -14,12 +14,14 @@ import { extractFlag, extractRoot } from "./args";
 const DEFAULT_LEDGER = "refs/triage.md";
 
 function usage(out: Out): number {
-  out.log("usage: rk refs triage --auto [--keywords <file>] [--in-links N] [--out-links N] [--triage <path>] [--root <path>]");
+  out.log("usage: rk refs triage --auto [--redo-auto] [--keywords <file>] [--in-links N] [--out-links N] [--triage <path>] [--root <path>]");
   out.log("  Mechanical pre-triage of the snowball ledger: rows with EMPTY triage and reason are banded by");
   out.log("  seed-link count (the `via` column) and title keyword hits. candidate (>= --in-links, default 3,");
   out.log("  or >= 2 with a keyword) and review rows get an `auto:` reason and an EMPTY triage for the");
   out.log("  operator; out rows (<= --out-links, default 1, no keyword) get triage `out` + `auto:` reason.");
   out.log("  Seed rows and anything already triaged or reasoned are never touched; reruns are idempotent.");
+  out.log("  --redo-auto re-bands rows this command banded before (reason 'auto:'), e.g. after tuning keywords;");
+  out.log("  a row whose triage a human changed since is still left alone.");
   return 2;
 }
 
@@ -36,7 +38,8 @@ function parseCount(raw: string | undefined, flag: string, out: Out): number | u
 export async function refsTriage(args: string[], out: Out): Promise<number> {
   const { rest: r1, root } = extractRoot(args);
   const auto = r1.includes("--auto");
-  const r2 = r1.filter((a) => a !== "--auto");
+  const redoAuto = r1.includes("--redo-auto");
+  const r2 = r1.filter((a) => a !== "--auto" && a !== "--redo-auto");
   const { rest: r3, value: keywordsPath } = extractFlag(r2, "--keywords");
   const { rest: r4, value: inLinksRaw } = extractFlag(r3, "--in-links");
   const { rest: r5, value: outLinksRaw } = extractFlag(r4, "--out-links");
@@ -55,7 +58,7 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
     return 2;
   }
 
-  const opts: AutoTriageOptions = {};
+  const opts: AutoTriageOptions = { redoAuto };
   if (inLinks !== undefined) opts.inLinks = inLinks;
   if (outLinks !== undefined) opts.outLinks = outLinks;
   if (keywordsPath !== undefined) {

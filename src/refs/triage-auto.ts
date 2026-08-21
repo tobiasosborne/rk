@@ -27,6 +27,19 @@ export interface AutoTriageOptions {
   outLinks?: number;
   /** Title keywords; matched case-insensitively as whole words (a term may be multi-word). */
   keywords?: string[];
+  /** Re-band rows this module banded earlier (reason starts with `auto:` and triage is still what
+   * the band wrote — empty, or `out`). A row whose triage a human changed afterwards keeps its
+   * `auto:` reason but is never re-banded. Default false: reruns are idempotent. */
+  redoAuto?: boolean;
+}
+
+const AUTO_PREFIX = "auto: ";
+
+function isUntouchedOrRedoable(row: TriageRow, redoAuto: boolean): boolean {
+  if (row.triage === "" && row.reason === "") return true;
+  if (!redoAuto || !row.reason.startsWith(AUTO_PREFIX)) return false;
+  const bandWroteOut = row.reason.startsWith(`${AUTO_PREFIX}out`);
+  return bandWroteOut ? row.triage === "out" : row.triage === "";
 }
 
 export type AutoBand = "candidate" | "review" | "out";
@@ -90,7 +103,7 @@ function reasonFor(band: AutoBand, links: number, hits: string[]): string {
 export function autoTriage(rows: readonly TriageRow[], opts: AutoTriageOptions): AutoTriageResult {
   const counts: AutoTriageCounts = { candidate: 0, review: 0, out: 0, untouched: 0 };
   const outRows = rows.map((row) => {
-    if (row.triage !== "" || row.reason !== "") {
+    if (!isUntouchedOrRedoable(row, opts.redoAuto ?? false)) {
       counts.untouched++;
       return row;
     }
