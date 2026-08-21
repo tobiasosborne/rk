@@ -28,14 +28,29 @@ export type {
 } from "./types-edges";
 
 import type { GraphEdges, UnresolvedRef, ConflictRecord } from "./types-edges";
+// rk-8805: the signature SHAPE is owned by src/gates/signature.ts (one definition, one canonical
+// form) and re-exported here so a graph consumer has ONE import surface — the same pattern
+// src/graph/assemble.ts already uses for `Lemma`. Type-only: no gate logic crosses into src/graph.
+import type { Signature } from "../gates/signature";
 
-/** Bumped "1" -> "2" by rk-0ehr / P1 (CLAUDE.md rule 10 — a schema change is a compat event): the
+export type { Signature, SignaturePredicate } from "../gates/signature";
+
+/** Bumped "2" -> "3" by rk-8805 (CLAUDE.md rule 10 — a schema change is a compat event): a
+ * `RegistryNode` gains `signature`, the Layer 1 signature block (schemas/signature.v1.json,
+ * src/gates/signature.ts) the projection now carries so a consumer can read a result's declared
+ * regime without re-parsing shards. A v2 consumer reading a v3 document silently sees no signature
+ * on any node — which is exactly the "applied outside its regime" blindness Check 17 exists to
+ * remove — hence a version bump rather than a tolerated widening. `src/graph/schema-version.ts`'s
+ * `acceptGraphDocument` reads BOTH versions (a v2 document is upgraded in memory with every
+ * signature ABSENT, never a fabricated empty one) and refuses anything else.
+ *
+ * Bumped "1" -> "2" by rk-0ehr / P1: the
  * closed `conflictKind` enum gains `retraction-vs-status`, `ConflictRecord.edge` and the
  * `unresolved` bucket's `edge` gain `"retraction"`, and `edges` gains a fifth array. The file name
  * `schemas/graph.v1.json` is deliberately unchanged — its `$id`/filename track the schema FAMILY,
  * the `schema_version` const inside tracks the version — flagged for the Tier A review in this
  * branch's SHARED-EDITS.md rather than resolved unilaterally. */
-export const GRAPH_SCHEMA_VERSION = "2";
+export const GRAPH_SCHEMA_VERSION = "3";
 
 // ---------------------------------------------------------------------------------------
 // The registry spine
@@ -110,6 +125,14 @@ export interface RegistryNode {
   /** Layer-0 definitions/*.md ids this node cites. */
   defs: string[];
   balloons: BalloonCounter;
+  /** rk-8805 (`schema_version: "3"`): the shard's parsed ```signature block
+   * (schemas/signature.v1.json), in CANONICAL form — `src/graph/serialize.ts` canonicalises it
+   * like every other set-valued field, so two projections of the same declared regime serialize
+   * to the same bytes. ABSENT iff the shard declared no signature, or declared one the gate
+   * refused to parse: a malformed block is a Gate 2 Check 17 ERROR, never graph data, and an
+   * absent signature is never fabricated as an empty one ("declared nothing" and "declared the
+   * empty regime" are different claims). */
+  signature?: Signature;
 }
 
 /** The top-level unified projection graph document — `schemas/graph.v1.json`'s runtime mirror.

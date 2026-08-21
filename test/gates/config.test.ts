@@ -170,6 +170,41 @@ describe("validateConfigOverrides — the other four fields + unknown keys", () 
     }
   });
 
+  // rk-8805 (Gate 2 Check 17): the same four-place wiring — interface, "no default" stance,
+  // KNOWN_CONFIG_KEYS, validation branch — for the two signature fields.
+  test("signatures: the two adoption modes pass through, and it is a KNOWN key", () => {
+    for (const mode of ["required", "optional"] as const) {
+      const r = validateConfigOverrides({ signatures: mode });
+      expect(r.overrides.signatures).toBe(mode);
+      expect(r.findings).toEqual([]);
+    }
+  });
+
+  test("signatures: absent means NOT ADOPTED, never a guessed adoption state", () => {
+    const r = validateConfigOverrides({});
+    expect(r.overrides.signatures).toBeUndefined();
+    expect(mergeGateConfig(r.overrides).signatures).toBeUndefined();
+  });
+
+  test("signatures: a malformed value is dropped and reported (adoption is never guessed)", () => {
+    for (const bad of ["yes", true, 1, null, ""]) {
+      const r = validateConfigOverrides({ signatures: bad });
+      expect(r.overrides.signatures).toBeUndefined();
+      expect(r.findings).toHaveLength(1);
+      expect(r.findings[0]!.message).toContain("signatures");
+    }
+  });
+
+  test("conventionProfile: a non-empty string passes through; a malformed one is dropped", () => {
+    expect(validateConfigOverrides({ conventionProfile: "qpcp.v1" }).overrides.conventionProfile).toBe("qpcp.v1");
+    for (const bad of ["", 7, null, {}]) {
+      const r = validateConfigOverrides({ conventionProfile: bad });
+      expect(r.overrides.conventionProfile).toBeUndefined();
+      expect(r.findings).toHaveLength(1);
+      expect(r.findings[0]!.message).toContain("conventionProfile");
+    }
+  });
+
   test("an unrecognized key is dropped and reported, never silently applied", () => {
     const r = validateConfigOverrides({ shardsMxLines: 999 });
     expect((r.overrides as Record<string, unknown>).shardsMxLines).toBeUndefined();

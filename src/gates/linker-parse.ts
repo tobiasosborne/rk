@@ -41,6 +41,7 @@ import { parseFrontmatter } from "./snapshot";
 // src/drive/driver-frontmatter.ts's `applyBalloonMark` writes, with one degradation path, not two.
 import { readBalloonCounterFromFields } from "../drive/driver-balloon";
 import { AF_STATES, KINDS, MATH_STATUS, parseList, parseRoutes, pyListRepr, type Lemma } from "./linker-lemma";
+import { extractSignatureBlock } from "./signature";
 
 export type { Lemma } from "./linker-lemma";
 export { allDepIds, parseRoutes } from "./linker-lemma";
@@ -220,6 +221,7 @@ export function parseRegistry(snapshot: RepoSnapshot): ParseRegistryResult {
       routes: parseRoutes(fm.fields.routes),
       workspace: fm.fields.workspace,
       balloons: readBalloonCounterFromFields(fm.fields),
+      signatureBlock: extractSignatureBlock(content),
     });
   }
 

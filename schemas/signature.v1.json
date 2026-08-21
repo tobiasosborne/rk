@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/signature.v1.json",
+  "title": "rk Layer 1 signature block (v1)",
+  "description": "The SIGNATURE of a Layer 1 result: what it REQUIRES of its context (`pre`), what it PROVIDES (`post`), and the ambient parameter predicates it holds under (`regime`). Ground truth: docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6 (the repair of Tier A review LB2/LB6, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md) and docs/gate-contracts.md Gate 2 Check 17. WHERE IT LIVES: a fenced ```signature block in the shard's BODY, not in frontmatter. `parseFrontmatter` (src/gates/snapshot.ts) is a flat `key: value` YAML subset whose only nesting is a `- item` block list flattened into a `;`-separated string; a list of maps cannot be expressed in it at all, and widening that grammar to real YAML would change the parse of every existing shard in every gate. WHY IT EXISTS: `contract` is one line of prose, so 'this result is being applied outside the regime it was proved in' is invisible to every other check in rk. Review LB2's concrete false-green: `lem-amp` holds for qudit dimension d=poly(n) and produces gap=const; `thm-qpcp` runs at d=const and consumes gap=const AND d=const. Atom-wise matching passes (the gap atom comes from the dependency, the dimension atom from the parent's own regime) although the dependency is UNAVAILABLE in the parent's regime. The check this schema feeds is therefore route-scoped ENTAILMENT, not atom matching. HONEST SCOPE: this is shallow typing. It does not check proofs; it checks that no result is applied outside its declared regime and that the regime bookkeeping is closed under the DAG. FAIL-CLOSED: a malformed or unparseable block is an ERROR (`signature-malformed`), NEVER 'no signature' — a parser that degraded a typo to 'absent' would turn every authoring slip into a silent skip of the entailment check (CLAUDE.md L2). The runtime validator is src/gates/signature.ts (`validateSignatureShape`, `extractSignatureBlock`); the entailment engine is src/gates/signature-entail.ts; the vocabulary comes from the convention profile named by `.rk/config.json`'s `conventionProfile` (src/gates/signature-profile.ts), never from this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "pre", "post", "regime"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Consumers must check this before parsing the rest of the block; a version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture. Same string-valued convention as schemas/graph.v1.json's `schema_version`. A block carrying any other value is `signature-malformed`, never silently read under v1 semantics."
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The convention profile this signature's vocabulary is drawn from, e.g. \"qpcp.v1\" — resolved to `.rk/conventions/<profile>.json` and required to equal `.rk/config.json`'s `conventionProfile`. A signature naming a DIFFERENT profile from the repo's is `profile-mismatch` (ERROR): checking a predicate against the wrong lattice is worse than not checking it, because it reports green."
+    },
+    "pre": {
+      "type": "array",
+      "description": "What the result REQUIRES of its context, as per-object predicates. Entailment is PER-OBJECT: a key of a predicate on object X can only be met by the context's predicate on the same X. A regime predicate never satisfies an object-scoped one — that conflation is exactly what made v1's matcher unsound (review LB2).",
+      "items": { "$ref": "#/$defs/objectPredicate" }
+    },
+    "post": {
+      "type": "array",
+      "description": "What the result PROVIDES. On a route, a dependency's ENTIRE `post` becomes available only after its entire `pre`+`regime` is entailed by the context, and the route is evaluated to a FIXED POINT rather than in listing order (docs/gate-contracts.md Gate 2 Check 17): the order an author happens to list route members in is not a fact about the mathematics, so it may not change the verdict. A consequence worth stating: two members that each need the other's post are both refused, because availability is only ever granted from the already-available context. The shard's own `post` must be entailed by its final route context plus its own `pre`; when it is not, the check reports `post-unsupported` as a WARN — a proof, not the route, may legitimately supply the gap.",
+      "items": { "$ref": "#/$defs/objectPredicate" }
+    },
+    "regime": {
+      "type": "array",
+      "description": "Predicates on the AMBIENT parameters (`{\"n\": \"to-infinity\"}`, `{\"d\": \"const\"}`), object-free by construction. These live in their own scope: they are compared against a dependency's regime and never against an object predicate. An entry carrying `obj` is `signature-malformed`.",
+      "items": { "$ref": "#/$defs/regimePredicate" }
+    },
+    "hardness": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OPTIONAL. A value from the profile's `hardness` key (e.g. \"QMA-hard\"). Present-but-unknown is `unknown-value`; absent is a legitimate state, not a finding."
+    }
+  },
+  "$defs": {
+    "objectPredicate": {
+      "type": "object",
+      "description": "One predicate on ONE Layer 0 object: the required `obj` (a `definitions/*.md` id — an id naming no Layer 0 shard is `dangling-object`) plus AT LEAST ONE predicate key. Every additional property is a profile-declared key (`lattices` or `enums`) with a string value from that key's declared vocabulary; an unlisted key is `unknown-key` and an unlisted endpoint is `unknown-value`. A value is an INTERVAL over its key's declared order (codex Tier A review of the convention profile draft, findings 10-11): either the bare string `x`, which IS the point interval [x, x] and is its canonical spelling, or a two-element `[lo, hi]` in which either endpoint may be `null` for unbounded. ENTAILMENT IS CONTAINMENT: a context interval entails a requirement interval iff the context is CONTAINED in it. One rule covers both readings the corpus needs -- \"at least an inverse-polynomial gap\" is the requirement [\"inv-poly\", \"const\"], \"the dimension is at most constant\" is [null, \"const\"] -- so no key carries a direction flag that could be set wrongly. The key's order is a CHAIN or a genuine POSET (the profile decides); on a poset, INCOMPARABLE values do not entail each other in either direction, and an interval between two incomparable endpoints is `signature-malformed`, as is any interval whose lower endpoint is not at or below its upper one. Endpoints are always STRINGS (or `null` for unbounded) — that is how the memo's \"no floats\" is made mechanical: a numeric value anywhere in the block is `signature-malformed`, so there is no float/int judgement call at any nesting level.",
+      "required": ["obj"],
+      "minProperties": 2,
+      "properties": {
+        "obj": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Layer 0 (`definitions/*.md`) id this predicate constrains. Objects are compared by ID, never by name — which is what makes bite's canonical identity immune to renaming (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 8, src/graph/bite.ts)."
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/predicateValue" }
+    },
+    "predicateValue": {
+      "description": "An INTERVAL over the key's declared order. The bare-string form is the point interval and is the CANONICAL spelling of one -- the two-element form with lo equal to hi is refused, so every value has exactly one encoding. A null endpoint is unbounded on that side; an unbounded CONTEXT endpoint is entailed only by an equally unbounded requirement.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+        }
+      ]
+    },
+    "regimePredicate": {
+      "type": "object",
+      "description": "An ambient predicate: profile-declared keys to string values, and NO `obj` key.",
+      "minProperties": 1,
+      "not": { "required": ["obj"] },
+      "additionalProperties": { "$ref": "#/$defs/predicateValue" }
+    }
+  },
+  "$comment": "CANONICAL ENCODING (Check 17(d), enforced byte-for-byte by src/gates/signature.ts's `canonicalSignatureText`): the block text must equal `JSON.stringify(value, null, 2)` over the value with every object's keys sorted and every array's entries sorted by their own rendering. Indented rather than compact so the authored artifact stays readable — the anti-drift property is that the encoding is DETERMINED, not that it is dense. A well-formed but non-canonical block is `signature-noncanonical` (ERROR), refused rather than normalised silently, because canonical identity is the whole basis on which two signatures are compared at all (subsumption/partial order, src/graph/bite.ts)."
+}

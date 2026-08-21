@@ -11,6 +11,7 @@
 // purpose). af-, fr-, and conflict-specific checks are split into sibling
 // validate-{af,fr,conflicts}.ts modules to stay clear of CLAUDE.md's 280-line shard cap.
 
+import { canonicalSignature } from "../gates/signature";
 import { canonicalizeGraphDocument, sortKeysDeep } from "./serialize";
 import type { GraphDocument } from "./types";
 import { checkAfEdges, checkAfUnresolvedBucket } from "./validate-af";
@@ -42,6 +43,7 @@ export function validateGraphDocument(doc: GraphDocument): GraphIssue[] {
   checkRetractionEdges(doc, nodeById, issues);
   checkRetractionUnresolvedBucket(doc, issues);
   checkConflicts(doc, nodeById, issues);
+  checkNodeSignatures(doc, issues);
   checkCanonicalForm(doc, issues);
 
   return issues;
@@ -181,6 +183,21 @@ function checkRetractionUnresolvedBucket(doc: GraphDocument, issues: GraphIssue[
  * validates ALL of it, not nodes alone). A document that has NOT been canonicalized is still
  * structurally valid by every OTHER check in this file; only this one names where the
  * determinism contract itself is violated. */
+/** rk-8805 (v3): a node's `signature` must be in CANONICAL form. The generic canonical-form check
+ * below would notice the same defect, but only as an anonymous "nodes not in canonical order" —
+ * this one names the NODE, because a signature is the field an author hand-writes and therefore the
+ * one a person has to go and fix. Canonicalisation runs through src/gates/signature.ts's single
+ * canonicaliser, so a graph document's signature bytes and a shard's block bytes can never disagree
+ * about what canonical means. */
+function checkNodeSignatures(doc: GraphDocument, issues: GraphIssue[]): void {
+  for (const n of doc.nodes) {
+    if (n.signature === undefined) continue;
+    if (JSON.stringify(sortKeysDeep(n.signature)) !== JSON.stringify(sortKeysDeep(canonicalSignature(n.signature)))) {
+      issues.push(err(`signature is not in canonical form (sorted keys, sorted entries — src/gates/signature.ts)`, n.id));
+    }
+  }
+}
+
 function checkCanonicalForm(doc: GraphDocument, issues: GraphIssue[]): void {
   const canonical = canonicalizeGraphDocument(doc);
   const arrayOrder = (label: string, actual: unknown, expected: unknown) => {

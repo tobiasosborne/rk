@@ -31,13 +31,7 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RepoSnapshot, SnapshotFacts } from "../gates/snapshot";
 import { sha256Bytes } from "../refs/hash";
-import { SNAPSHOT_INCLUDE_RULES } from "./snapshot-rules";
-
-/** A git placeholder for an otherwise-empty directory: recorded as directory existence (its
- * parent dir is added to `dirs`), NEVER as bundle/shard content (excluded from the text map and
- * from its sha256/tracked facts). This is the corpus convention for representing a genuinely
- * empty directory in git, which cannot store one (corpus/README.md "empty-directory fixtures"). */
-const DIR_PLACEHOLDER = ".gitkeep";
+import { collectIncluded, DIR_PLACEHOLDER, readInto, type SnapshotAccum } from "./snapshot-include";
 
 /** The SOLE directory the full-tree hash walk skips, and ONLY at the repo root: `.git`.
  *
@@ -94,6 +88,15 @@ const ROOT_SKIP_DIR = ".git";
  *                                       is exactly the loader's job, not kitchen-sink bloat.
  * - `runs/**`                        — runs gate (Gate 5 Inputs)
  * - `report/**\/*.{tex,md}`          — provenance + report-shards gates (Gate 4 / Gate 6 Inputs)
+ * - `.rk/conventions/` (one level)    — rk-8805: the convention profile Gate 2 Check 17 reads its
+ *                                       closed vocabulary from (`.rk/conventions/<name>.json`,
+ *                                       named by `.rk/config.json`'s `conventionProfile`;
+ *                                       src/gates/signature-profile.ts). A SEPARATE, targeted rule
+ *                                       rather than making the `.rk` rule recursive: `.rk/` also
+ *                                       holds append-only validity stores and worker scratch, and
+ *                                       widening one rule to sweep all of it in would change what
+ *                                       every `.rk`-reading gate sees for the sake of one
+ *                                       directory the memo names explicitly.
  * - `.rk/` (one level only)          — M2.6: the freshness gate's declared manifest,
  *                                       `.rk/generated.json` (Gate 7 Inputs, src/gates/
  *                                       freshness.ts). Non-recursive: the manifest is a single
@@ -115,13 +118,8 @@ const ROOT_SKIP_DIR = ".git";
  * verifiability. `walkTree` below hashes every file present on disk (tracked or not, inside these
  * rules or not), so a provenance source row naming ANY present path is verified (present+stale ⇒
  * ERROR), never silently WARNed as "absent". */
-const INCLUDE_RULES = SNAPSHOT_INCLUDE_RULES;
-
-interface Accum {
-  text: Map<string, string>;
-  sha256: Map<string, string>;
-  dirs: Set<string>;
-}
+// The rule table and bounded text walker live in snapshot-include.ts; the full hash walk remains here.
+type Accum = SnapshotAccum;
 
 /** SYMLINK POLICY (round-3 landing-blocker 3; docs/gate-contracts.md Shared conventions, "Snapshot
  * loading"). Both walkers `lstat` every entry and treat a symbolic link as CONTENT-INVISIBLE: it
@@ -137,54 +135,6 @@ interface Accum {
  * genuinely absent ⇒ WARN "not hash-verifiable" — the safe direction (never a false ERROR, never a
  * missed-stale false-green), and never a crash. Only regular files (`isFile()`) get content/hash;
  * fifos/sockets/device nodes are skipped for the same reason. */
-
-/** Reads `absPath`'s raw bytes: UTF-8-decoded text into the map (what text gates read) and a
- * byte-faithful sha256 into the facts (what Gate 4 verifies). The two are decoupled on purpose —
- * the sha is of the raw bytes, so a non-UTF-8/binary payload hashes correctly even though its
- * text projection is lossy (review finding 1). */
-function readInto(acc: Accum, relPath: string, absPath: string): void {
-  const bytes = readFileSync(absPath); // Buffer (raw bytes) — no encoding arg
-  acc.text.set(relPath, bytes.toString("utf8"));
-  acc.sha256.set(relPath, sha256Bytes(bytes));
-}
-
-function collectDir(
-  absRoot: string,
-  relDir: string,
-  recursive: boolean,
-  extensions: string[] | undefined,
-  acc: Accum,
-): void {
-  const absDir = join(absRoot, ...relDir.split("/"));
-  let entries: string[];
-  try {
-    entries = readdirSync(absDir);
-  } catch {
-    return; // absent directory entirely is legitimate (e.g. day-1 empty runs/) — never an error
-  }
-  acc.dirs.add(relDir); // the directory EXISTS (recorded even when it holds no matching files)
-  for (const name of entries) {
-    const absPath = join(absDir, name);
-    const st = lstatSync(absPath); // lstat: never follows the link (see the SYMLINK POLICY note above)
-    if (st.isSymbolicLink()) continue; // symlinks are content-invisible: neither followed nor recorded
-    if (st.isDirectory()) {
-      // A recursive rule descends into subdirs (recording their existence, empty ones included,
-      // AND their content); a non-recursive rule descends ONLY to record the subdir's existence,
-      // never its content — preserving "no kitchen-sink" while completing directory facts.
-      if (recursive) collectDir(absRoot, `${relDir}/${name}`, recursive, extensions, acc);
-      else acc.dirs.add(`${relDir}/${name}`);
-      continue;
-    }
-    if (name === DIR_PLACEHOLDER) continue; // directory placeholder: existence only, never content
-    if (!st.isFile()) continue; // only regular files carry content (skip fifo/socket/device nodes)
-    if (extensions && extensions.length > 0) {
-      const dot = name.lastIndexOf(".");
-      const ext = dot === -1 ? "" : name.slice(dot);
-      if (!extensions.includes(ext)) continue;
-    }
-    readInto(acc, `${relDir}/${name}`, absPath);
-  }
-}
 
 /** Full recursive walk from `root`: records EVERY directory (empty ones included) into `acc.dirs`
  * and a byte-faithful sha256 for EVERY file present on disk into `acc.sha256`, skipping the repo-root `.git`
@@ -243,9 +193,7 @@ function gitTracked(root: string): Set<string> {
  * gate's own "empty/absent input is a legitimate state" contract. */
 export function loadSnapshot(root: string): RepoSnapshot {
   const acc: Accum = { text: new Map(), sha256: new Map(), dirs: new Set() };
-  for (const rule of INCLUDE_RULES) {
-    collectDir(root, rule.dir, rule.recursive, rule.extensions, acc);
-  }
+  collectIncluded(root, acc);
   try {
     readInto(acc, "INDEX.md", join(root, "INDEX.md"));
   } catch {

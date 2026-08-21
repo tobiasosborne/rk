@@ -63,8 +63,8 @@ describe("corpus discovery", () => {
     }
   });
 
-  test("total fixture count matches corpus/README.md's ledger (230)", () => {
+  test("total fixture count matches corpus/README.md's ledger (246)", () => {
     const total = GATE_DIRS.reduce((sum, g) => sum + ALL_FIXTURES[g]!.length, 0);
-    expect(total).toBe(230);
+    expect(total).toBe(246);
   });
 });

@@ -9,6 +9,7 @@
 // (those are about the SCAN, not this shape, so they stayed there).
 
 import type { BalloonCounter } from "../graph/types";
+import type { SignatureBlock } from "./signature";
 
 export interface Lemma {
   id: string;
@@ -45,6 +46,9 @@ export interface Lemma {
    * Never absent — a shard with no balloon marks parses to `{count: 0, classifications: []}`,
    * matching `RegistryNode.balloons`'s own "never undefined" invariant (graph/types.ts). */
   balloons: BalloonCounter;
+  /** Parsed exactly once at the registry boundary; absent/malformed/ok are all retained so every
+   * consumer sees the same block state and no graph edge reparses shard bytes. */
+  signatureBlock?: SignatureBlock;
 }
 
 export const KINDS = new Set(["lemma", "proposition", "theorem", "corollary", "open-problem", "obstruction"]);

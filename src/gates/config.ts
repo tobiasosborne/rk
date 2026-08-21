@@ -11,7 +11,7 @@
 // non-consolidation (src/gates/phase.ts:40's old `if (phase === "consolidation")` treated ANY
 // other value, typo included, as exploration — a silent severity demotion) and
 // `shardsMaxLines: "garbage"` made src/gates/shards.ts:152's `>` comparison always false (a
-// false-green on the per-shard line-cap check). `validateConfigOverrides` below is the ONE place
+// false-green on the per-shard line-cap check). `config-validation.ts` is the ONE place
 // every field from the raw parsed JSON is runtime-checked (enum membership for `phase`,
 // type+range for the four numeric/string fields, unknown-key detection) before it ever reaches
 // `mergeGateConfig` — an invalid or unknown value is NEVER silently accepted and NEVER silently
@@ -43,13 +43,19 @@ import { DEFAULT_PHASE } from "./phase";
 // (no fs/network/clock) and does NOT import backend-claude.ts/backend-codex.ts (the actual
 // subprocess-spawning adapters), so importing it here does not drag edge code into the gates
 // layer. Same rk-xbm discipline as every other field below: malformed input drops the WHOLE field.
-import { validateWorkersConfig, type WorkersConfig } from "../drive/backend-registry";
+import type { WorkersConfig } from "../drive/backend-registry";
+
+export { CONFIG_PATH, configError, validateConfigOverrides } from "./config-validation";
 // rk-5lzf: the convention profile's own validation (schemas/convention-profile.v1.json) — pure,
 // snapshot-only, no fs; see src/gates/profile.ts.
 import { validateConventionProfile } from "./profile";
 
-/** Gate 3 Check 12's two records modes — see `GateConfig.records`. */
+/** Gate 3 Check 12's two records modes — see `GateConfig.records` (rk-nsex). */
 export type RecordsMode = "legacy" | "required";
+
+/** rk-8805: `.rk/config.json`'s `signatures` adoption states (see `GateConfig.signatures`). */
+export const SIGNATURES_MODES = ["required", "optional"] as const;
+export type SignaturesMode = (typeof SIGNATURES_MODES)[number];
 
 export interface GateConfig {
   /** M1.3 (`rk phase exploration|consolidation`). Missing field = `"consolidation"` (the
@@ -115,7 +121,7 @@ export interface GateConfig {
    * assignment + ordered fallbacks. Optional, same "no default" stance as `shardsPrefix`/
    * `northStarId` — a general tool must never guess which backend fronts which role/tier.
    * Malformed input (at ANY nesting level) drops the WHOLE field — never a partial or
-   * silently-guessed assignment — with one loud ERROR (see `validateConfigOverrides` below);
+   * silently-guessed assignment — with one loud ERROR (see `config-validation.ts`);
    * `BackendRegistry.chainFor`/`resolve` treat an absent (role,tier) entry as "nothing configured,"
    * never a silent default backend choice.
    *
@@ -125,15 +131,28 @@ export interface GateConfig {
    * driver-live.ts's `DEFAULT_*`. Present-but-invalid drops the whole field like any other
    * malformation (fixture `config-05`) — see docs/gate-contracts.md's "Worker timeouts". */
   workers?: WorkersConfig;
-  /** rk-5lzf (Tier A, LB5): the CONVENTION PROFILE reference — `<name>.v<n>`, naming
-   * `.rk/conventions/<name>.v<n>.json` (schemas/convention-profile.v1.json). Optional, same "no
-   * default" stance as `shardsPrefix`/`northStarId`: a general tool must never guess which
-   * normalisation contract a campaign runs under. Absent means Gate 9 (notation) has nothing to
-   * check against and says so in its coverage line — a visible failed 0/1 prerequisite, never a
-   * silent or pass-shaped 0/0. A
-   * present-but-unknown or malformed profile is an ERROR (`src/gates/profile.ts`), never degraded
-   * to the absent state: "the profile you configured does not exist" and "you configured no
-   * profile" are different facts and must never print the same. */
+  /** rk-8805 (Gate 2 Check 17, docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6): the
+   * repo's adoption state for Layer 1 SIGNATURES. THREE states, deliberately, and the third is not
+   * a fourth spelling of the second:
+   *   - `"required"` — signed kind OR signed status OR seeded/validated af demands a signature;
+   *     absence is structural ERROR `signature-missing` (linker-62 closes kind evasion).
+   *   - `"optional"` — the same shard is a WARN: the repo has adopted signatures and is still
+   *     filling them in.
+   *   - ABSENT — the repo has NOT adopted signatures at all: no missing-signature finding is
+   *     produced, and the linker's coverage line says `signatures: absent (not adopted)` out loud
+   *     (never a silent skip, CLAUDE.md L2). This is the only honest default for a GENERAL tool:
+   *     rk is not the qPCP campaign, and a WARN on every result shard of every existing repo would
+   *     be noise that buries signal — the aism-s64 lesson.
+   * A signature that IS present is always checked, in all three states: adoption governs whether
+   * one is DEMANDED, never whether a present one is validated. */
+  signatures?: SignaturesMode;
+  /** rk-8805: the convention profile Check 17's closed vocabulary comes from, e.g. `"qpcp.v1"` ->
+   * `.rk/conventions/qpcp.v1.json` (the `.v<n>` suffix is part of the NAME, so a profile version
+   * bump is a different file, never an in-place edit). Optional, same "no default" stance as
+   * `shardsPrefix`/`northStarId`: a general tool must never guess a campaign's convention profile.
+   * Required-when-consumed and FAIL-CLOSED: a repo with signatures present but no readable profile
+   * gets one loud `profile-unreadable` ERROR and no vocabulary/entailment checking — checking a
+   * predicate against a guessed lattice is worse than not checking it, because it reports green. */
   conventionProfile?: string;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
@@ -168,7 +187,7 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
  * `src/scaffold/config-stub.ts`, `src/corpus/run.ts`'s `expected.config_override` comparison) all
  * pass a compile-time-typed `Partial<GateConfig>`, so there is nothing to runtime-validate. The
  * ONE untrusted-input path — `.rk/config.json`, arbitrary parsed JSON — goes through
- * `validateConfigOverrides` below FIRST (src/store/config-load.ts); by the time its sanitized
+ * `validateConfigOverrides` from config-validation.ts FIRST (src/store/config-load.ts); once sanitized
  * output reaches this function, every field is already a well-typed, in-range `GateConfig` value
  * or simply absent (falls back to `DEFAULT_GATE_CONFIG` here, same as always). Do not call this
  * directly on raw JSON — that is exactly the rk-xbm bug (an unvalidated `as Partial<GateConfig>`
@@ -176,50 +195,6 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
 export function mergeGateConfig(overrides: Partial<GateConfig> | undefined | null): GateConfig {
   if (!overrides) return { ...DEFAULT_GATE_CONFIG };
   return { ...DEFAULT_GATE_CONFIG, ...overrides };
-}
-
-/** The set of real `GateConfig` fields `.rk/config.json` may configure — everything else is an
- * unknown key (rk-xbm: loud ERROR, dropped, never silently applied). `_configValidation` is
- * deliberately excluded: it is this module's own internal side channel, never a user-writable
- * field. */
-const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
-  "phase",
-  "linkerBrittlenessSoftCap",
-  "provenanceStatusTableFile",
-  "shardsPrefix",
-  "shardsMaxLines",
-  "refsMinRunReportingLength",
-  "refsLocusToleranceLines",
-  "records",
-  "northStarId",
-  "workers",
-  "conventionProfile",
-]);
-
-/** Exported so `src/store/config-load.ts` (the impure edge that actually reads the file) can
- * build the SAME shape of finding for the two whole-file failure modes it alone can detect --
- * "the bytes are not valid JSON at all" and "the JSON parses but its top-level shape is not an
- * object" (rk-45m). Both are, structurally, the same class of fault this function already
- * exists for: a config problem about the checking apparatus itself, never a per-field value. */
-export const CONFIG_PATH = ".rk/config.json";
-
-export function configError(message: string): Finding {
-  // structural: true -- a config validation failure is a validity-semantics fault about the
-  // checking apparatus itself (CLAUDE.md L6), not an ordinary completeness/freshness finding; it
-  // must never be silently demoted to WARN by src/gates/phase.ts's exploration matrix (the exact
-  // shape of drift this bead exists to close). docs/gate-contracts.md's Phase matrix "Mechanism"
-  // section names "parse errors" as one of the four canonical STRUCTURAL classes outright -- an
-  // unparseable `.rk/config.json` (rk-45m) is textually exactly that, so it uses this same
-  // constructor rather than inventing a second, weaker finding shape.
-  return { severity: "ERROR", path: CONFIG_PATH, line: 1, message, structural: true };
-}
-
-function isPositiveFiniteNumber(v: unknown): v is number {
-  return typeof v === "number" && Number.isFinite(v) && v > 0;
-}
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === "string" && v.length > 0;
 }
 
 export interface ConfigValidationSummary {
@@ -248,220 +223,6 @@ export interface ConfigValidationResult extends ConfigValidationSummary {
    * invalid or unknown field is simply absent here (never the malformed raw value, never a
    * fabricated sentinel), so the merge's own `DEFAULT_GATE_CONFIG` fallback applies. */
   overrides: Partial<GateConfig>;
-}
-
-/** Runtime-validates every field of a `.rk/config.json`-shaped object BEFORE it is ever spread
- * over `DEFAULT_GATE_CONFIG` (rk-xbm). Pure: `raw` is already-parsed JSON data, not a file path.
- * Per field: enum membership for `phase`, positive-finite-number for the three numeric fields,
- * non-empty-string for the two string fields (`shardsPrefix` optional — absent is legal, per R12
- * its own "no default" contract; only a PRESENT-but-malformed value is an error). Any key not in
- * `KNOWN_CONFIG_KEYS` is an unknown-key ERROR. Every malformed/unknown field is dropped from
- * `overrides` (never coerced, never silently kept) and produces exactly one `configError` finding
- * — CLAUDE.md L2: loud and counted, never a silent skip. */
-export function validateConfigOverrides(raw: Record<string, unknown>): ConfigValidationResult {
-  const findings: Finding[] = [];
-  const overrides: Partial<GateConfig> = {};
-  let checked = 0;
-  let total = 0;
-
-  for (const key of Object.keys(raw)) {
-    if (!KNOWN_CONFIG_KEYS.has(key)) {
-      total++;
-      findings.push(
-        configError(
-          `unknown config key "${key}" in ${CONFIG_PATH} -- not a recognized GateConfig field ` +
-            `(known: ${[...KNOWN_CONFIG_KEYS].sort().join(", ")}); ignored rather than silently applied`,
-        ),
-      );
-    }
-  }
-
-  if ("phase" in raw) {
-    total++;
-    const v = raw.phase;
-    if (v === "exploration" || v === "consolidation") {
-      overrides.phase = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `phase: invalid value ${JSON.stringify(v)} -- must be "exploration" or "consolidation"; ` +
-            `falling back to the strict default "${DEFAULT_PHASE}" rather than silently demoting ` +
-            `gate severities (a typo must never weaken validity checking, CLAUDE.md L2/L6)`,
-        ),
-      );
-    }
-  }
-
-  if ("records" in raw) {
-    total++;
-    const v = raw.records;
-    if (v === "legacy" || v === "required") {
-      overrides.records = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `records: invalid value ${JSON.stringify(v)} -- must be "legacy" or "required"; falling back to ` +
-            `the default "${DEFAULT_GATE_CONFIG.records}". A typo must never silently turn OFF the ` +
-            "record requirement a campaign opted into (CLAUDE.md L2/L6)",
-        ),
-      );
-    }
-  }
-
-  if ("linkerBrittlenessSoftCap" in raw) {
-    total++;
-    const v = raw.linkerBrittlenessSoftCap;
-    if (isPositiveFiniteNumber(v)) {
-      overrides.linkerBrittlenessSoftCap = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `linkerBrittlenessSoftCap: invalid value ${JSON.stringify(v)} -- must be a positive ` +
-            `number; falling back to default ${DEFAULT_GATE_CONFIG.linkerBrittlenessSoftCap}`,
-        ),
-      );
-    }
-  }
-
-  if ("provenanceStatusTableFile" in raw) {
-    total++;
-    const v = raw.provenanceStatusTableFile;
-    if (isNonEmptyString(v)) {
-      overrides.provenanceStatusTableFile = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `provenanceStatusTableFile: invalid value ${JSON.stringify(v)} -- must be a non-empty ` +
-            `string; falling back to default ${JSON.stringify(DEFAULT_GATE_CONFIG.provenanceStatusTableFile)}`,
-        ),
-      );
-    }
-  }
-
-  if ("shardsPrefix" in raw) {
-    total++;
-    const v = raw.shardsPrefix;
-    if (isNonEmptyString(v)) {
-      overrides.shardsPrefix = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `shardsPrefix: invalid value ${JSON.stringify(v)} -- must be a non-empty string when ` +
-            `set; treating as unconfigured (R12's own "no default" contract, never a malformed ` +
-            `sentinel)`,
-        ),
-      );
-    }
-  }
-
-  if ("shardsMaxLines" in raw) {
-    total++;
-    const v = raw.shardsMaxLines;
-    if (isPositiveFiniteNumber(v)) {
-      overrides.shardsMaxLines = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `shardsMaxLines: invalid value ${JSON.stringify(v)} -- must be a positive number; ` +
-            `falling back to default ${DEFAULT_GATE_CONFIG.shardsMaxLines} (an unvalidated value ` +
-            `here made Gate 6 Check 7's line-count comparison always false -- a false-green, ` +
-            `rk-xbm)`,
-        ),
-      );
-    }
-  }
-
-  if ("refsMinRunReportingLength" in raw) {
-    total++;
-    const v = raw.refsMinRunReportingLength;
-    if (isPositiveFiniteNumber(v)) {
-      overrides.refsMinRunReportingLength = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `refsMinRunReportingLength: invalid value ${JSON.stringify(v)} -- must be a positive ` +
-            `number; falling back to default ${DEFAULT_GATE_CONFIG.refsMinRunReportingLength}`,
-        ),
-      );
-    }
-  }
-
-  if ("refsLocusToleranceLines" in raw) {
-    total++;
-    const v = raw.refsLocusToleranceLines;
-    if (isPositiveFiniteNumber(v)) {
-      overrides.refsLocusToleranceLines = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `refsLocusToleranceLines: invalid value ${JSON.stringify(v)} -- must be a positive ` +
-            `number; falling back to default ${DEFAULT_GATE_CONFIG.refsLocusToleranceLines} (an ` +
-            `unvalidated value here would widen or invert Gate 3's quote-at-locus window -- a ` +
-            `verdict threshold, not a message-only one)`,
-        ),
-      );
-    }
-  }
-
-  if ("northStarId" in raw) {
-    total++;
-    const v = raw.northStarId;
-    if (isNonEmptyString(v)) {
-      overrides.northStarId = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `northStarId: invalid value ${JSON.stringify(v)} -- must be a non-empty string when ` +
-            `set; treating as unconfigured (M2.5's own "no default" contract, never a malformed ` +
-            `sentinel)`,
-        ),
-      );
-    }
-  }
-
-  if ("conventionProfile" in raw) {
-    total++;
-    const v = raw.conventionProfile;
-    if (isNonEmptyString(v)) {
-      overrides.conventionProfile = v;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `conventionProfile: invalid value ${JSON.stringify(v)} -- must be a non-empty string ` +
-            `(<name>.v<n>, naming .rk/conventions/<name>.v<n>.json) when set; treating as ` +
-            `unconfigured (rk-5lzf's own "no default" contract, never a malformed sentinel)`,
-        ),
-      );
-    }
-  }
-
-  if ("workers" in raw) {
-    total++;
-    const v = validateWorkersConfig(raw.workers);
-    if (v.ok) {
-      overrides.workers = v.config;
-      checked++;
-    } else {
-      findings.push(
-        configError(
-          `workers: invalid value -- ${v.issues.map((i) => `${i.path}: ${i.message}`).join("; ")} -- ` +
-            `dropping the whole field rather than applying a partial or silently-guessed assignment`,
-        ),
-      );
-    }
-  }
-
-  return { overrides, findings, checked, total };
 }
 
 /** Synthetic seventh gate (rk-xbm): surfaces `validateConfigOverrides`' findings through the

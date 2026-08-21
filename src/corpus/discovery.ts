@@ -183,6 +183,27 @@ export function totalFixtureCount(corpusRoot: string): number {
  * unpinned bytes are not adopted evidence). The pin now runs for every payload kind before the
  * PDF/non-PDF split, which is why `refs-02`/`03`/`07`/`09`/`11` gained locks — see
  * corpus/README.md's rk-r0j3 paragraph.
+ * 188 (+12 over the then-pinned 176): bead rk-8805 (P1, Tier A) — Gate 2 CHECK 17, the signature +
+ * route-scoped entailment check (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6,
+ * repairing the 2026-08-20 Tier A review's LB2). `linker-47` is the review's OWN pair, which v1's
+ * atom-wise matcher passed: a lemma holding only at `qdim: poly` silently backing a theorem stated
+ * at `qdim: const`, because the gap atom came from the dependency and the dimension atom from the
+ * parent's own regime. `linker-48` is the CAPPED reading (a loose ambient cannot discharge a
+ * tight cap — the profile review's finding that the memo's single-direction rule is unsound for
+ * capped constraints, repaired by making every value an INTERVAL and entailment CONTAINMENT),
+ * `linker-49` the golden pass over capped, point and ranged predicates at once, `linker-50`..`52` the
+ * object/key/value vocabulary classes, `linker-53` the fail-closed "malformed is never absent"
+ * rule, `linker-54` required-ness with its open-problem discriminator, `linker-55` the deliberate
+ * post-unsupported WARN, `linker-56` the phase-independence of the whole check (memo section 2a /
+ * review LB4), `linker-57` a POSET key's incomparability (the codex review of the profile draft,
+ * finding 12: `reduction` is not totally ordered, and linearising it silently over-accepts), and
+ * `linker-58` an interval that runs backwards. Eleven of the twelve go red the moment Check 17 is unwired from src/gates/linker.ts;
+ * `linker-49`, the green one, is exactly the fixture that cannot detect that — which is why it
+ * exists.
+ * 192 (+4 over the then-pinned 188): rk-8805 Tier A repair fixtures. `linker-59` rejects an empty
+ * conjunction and keeps its dependency locked; `linker-60` deduplicates canonical predicates;
+ * `linker-61` canonicalizes split and grouped per-scope keys identically; `linker-62` closes the
+ * signed-status kind evasion. All four are ledgered in corpus/README.md.
  * 176 (+2 over the then-pinned 174): bead rk-yic3 (P1, Tier A) — Check 4b's two backing routes were
  * asymmetric about WITHDRAWAL. `l5Decision` refused backing on a live retraction or an unhealthy
  * retraction ledger; `provenanceDecision` read neither, and `pmaBackingDecision` tried the
@@ -248,5 +269,8 @@ export function totalFixtureCount(corpusRoot: string): number {
  * rk-5lzf (+29 over 176) were developed on sibling branches from the same 176 base; the totals are
  * additive. The two lanes both numbered a new fixture `freshness-12`; rk-5lzf's macros.tex
  * fixture is `freshness-16` on master, rk-nsex's card fixtures keep 12..15.
+ * 246 (+16 over 230, integration 2026-08-21): rk-8805 — `linker-47`..`linker-58` (Check 17
+ * signature/entailment, graph v3, bite core) and its Tier A repair wave `linker-59` (contradictory
+ * predicates), `linker-60`/`linker-61` (canonical uniqueness), `linker-62` (kind evasion).
  */
-export const EXPECTED_FIXTURE_COUNT = 230;
+export const EXPECTED_FIXTURE_COUNT = 246;

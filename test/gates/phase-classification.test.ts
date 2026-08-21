@@ -183,6 +183,64 @@ describe("Gate 2 Check 16 (retraction) structural classification [LB5]", () => {
   });
 });
 
+describe("Gate 2 Check 17 (signature/entailment) structural classification [rk-8805]", () => {
+  // Memo section 2a (repair of review LB4): the checks this plan introduces are classified
+  // STRUCTURAL and are never demoted. Admission of a conjecture happens DURING exploration — the
+  // phase that demotes everything else — so a demotable signature barrier is an advisory barrier
+  // at precisely the moment it is load-bearing.
+  const PROFILE = JSON.stringify({ lattices: { gap: ["inv-poly", "const"], qdim: ["const", "poly"] } });
+  const sigBlock = (value: unknown): string => "```signature\n" + JSON.stringify(value, null, 2) + "\n```\n";
+  const ADOPTED = { ...DEFAULT_GATE_CONFIG, conventionProfile: "p.v1", signatures: "required" as const };
+
+  function sigSnap(files: Record<string, string>): RepoSnapshot {
+    return snapshotFromFiles({ ".rk/conventions/p.v1.json": PROFILE, ...files });
+  }
+
+  test("regime-unentailed (a result applied outside its regime) is STRUCTURAL", () => {
+    const snap = sigSnap({
+      "definitions/def-g.md": "---\nid: def-g\nterm: G\nkind: original\nstatus: locked\nconsensus: x\n---\n",
+      "argument/lem-amp.md":
+        "---\nid: lem-amp\nkind: lemma\n---\n\n" +
+        sigBlock({ post: [{ gap: "const", obj: "def-g" }], pre: [], profile: "p.v1", regime: [{ qdim: "poly" }], schema_version: "1" }),
+      "argument/thm-q.md":
+        "---\nid: thm-q\nkind: theorem\ndeps: lem-amp\n---\n\n" +
+        sigBlock({ post: [], pre: [{ gap: "const", obj: "def-g" }], profile: "p.v1", regime: [{ qdim: "const" }], schema_version: "1" }),
+    });
+    const { findings } = linkerGate.run(snap, ADOPTED);
+    expectPresent(findings, "[regime-unentailed]");
+    expect(structuralOf(findings, "[regime-unentailed]")).toBe(true);
+  });
+
+  test("signature-missing under `signatures: required` is STRUCTURAL", () => {
+    const { findings } = linkerGate.run(sigSnap({ "argument/thm-q.md": "---\nid: thm-q\nkind: theorem\n---\n" }), ADOPTED);
+    expectPresent(findings, "[signature-missing]");
+    expect(structuralOf(findings, "[signature-missing]")).toBe(true);
+  });
+
+  test("signature-malformed is STRUCTURAL (never softens into 'no signature')", () => {
+    const { findings } = linkerGate.run(
+      sigSnap({ "argument/thm-q.md": "---\nid: thm-q\nkind: theorem\n---\n\n```signature\n{nope\n```\n" }),
+      ADOPTED,
+    );
+    expectPresent(findings, "[signature-malformed]");
+    expect(structuralOf(findings, "[signature-malformed]")).toBe(true);
+  });
+
+  test("post-unsupported is a WARN in BOTH phases (nothing to demote — a proof may supply it)", () => {
+    const { findings } = linkerGate.run(
+      sigSnap({
+        "definitions/def-g.md": "---\nid: def-g\nterm: G\nkind: original\nstatus: locked\nconsensus: x\n---\n",
+        "argument/lem-a.md":
+          "---\nid: lem-a\nkind: lemma\n---\n\n" +
+          sigBlock({ post: [{ gap: "const", obj: "def-g" }], pre: [], profile: "p.v1", regime: [], schema_version: "1" }),
+      }),
+      ADOPTED,
+    );
+    expectPresent(findings, "[post-unsupported]");
+    expect(findings.find((f) => f.message.includes("[post-unsupported]"))!.severity).toBe("WARN");
+  });
+});
+
 describe("Gate 2 Check 13 (critical-path provenance) structural classification [LB5]", () => {
   // A validated critical-path root with NO parseable cross-vendor identity and no explicit
   // `legacy-same-family` marker => ERROR (2026-07-19 M3 review blocker 5a; fixture linker-32).

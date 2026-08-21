@@ -1,0 +1,52 @@
+{
+  "schema_version": "1",
+  "name": "rk-corpus.v1",
+  "lattices": {
+    "gap": [
+      "inv-poly",
+      "inv-log",
+      "const"
+    ],
+    "qdim": {
+      "kind": "chain",
+      "values": [
+        "const",
+        "polylog",
+        "poly"
+      ]
+    },
+    "reduction": {
+      "kind": "poset",
+      "values": [
+        "karp",
+        "quasi-poly",
+        "quantum-poly",
+        "turing"
+      ],
+      "edges": [
+        [
+          "karp",
+          "quasi-poly"
+        ],
+        [
+          "karp",
+          "quantum-poly"
+        ],
+        [
+          "karp",
+          "turing"
+        ]
+      ]
+    }
+  },
+  "enums": {
+    "norm": [
+      "relative",
+      "absolute"
+    ],
+    "n_regime": [
+      "finite",
+      "to-infinity"
+    ]
+  }
+}
