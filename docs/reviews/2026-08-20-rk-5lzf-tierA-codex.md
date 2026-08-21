@@ -49,3 +49,18 @@ Verdict: **REJECT**. I found six MAJOR validity-semantic blockers.
 Verification: `timeout 120 bun run selftest` passed, including 188/188 corpus fixtures and purity checks. The seven changed pure test files passed 151/151. The full suite could not be meaningfully completed in this read-only environment: temp-directory tests failed with `EROFS` on `/tmp`.
 
 **Final verdict: REJECT.**
+## Repair-wave verification (orchestrator, 2026-08-21)
+
+Single repair wave, implemented by a codex gpt-5.6-sol xhigh lane on branch `worktree-agent-a54164d035c96a7d3` (359cba6..06d4d82; the lane's sandbox could not write the worktree's git metadata, so the orchestrator committed its verified working tree as 06d4d82). Verified mechanically on the branch and again on master after merge; no re-review (anti-Zeno rule).
+
+| Finding | Code | Fixtures | Orchestrator check |
+|---|---|---|---|
+| B1 meaning byte-bound | `src/gates/defs-notation-provenance.ts:15` | defs-23..26 | lane mutation report; fixtures green on master |
+| B2 blessed tied to register / overlap false green | `src/gates/defs-notation.ts:130`, `src/gates/notation.ts:196` | defs-27, notation-05 | orchestrator: disabled the `symbol !== blessed` guard -> defs-27 RED; restored |
+| B3 quoted-line bypass | `src/gates/notation.ts:58` | notation-06 | lane mutation report |
+| B4 vacuous class coverage / `notation: complete` | `src/gates/notation.ts:232` | notation-07 | lane mutation report |
+| B5 evadable compat check (predecessor chain) | `src/gates/profile-history.ts:9` | config-08..11 | orchestrator: disabled the hash comparison -> config-11 RED; restored |
+| B6 ambiguous recursive ids | `src/gates/definitions-scan.ts:37` (4b883f9) | defs-21, defs-22 | fixtures green |
+| follow-ups: 280-cap splits, `allowed_translations` uniqueness, `expansion:` binding | profile-*.ts, defs-shard.ts, snapshot-rules.ts, render-site-from-repo.ts | config-12, defs-28, defs-29 | `wc -l` under 280 for every touched file; fixtures green |
+
+Gates: branch `bun test` 3195 pass / 0 fail, selftest 205/205; master after merge 3362 pass / 0 fail, selftest 230/230, compile OK. Integration notes: both lanes numbered a fixture `freshness-12` (rk-5lzf's macros.tex fixture is `freshness-16` on master); both extracted `adoptGeneratedEntry` (kept rk-5lzf's `src/cli/generated-manifest.ts`, `rk render cards` adapts to it); the `notation-macros` generator now returns `PureRegenResult` under rk-nsex's widened generator signature.
