@@ -41,8 +41,8 @@
 // renders exactly as it did before this option existed.
 //
 // B2 (docs/memos/2026-07-25-generality-audit.md): all of the above assembly now lives in the
-// EXPORTED `renderSiteFromRepo` below, which `src/cli/check.ts`'s Gate 7 edge regeneration calls
-// too. This module is therefore the ONLY place in the codebase that calls `renderSite` for the
+// `renderSiteFromRepo` in the focused sibling render-site-from-repo.ts, which `src/cli/check.ts`'s
+// Gate 7 edge regeneration calls too. That sibling is the ONLY place that calls `renderSite` for the
 // site artifact -- generator and freshness verifier cannot drift apart on what a render is.
 // See `renderSiteFromRepo`'s own doc comment for the defect and the seam rationale, and
 // `checkDivergenceWarning`'s for the one residual (`--title`/`--north-star`) and how it is
@@ -56,92 +56,19 @@ import { MANIFEST_PATH, RENDER_SITE_GENERATOR } from "../gates/freshness";
 // input, so two producers cannot disagree about its shape.
 import { adoptGeneratedEntry } from "./generated-manifest";
 import { renderMacrosCommand } from "./render-macros";
-import { loadDefsData } from "../render/defs-edge";
 import { sourceStatusLines, structuralLossLines } from "../render/diagnostics-view";
-import { loadFrResiduals } from "../render/fr-edge";
-import { loadRunGallery } from "../render/runs-edge";
-import type { DefsData } from "../render/defs-edge";
-import type { FrResidualData } from "../render/fr-edge";
-import type { RunGalleryData } from "../render/runs-edge";
-import type { SourceStatuses } from "../render/diagnostics-view";
-import { renderSite, type RenderedSite } from "../render/site";
+import type { RenderedSite } from "../render/site";
 import { buildGraphDocument } from "../store/build-graph";
 import { loadGateConfig } from "../store/config-load";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
+import { renderSiteFromRepo, type RepoSiteRender } from "./render-site-from-repo";
+
+export { renderSiteFromRepo } from "./render-site-from-repo";
 
 export interface RenderCommandDeps {
   afCommand?: readonly string[];
   frCommand?: readonly string[];
-}
-
-/** The three presence-conditional repo reads `renderSite`'s data options need but the
- * `GraphDocument` does not carry: `runs/**`, `definitions/*.md` + `CONVENTIONS.md`, and a second
- * `fr export`. Bundled so `renderSiteFromRepo` can hand them back to `rk render`'s own summary
- * output without either caller reassembling them. */
-export interface RepoSiteRender {
-  site: RenderedSite;
-  runGallery: RunGalleryData;
-  defsData: DefsData;
-  frResiduals: FrResidualData;
-  /** Re-renders the SAME already-loaded repo data under different DISPLAY options
-   * (`northStarId`/`title`), with no second fs/subprocess read. Exists so `rk render` can compute,
-   * exactly and cheaply, what `rk check` will regenerate — see `warnIfCheckWillDiffer`. */
-  renderWith(opts: { northStarId?: string; title?: string }): RenderedSite;
-}
-
-/** THE option-assembly seam (B2, docs/memos/2026-07-25-generality-audit.md).
- *
- * Before this existed, `rk render` called `renderSite` with SIX options while Gate 7's edge
- * regeneration (`src/cli/check.ts`'s `prepareRenderSiteExternalRegen`) called it with ONE
- * (`northStarId`). Four repo-derived options — `sources`, `runGallery`, `defsData`,
- * `frResiduals` — were dropped on the check side, so the "expected" bytes could never equal the
- * real artifact on ANY repo: `build/site/index.html` reported STALE on a pristine scaffold and
- * re-rendering never cleared it. WARN in exploration, ERROR in consolidation, and the stamped
- * pre-commit hook runs `rk check` — so commits blocked. A gate that always cries STALE trains
- * users to ignore the one signal PRD SC2's "no drift by construction" rests on: an L6 truthful-
- * freshness defect, not a cosmetic one.
- *
- * THE SEAM CHOSEN, AND WHY HERE. `src/gates/freshness.ts` is PURE (L3) and cannot acquire any of
- * these inputs — three of the four are fs/subprocess reads. The gate therefore keeps its existing
- * `externalRegen` contract (edge-supplied bytes in, byte-diff out) unchanged; the repair is one
- * level down, at the EDGE that supplies those bytes. Rather than teach `rk check` to reproduce
- * `rk render`'s assembly (two call sites that must be kept in step by hand — exactly the drift
- * that produced this defect), the assembly itself is extracted here, into the generator's own
- * module, and BOTH callers go through it. After this change `renderSite` is called for the site
- * artifact from exactly ONE place in the codebase, so generator and verifier cannot silently
- * disagree about what a render is: adding a seventh option is automatically seen by Gate 7.
- *
- * PURITY: this function is an EDGE (fs + subprocess), living in an edge module, called only from
- * edge modules (`src/cli/render.ts`, `src/cli/check.ts`). `src/gates/**` is untouched by it. */
-export function renderSiteFromRepo(
-  root: string,
-  doc: Parameters<typeof renderSite>[0],
-  sources: SourceStatuses | undefined,
-  opts: { northStarId?: string; title?: string; frCommand?: readonly string[] },
-): RepoSiteRender {
-  // M2.4 pass 2 (rk-c2q): the run gallery + definitions/conventions views read presence-
-  // conditional data OUTSIDE the GraphDocument (runs/**, definitions/*.md, CONVENTIONS.md) via
-  // their own small edges (src/render/runs-edge.ts, src/render/defs-edge.ts) -- day-1 vacuity
-  // (no runs/, no definitions/) degrades to an empty-but-honest result, never a crash, same
-  // stance every other reader in this codebase takes.
-  const runGallery = loadRunGallery(root);
-  const defsData = loadDefsData(root);
-  // rk-50v RENDER-EDGE option: a second, independent `fr export` read for the graveyard's
-  // residual/death-certificate text (src/render/fr-edge.ts) -- degrades to an empty result
-  // (no new failure mode) when `fr` is unreachable, same `frCommand` as the graph's own fr read.
-  const frResiduals = loadFrResiduals(root, opts.frCommand ?? ["fr"]);
-  const renderWith = (display: { northStarId?: string; title?: string }): RenderedSite =>
-    renderSite(doc, {
-      northStarId: display.northStarId,
-      title: display.title,
-      sources,
-      runGallery,
-      defsData,
-      frResiduals,
-    });
-  const site = renderWith({ northStarId: opts.northStarId, title: opts.title });
-  return { site, runGallery, defsData, frResiduals, renderWith };
 }
 
 /** Repo-relative `index.html` bytes of a rendered site — the one file Gate 7's `render-site-v1`

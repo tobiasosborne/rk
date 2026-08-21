@@ -1,0 +1,15 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gap-alias.md",
+      "message_pattern": "symbol-not-blessed-for-class"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no convention profile or notation register.",
+  "notes": "rk-5lzf repair B2: a shard cannot make a raw source spelling canonical merely by declaring the right class. The shard's symbol must equal that class's profile-blessed macro; phase-0c whole-register completeness is pinned separately by B4."
+}

@@ -220,7 +220,8 @@ names the campaign's normalisation contract by reference key `<name>.v<n>`, reso
 (`src/gates/profile.ts`, surfaced by the `config` gate). It fixes what Gate 9 enforces
 (`tracked_classes`, with EXPLICIT token lists per class — never patterns), the campaign's value
 `lattices`, its normalisation `choices` (canonical convention + allowed translations, plus optional
-`notes`), and its closed `enums`.
+`notes`), and its closed `enums`. OPTIONAL `notation` is `draft|complete`, defaulting to `draft`:
+`complete` is the phase-0c assertion that every tracked class now has exactly one canonical shard.
 
 *`tracked_classes`.* Each entry is `{class, description, symbols, blessed}` (plus an OPTIONAL
 `symbols_must_be_registered: true`, which is the rule whether or not it is written). `symbols` are
@@ -229,10 +230,12 @@ whitespace is the only forbidden character, because a source's notation is not r
 `blessed` is the campaign's ONE canonical macro for the class and is always a plain macro token.
 **A raw token may be claimed by several classes** — `\Delta` is a promise gap in one source and a
 spectral gap in another, `d` is a code distance and a qudit dimension — and that overlap is exactly
-what the register exists to resolve, so the profile admits it and Gate 9 requires the token to be
-registered by a notation shard in one of its claiming classes. `blessed` macros are the half that
-IS unique across classes: two classes cannot bless the same macro, or the campaign has no canonical
-form for either.
+what the register exists to resolve, so the profile admits it. Raw tokens are SOURCE notation: they
+may appear only inside source-scoped translation evidence, whose owning notation shard supplies the
+intended class and whose `(source-id, token)` pair is unique. Campaign prose must use the class's
+`blessed` macro; lexical context cannot determine which sense an overlapping raw token intended.
+`blessed` macros are unique across classes: two classes cannot bless the same macro, or the campaign
+has no canonical form for either.
 
 *`lattices`.* Each entry is a TAGGED object, never a bare array: `{kind: "chain", values}` — a
 total order written WEAKEST FIRST — or `{kind: "poset", values, edges}`, where `edges` are
@@ -269,15 +272,21 @@ same class as an unparseable `.rk/config.json`):*
   containing whitespace, a missing or non-macro `blessed`, a `symbols_must_be_registered` present
   and not `true`, a duplicate class id, one BLESSED macro claimed by two classes, a bare-array or
   untagged lattice, a lattice with fewer than two values, a poset edge naming an undeclared value
-  or closing a cycle, a choice missing `canonical`. ANY malformation drops the WHOLE profile
+  or closing a cycle, a choice missing `canonical`, duplicate `allowed_translations`, `notation`
+  outside `draft|complete`, or a
+  present `predecessor_sha256` not exactly 64 lowercase hex characters. ANY malformation drops the
+  WHOLE profile
   (never a partially applied one — a
   half-read tracked-class list is a silently shrunk one).
-- **`class-removed-without-bump`.** When `.rk/conventions/<name>.v<n-1>.json` is present, every
-  tracked class it declares must still be declared by `<name>.v<n>.json` UNLESS the latter's
-  `version` FIELD is strictly greater. The filename's `v<n>` is only the reference key; `version`
-  is the rule-10 compat counter, so renaming a file can never launder a shrink. An unparseable
-  predecessor is a WARN — the comparison genuinely could not run, and a skipped check is always
-  visible (L2), never a clean bill. Fixture `config-07`.
+- **Immutable predecessor chain and `class-removed-without-bump`.** A `.v1` profile is the chain
+  root and must omit `predecessor_sha256`. Every `.v<n>` for `n>1` must retain the immediate
+  same-family `.v<n-1>` file and set `predecessor_sha256` to the SHA-256 of that predecessor's exact
+  raw bytes. Validation walks every link to v1 before returning the current profile for enforcement.
+  A missing hash/file, skipped filename version, renamed family, hash mismatch, or unusable
+  predecessor is a structural ERROR; current enforcement is blocked, never run on unverifiable
+  history. At every verified link, every predecessor tracked class must remain unless the current
+  profile's `version` FIELD is strictly greater. The filename's `v<n>` is only the reference key;
+  `version` is the rule-10 compat counter. Fixtures `config-07` through `config-11`.
 
 The `config` gate's coverage line carries the profile as its own clause — `; convention profile
 "<ref>" <checked>/<total> valid`, or `; no convention profile configured` — so the unconfigured
@@ -557,6 +566,8 @@ value; any other is an ERROR, since a typo would silently exempt the shard from 
 | `shard_type` | enum | no | `notation` is the only value in v1 |
 | `symbol` | LaTeX macro token | yes, on a notation shard | `\name`, letters only — the blessed form Gate 9 scans for and `macros.tex` declares |
 | `class` | string | yes, on a notation shard | must be a `tracked_classes` entry of the configured profile |
+| `meaning` | non-empty string | yes when `kind: cited` | the meaning attributed to the cited source; the shard-level `source:`/`sha256:` pair alone does not bind this claim to a passage |
+| `expansion` | LaTeX replacement body | yes, on a notation shard | exactly one non-empty balanced `\ensuremath{...}` body; definition, file-I/O, write/read, catcode, and parameter-marker primitives are forbidden |
 
 *Translation rows live in the shard BODY, never the frontmatter.* A row is
 `- <source-id>: <their symbol> @ refs/<path>:<line>`, strict and standalone, immediately followed
@@ -576,6 +587,17 @@ a `translations:` key IN the frontmatter is an ERROR (`translations-in-frontmatt
   bucket Gate 9 never checks, so every symbol it was meant to bless goes unenforced while the
   register looks complete. With NO profile configured the class cannot be checked at all; the
   coverage line says so rather than passing silently.
+- `symbol` must equal the configured class's `blessed` macro exactly. A shard cannot bless a raw
+  source spelling, or a second campaign macro, merely by declaring the class: raw spellings belong
+  only in source-scoped translation rows. A mismatch is structural ERROR
+  `symbol-not-blessed-for-class`. Fixture `defs-27`.
+- `expansion` is the reviewed typographical implementation of that blessed macro and is embedded
+  verbatim by the generated `definitions/notation/macros.tex`. It is required and restricted to one
+  balanced non-empty `\ensuremath{...}` replacement body; TeX definition, file-I/O, write/read,
+  catcode, and `#` parameter primitives are structural ERROR `expansion-unsafe`. `expansion` does
+  not establish semantic identity: `meaning` plus its kind-specific provenance does. Editing the
+  expansion changes the authored shard bytes and Gate 7 regenerates/diffs the macro file, so the
+  visible rendering and reviewed register cannot drift silently. Fixtures `defs-28`, `defs-29`.
 - **DRIFT namespace extension.** Gate 1's one dedup map gains two keyspaces beside `term`:
   `symbol` (two shards blessing the same macro ⇒ `DRIFT: symbol ...`) and `(source-id,
   their-symbol)` (two shards claiming one source token ⇒ `translation-collision`, fixture
@@ -590,6 +612,19 @@ a `translations:` key IN the frontmatter is an ERROR (`translations-in-frontmatt
   (`src/gates/refs-shard-citations.ts`), called directly — not reimplemented. There is exactly one
   quote semantics in the codebase: strict grammar, adopted-pin check, and the quote found
   byte-for-byte at the recorded locus in whichever layer that locus indexes.
+- A `kind: cited` notation shard must carry a non-empty `meaning:` and an explicit
+  `meaning-anchor:` body block: the marker, then a standalone `refs/<path>:<line>` pointer, then
+  its `"<quote>"`. The anchor is byte-verified through that same Gate 3 verifier. This binds the
+  declared meaning to reviewable source bytes; whether the passage semantically supports the
+  prose remains adversarial-review work, never a lexical gate's claim. Missing, malformed, stale,
+  or unverified meaning provenance is a structural ERROR. Fixtures `defs-23` and `defs-26`.
+- A byte-verified translation row is counted verified only when its quote contains `their-symbol`
+  verbatim and the row's `source-id` owns the anchored payload path through
+  `refs/manifest/sources.lock.json`'s `files[].source_id`. Missing ownership fails closed; genuine
+  bytes from one source cannot prove another source's notation. Both failures are structural
+  ERRORs. Fixtures `defs-24` and `defs-25`.
+- Every notation-admission provenance failure in this section is **structural**, including findings
+  returned by the shared citation verifier, and therefore remains ERROR in exploration.
 
 Coverage clause: `, <N> notation shard(s), <V>/<R> translations verified`, plus
 `— no convention profile configured, classes unchecked` when there is no profile.
@@ -734,6 +769,13 @@ N/A for this gate; nothing to tolerate.
 | `defs-20` | **translations-in-frontmatter** [rk-5lzf] — rows written in the frontmatter are destroyed by the flat grammar ⇒ ERROR, never a vacuous `0/0` pass |
 | `defs-21` | **def-id-collision** [rk-5lzf B6] — two shards at different depths claiming one flat `id` ⇒ structural ERROR on BOTH paths |
 | `defs-22` | **shared non-shard policy** [rk-5lzf B6] — nested `DAG.md`, `notes-*.md`, `_scratch.md` are not shards; `def-notes-on-gaps.md` is ⇒ zero findings, `checked 1/1` |
+| `defs-23` | **meaning-missing** [rk-5lzf B1] — cited notation shard has an anchored passage but no `meaning:` ⇒ structural ERROR |
+| `defs-24` | **translation-symbol-not-in-quote** [rk-5lzf B1] — a byte-verified translation quote omits `their-symbol` ⇒ structural ERROR |
+| `defs-25` | **translation-source-path-mismatch** [rk-5lzf B1] — source-id does not own the anchored payload path ⇒ structural ERROR |
+| `defs-26` | **meaning-anchor-missing in exploration** [rk-5lzf B1] — cited meaning has no anchor under `phase: exploration` ⇒ ERROR/fail |
+| `defs-27` | **symbol-not-blessed-for-class** [rk-5lzf B2] — a notation shard declares a raw source token instead of its class's blessed macro ⇒ structural ERROR |
+| `defs-28` | **expansion-missing** [rk-5lzf follow-up] — notation shard has no generated LaTeX replacement body ⇒ structural ERROR |
+| `defs-29` | **expansion-unsafe** [rk-5lzf follow-up] — expansion contains a forbidden TeX file-input primitive ⇒ structural ERROR |
 
 ---
 
@@ -3029,10 +3071,10 @@ for a code distance and a qudit dimension, `\epsilon` for a gap and an energy de
 that lets those tokens into its own prose unregistered is building on sentences that cannot be
 read back — LB8's "the trap list is mathematically incomplete", made mechanical.
 
-**Failure mode guarded.** An unregistered tracked symbol: a token the convention profile says is
-load-bearing, used in a shard body or a blessed statement, with no notation shard saying which
-quantity it denotes. Class-driven (the campaign is new); the source incident is the literature
-itself, enumerated in the profile draft's checked divergences.
+**Failure mode guarded.** Unregistered canonical notation, or raw source notation used as campaign
+notation: a token the convention profile says is load-bearing appears in a shard body or blessed
+statement without the unique class meaning the profile fixes. Class-driven (the campaign is new);
+the source incident is the literature itself, enumerated in the profile draft's checked divergences.
 
 **Inputs.**
 - The convention profile named by `.rk/config.json`'s `conventionProfile` — see "Convention
@@ -3047,27 +3089,40 @@ itself, enumerated in the profile draft's checked divergences.
 **Reach, stated rather than implied.** The profile's tracked tokens are raw literature notation:
 some are plain macro tokens (`\epsilon`), some are bare identifiers (`c`, `k`) or brace/subscript
 forms (`\lambda_{\min}`). Only the macro-token subset can be scanned for reliably — searching prose
-for a bare `c` produces noise, not signal. Gate 9 enforces that subset and COUNTS the rest in its
-coverage line. A gate that quietly claimed the wider reach would be the more dangerous artifact.
+for a bare `c` produces noise, not signal. Gate 9 enforces that subset and COUNTS the rest per class
+in its coverage line, listing every skipped token deterministically and without truncation. A gate
+that quietly claimed the wider reach would be the more dangerous artifact.
 
-**Quoted source text is exempt.** A translation row in a notation shard, its quote anchor, and any
-standalone `"<quote>"` line in an argument shard are the SOURCE's notation, verbatim. Recording a
-foreign convention is the register's whole job; flagging it would make the register unwritable.
-Everything else in a shard body is campaign prose and is scanned. Fixture `notation-04` pins this.
+**Verified quote syntax is exempt; quotation marks are not.** A strict translation row and its
+immediately following `"<quote>"`, or a strict standalone `refs/<path>:<positive-line>` pointer and
+its immediately following `"<quote>"`, are the SOURCE's notation. Recording a foreign convention
+is the register's whole job; flagging those adjacent pairs would make it unwritable. A fully quoted
+line with no immediately preceding strict row/pointer is campaign prose and is scanned, including
+inside `statement_blessed`; otherwise adding two quotation marks bypasses Gate 9. Fixtures
+`notation-04` and `notation-06`.
 
 **Checks.**
-1. **Unregistered tracked symbol.** A tracked macro token appearing in any scanned artifact must be
-   the `symbol:` of a notation shard whose `class:` is one of the classes that track that token
-   (a token claimed by several classes is cleared by a register entry in ANY of them — the overlap
-   is real and the register is what resolves it). Otherwise ERROR `unregistered-symbol`, naming the
-   token, its tracking classes, and whether it is unregistered outright or registered only in some
-   other class. **STRUCTURAL** — see below. One finding per (file, symbol): ten usages in one file
-   are one defect, reported at the first.
-2. **Profile presence.** No `conventionProfile` configured ⇒ one WARN and `checked 0/0 (no profile
-   configured)`. A profile configured but UNUSABLE ⇒ a different WARN naming it and
-   `(profile "<ref>" unusable, nothing enforced)`. The two are never collapsed: a campaign that
+1. **Canonical and raw tracked symbols.** A class's `blessed` macro appearing in a scanned artifact
+   must be the `symbol:` of a notation shard whose `class:` is that exact class; otherwise ERROR
+   `unregistered-symbol`. A raw profile `symbols` token appearing in campaign prose is always ERROR
+   `unblessed-source-symbol`, even if a shard tries to register it in one claiming class. Raw tokens
+   are legal only in source-scoped translation evidence: the row names the source, its owning shard
+   names the intended class, and Gate 1 requires the pair to be unique and byte-bound. This closes
+   the overlapping-token false green: lexical context cannot decide whether `\Delta` meant promise
+   gap or spectral gap, so registration in either class cannot clear campaign prose. Both errors are
+   **STRUCTURAL**. One finding per (file, symbol): ten usages in one file are one defect, reported at
+   the first. Fixture `notation-05`.
+2. **Profile presence.** No `conventionProfile` configured ⇒ one WARN and a failed `0/1 profile
+   prerequisite (no profile configured; zero classes tracked)`, never a pass-shaped `0/0`. A profile
+   configured but UNUSABLE ⇒ a different WARN naming it and a failed `0/1` prerequisite. The two
+   are never collapsed: a campaign that
    believes it is being checked must not read the same output as one that knows it is not. The
    config gate's own ERROR is what blocks the run in the second case. Fixture `notation-03`.
+3. **Register completeness.** `notation: draft` (including an absent `notation`) reports missing
+   canonical shards in coverage without claiming phase 0c is done. `notation: complete` asserts
+   exactly one notation shard per tracked class whose `class:` is that class and whose `symbol:` is
+   its profile `blessed` macro. Zero gives structural ERROR `canonical-shard-missing`; more than one
+   gives structural ERROR `canonical-shard-duplicate`. Fixture `notation-07`.
 
 **Phase classification. STRUCTURAL, never demoted.** Campaign plan section 2a: admission of a
 conjecture or a cited result is a transaction over one candidate, and its notation must be
@@ -3077,15 +3132,23 @@ notation check that demoted there would be unenforced precisely where conjecture
 Fixture `notation-02` is `notation-01` under `phase: exploration` with a byte-identical
 expectation.
 
-**Coverage line.** `checked notation: <registered>/<encountered> symbols in <C> classes over <M>
-files`, plus `, <N> tracked tokens not lexically enforceable (<list>)` when the profile carries
-any. `checked` and `encountered` count DISTINCT tracked macro tokens across the whole scan.
+**Coverage line.** The numeric pair is `<classes with exactly one canonical shard>/<profile tracked
+classes>`, never encountered-symbols/encountered-symbols. Its unit names `notation draft|complete`
+and emits one deterministic class clause in class-id order:
+`<class>: registered <R>/1, enforceable <E>, encountered <U>, skipped <S> [<all skipped tokens>]`.
+`enforceable` is the distinct plain-macro subset of that class's raw symbols plus its blessed macro;
+`encountered` is the distinct enforceable subset present in scanned artifacts; `skipped` lists every
+non-macro raw token in lexical order, without truncation. Thus an untouched or wholly unenforceable
+class remains visible, and zero tracked classes never renders as a successful `N/N`.
 
 **Corpus fixtures required.**
 
 | id | violation |
 |---|---|
-| `notation-01` | two tracked symbols (`\epsilon`, `\Delta`) used in a conjecture shard, neither registered ⇒ 2 structural ERRORs, `checked 0/2` |
+| `notation-01` | two raw tracked symbols (`\epsilon`, `\Delta`) used in a conjecture shard ⇒ 2 structural `unblessed-source-symbol` ERRORs, `checked 0/2` |
 | `notation-02` | `notation-01` under `phase: exploration` ⇒ byte-identical ERROR/fail/exit 1 (structural survives demotion) |
-| `notation-03` | no `conventionProfile` configured ⇒ WARN + `0/0 (no profile configured)`, never a silent pass |
+| `notation-03` | no `conventionProfile` configured ⇒ WARN + failed `0/1` profile prerequisite, never a silent/pass-shaped `0/0` |
 | `notation-04` | golden pass: blessed macros registered in their classes, `2/2`; a translation row and its quote anchor carry an unregistered source token and are NOT flagged |
+| `notation-05` | **source-scoped overlap** [rk-5lzf B2] — overlapping raw `\Delta` in campaign prose remains ERROR even when registered in one claiming class |
+| `notation-06` | **quoted-line bypass** [rk-5lzf B3] — a fully quoted but unpaired campaign sentence carrying raw `\epsilon` ⇒ structural ERROR |
+| `notation-07` | **vacuous class coverage** [rk-5lzf B4] — `notation: complete` with one of two canonical class shards absent ⇒ structural ERROR + per-class `1/2` coverage |

@@ -1,0 +1,16 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v3.json",
+      "message_pattern": "predecessor-missing: required .rk/conventions/qpcp.v2.json"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["convention profile \"qpcp.v3\" 0/1 valid"] },
+  "config_override": { "conventionProfile": "qpcp.v3" },
+  "aism_behavior": "n/a: AISM has no convention-profile history chain.",
+  "notes": "rk-5lzf repair B5, skipped filename version: qpcp.v1 and qpcp.v3 are present but qpcp.v2 is not. A successor chains to n-1 exactly; a skipped version cannot bypass compatibility comparison."
+}

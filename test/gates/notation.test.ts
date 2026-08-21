@@ -43,14 +43,14 @@ function run(files: Record<string, string>, config = CONFIG) {
 }
 
 describe("Gate 9 — no profile configured", () => {
-  test("reports a VISIBLE WARN and 0/0, never a silent pass", () => {
+  test("reports a VISIBLE WARN and failed profile prerequisite, never a silent 0/0 pass", () => {
     const result = notationGate.run(
       snapshotFromFiles({ "argument/lem-a.md": "---\nid: lem-a\n---\nThe gap \\epsilon is constant.\n" }),
       DEFAULT_GATE_CONFIG,
     );
     expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
     expect(result.findings.filter((f) => f.severity === "WARN")).toHaveLength(1);
-    expect(result.coverage[0]).toMatchObject({ gate: "notation", checked: 0, total: 0 });
+    expect(result.coverage[0]).toMatchObject({ gate: "notation", checked: 0, total: 1 });
     expect(result.coverage[0]!.unit).toContain("no profile configured");
   });
 
@@ -67,9 +67,9 @@ describe("Gate 9 — no profile configured", () => {
 });
 
 describe("Gate 9 — unregistered tracked symbols", () => {
-  test("a tracked macro used in an argument shard with no register entry is a structural ERROR", () => {
+  test("a raw tracked macro used in campaign prose is a structural ERROR", () => {
     const result = run({ "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\epsilon is constant.\n" });
-    const hit = result.findings.find((f) => f.message.includes("unregistered-symbol"));
+    const hit = result.findings.find((f) => f.message.includes("unblessed-source-symbol"));
     expect(hit).toBeDefined();
     expect(hit!.severity).toBe("ERROR");
     expect(hit!.structural).toBe(true);
@@ -79,24 +79,24 @@ describe("Gate 9 — unregistered tracked symbols", () => {
     expect(hit!.message).toContain("promise-gap");
   });
 
-  test("registering the symbol in the right class clears it", () => {
+  test("registering a raw source symbol in a claiming class does not clear campaign prose", () => {
     const result = run({
       "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\epsilon is constant.\n",
       "definitions/notation/sym-eps.md": notationShard("sym-eps", "\\epsilon", "promise-gap"),
     });
-    expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
-    expect(result.coverage[0]).toMatchObject({ checked: 1, total: 1 });
+    expect(result.findings.some((f) => f.message.includes("unblessed-source-symbol"))).toBe(true);
+    expect(result.coverage[0]).toMatchObject({ checked: 0, total: 2 });
   });
 
-  test("registering it in the WRONG class does not clear it", () => {
+  test("registering a blessed macro in the WRONG class does not clear it", () => {
     const result = run({
-      "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\epsilon is constant.\n",
-      "definitions/notation/sym-eps.md": notationShard("sym-eps", "\\epsilon", "spectral"),
+      "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\gapfrac is constant.\n",
+      "definitions/notation/sym-gap.md": notationShard("sym-gap", "\\gapfrac", "spectral"),
     });
     expect(result.findings.some((f) => f.message.includes("unregistered-symbol"))).toBe(true);
   });
 
-  test("a token claimed by TWO classes is cleared by a register entry in EITHER", () => {
+  test("a token claimed by TWO classes is never cleared by a register entry in either", () => {
     const profile = JSON.parse(PROFILE);
     profile.tracked_classes[1].symbols.push("\\epsilon");
     const snap = snapshotFromFiles({
@@ -104,18 +104,27 @@ describe("Gate 9 — unregistered tracked symbols", () => {
       "argument/lem-a.md": "---\nid: lem-a\n---\nThe gap \\epsilon is constant.\n",
       "definitions/notation/sym-eps.md": notationShard("sym-eps", "\\epsilon", "spectral"),
     });
-    expect(notationGate.run(snap, CONFIG).findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+    expect(notationGate.run(snap, CONFIG).findings.some((f) => f.message.includes("unblessed-source-symbol"))).toBe(true);
   });
 
   test("an UNtracked macro is never an error — the profile bounds the check", () => {
     const result = run({ "argument/lem-a.md": "---\nid: lem-a\n---\nWe write \\alpha for the angle.\n" });
     expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
-    expect(result.coverage[0]).toMatchObject({ checked: 0, total: 0 });
+    expect(result.coverage[0]).toMatchObject({ checked: 0, total: 2 });
   });
 
   test("the blessed macro itself is tracked and must be registered", () => {
     const result = run({ "argument/lem-a.md": "---\nid: lem-a\n---\nThe gap \\gapfrac is constant.\n" });
     expect(result.findings.some((f) => f.message.includes("\\gapfrac"))).toBe(true);
+  });
+
+  test("the blessed macro registered in its own class clears campaign prose", () => {
+    const result = run({
+      "argument/lem-a.md": "---\nid: lem-a\n---\nThe gap \\gapfrac is constant.\n",
+      "definitions/notation/sym-gap.md": notationShard("sym-gap", "\\gapfrac", "promise-gap"),
+    });
+    expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+    expect(result.coverage[0]).toMatchObject({ checked: 1, total: 2 });
   });
 });
 
@@ -171,15 +180,29 @@ describe("Gate 9 — scan scope", () => {
     });
     expect(result.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
   });
+
+  test("an unpaired fully quoted line is campaign prose and is scanned", () => {
+    const result = run({
+      "argument/lem-a.md": '---\nid: lem-a\n---\n"the promise gap \\epsilon is constant"\n',
+    });
+    expect(result.findings.some((f) => f.message.includes("unblessed-source-symbol"))).toBe(true);
+  });
+
+  test("quotation marks do not exempt statement_blessed", () => {
+    const result = run({
+      "refs/records/a.json": JSON.stringify({ statement_blessed: '"the promise gap \\epsilon is constant"' }),
+    });
+    expect(result.findings.some((f) => f.path === "refs/records/a.json" && f.message.includes("unblessed-source-symbol"))).toBe(true);
+  });
 });
 
 describe("Gate 9 — coverage line", () => {
   test("states symbols, classes and files", () => {
     const result = run({
-      "argument/lem-a.md": "---\nid: lem-a\n---\n\\epsilon and \\Delta.\n",
-      "definitions/notation/sym-eps.md": notationShard("sym-eps", "\\epsilon", "promise-gap"),
+      "argument/lem-a.md": "---\nid: lem-a\n---\n\\gapfrac and \\Delta.\n",
+      "definitions/notation/sym-gap.md": notationShard("sym-gap", "\\gapfrac", "promise-gap"),
     });
-    expect(result.coverage[0]!.unit).toMatch(/symbols in 2 classes over \d+ files/);
+    expect(result.coverage[0]!.unit).toMatch(/classes \(notation draft; .*\) over \d+ files/);
     expect(result.coverage[0]).toMatchObject({ checked: 1, total: 2 });
   });
 
@@ -187,7 +210,7 @@ describe("Gate 9 — coverage line", () => {
     // `c` is a tracked token of promise-gap and is not a macro token: no lexical scan can find it
     // reliably. The coverage line says so rather than implying it was checked.
     const result = run({ "argument/lem-a.md": "---\nid: lem-a\n---\nnothing tracked here.\n" });
-    expect(result.coverage[0]!.unit).toContain("1 tracked token not lexically enforceable");
+    expect(result.coverage[0]!.unit).toContain("promise-gap: registered 0/1, enforceable 3, encountered 0, skipped 1 [c]");
   });
 
   test("one ERROR per (file, symbol) — a symbol used ten times in one file is one finding", () => {

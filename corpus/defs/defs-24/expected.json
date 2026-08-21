@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "translation-symbol-not-in-quote"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1 notation shard", "0/1 translations verified"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation translation register.",
+  "notes": "rk-5lzf repair B1: the quote exists at the pinned locus but does not contain the source symbol claimed by the translation row. Byte-verifying an irrelevant passage is not evidence that the source writes that symbol."
+}

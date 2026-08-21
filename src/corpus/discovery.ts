@@ -221,11 +221,28 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `phase: exploration`, byte-identical expectation: structural survives demotion — and the first
  * fixture in the corpus able to make a PHASE claim at all, since `src/corpus/run.ts` now applies
  * `applyPhase` the way `rk check` does), `notation-03` (no profile configured ⇒ visible WARN and
- * `0/0`, never a silent pass), `notation-04` (golden pass, with the quoted-source exemption
+ * failed `0/1` profile prerequisite, never a silent/pass-shaped `0/0`), `notation-04` (golden pass, with the quoted-source exemption
  * pinned). "notation" also added to GATE_DIRS as the fourth synthetic gate's corpus directory.
  * 190 (+2 over the then-pinned 188): the rk-5lzf Tier A repair wave, blocker B6 — `defs-21`
  * (`def-id-collision`: two shards at different depths claiming one flat id, which recursion made
  * reachable and which every id-keyed consumer resolves arbitrarily) and `defs-22` (the ONE shared
  * non-shard policy: nested `DAG.md`/`notes-*.md`/`_scratch.md` drew spurious ERRORs from Gate 1
- * while Gate 9 skipped `DAG.md` — one tree, two answers to "is this a shard"). */
-export const EXPECTED_FIXTURE_COUNT = 190;
+ * while Gate 9 skipped `DAG.md` — one tree, two answers to "is this a shard").
+ * 194 (+4 over the then-pinned 190): rk-5lzf Tier A repair B1 — `defs-23` (meaning declaration
+ * absent), `defs-24` (translation quote omits its source symbol), `defs-25` (source-id does not own
+ * the anchored path), and `defs-26` (missing meaning anchor remains ERROR in exploration).
+ * 196 (+2 over the then-pinned 194): repair B2 — `defs-27` binds each class to its profile-blessed
+ * macro and `notation-05` rejects an overlapping raw source token from campaign prose even when a
+ * shard registered that token in one of its possible classes.
+ * 197 (+1 over the then-pinned 196): repair B3 — `notation-06` scans a fully quoted but unpaired
+ * campaign sentence; quotation marks alone are not verified source evidence.
+ * 198 (+1 over the then-pinned 197): repair B4 — `notation-07` declares `notation: complete` but
+ * omits one class's canonical shard; per-class coverage reports the missing class and every skipped
+ * token instead of a vacuous symbol-level N/N.
+ * 202 (+4 over the then-pinned 198): repair B5 — `config-08` deleted predecessor, `config-09`
+ * skipped filename version, `config-10` renamed family, and `config-11` in-place v1 mutation all
+ * fail the predecessor_sha256 history chain structurally.
+ * 205 (+3 over the then-pinned 202): review follow-ups — `config-12` enforces runtime uniqueness
+ * of allowed_translations; `defs-28` and `defs-29` require and constrain generated LaTeX expansion.
+ */
+export const EXPECTED_FIXTURE_COUNT = 205;

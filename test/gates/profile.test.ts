@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
+import { sha256Hex } from "../../src/gates/sha256";
 import {
   CONVENTIONS_DIR,
   enforceableSymbolIndex,
@@ -49,6 +50,10 @@ function snap(files: Record<string, unknown>) {
 
 function messages(findings: { message: string }[]): string {
   return findings.map((f) => f.message).join(" || ");
+}
+
+function predecessorSha(profile: unknown): string {
+  return sha256Hex(new TextEncoder().encode(JSON.stringify(profile, null, 2)));
 }
 
 describe("profileFilePath", () => {
@@ -97,6 +102,20 @@ describe("validateConventionProfile — schema enforcement", () => {
     expect(r.checked).toBe(r.total);
     expect(r.profile?.name).toBe("qpcp");
     expect(r.profile?.tracked_classes).toHaveLength(2);
+    expect(r.profile?.notation).toBe("draft");
+  });
+
+  test("notation defaults to draft and admits only draft or complete", () => {
+    const complete = validateConventionProfile(
+      snap({ ".rk/conventions/qpcp.v1.json": { ...GOOD, notation: "complete" } }),
+      "qpcp.v1",
+    );
+    expect(complete.profile?.notation).toBe("complete");
+    const bad = validateConventionProfile(
+      snap({ ".rk/conventions/qpcp.v1.json": { ...GOOD, notation: "done" } }),
+      "qpcp.v1",
+    );
+    expect(messages(bad.findings)).toContain('"notation"');
   });
 
   test("unparseable JSON is one loud ERROR and no profile", () => {
@@ -333,13 +352,27 @@ describe("validateConventionProfile — schema enforcement", () => {
     const r = validateConventionProfile(snap({ ".rk/conventions/qpcp.v1.json": bad }), "qpcp.v1");
     expect(messages(r.findings)).toContain("canonical");
   });
+
+  test("allowed_translations enforces schema uniqueItems at runtime", () => {
+    const bad = {
+      ...GOOD,
+      choices: { x: { canonical: "relative", allowed_translations: ["absolute", "absolute"] } },
+    };
+    const r = validateConventionProfile(snap({ ".rk/conventions/qpcp.v1.json": bad }), "qpcp.v1");
+    expect(messages(r.findings)).toContain("distinct values");
+  });
 });
 
 describe("validateConventionProfile — class-removed-without-bump", () => {
   const v1 = { ...GOOD, version: 1 };
 
   test("dropping a tracked class with NO version bump is an ERROR", () => {
-    const v2 = { ...GOOD, version: 1, tracked_classes: [GOOD.tracked_classes[0]!] };
+    const v2 = {
+      ...GOOD,
+      version: 1,
+      predecessor_sha256: predecessorSha(v1),
+      tracked_classes: [GOOD.tracked_classes[0]!],
+    };
     const r = validateConventionProfile(
       snap({ ".rk/conventions/qpcp.v1.json": v1, ".rk/conventions/qpcp.v2.json": v2 }),
       "qpcp.v2",
@@ -350,7 +383,12 @@ describe("validateConventionProfile — class-removed-without-bump", () => {
   });
 
   test("dropping a tracked class WITH a version bump is permitted", () => {
-    const v2 = { ...GOOD, version: 2, tracked_classes: [GOOD.tracked_classes[0]!] };
+    const v2 = {
+      ...GOOD,
+      version: 2,
+      predecessor_sha256: predecessorSha(v1),
+      tracked_classes: [GOOD.tracked_classes[0]!],
+    };
     const r = validateConventionProfile(
       snap({ ".rk/conventions/qpcp.v1.json": v1, ".rk/conventions/qpcp.v2.json": v2 }),
       "qpcp.v2",
@@ -359,7 +397,7 @@ describe("validateConventionProfile — class-removed-without-bump", () => {
   });
 
   test("keeping every class needs no bump", () => {
-    const v2 = { ...GOOD, version: 1 };
+    const v2 = { ...GOOD, version: 1, predecessor_sha256: predecessorSha(v1) };
     const r = validateConventionProfile(
       snap({ ".rk/conventions/qpcp.v1.json": v1, ".rk/conventions/qpcp.v2.json": v2 }),
       "qpcp.v2",
@@ -367,21 +405,47 @@ describe("validateConventionProfile — class-removed-without-bump", () => {
     expect(r.findings).toEqual([]);
   });
 
-  test("no predecessor file present: nothing to compare, no finding", () => {
-    const v2 = { ...GOOD, version: 1, tracked_classes: [GOOD.tracked_classes[0]!] };
+  test("no predecessor file present is a structural ERROR", () => {
+    const v2 = {
+      ...GOOD,
+      version: 1,
+      predecessor_sha256: predecessorSha(v1),
+      tracked_classes: [GOOD.tracked_classes[0]!],
+    };
     const r = validateConventionProfile(snap({ ".rk/conventions/qpcp.v2.json": v2 }), "qpcp.v2");
-    expect(r.findings).toEqual([]);
+    expect(messages(r.findings)).toContain("predecessor-missing");
+    expect(r.findings[0]!.structural).toBe(true);
+    expect(r.profile).toBeUndefined();
   });
 
-  test("an UNPARSEABLE predecessor is a loud WARN, never a silent 'nothing was removed'", () => {
-    const v2 = { ...GOOD, version: 1, tracked_classes: [GOOD.tracked_classes[0]!] };
+  test("an UNPARSEABLE but hash-matching predecessor is a structural ERROR", () => {
+    const badPredecessor = "{ nope";
+    const v2 = {
+      ...GOOD,
+      version: 1,
+      predecessor_sha256: sha256Hex(new TextEncoder().encode(badPredecessor)),
+      tracked_classes: [GOOD.tracked_classes[0]!],
+    };
     const r = validateConventionProfile(
-      snap({ ".rk/conventions/qpcp.v1.json": "{ nope", ".rk/conventions/qpcp.v2.json": v2 }),
+      snap({ ".rk/conventions/qpcp.v1.json": badPredecessor, ".rk/conventions/qpcp.v2.json": v2 }),
       "qpcp.v2",
     );
     expect(r.findings).toHaveLength(1);
-    expect(r.findings[0]!.severity).toBe("WARN");
+    expect(r.findings[0]!.severity).toBe("ERROR");
+    expect(r.findings[0]!.structural).toBe(true);
     expect(messages(r.findings)).toContain("qpcp.v1.json");
+    expect(r.profile).toBeUndefined();
+  });
+
+  test("a rewritten predecessor fails its pinned hash before shrink comparison", () => {
+    const rewritten = { ...GOOD, tracked_classes: [GOOD.tracked_classes[0]!] };
+    const v2 = { ...GOOD, version: 2, predecessor_sha256: predecessorSha(v1) };
+    const r = validateConventionProfile(
+      snap({ ".rk/conventions/qpcp.v1.json": rewritten, ".rk/conventions/qpcp.v2.json": v2 }),
+      "qpcp.v2",
+    );
+    expect(messages(r.findings)).toContain("predecessor-hash-mismatch");
+    expect(r.profile).toBeUndefined();
   });
 });
 

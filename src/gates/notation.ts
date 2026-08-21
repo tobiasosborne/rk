@@ -1,6 +1,6 @@
-// ROLE: Gate 9 — notation (rk-5lzf, Tier A, LB5). A LEXICAL check: every tracked macro token that
-// appears in a scanned artifact must be a registered `symbol:` of a notation shard in one of the
-// classes that track it. Contract: docs/gate-contracts.md "Gate 9 — notation".
+// ROLE: Gate 9 — notation (rk-5lzf, Tier A, LB5). A LEXICAL check: campaign prose uses each
+// class's registered blessed macro; raw source tokens stay inside source-scoped quote evidence.
+// Contract: docs/gate-contracts.md "Gate 9 — notation".
 // PURITY: pure — no fs/network/clock (L3).
 //
 // STRUCTURAL, never demoted (campaign plan section 2a): admission of a cited result or a conjecture
@@ -14,15 +14,20 @@
 // subset and COUNTS the rest in its coverage line (L2: a skip is always visible with a count),
 // rather than pretending to a reach it does not have.
 //
-// QUOTED SOURCE TEXT IS EXEMPT. A translation row in a notation shard, its quote anchor, and any
-// standalone `"<quote>"` line in an argument shard are the SOURCE's notation, verbatim — recording
-// a foreign convention is the register's whole job, and flagging it would make the register
-// impossible to write. Everything else in a shard body is campaign prose and is scanned.
+// QUOTED SOURCE TEXT IS EXEMPT only as an adjacent strict evidence pair. A translation row or
+// refs/<path>:<line> pointer followed immediately by its `"<quote>"` anchor is source notation;
+// quotation marks by themselves prove nothing and never exempt campaign prose.
 
 import type { CoverageLine, Finding, Gate, GateResult } from "./framework";
 import type { GateConfig } from "./config";
 import { baseName, listFilesRecursive, type RepoSnapshot } from "./snapshot";
-import { enforceableSymbolIndex, unenforceableSymbols, validateConventionProfile } from "./profile";
+import {
+  blessedSymbolIndex,
+  enforceableRawSymbolIndex,
+  MACRO_TOKEN_RE,
+  profileFilePath,
+  validateConventionProfile,
+} from "./profile";
 // rk-5lzf B6: ONE shared non-shard policy, applied to definitions/ and argument/ alike, at any
 // depth. Before the repair wave Gate 1 skipped README/INDEX while Gate 9 skipped README/INDEX/DAG,
 // so the same file was a shard to one gate and not the other.
@@ -34,6 +39,8 @@ const RECORDS_DIR = "refs/records";
 const MACRO_SCAN_RE = /\\[A-Za-z]+/g;
 /** A translation row (src/gates/notation-shards.ts's own grammar) — source notation, exempt. */
 const ROW_LINE_RE = /^-\s+[A-Za-z0-9][A-Za-z0-9._-]*:\s*\S+\s+@\s+refs\/[A-Za-z0-9_./-]+:[0-9]+$/;
+/** Gate 3's strict standalone source pointer, restricted to a positive line locus. */
+const POINTER_LINE_RE = /^refs\/[A-Za-z0-9_./-]+:[1-9][0-9]*$/;
 
 interface Occurrence {
   path: string;
@@ -43,11 +50,17 @@ interface Occurrence {
   where: string;
 }
 
-/** True iff this line is quoted SOURCE text rather than campaign prose: a translation row, or a
- * standalone `"<quote>"` anchor (the second line of an `rk refs quote` pair, wherever it appears). */
-function isQuotedSource(trimmed: string): boolean {
-  if (ROW_LINE_RE.test(trimmed)) return true;
+function isQuotedLine(trimmed: string): boolean {
   return trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"');
+}
+
+/** True only for a strict translation row itself, or its/pointer's immediately adjacent quote. */
+function isVerifiedQuoteSyntax(lines: readonly { text: string }[], index: number): boolean {
+  const current = lines[index]!.text.trim();
+  if (ROW_LINE_RE.test(current)) return true;
+  if (!isQuotedLine(current) || index === 0) return false;
+  const previous = lines[index - 1]!.text.trim();
+  return ROW_LINE_RE.test(previous) || POINTER_LINE_RE.test(previous);
 }
 
 /** Body lines of a shard (everything after the frontmatter's closing `---`), 1-indexed against the
@@ -68,9 +81,8 @@ function bodyLines(content: string): { line: number; text: string }[] {
   return lines.slice(start).map((text, i) => ({ line: start + i + 1, text }));
 }
 
-function scanLine(path: string, line: number, text: string, where: string, out: Occurrence[]): void {
-  const trimmed = text.trim();
-  if (isQuotedSource(trimmed)) return;
+function scanLine(path: string, line: number, text: string, where: string, out: Occurrence[], exempt = false): void {
+  if (exempt) return;
   for (const m of text.matchAll(MACRO_SCAN_RE)) out.push({ path, line, token: m[0]!, where });
 }
 
@@ -85,8 +97,10 @@ function collectOccurrences(snapshot: RepoSnapshot): { occurrences: Occurrence[]
     for (const path of listFilesRecursive(snapshot, prefix, ".md")) {
       if (isNonShardBasename(baseName(path))) continue;
       files++;
-      for (const { line, text } of bodyLines(snapshot.get(path)!)) {
-        scanLine(path, line, text, "", occurrences);
+      const body = bodyLines(snapshot.get(path)!);
+      for (let i = 0; i < body.length; i++) {
+        const { line, text } = body[i]!;
+        scanLine(path, line, text, "", occurrences, isVerifiedQuoteSyntax(body, i));
       }
     }
   }
@@ -139,19 +153,20 @@ export const notationGate: Gate = {
           {
             gate: "notation",
             unit: configured
-              ? `(profile "${config.conventionProfile}" unusable, nothing enforced)`
-              : "(no profile configured)",
+              ? `profile prerequisite (profile "${config.conventionProfile}" unusable; zero classes tracked)`
+              : "profile prerequisite (no profile configured; zero classes tracked)",
             checked: 0,
-            total: 0,
+            total: 1,
           },
         ],
       };
     }
 
-    const tracked = enforceableSymbolIndex(profile);
-    const unenforceable = unenforceableSymbols(profile);
+    const rawTracked = enforceableRawSymbolIndex(profile);
+    const blessed = blessedSymbolIndex(profile);
+    const notationShards = parseNotationShards(snapshot);
     const registered = new Map<string, Set<string>>(); // symbol -> classes it is registered in
-    for (const shard of parseNotationShards(snapshot)) {
+    for (const shard of notationShards) {
       if (shard.symbol === undefined || shard.className === undefined) continue;
       const set = registered.get(shard.symbol);
       if (set) set.add(shard.className);
@@ -159,23 +174,33 @@ export const notationGate: Gate = {
     }
 
     const { occurrences, files, findings } = collectOccurrences(snapshot);
-    const seen = new Set<string>();
+    const encounteredTokens = new Set(occurrences.map((occ) => occ.token));
     const reported = new Set<string>();
-    let ok = 0;
 
     for (const occ of occurrences) {
-      const classes = tracked.get(occ.token);
-      if (classes === undefined) continue; // not tracked by this profile: out of scope, never an error
-      const isRegistered = [...(registered.get(occ.token) ?? [])].some((c) => classes.includes(c));
-      if (!seen.has(occ.token)) {
-        seen.add(occ.token);
-        if (isRegistered) ok++;
-      }
-      if (isRegistered) continue;
+      const rawClasses = rawTracked.get(occ.token);
+      const blessedClass = blessed.get(occ.token);
+      if (rawClasses === undefined && blessedClass === undefined) continue;
+      const isRegistered = blessedClass !== undefined && registered.get(occ.token)?.has(blessedClass) === true;
       const key = `${occ.path}\u0000${occ.token}`;
       if (reported.has(key)) continue; // one finding per (file, symbol) — ten usages are one defect
       reported.add(key);
       const where = occ.where ? ` in ${occ.where}` : "";
+      if (rawClasses !== undefined && blessedClass === undefined) {
+        findings.push({
+          severity: "ERROR",
+          path: occ.path,
+          line: occ.line,
+          structural: true,
+          message:
+            `unblessed-source-symbol: '${occ.token}'${where} is raw source notation tracked by class` +
+            `${rawClasses.length === 1 ? "" : "es"} ${rawClasses.map((c) => `'${c}'`).join(", ")}; ` +
+            `campaign prose cannot identify its intended class lexically — use that class's blessed macro, ` +
+            `and record '${occ.token}' only in a source-scoped translation row`,
+        });
+        continue;
+      }
+      if (isRegistered) continue;
       const registeredIn = registered.get(occ.token);
       const detail = registeredIn
         ? `it is registered only in class${registeredIn.size === 1 ? "" : "es"} ${[...registeredIn].sort().map((c) => `'${c}'`).join(", ")}`
@@ -188,20 +213,51 @@ export const notationGate: Gate = {
         // demotes to WARN in exploration.
         structural: true,
         message:
-          `unregistered-symbol: '${occ.token}'${where} is a tracked symbol of class${classes.length === 1 ? "" : "es"} ` +
-          `${classes.map((c) => `'${c}'`).join(", ")} in the convention profile, but ${detail} — ` +
-          `add a definitions/**/*.md shard with shard_type: notation, symbol: ${occ.token}, and a matching class:`,
+          `unregistered-symbol: blessed macro '${occ.token}'${where} is the canonical symbol of class ` +
+          `'${blessedClass}' in the convention profile, but ${detail} — add a definitions/**/*.md shard ` +
+          `with shard_type: notation, symbol: ${occ.token}, and class: ${blessedClass}`,
       });
     }
 
+    const classClauses: string[] = [];
+    let registeredClasses = 0;
+    for (const trackedClass of [...profile.tracked_classes].sort((a, b) =>
+      a.class < b.class ? -1 : a.class > b.class ? 1 : 0,
+    )) {
+      const canonicalCount = notationShards.filter(
+        (shard) => shard.className === trackedClass.class && shard.symbol === trackedClass.blessed,
+      ).length;
+      if (canonicalCount === 1) registeredClasses++;
+      if (profile.notation === "complete" && canonicalCount !== 1) {
+        const kind = canonicalCount === 0 ? "canonical-shard-missing" : "canonical-shard-duplicate";
+        findings.push({
+          severity: "ERROR",
+          path: profileFilePath(config.conventionProfile!),
+          line: 1,
+          structural: true,
+          message:
+            `${kind}: class '${trackedClass.class}' blesses '${trackedClass.blessed}' but has ` +
+            `${canonicalCount} matching notation shards; notation: complete requires exactly one canonical ` +
+            `shard per tracked class`,
+        });
+      }
+      const enforceable = [...new Set([...trackedClass.symbols, trackedClass.blessed])]
+        .filter((token) => MACRO_TOKEN_RE.test(token))
+        .sort();
+      const encountered = enforceable.filter((token) => encounteredTokens.has(token));
+      const skipped = [...new Set(trackedClass.symbols.filter((token) => !MACRO_TOKEN_RE.test(token)))].sort();
+      classClauses.push(
+        `${trackedClass.class}: registered ${canonicalCount}/1, enforceable ${enforceable.length}, ` +
+        `encountered ${encountered.length}, skipped ${skipped.length} [${skipped.join(", ")}]`,
+      );
+    }
+
     const unit =
-      `symbols in ${profile.tracked_classes.length} class${profile.tracked_classes.length === 1 ? "" : "es"} ` +
-      `over ${files} file${files === 1 ? "" : "s"}` +
-      (unenforceable.length > 0
-        ? `, ${unenforceable.length} tracked token${unenforceable.length === 1 ? "" : "s"} not lexically enforceable ` +
-          `(${unenforceable.slice(0, 5).join(", ")}${unenforceable.length > 5 ? ", ..." : ""})`
-        : "");
-    const coverage: CoverageLine[] = [{ gate: "notation", unit, checked: ok, total: seen.size }];
+      `classes (notation ${profile.notation}; ${classClauses.join("; ")}) over ` +
+      `${files} file${files === 1 ? "" : "s"}`;
+    const coverage: CoverageLine[] = [
+      { gate: "notation", unit, checked: registeredClasses, total: profile.tracked_classes.length },
+    ];
     return { findings, coverage };
   },
 };

@@ -1,0 +1,21 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v2.json",
+      "message_pattern": "predecessor-hash-mismatch"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v2.json",
+      "message_pattern": "2d95deae2c628eb5d905a93a5dbbbe47dcc5c89cd4f0670de0503da43d95c7ad"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["convention profile \"qpcp.v2\" 0/1 valid"] },
+  "config_override": { "conventionProfile": "qpcp.v2" },
+  "aism_behavior": "n/a: AISM has no convention-profile history chain.",
+  "notes": "rk-5lzf repair B5, in-place v1 shrink: qpcp.v2 pins the byte hash of the original two-class v1, but the v1 file in the repo was rewritten to one class. The mismatch blocks before compatibility comparison; mutating history is not a version bump."
+}

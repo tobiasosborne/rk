@@ -6,7 +6,12 @@
   "coverage": {
     "checked": 2,
     "total": 2,
-    "unit_patterns": ["symbols in 2 classes over 3 files", "1 tracked token not lexically enforceable"]
+    "unit_patterns": [
+      "notation draft",
+      "promise-gap: registered 1/1, enforceable 4, encountered 1, skipped 1 [c]",
+      "spectral: registered 1/1, enforceable 3, encountered 1, skipped 0 []",
+      "over 3 files"
+    ]
   },
   "config_override": { "conventionProfile": "qpcp.v1" },
   "aism_behavior": "n/a: AISM has no notation register and no lexical symbol check.",

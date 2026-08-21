@@ -4,6 +4,7 @@ term: locality
 shard_type: notation
 symbol: \locality
 class: locality
+expansion: \ensuremath{k}
 kind: consensus
 consensus: campaign convention, qpcp.v1
 status: locked

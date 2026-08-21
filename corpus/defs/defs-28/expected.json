@@ -1,0 +1,15 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "expansion-missing"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no generated notation macro register.",
+  "notes": "rk-5lzf review follow-up: expansion drives generated macros.tex and is therefore required on every notation shard. A renderer placeholder remains defense-in-depth, not a valid register entry."
+}

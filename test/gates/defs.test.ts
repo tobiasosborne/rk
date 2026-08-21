@@ -360,7 +360,14 @@ describe("defsGate.run — notation shards (rk-5lzf)", () => {
   const CONFIG = { ...DEFAULT_GATE_CONFIG, conventionProfile: "qpcp.v1" };
 
   function notationShard(fields: Record<string, string>, body = ""): string {
-    const all = { shard_type: "notation", kind: "consensus", consensus: "campaign", status: "locked", ...fields };
+    const all = {
+      shard_type: "notation",
+      expansion: "\\ensuremath{x}",
+      kind: "consensus",
+      consensus: "campaign",
+      status: "locked",
+      ...fields,
+    };
     return `---\n${Object.entries(all).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${body}`;
   }
 
@@ -542,6 +549,7 @@ describe("Gate 1 — cited notation meanings are byte-bound (rk-5lzf B1)", () =>
       source: "aav",
       sha256: "0000000000000000",
       status: "locked",
+      expansion: "\\ensuremath{\\epsilon}",
       ...fm,
     };
     const shard = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${shardBody}`;
@@ -609,6 +617,7 @@ describe("Gate 1 — translation rows bind symbol and source (rk-5lzf B1)", () =
       kind: "consensus",
       consensus: "campaign",
       status: "locked",
+      expansion: "\\ensuremath{\\epsilon}",
     };
     const shard = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${row}`;
     return {
@@ -662,5 +671,32 @@ describe("Gate 1 — translation rows bind symbol and source (rk-5lzf B1)", () =
     const demoted = applyPhase(findings, "exploration");
     const hit = demoted.find((f) => f.message.includes("translation-symbol-not-in-quote"));
     expect(hit!.severity).toBe("ERROR");
+  });
+});
+
+describe("Gate 1 — profile blessed macro binds the register (rk-5lzf B2)", () => {
+  test("a notation shard cannot bless a raw source token for its class", () => {
+    const profile = JSON.stringify({
+      schema_version: "1",
+      name: "qpcp",
+      version: 1,
+      tracked_classes: [{ class: "promise-gap", description: "gap", symbols: ["\\epsilon"], blessed: "\\gapfrac" }],
+      lattices: {},
+      choices: {},
+      enums: {},
+    });
+    const shard =
+      "---\nid: sym-eps\nterm: epsilon\nshard_type: notation\nsymbol: \\epsilon\nclass: promise-gap\n" +
+      "kind: consensus\nconsensus: campaign\nstatus: locked\n---\n";
+    const result = defsGate.run(
+      snapshotFromFiles({
+        ".rk/conventions/qpcp.v1.json": profile,
+        "definitions/notation/sym-eps.md": shard,
+      }),
+      { ...DEFAULT_GATE_CONFIG, conventionProfile: "qpcp.v1" },
+    );
+    const hit = result.findings.find((f) => f.message.includes("symbol-not-blessed-for-class"));
+    expect(hit).toBeDefined();
+    expect(hit!.structural).toBe(true);
   });
 });

@@ -31,14 +31,7 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RepoSnapshot, SnapshotFacts } from "../gates/snapshot";
 import { sha256Bytes } from "../refs/hash";
-
-interface IncludeRule {
-  /** repo-relative dir, POSIX-style ("argument/lemmas"). */
-  dir: string;
-  recursive: boolean;
-  /** File extensions (with leading dot) to include; omit/empty to include every file. */
-  extensions?: string[];
-}
+import { SNAPSHOT_INCLUDE_RULES } from "./snapshot-rules";
 
 /** A git placeholder for an otherwise-empty directory: recorded as directory existence (its
  * parent dir is added to `dirs`), NEVER as bundle/shard content (excluded from the text map and
@@ -122,26 +115,7 @@ const ROOT_SKIP_DIR = ".git";
  * verifiability. `walkTree` below hashes every file present on disk (tracked or not, inside these
  * rules or not), so a provenance source row naming ANY present path is verified (present+stale ⇒
  * ERROR), never silently WARNed as "absent". */
-const INCLUDE_RULES: IncludeRule[] = [
-  // rk-5lzf (LB5, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md): RECURSIVE since 2026-08-20.
-  // `definitions/notation/<symbol-id>.md` (the notation register, docs/gate-contracts.md Gate 1
-  // "Notation shards") sits one level down, and under the former non-recursive rule it was not in
-  // the snapshot AT ALL — invisible to Gate 1, to `loadDefIds` (Gate 2 check 7), and to Gate 9. A
-  // shard nobody reads carries no violations: the same shape as the rk-9pk `argument/` widen above.
-  { dir: "definitions", recursive: true },
-  { dir: "argument", recursive: true },
-  { dir: "proofs", recursive: true },
-  { dir: "refs", recursive: true },
-  { dir: "runs", recursive: true },
-  { dir: "report", recursive: true, extensions: [".tex", ".md"] },
-  { dir: ".rk", recursive: false },
-  // rk-5lzf: the convention profile (`.rk/conventions/<name>.v<n>.json`, schemas/
-  // convention-profile.v1.json) is the artifact Gate 9 checks AGAINST, deliberately kept OUTSIDE
-  // the register it validates (LB5). It lives one level below the non-recursive `.rk` rule above,
-  // so it needs its own rule to reach the TEXT map at all. Extension-filtered to `.json`: this
-  // directory holds nothing else, and a stray file must not become gate input by accident.
-  { dir: ".rk/conventions", recursive: false, extensions: [".json"] },
-];
+const INCLUDE_RULES = SNAPSHOT_INCLUDE_RULES;
 
 interface Accum {
   text: Map<string, string>;

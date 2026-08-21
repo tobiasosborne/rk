@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 1,
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "The promise gap between thresholds.",
+      "symbols": ["\\epsilon", "\\Delta"],
+      "blessed": "\\gapfrac"
+    },
+    {
+      "class": "spectral",
+      "description": "The spectral gap of one operator.",
+      "symbols": ["\\Delta", "\\lambda"],
+      "blessed": "\\specgap"
+    }
+  ],
+  "lattices": {},
+  "choices": {},
+  "enums": {}
+}

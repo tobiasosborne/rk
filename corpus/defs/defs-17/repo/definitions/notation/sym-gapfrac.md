@@ -4,6 +4,7 @@ term: relative promise gap
 shard_type: notation
 symbol: \gapfrac
 class: promise-gap
+expansion: \ensuremath{\epsilon}
 kind: consensus
 consensus: campaign convention, qpcp.v1
 status: locked

@@ -1,0 +1,15 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "expansion-unsafe"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no generated notation macro register.",
+  "notes": "rk-5lzf review follow-up: expansion is a single ensuremath replacement body, not an arbitrary TeX program. Input/definition/write/catcode primitives and parameter markers are refused before generated macros.tex embeds them."
+}

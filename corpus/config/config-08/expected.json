@@ -1,0 +1,16 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v2.json",
+      "message_pattern": "predecessor-missing: required .rk/conventions/qpcp.v1.json"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["convention profile \"qpcp.v2\" 0/1 valid"] },
+  "config_override": { "conventionProfile": "qpcp.v2" },
+  "aism_behavior": "n/a: AISM has no convention-profile history chain.",
+  "notes": "rk-5lzf repair B5, predecessor deletion: every successor requires its immediate predecessor. A hash without the bytes it claims to chain cannot establish compatibility history and fails structurally."
+}

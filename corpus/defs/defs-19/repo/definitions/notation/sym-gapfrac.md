@@ -4,6 +4,7 @@ term: relative promise gap
 shard_type: notation
 symbol: \gapfrac
 class: promise-gap
+expansion: \ensuremath{\epsilon}
 kind: cited
 meaning: the promise gap normalised as a fraction of the number of terms m
 source: aav-1309.7495

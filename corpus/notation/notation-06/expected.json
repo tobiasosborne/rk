@@ -1,0 +1,15 @@
+{
+  "gate": "notation",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-quoted-bypass.md",
+      "message_pattern": "unblessed-source-symbol: '\\epsilon'"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no lexical notation gate.",
+  "notes": "rk-5lzf repair B3: a fully double-quoted campaign sentence is not source evidence. Only a quote immediately following a strict refs path:line pointer or translation row is exempt; the old first/last-quote heuristic let any sentence bypass Gate 9."
+}

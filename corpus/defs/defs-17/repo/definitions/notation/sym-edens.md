@@ -4,6 +4,7 @@ term: energy density per term
 shard_type: notation
 symbol: \edens
 class: energy-density
+expansion: \ensuremath{\epsilon}
 kind: consensus
 consensus: campaign convention, qpcp.v1
 status: locked

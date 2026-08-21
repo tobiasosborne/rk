@@ -327,7 +327,7 @@ describe("Gate 9 (notation) structural classification [rk-5lzf / plan 2a]", () =
   function unregisteredSnap(): RepoSnapshot {
     return snapshotFromFiles({
       ".rk/conventions/qpcp.v1.json": NOTATION_PROFILE,
-      "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\epsilon is constant.\n",
+      "argument/lem-a.md": "---\nid: lem-a\n---\nThe promise gap \\gapfrac is constant.\n",
     });
   }
 

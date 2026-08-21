@@ -5,19 +5,19 @@
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-amplified.md",
-      "message_pattern": "unregistered-symbol: '\\epsilon'"
+      "message_pattern": "unblessed-source-symbol: '\\epsilon'"
     },
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-amplified.md",
-      "message_pattern": "unregistered-symbol: '\\Delta'"
+      "message_pattern": "unblessed-source-symbol: '\\Delta'"
     }
   ],
   "exit_code": 1,
   "coverage": {
     "checked": 0,
     "total": 2,
-    "unit_patterns": ["symbols in 2 classes over 1 file"]
+    "unit_patterns": ["notation draft", "promise-gap: registered 0/1", "spectral: registered 0/1", "over 1 file"]
   },
   "config_override": { "phase": "exploration", "conventionProfile": "qpcp.v1" },
   "aism_behavior": "n/a: AISM has no phase matrix and no notation check.",

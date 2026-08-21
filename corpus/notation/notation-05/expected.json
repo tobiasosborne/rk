@@ -1,0 +1,20 @@
+{
+  "gate": "notation",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-overlap.md",
+      "message_pattern": "unblessed-source-symbol: '\\Delta'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-overlap.md",
+      "message_pattern": "tracked by classes 'promise-gap', 'spectral'"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no convention profile or lexical notation gate.",
+  "notes": "rk-5lzf repair B2, the review's false-green: raw source token \\Delta is claimed by two classes. Registering it in spectral used to clear campaign prose whose intended sense could instead be promise-gap. Raw spellings are legal only in source-scoped translation evidence; campaign prose must use the class's unique blessed macro."
+}

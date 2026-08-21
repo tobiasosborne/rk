@@ -4,6 +4,7 @@ term: invisible nested symbol
 shard_type: notation
 symbol: \epsilon
 class: promise-gap
+expansion: \ensuremath{\epsilon}
 kind: cited
 status: locked
 ---

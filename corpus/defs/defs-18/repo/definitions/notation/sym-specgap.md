@@ -4,6 +4,7 @@ term: spectral gap
 shard_type: notation
 symbol: \specgap
 class: spectral
+expansion: \ensuremath{\Delta}
 kind: consensus
 consensus: campaign convention, qpcp.v1
 status: locked

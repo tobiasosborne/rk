@@ -5,24 +5,29 @@
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-amplified.md",
-      "message_pattern": "unregistered-symbol: '\\epsilon'"
+      "message_pattern": "unblessed-source-symbol: '\\epsilon'"
     },
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-amplified.md",
-      "message_pattern": "unregistered-symbol: '\\Delta'"
+      "message_pattern": "unblessed-source-symbol: '\\Delta'"
     },
     {
       "severity": "ERROR",
       "path_pattern": "argument/thm-amplified.md",
-      "message_pattern": "no notation shard registers it at all"
+      "message_pattern": "use that class's blessed macro"
     }
   ],
   "exit_code": 1,
   "coverage": {
     "checked": 0,
     "total": 2,
-    "unit_patterns": ["symbols in 2 classes over 1 file", "1 tracked token not lexically enforceable"]
+    "unit_patterns": [
+      "notation draft",
+      "promise-gap: registered 0/1, enforceable 4, encountered 1, skipped 1 [c]",
+      "spectral: registered 0/1, enforceable 3, encountered 1, skipped 0 []",
+      "over 1 file"
+    ]
   },
   "config_override": { "conventionProfile": "qpcp.v1" },
   "aism_behavior": "n/a: AISM has no notation register, no convention profile, and no lexical symbol check.",

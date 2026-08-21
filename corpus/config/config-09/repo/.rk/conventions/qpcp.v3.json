@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 3,
+  "predecessor_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "The promise gap between thresholds.",
+      "symbols": ["\\epsilon"],
+      "blessed": "\\gapfrac"
+    }
+  ],
+  "lattices": {},
+  "choices": {},
+  "enums": {}
+}

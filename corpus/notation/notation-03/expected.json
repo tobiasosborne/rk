@@ -14,7 +14,7 @@
     }
   ],
   "exit_code": 0,
-  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["(no profile configured)"] },
+  "coverage": { "checked": 0, "total": 1, "unit_patterns": ["no profile configured; zero classes tracked"] },
   "aism_behavior": "n/a: AISM has no convention profile and no notation check.",
   "notes": "rk-5lzf (Tier A, LB5): the UNCONFIGURED state, made visible. This repo carries exactly notation-01's tracked-symbol usage and no profile, so Gate 9 enforces nothing — and the one thing it must never do is report that as a clean check. It emits a WARN and a `0/0 (no profile configured)` coverage line instead. L2 verbatim: 'Gates report coverage; a silent skip is a bug, full stop.' The state is distinct from a CONFIGURED-but-unusable profile, which reports its own different WARN naming the profile (unit-tested in test/gates/notation.test.ts) — collapsing the two would let a campaign that believes it is being checked read the same output as one that knows it is not."
 }

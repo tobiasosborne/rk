@@ -116,7 +116,8 @@ export interface GateConfig {
    * `.rk/conventions/<name>.v<n>.json` (schemas/convention-profile.v1.json). Optional, same "no
    * default" stance as `shardsPrefix`/`northStarId`: a general tool must never guess which
    * normalisation contract a campaign runs under. Absent means Gate 9 (notation) has nothing to
-   * check against and says so in its coverage line — a VISIBLE 0/0 WARN, never a silent pass. A
+   * check against and says so in its coverage line — a visible failed 0/1 prerequisite, never a
+   * silent or pass-shaped 0/0. A
    * present-but-unknown or malformed profile is an ERROR (`src/gates/profile.ts`), never degraded
    * to the absent state: "the profile you configured does not exist" and "you configured no
    * profile" are different facts and must never print the same. */

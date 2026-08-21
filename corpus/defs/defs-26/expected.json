@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "meaning-anchor-missing"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1/1 cited shards hash-verified", "1 notation shard", "0/0 translations verified"]
+  },
+  "config_override": { "phase": "exploration", "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation register, meaning anchor, or phase classification for it.",
+  "notes": "rk-5lzf repair B1: a cited notation meaning with no anchor remains a structural ERROR under phase: exploration. Admission is phase-independent; the provenance barrier cannot soften exactly when conjectures are admitted."
+}

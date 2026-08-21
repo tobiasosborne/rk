@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://rk.invalid/schemas/convention-profile.v1.json",
   "title": "rk convention profile v1",
-  "description": "The versioned, committed normalisation contract a campaign checks its own notation and statements AGAINST. Lives at `.rk/conventions/<name>.v<n>.json` and is named in `.rk/config.json` as `conventionProfile: \"<name>.v<n>\"` (the reference key is the filename stem, no `.json`). Deliberately kept OUTSIDE the artifact being checked (LB5, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md): a register that declares its own tracked classes can shrink its own coverage silently. Gate 9 (notation) enforces `tracked_classes`; the config gate validates this file's shape and its coverage-shrink rule. Schema changes here are compat events (CLAUDE.md rule 10).",
+  "description": "The versioned, committed normalisation contract a campaign checks its own notation and statements AGAINST. Lives at `.rk/conventions/<name>.v<n>.json` and is named in `.rk/config.json` as `conventionProfile: \"<name>.v<n>\"` (the reference key is the filename stem, no `.json`). Deliberately kept OUTSIDE the artifact being checked (LB5, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md): a register that declares its own tracked classes can shrink its own coverage silently. Gate 9 enforces tracked_classes; the config gate validates this file and its predecessor chain. VERSION RULING: notation and predecessor_sha256 were added during the single repair wave of the Tier A review that rejected the schema's first branch implementation; that branch never landed and no campaign consumed it, so this repaired shape is v1 from inception rather than a fictitious v2 migration for a population of zero.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "name", "version", "tracked_classes", "lattices", "choices", "enums"],
@@ -20,6 +20,15 @@
       "type": "integer",
       "minimum": 1,
       "description": "The COMPAT COUNTER (CLAUDE.md rule 10's \"bumps a version field\"), not a restatement of the filename. Removing a `tracked_classes` entry present in `<name>.v<n-1>.json` is permitted ONLY when this number is strictly greater than that file's own `version` — the config gate's `class-removed-without-bump` check. Copying a profile to a new filename, deleting a class, and leaving `version` untouched is exactly the silent coverage shrink that rule exists to forbid."
+    },
+    "predecessor_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Required by the runtime on every filename version n>1 and forbidden on v1. Exact SHA-256 of the raw bytes of the immediate same-family predecessor `<name>.v<n-1>.json`. The config gate verifies the complete chain to v1 before returning the current profile for enforcement; missing, skipped, renamed, unparseable, or rewritten history is a structural error."
+    },
+    "notation": {
+      "enum": ["draft", "complete"],
+      "description": "OPTIONAL phase-0c completion assertion. Absent is exactly `draft`: per-class coverage is reported, but missing canonical shards do not yet fail. `complete` asserts that every tracked class has exactly one notation shard whose `class` and `symbol` equal the profile class and its `blessed` macro; Gate 9 makes a missing or duplicate canonical shard a structural ERROR."
     },
     "tracked_classes": {
       "type": "array",
@@ -44,7 +53,7 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "description": "The raw tokens considered tracked for this class, verbatim as the literature writes them — e.g. [\"\\\\epsilon\", \"\\\\varepsilon\", \"\\\\lambda_{\\\\min}\", \"c\", \"QMA\"]. Whitespace is forbidden (a token is one lexical unit); everything else is admitted, because a source's notation is not rk's to constrain. Gate 9's LEXICAL enforcement covers exactly the subset that is a plain LaTeX macro token `\\name`: those must be a registered `symbol:` of a notation shard in this class wherever Gate 9 scans, or it is an `unregistered-symbol` ERROR. Tokens outside that shape (bare identifiers, brace/subscript forms) cannot be scanned for reliably and are counted, per class, in Gate 9's coverage line as NOT lexically enforceable — visible, never silently dropped.",
+            "description": "The raw SOURCE tokens tracked for this class, verbatim as the literature writes them. Whitespace is forbidden. A plain-macro raw token found in campaign prose is unblessed-source-symbol; raw spellings are legal only in source-scoped translation evidence. Tokens outside the plain-macro shape cannot be scanned reliably and are listed per class as skipped in Gate 9 coverage.",
             "items": { "type": "string", "minLength": 1, "pattern": "^\\S+$" }
           },
           "blessed": {
