@@ -19,6 +19,7 @@ import {
   spectatorConsumes,
   stripRedundant,
   strongerOrEqual,
+  strictlyStronger,
   type BiteDag,
 } from "../../src/graph/bite";
 
@@ -152,7 +153,7 @@ describe("canonical identity is immune to RENAMING (LB3's first gameable move)",
 
   test("a candidate whose canonical signature equals an admitted one is SUBSUMED, not an advance", () => {
     const s = sig({ pre: [{ obj: "def-a", keys: { gap: "const" } }], post: [{ obj: "def-b", keys: { qdim: "const" } }] });
-    const dag: BiteDag = { admitted: new Map([["thm-old", s]]), objectClosure: new Set(["def-a", "def-b"]), profile };
+    const dag: BiteDag = { admitted: new Map([["thm-old", { signature: s, routes: [] }]]), objectClosure: new Set(["def-a", "def-b"]), profile };
     const v = advanceClause({ id: "thm-new-name", signature: s, statementBlessed: "about def-a and def-b" }, dag);
     expect(v.ok).toBe(false);
     expect(v.clause).toBe("none");
@@ -234,7 +235,7 @@ describe("redundancy stripping (LB3's third gameable move)", () => {
 describe("advanceClause (memo section 8, item 4)", () => {
   const target = sig({ pre: [{ obj: "def-a", keys: { gap: "const" } }], post: [{ obj: "def-b", keys: { qdim: ["const", "poly"] } }] });
   const dag = (over: Partial<BiteDag> = {}): BiteDag => ({
-    admitted: new Map([["thm-target", target]]),
+    admitted: new Map([["thm-target", { signature: target, routes: [["lem-new"]] }]]),
     objectClosure: new Set(["def-a", "def-b"]),
     profile,
     ...over,
@@ -249,6 +250,14 @@ describe("advanceClause (memo section 8, item 4)", () => {
     expect(v).toMatchObject({ ok: true, clause: "i" });
   });
 
+  test("(i) rejects an empty declared member set", () => {
+    const v = advanceClause(
+      { id: "lem-new", signature: stronger, statementBlessed: "def-a def-b", decomposition: { targetId: "thm-target", memberIds: [] } },
+      dag(),
+    );
+    expect(v.ok).toBe(false);
+  });
+
   test("(i) is refused when the declared target is not admitted", () => {
     const v = advanceClause(
       { id: "lem-new", signature: stronger, statementBlessed: "def-a def-b", decomposition: { targetId: "thm-ghost", memberIds: [] } },
@@ -256,6 +265,24 @@ describe("advanceClause (memo section 8, item 4)", () => {
     );
     expect(v.ok).toBe(false);
     expect(v.reason).toContain("thm-ghost");
+  });
+
+  test("(i) requires the candidate id to occur in an authoritative target route", () => {
+    const v = advanceClause(
+      { id: "lem-new", signature: stronger, statementBlessed: "def-a def-b", decomposition: { targetId: "thm-target", memberIds: ["lem-other"] } },
+      dag({ admitted: new Map([["thm-target", { signature: target, routes: [["lem-other"]] }]]) }),
+    );
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("contains candidate 'lem-new'");
+  });
+
+  test("(i) requires every declared member id to be a subset of that same route", () => {
+    const v = advanceClause(
+      { id: "lem-new", signature: stronger, statementBlessed: "def-a def-b", decomposition: { targetId: "thm-target", memberIds: ["lem-new", "lem-ghost"] } },
+      dag(),
+    );
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("not a subset");
   });
 
   test("(ii) strengthening: strictly stronger than an admitted shard with the SAME post objects", () => {
@@ -267,6 +294,41 @@ describe("advanceClause (memo section 8, item 4)", () => {
     const withNewObject = sig({ pre: [{ obj: "def-new-tool", keys: { gap: "const" } }], post: [{ obj: "def-c", keys: { qdim: "const" } }] });
     const v = advanceClause({ id: "lem-tool", signature: withNewObject, statementBlessed: "uses def-new-tool" }, dag());
     expect(v).toMatchObject({ ok: true, clause: "iii" });
+  });
+
+  test("the post-object condition rejects a new tool that does not strengthen an existing provider", () => {
+    const nonStrongerPost = sig({
+      pre: [{ obj: "def-new-tool", keys: { gap: "const" } }],
+      post: [{ obj: "def-b", keys: { qdim: ["const", "poly"] } }],
+    });
+    const v = advanceClause(
+      { id: "lem-tool", signature: nonStrongerPost, statementBlessed: "uses def-new-tool" },
+      dag(),
+    );
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("post object");
+    expect(v.reason).toContain("thm-target");
+  });
+
+  test("the post-object condition quantifies over EVERY admitted provider", () => {
+    const middle = sig({
+      pre: [{ obj: "def-a", keys: { gap: ["inv-log", "const"] } }],
+      post: [{ obj: "def-b", keys: { qdim: "polylog" } }],
+    });
+    const top = sig({
+      pre: [{ obj: "def-a", keys: { gap: ["inv-poly", "const"] } }],
+      post: [{ obj: "def-b", keys: { qdim: "const" } }],
+    });
+    const v = advanceClause(
+      { id: "thm-middle", signature: middle, statementBlessed: "def-a def-b" },
+      dag({ admitted: new Map([
+        ["a-weaker", { signature: target, routes: [] }],
+        ["z-stronger", { signature: top, routes: [] }],
+      ]) }),
+    );
+    expect(strictlyStronger(middle, target, profile)).toBe(true);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("z-stronger");
   });
 
   test("(iii) does NOT count a SPECTATOR object (LB3's exact exploit)", () => {

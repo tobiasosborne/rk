@@ -241,11 +241,13 @@ Mechanical (pure, over the snapshot):
    by s2.regime. Defined via the section-6 lattices; decidable.
 3. **Spectator exclusion.** Every `pre` object must occur in `statement_blessed` or in the
    candidate's declared decomposition; a `pre` object occurring nowhere is an ERROR ("spectator
-   consume"). Every `post` object must be new relative to the context or strictly stronger
-   under (2). Redundant predicates (implied by others via the lattice) are stripped before
-   comparison, so inflation by redundant atoms changes nothing.
+   consume"). Before ANY advance clause, every `post` object must either have no admitted provider
+   or the candidate must be strictly stronger under (2) than EVERY admitted shard providing that
+   object. Redundant predicates (implied by others via the lattice) are stripped before comparison,
+   so inflation by redundant atoms changes nothing.
 4. **Advance clause.** At least one of: (i) decomposition — the candidate is declared as a new
-   route member of an admitted target T and s_candidate < s_T strictly under (2); (ii)
+   route member of an admitted target T, its nonempty declared `memberIds` are a subset of the SAME
+   authoritative route containing the candidate id, and s_candidate < s_T strictly under (2); (ii)
    strengthening — s_candidate < s_existing for some admitted shard with the same post objects;
    (iii) new tool — a non-spectator `pre` object outside the DAG's current closure.
 

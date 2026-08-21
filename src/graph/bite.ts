@@ -114,8 +114,8 @@ export interface BiteCandidate {
 }
 
 export interface BiteDag {
-  /** Every ADMITTED shard's canonical signature, by id. */
-  admitted: ReadonlyMap<string, Signature>;
+  /** Every ADMITTED shard's canonical signature and authoritative declared OR-routes, by id. */
+  admitted: ReadonlyMap<string, { signature: Signature; routes: readonly (readonly string[])[] }>;
   /** Every Layer 0 object id currently in the DAG's closure. */
   objectClosure: ReadonlySet<string>;
   profile: ConventionProfile;
@@ -149,7 +149,7 @@ export function advanceClause(candidate: BiteCandidate, dag: BiteDag): BiteVerdi
   const canonical = canonicalSignatureText(stripRedundant(candidate.signature, profile));
 
   for (const [id, admitted] of [...dag.admitted].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-    if (canonicalSignatureText(stripRedundant(admitted, profile)) === canonical) {
+    if (canonicalSignatureText(stripRedundant(admitted.signature, profile)) === canonical) {
       return {
         ok: false,
         clause: "none",
@@ -169,6 +169,23 @@ export function advanceClause(candidate: BiteCandidate, dag: BiteDag): BiteVerdi
     };
   }
 
+  // Section 8's post-object condition applies BEFORE every advance clause: an existing output
+  // object may only be reused by a candidate strictly stronger than every admitted provider.
+  for (const object of [...new Set(candidate.signature.post.map((p) => p.obj))].sort()) {
+    const blockers = [...dag.admitted]
+      .filter(([, admitted]) => admitted.signature.post.some((p) => p.obj === object))
+      .filter(([, admitted]) => !strictlyStronger(candidate.signature, admitted.signature, profile))
+      .map(([id]) => id)
+      .sort();
+    if (blockers.length > 0) {
+      return {
+        ok: false,
+        clause: "none",
+        reason: `post object '${object}' already has admitted provider(s) ${blockers.join(", ")}, and the candidate is not strictly stronger than every provider`,
+      };
+    }
+  }
+
   if (candidate.decomposition) {
     const target = dag.admitted.get(candidate.decomposition.targetId);
     if (!target) {
@@ -178,15 +195,28 @@ export function advanceClause(candidate: BiteCandidate, dag: BiteDag): BiteVerdi
         reason: `declared decomposition target '${candidate.decomposition.targetId}' is not an admitted shard`,
       };
     }
-    if (strictlyStronger(candidate.signature, target, profile)) {
+    if (candidate.decomposition.memberIds.length === 0) {
+      return { ok: false, clause: "none", reason: "declared decomposition memberIds is empty" };
+    }
+    const route = target.routes.find((declared) =>
+      declared.includes(candidate.id) && candidate.decomposition!.memberIds.every((id) => declared.includes(id))
+    );
+    if (!route) {
+      return {
+        ok: false,
+        clause: "none",
+        reason: `declared decomposition is not a subset of any target route that contains candidate '${candidate.id}'`,
+      };
+    }
+    if (strictlyStronger(candidate.signature, target.signature, profile)) {
       return { ok: true, clause: "i", reason: `decomposition: strictly stronger than the admitted target '${candidate.decomposition.targetId}'` };
     }
   }
 
   const objects = postObjects(candidate.signature);
   for (const [id, admitted] of [...dag.admitted].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-    if (postObjects(admitted) !== objects) continue;
-    if (strictlyStronger(candidate.signature, admitted, profile)) {
+    if (postObjects(admitted.signature) !== objects) continue;
+    if (strictlyStronger(candidate.signature, admitted.signature, profile)) {
       return { ok: true, clause: "ii", reason: `strengthening: strictly stronger than the admitted '${id}', which has the same post objects` };
     }
   }
