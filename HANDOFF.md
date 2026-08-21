@@ -28,9 +28,9 @@ generator returns `PureRegenResult`; config validation lives in `src/gates/confi
 and carries `records` (nsex), `signatures` + `conventionProfile` (8805/5lzf); the snapshot walker
 is `src/store/snapshot-include.ts` over rk-5lzf's recursive rule table `snapshot-rules.ts`.
 
-Debt created by the integration: `src/gates/freshness.ts` is 558 lines (cap 280) — bead rk-tmzl
-(move-only split, Tier B). Pre-existing over-cap: provenance 328, shards 312, refs 296,
-drive/driver-af 305.
+Integration debt repaired same session: `src/gates/freshness.ts` (558 after the merges) split
+move-only into freshness-manifest/-generators/-findings/-cards (rk-tmzl CLOSED, e1147ef).
+Pre-existing over-cap files remain: provenance 328, shards 312, refs 296, drive/driver-af 305.
 
 Residual for the NEXT milestone review (not re-reviewed now, per the cap): rk-8805's adoption
 gate on `kind-status-incoherent` (ERROR only once `signatures` is `optional|required`); rk-nsex's
@@ -56,7 +56,7 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
    canonical-shard rule per macro — Tier A, codex xhigh review.
 2. Campaign E next steps per its HANDOFF: resume closure; records at scale (author -> codex
    review -> repair -> card); Layer 0 shards; then `signatures: optional`.
-3. rk side: rk-tmzl split; rk-wv3h / rk-vy2v at the next milestone review.
+3. rk side: rk-wv3h / rk-vy2v at the next milestone review; pre-existing 280-cap debt.
 4. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — hard prerequisite for
    campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (re-filed).
 5. Bundles refreshed at close (campaign E @ 22f3405).
@@ -78,7 +78,8 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
 - Codex lanes: `codex exec -s workspace-write -c model_reasoning_effort="xhigh" -o <file>
   "<brief>" < /dev/null`, tracked background task, `timeout 7200`. A lane in a git WORKTREE
   cannot commit (its `.git` file points outside the sandbox) — either commit its verified tree
-  yourself or run the lane on a branch in the main checkout. Lanes in a campaign repo commit fine.
+  yourself or run the lane on a branch in the main checkout. Lanes in the campaign repo committed
+  in 1 of 5 runs; plan on committing their verified trees yourself (the hook runs `rk check`).
 - `bd dolt push` has no remote configured here (prints help); beads travel with git.
 - Merged worktrees removed; branches `worktree-agent-a9f0…/a541…/a642…` remain (merged).
 - `rk` on PATH is a symlink to `dist/rk`; rebuilt at 3dfc961.
@@ -89,4 +90,4 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
 
 L1/L2 never relaxed; 246/246 + selftest green on master. D1-D9 + A1 stand. bd for all tracking.
 Campaigns: A wound down, B closed, C between windows, D restored here (audit due at its next
-close, counter 9/10), E session 2 in progress (audit counter 1/10 at session-1 close).
+close, counter 9/10), E session 2 closed (audit counter 2/10).
