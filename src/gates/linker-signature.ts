@@ -22,6 +22,7 @@ import type { Lemma } from "./linker-lemma";
 import { extractSignatureBlock, type Signature } from "./signature";
 import { conventionProfilePath, parseConventionProfile, type ConventionProfile } from "./signature-profile";
 import { checkRoute, scopeLabel, validateSignatureVocabulary } from "./signature-entail";
+import { conjoinSignature, type ConjunctionIssue } from "./signature-context";
 
 /** The kinds a signature is REQUIRED for once a repo adopts them (memo section 6). `open-problem`
  * and `obstruction` are deliberately outside: neither claims a result to apply. */
@@ -33,6 +34,13 @@ function err(path: string, line: number | undefined, code: string, message: stri
 
 function warn(path: string, line: number | undefined, code: string, message: string): Finding {
   return { severity: "WARN", path, line, message: `[${code}] ${message}` };
+}
+
+function contradictionMessage(subject: string, issue: ConjunctionIssue): string {
+  const reason = issue.reason === "empty"
+    ? "no value satisfies both declared intervals"
+    : "no maximum lower bound in the declared order; this is a conservative refusal because rk cannot represent the conjunction as one interval";
+  return `${subject}: ${scopeLabel(issue.scope)} '${issue.key}' is contradictory — ${reason}`;
 }
 
 export interface SignatureCheckResult {
@@ -177,8 +185,15 @@ export function checkSignatures(
         findings.push(err(path, line, "dangling-object", `${id}: signature object '${p.obj}' resolves to no definitions/*.md shard`));
       }
     }
-    for (const issue of validateSignatureVocabulary(sig, profile)) {
+    const vocabularyIssues = validateSignatureVocabulary(sig, profile);
+    for (const issue of vocabularyIssues) {
       findings.push(err(path, line, issue.code, `${id}: ${issue.message}`));
+    }
+    if (vocabularyIssues.length === 0) {
+      const own = conjoinSignature(sig, profile).issues.filter((issue) => issue.source !== "post");
+      for (const issue of own) {
+        findings.push(err(path, line, "signature-contradictory", contradictionMessage(id, issue)));
+      }
     }
   }
 
@@ -206,6 +221,15 @@ export function checkSignatures(
               `'${memberId}' is unavailable here, so its post is NOT added to the context`,
           ),
         );
+      }
+      for (const { memberId, issue } of r.postContradictions) {
+        findings.push(err(
+          l.path,
+          line,
+          "signature-contradictory",
+          contradictionMessage(`${l.id}: on route ${routeLabel}, dependency '${memberId}' post`, issue) +
+            ` — '${memberId}' is unavailable here, so none of its post is added to the context`,
+        ));
       }
       for (const failure of r.postUnsupported) {
         findings.push(

@@ -213,14 +213,21 @@ describe("redundancy stripping (LB3's third gameable move)", () => {
     expect(canonicalSignatureText(stripRedundant(inflated, profile))).toBe(canonicalSignatureText(stripRedundant(lean, profile)));
   });
 
-  test("two predicates neither of which contains the other are BOTH kept", () => {
+  test("overlapping predicates are conjoined to their interval intersection", () => {
     const irreducible = sig({
       pre: [
         { obj: "def-a", keys: { gap: ["inv-poly", "inv-log"] } },
         { obj: "def-a", keys: { gap: ["inv-log", "const"] } },
       ],
     });
-    expect(stripRedundant(irreducible, profile).pre).toHaveLength(2);
+    const stripped = stripRedundant(irreducible, profile);
+    expect(stripped.pre).toHaveLength(1);
+    expect(stripped.pre[0]!.keys.gap).toBe("inv-log");
+  });
+
+  test("a contradictory signature is never stronger than an admitted one", () => {
+    const contradictory = sig({ regime: [{ qdim: "const" }, { qdim: "poly" }] });
+    expect(strongerOrEqual(contradictory, sig({ regime: [{ qdim: "poly" }] }), profile)).toBe(false);
   });
 });
 

@@ -220,9 +220,27 @@ export interface Interval {
   hi: Bound;
 }
 
+export type IntervalIntersection = Interval | "empty" | "unrepresentable";
+
 /** A value as its interval. A bare string is the point interval. */
 export function intervalOf(value: PredicateValue): Interval {
   return typeof value === "string" ? { lo: value, hi: value } : { lo: value[0], hi: value[1] };
+}
+
+/** Conjunction is interval intersection. A poset pair with no declared maximum lower bound (or
+ * minimum upper bound) has no faithful single-interval representation, so it is refused. */
+export function intersect(
+  profile: ConventionProfile, key: string, a: Interval, b: Interval,
+): IntervalIntersection {
+  const maximum = (x: Bound, y: Bound): Bound | undefined =>
+    x === null ? y : y === null ? x : leq(profile, key, x, y) ? y : leq(profile, key, y, x) ? x : undefined;
+  const minimum = (x: Bound, y: Bound): Bound | undefined =>
+    x === null ? y : y === null ? x : leq(profile, key, x, y) ? x : leq(profile, key, y, x) ? y : undefined;
+  const lo = maximum(a.lo, b.lo);
+  const hi = minimum(a.hi, b.hi);
+  if (lo === undefined || hi === undefined) return "unrepresentable";
+  if (lo !== null && hi !== null && !leq(profile, key, lo, hi)) return "empty";
+  return { lo, hi };
 }
 
 /** True iff the interval is consistent in `key`'s order: an unbounded endpoint always is, and a
@@ -243,20 +261,13 @@ export function intervalEntails(profile: ConventionProfile, key: string, ctx: In
   return loOk && hiOk;
 }
 
-/** True iff SOME value the context holds for `key` entails `required`. A context holding nothing
- * for the key never entails (fail closed: an undeclared bound is not a guarantee), and an unknown
- * key or value never entails either — vocabulary errors are reported separately (Check 17(c)) and
- * must not also read as satisfaction. */
+/** A missing, empty or unrepresentable context entails nothing. */
 export function keyEntailed(
   profile: ConventionProfile,
   key: string,
-  available: Iterable<PredicateValue>,
+  available: IntervalIntersection | undefined,
   required: PredicateValue,
 ): boolean {
-  if (!profile.keys[key]) return false;
-  const req = intervalOf(required);
-  for (const v of available) {
-    if (intervalEntails(profile, key, intervalOf(v), req)) return true;
-  }
-  return false;
+  return !!profile.keys[key] && available !== undefined && typeof available !== "string" &&
+    intervalEntails(profile, key, available, intervalOf(required));
 }

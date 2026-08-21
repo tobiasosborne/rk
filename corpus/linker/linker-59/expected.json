@@ -1,0 +1,30 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-contradictory.md",
+      "message_pattern": "[signature-contradictory]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-contradictory.md",
+      "message_pattern": "no value satisfies both"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-contradictory.md",
+      "message_pattern": "[regime-unentailed]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-contradictory.md",
+      "message_pattern": "'lem-poly' is unavailable here, so its post is NOT added"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "signatures": "required", "conventionProfile": "rk-corpus.v1" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary, interval conjunction, or regime reasoning).",
+  "notes": "Tier A review B1's exact false green: the parent declares qdim=const AND qdim=poly, while its dependency needs qdim=poly and provides gap=const. Before repair, SignatureContext kept both values and keyEntailed accepted when ANY one matched, so the contradictory parent unlocked lem-poly and received its post. The fixture requires both the contradiction ERROR and the dependency-unavailable consequence, proving the post is not added."
+}

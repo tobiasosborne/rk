@@ -16,7 +16,11 @@ const PROFILE_PATH = ".rk/conventions/rk-test.v1.json";
 const PROFILE = JSON.stringify({
   schema_version: "1",
   name: "rk-test.v1",
-  lattices: { gap: ["inv-poly", "inv-log", "const"], qdim: { kind: "chain", values: ["const", "poly"] } },
+  lattices: {
+    gap: ["inv-poly", "inv-log", "const"],
+    qdim: { kind: "chain", values: ["const", "poly"] },
+    reduction: { kind: "poset", values: ["karp", "quasi-poly", "turing"], edges: [["karp", "quasi-poly"], ["karp", "turing"]] },
+  },
   enums: { norm: ["relative", "absolute"] },
 });
 
@@ -203,6 +207,37 @@ describe("Check 17 — the other failure classes", () => {
     const hits = withCode(findings, "post-unsupported");
     expect(hits).toHaveLength(1);
     expect(hits[0]!.severity).toBe("WARN");
+  });
+
+  test("an unrepresentable poset conjunction is a named conservative refusal", () => {
+    const { findings } = run({
+      ...DEFS,
+      [PROFILE_PATH]: PROFILE,
+      "argument/lem-a.md": shard("lem-a", {}, signatureBody({ regime: [
+        { reduction: "quasi-poly" }, { reduction: "turing" },
+      ] })),
+    });
+    const hits = withCode(findings, "signature-contradictory");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.message).toContain("no maximum lower bound in the declared order");
+    expect(hits[0]!.message).toContain("conservative refusal");
+  });
+
+  test("a dependency whose post contradicts context is refused and named", () => {
+    const { findings } = run({
+      ...DEFS,
+      [PROFILE_PATH]: PROFILE,
+      "argument/lem-conflict.md": shard("lem-conflict", {}, signatureBody({
+        post: [{ gap: "const", obj: "def-promise-gap" }],
+      })),
+      "argument/thm-parent.md": shard("thm-parent", { kind: "theorem", deps: "lem-conflict" }, signatureBody({
+        pre: [{ gap: "inv-poly", obj: "def-promise-gap" }],
+      })),
+    });
+    const hits = withCode(findings, "signature-contradictory").filter((f) => f.path.includes("thm-parent"));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.message).toContain("dependency 'lem-conflict' post");
+    expect(hits[0]!.message).toContain("none of its post is added");
   });
 });
 

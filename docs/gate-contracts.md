@@ -991,6 +991,18 @@ is stale against the code and must not be treated as ground truth).
       dimension is at most constant" is `[null, "const"]` (fixture `linker-48`) — so no key carries
       a direction flag that could be set wrongly. An interval whose lower endpoint is not at or
       below its upper one is `signature-malformed`, not a regime clash (fixture `linker-58`).
+    - **Canonical uniqueness and conjunction.** Canonical identity is the distinct value set for
+      each `(scope,key)`, independent of authored predicate boundaries: values are sorted by their
+      rendered text and emitted in rows, so duplicate predicates deduplicate and split/combined
+      multi-key predicates have identical canonical bytes (`linker-60`/`linker-61`). Repeated
+      predicates are conjunctions, not alternatives. Their intervals are intersected to ONE held
+      interval per `(scope,key)` before entailment. An empty intersection is structural ERROR
+      `signature-contradictory` (`no value satisfies both`); a poset conjunction with no maximum
+      lower bound is the same code but says `no maximum lower bound in the declared order` and
+      explicitly records a conservative refusal. A shard's own `pre`+`regime` is checked before
+      its routes; an empty or unrepresentable context entails nothing. A dependency whose `post`
+      would contradict the current context is unavailable and contributes NONE of that post
+      (`linker-59`).
     - **Orders are CHAINS or POSETS.** The convention profile declares each key's order as a chain
       (total, weakest to strongest) or a genuine poset (`{kind, values, edges}`, `a <= b`). Some
       vocabularies are not totally ordered — `reduction`'s `quasi-poly` is a time bound and `turing`

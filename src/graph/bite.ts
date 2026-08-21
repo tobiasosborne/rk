@@ -29,12 +29,8 @@
 
 import type { Signature, SignaturePredicate } from "../gates/signature";
 import { canonicalSignature, canonicalSignatureText } from "../gates/signature";
-import {
-  intervalEntails,
-  intervalOf,
-  type ConventionProfile,
-} from "../gates/signature-profile";
-import { AMBIENT_SCOPE, buildContext, type ContextParts } from "../gates/signature-entail";
+import { type ConventionProfile } from "../gates/signature-profile";
+import { buildContext, conjoinSignature, type ContextParts } from "../gates/signature-context";
 
 export { canonicalSignature, canonicalSignatureText } from "../gates/signature";
 
@@ -43,7 +39,7 @@ export { canonicalSignature, canonicalSignatureText } from "../gates/signature";
  * what "entails" means. */
 function entails(ctx: ContextParts, demand: { pre: SignaturePredicate[]; regime: Record<string, unknown>[] }, profile: ConventionProfile): boolean {
   return (
-    buildContext([ctx]).unmet(profile, {
+    buildContext([ctx], profile).unmet({
       pre: demand.pre,
       regime: demand.regime as Signature["regime"],
     }).length === 0
@@ -57,8 +53,11 @@ function entails(ctx: ContextParts, demand: { pre: SignaturePredicate[]; regime:
  * stripped signatures (mutual strength ⇒ byte-identical canonical text), which is what makes
  * "the same claim" mechanically decidable. */
 export function strongerOrEqual(s1: Signature, s2: Signature, profile: ConventionProfile): boolean {
-  const a = stripRedundant(s1, profile);
-  const b = stripRedundant(s2, profile);
+  const joinedA = conjoinSignature(s1, profile);
+  const joinedB = conjoinSignature(s2, profile);
+  if (joinedA.issues.length > 0 || joinedB.issues.length > 0) return false;
+  const a = joinedA.signature;
+  const b = joinedB.signature;
   return (
     entails({ pre: b.pre }, { pre: a.pre, regime: [] }, profile) &&
     entails({ post: a.post }, { pre: b.post, regime: [] }, profile) &&
@@ -76,78 +75,12 @@ export function strictlyStronger(s1: Signature, s2: Signature, profile: Conventi
   return strongerOrEqual(s1, s2, profile) && !strongerOrEqual(s2, s1, profile);
 }
 
-/** REDUNDANCY STRIPPING (memo section 8, item 3). Within one scope and key, an interval that
- * strictly CONTAINS another says strictly less than it and is dropped — the minimal elements under
- * containment survive. Two intervals neither of which contains the other are BOTH kept: that is a
- * genuine conjunction this model does not merge, and silently intersecting them would invent a
- * claim the author did not make. Idempotent, and applied before every comparison, so inflation by
- * implied atoms changes nothing. */
+/** Repeated predicates are conjunctions, so their interval intersection is the unique stripped
+ * form. Contradictory signatures are refused by Check 17; this fallback preserves their authored
+ * canonical bytes while `strongerOrEqual` returns false for them. */
 export function stripRedundant(sig: Signature, profile: ConventionProfile): Signature {
-  const strip = (entries: readonly SignaturePredicate[]): SignaturePredicate[] => {
-    const byScope = new Map<string, Record<string, unknown>[]>();
-    for (const p of entries) {
-      const list = byScope.get(p.obj) ?? [];
-      list.push(p.keys);
-      byScope.set(p.obj, list);
-    }
-    const out: SignaturePredicate[] = [];
-    for (const [obj, maps] of [...byScope].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-      for (const keys of minimalPerKey(obj, maps as Record<string, Signature["pre"][number]["keys"][string]>[], profile)) {
-        out.push({ obj, keys });
-      }
-    }
-    return out;
-  };
-  const regimeMaps = minimalPerKey(AMBIENT_SCOPE, sig.regime, profile);
-  return canonicalSignature({ ...sig, pre: strip(sig.pre), post: strip(sig.post), regime: regimeMaps });
-}
-
-/** Reduces a list of key->interval maps for ONE scope to the minimal set: per key, keep only the
- * intervals no other interval for that key is contained in. The result is re-assembled into as few
- * maps as possible (one map per "row" of surviving intervals), so a scope whose keys all reduce to
- * one interval yields exactly one predicate. */
-function minimalPerKey(
-  _scope: string,
-  maps: readonly Record<string, Signature["pre"][number]["keys"][string]>[],
-  profile: ConventionProfile,
-): Record<string, Signature["pre"][number]["keys"][string]>[] {
-  const perKey = new Map<string, Signature["pre"][number]["keys"][string][]>();
-  for (const m of maps) {
-    for (const [k, v] of Object.entries(m)) {
-      const list = perKey.get(k) ?? [];
-      if (!list.some((x) => JSON.stringify(x) === JSON.stringify(v))) list.push(v);
-      perKey.set(k, list);
-    }
-  }
-  const survivors = new Map<string, Signature["pre"][number]["keys"][string][]>();
-  for (const [key, values] of perKey) {
-    const kept = values.filter(
-      (v) =>
-        !values.some(
-          (w) =>
-            JSON.stringify(w) !== JSON.stringify(v) &&
-            intervalEntails(profile, key, intervalOf(w), intervalOf(v)) &&
-            !intervalEntails(profile, key, intervalOf(v), intervalOf(w)),
-        ),
-    );
-    // A key whose values are mutually equivalent collapses to one representative.
-    const unique: typeof kept = [];
-    for (const v of kept) {
-      if (!unique.some((u) => JSON.stringify(u) === JSON.stringify(v))) unique.push(v);
-    }
-    survivors.set(key, unique);
-  }
-  const rows = Math.max(0, ...[...survivors.values()].map((v) => v.length));
-  const out: Record<string, Signature["pre"][number]["keys"][string]>[] = [];
-  for (let i = 0; i < rows; i++) {
-    const row: Record<string, Signature["pre"][number]["keys"][string]> = {};
-    for (const [key, values] of survivors) {
-      const v = values[Math.min(i, values.length - 1)];
-      if (v !== undefined) row[key] = v;
-    }
-    if (Object.keys(row).length > 0) out.push(row);
-  }
-  return out;
+  const joined = conjoinSignature(sig, profile);
+  return joined.issues.length === 0 ? joined.signature : canonicalSignature(sig);
 }
 
 /** SPECTATOR EXCLUSION (memo section 8, item 3). Every `pre` object must occur in the candidate's

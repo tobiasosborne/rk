@@ -28,41 +28,23 @@
 // satisfy `{obj: def-local-hamiltonian, qdim: const}`, and vice versa. That separation IS the
 // repair. Values are INTERVALS and entailment is containment — see src/gates/signature-profile.ts.
 
-import type { PredicateValue, Signature, SignaturePredicate } from "./signature";
+import type { PredicateValue, Signature } from "./signature";
 import {
   intervalConsistent,
   intervalOf,
-  keyEntailed,
   keySpec,
   keyValues,
   type ConventionProfile,
 } from "./signature-profile";
+import {
+  AMBIENT_SCOPE,
+  buildContext,
+  type ConjunctionIssue,
+  type EntailmentFailure,
+} from "./signature-context";
 
-/** The scope key for object-free (`regime`) predicates. Not a legal Layer 0 id, so it can never
- * collide with an object scope. */
-export const AMBIENT_SCOPE = "#ambient";
-
-export interface EntailmentFailure {
-  /** `AMBIENT_SCOPE` for a regime predicate, else the Layer 0 object id. */
-  scope: string;
-  key: string;
-  /** The required interval, rendered for a finding. */
-  required: string;
-  /** Everything the context holds for (scope, key), rendered and sorted — `[]` when it holds
-   * nothing at all. */
-  available: string[];
-}
-
-export interface Demand {
-  pre: readonly SignaturePredicate[];
-  regime: readonly Record<string, PredicateValue>[];
-}
-
-export interface ContextParts {
-  pre?: readonly SignaturePredicate[];
-  post?: readonly SignaturePredicate[];
-  regime?: readonly Record<string, PredicateValue>[];
-}
+export { AMBIENT_SCOPE, buildContext, conjoinSignature, SignatureContext } from "./signature-context";
+export type { ConjunctionIssue, ContextParts, Demand, EntailmentFailure } from "./signature-context";
 
 /** Renders an interval the way a signature spells it: a point interval as its bare value, an
  * unbounded endpoint as `*`. */
@@ -70,65 +52,6 @@ export function renderValue(value: PredicateValue): string {
   const iv = intervalOf(value);
   if (iv.lo !== null && iv.lo === iv.hi) return `'${iv.lo}'`;
   return `[${iv.lo ?? "*"}, ${iv.hi ?? "*"}]`;
-}
-
-/** An accumulating (scope, key) -> value-SET context. A set, not a single interval: two sources may
- * legitimately supply the same key, and keeping them separate means entailment never depends on an
- * interval-join rule this design has not defined (a requirement is met iff SOME held interval is
- * contained in it). */
-export class SignatureContext {
-  private readonly held = new Map<string, Map<string, PredicateValue[]>>();
-
-  add(parts: ContextParts): this {
-    for (const p of parts.pre ?? []) this.addScope(p.obj, p.keys);
-    for (const p of parts.post ?? []) this.addScope(p.obj, p.keys);
-    for (const r of parts.regime ?? []) this.addScope(AMBIENT_SCOPE, r);
-    return this;
-  }
-
-  private addScope(scope: string, keys: Record<string, PredicateValue>): void {
-    let byKey = this.held.get(scope);
-    if (!byKey) {
-      byKey = new Map<string, PredicateValue[]>();
-      this.held.set(scope, byKey);
-    }
-    for (const [k, v] of Object.entries(keys)) {
-      const values = byKey.get(k) ?? [];
-      if (!values.some((x) => JSON.stringify(x) === JSON.stringify(v))) values.push(v);
-      byKey.set(k, values);
-    }
-  }
-
-  /** Everything held for (scope, key). */
-  valuesFor(scope: string, key: string): PredicateValue[] {
-    return [...(this.held.get(scope)?.get(key) ?? [])];
-  }
-
-  /** Every predicate of `demand` this context does NOT entail, in deterministic order. `[]` means
-   * fully entailed. */
-  unmet(profile: ConventionProfile, demand: Demand): EntailmentFailure[] {
-    const out: EntailmentFailure[] = [];
-    const check = (scope: string, keys: Record<string, PredicateValue>): void => {
-      for (const key of Object.keys(keys).sort()) {
-        const required = keys[key]!;
-        const available = this.valuesFor(scope, key);
-        if (!keyEntailed(profile, key, available, required)) {
-          out.push({ scope, key, required: renderValue(required), available: available.map(renderValue).sort() });
-        }
-      }
-    };
-    for (const p of [...demand.pre].sort((a, b) => (a.obj < b.obj ? -1 : a.obj > b.obj ? 1 : 0))) {
-      check(p.obj, p.keys);
-    }
-    for (const r of demand.regime) check(AMBIENT_SCOPE, r);
-    return out;
-  }
-}
-
-export function buildContext(parts: readonly ContextParts[]): SignatureContext {
-  const ctx = new SignatureContext();
-  for (const p of parts) ctx.add(p);
-  return ctx;
 }
 
 export type VocabularyCode = "unknown-key" | "unknown-value" | "signature-malformed";
@@ -222,6 +145,8 @@ export interface RouteCheckResult {
   postUnsupported: EntailmentFailure[];
   /** Route members carrying no signature — counted, never silently skipped (L2). */
   membersWithoutSignature: string[];
+  /** Dependencies refused because adding their post would contradict the current context. */
+  postContradictions: { memberId: string; issue: ConjunctionIssue }[];
   /** How many member demands were evaluated (one per signed member) — the coverage numerator. */
   entailmentsChecked: number;
 }
@@ -231,18 +156,27 @@ export function checkRoute(input: RouteCheckInput): RouteCheckResult {
   const members = [...new Set(input.route)].sort();
   const signed = members.filter((id) => input.signatureOf.has(id));
   const membersWithoutSignature = members.filter((id) => !input.signatureOf.has(id));
-  const ctx = buildContext([{ regime: input.signature.regime, pre: input.signature.pre }]);
+  let ctx = buildContext([{ regime: input.signature.regime, pre: input.signature.pre }], input.profile);
   const available = new Set<string>();
+  const refused = new Set<string>();
+  const postContradictions: { memberId: string; issue: ConjunctionIssue }[] = [];
 
   let changed = true;
   while (changed) {
     changed = false;
     for (const id of signed) {
-      if (available.has(id)) continue;
+      if (available.has(id) || refused.has(id)) continue;
       const dep = input.signatureOf.get(id)!;
-      if (ctx.unmet(input.profile, { pre: dep.pre, regime: dep.regime }).length > 0) continue;
+      if (ctx.unmet({ pre: dep.pre, regime: dep.regime }).length > 0) continue;
+      const candidate = ctx.fork();
+      const conflicts = candidate.add({ post: dep.post });
+      if (conflicts.length > 0) {
+        refused.add(id);
+        for (const issue of conflicts) postContradictions.push({ memberId: id, issue });
+        continue;
+      }
       available.add(id);
-      ctx.add({ post: dep.post });
+      ctx = candidate;
       changed = true;
     }
   }
@@ -252,19 +186,20 @@ export function checkRoute(input: RouteCheckInput): RouteCheckResult {
   const failures: { memberId: string; failure: EntailmentFailure }[] = [];
   for (const id of signed) {
     if (available.has(id)) continue;
-    const unmet = ctx.unmet(input.profile, {
+    const unmet = ctx.unmet({
       pre: input.signatureOf.get(id)!.pre,
       regime: input.signatureOf.get(id)!.regime,
     });
     if (unmet.length > 0) failures.push({ memberId: id, failure: unmet[0]! });
   }
 
-  const postUnsupported = ctx.unmet(input.profile, { pre: input.signature.post, regime: [] });
+  const postUnsupported = ctx.unmet({ pre: input.signature.post, regime: [] });
   return {
     available: [...available].sort(),
     failures,
     postUnsupported,
     membersWithoutSignature,
+    postContradictions,
     entailmentsChecked: signed.length,
   };
 }

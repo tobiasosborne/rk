@@ -155,8 +155,8 @@ describe("closed vocabulary", () => {
 
 describe("interval entailment — containment, in both directions", () => {
   test("a regime predicate NEVER satisfies an object-scoped one (the LB2 conflation)", () => {
-    const ctx = buildContext([{ regime: [{ qdim: "const" }] }]);
-    const fails = ctx.unmet(profile, { pre: [{ obj: "def-local-hamiltonian", keys: { qdim: "const" } }], regime: [] });
+    const ctx = buildContext([{ regime: [{ qdim: "const" }] }], profile);
+    const fails = ctx.unmet({ pre: [{ obj: "def-local-hamiltonian", keys: { qdim: "const" } }], regime: [] });
     expect(fails).toHaveLength(1);
     expect(fails[0]!.scope).toBe("def-local-hamiltonian");
     expect(fails[0]!.available).toEqual([]);
@@ -165,50 +165,60 @@ describe("interval entailment — containment, in both directions", () => {
   test("AFFORDED reading: a point context inside a ranged requirement entails it", () => {
     // "at least an inverse-polynomial gap" is the requirement [inv-poly, const]; a constant gap
     // sits inside it.
-    const ctx = buildContext([{ post: [{ obj: "def-promise-gap", keys: { gap: "const" } }] }]);
-    expect(ctx.unmet(profile, { pre: [{ obj: "def-promise-gap", keys: { gap: ["inv-poly", "const"] } }], regime: [] })).toEqual([]);
+    const ctx = buildContext([{ post: [{ obj: "def-promise-gap", keys: { gap: "const" } }] }], profile);
+    expect(ctx.unmet({ pre: [{ obj: "def-promise-gap", keys: { gap: ["inv-poly", "const"] } }], regime: [] })).toEqual([]);
   });
 
   test("CAPPED reading: the same containment rule, with the bound on the other side", () => {
     // "the dimension is at most constant" is the requirement [*, const].
-    const tight = buildContext([{ regime: [{ qdim: "const" }] }]);
-    expect(tight.unmet(profile, { pre: [], regime: [{ qdim: [null, "const"] }] })).toEqual([]);
-    const loose = buildContext([{ regime: [{ qdim: "poly" }] }]);
-    expect(loose.unmet(profile, { pre: [], regime: [{ qdim: [null, "const"] }] })).toHaveLength(1);
+    const tight = buildContext([{ regime: [{ qdim: "const" }] }], profile);
+    expect(tight.unmet({ pre: [], regime: [{ qdim: [null, "const"] }] })).toEqual([]);
+    const loose = buildContext([{ regime: [{ qdim: "poly" }] }], profile);
+    expect(loose.unmet({ pre: [], regime: [{ qdim: [null, "const"] }] })).toHaveLength(1);
   });
 
   test("a point requirement is met only by that exact point (an enum, and any exact demand)", () => {
-    const ctx = buildContext([{ regime: [{ norm: "absolute" }] }]);
-    expect(ctx.unmet(profile, { pre: [], regime: [{ norm: "relative" }] })).toHaveLength(1);
-    expect(ctx.unmet(profile, { pre: [], regime: [{ norm: "absolute" }] })).toEqual([]);
+    const ctx = buildContext([{ regime: [{ norm: "absolute" }] }], profile);
+    expect(ctx.unmet({ pre: [], regime: [{ norm: "relative" }] })).toHaveLength(1);
+    expect(ctx.unmet({ pre: [], regime: [{ norm: "absolute" }] })).toEqual([]);
   });
 
   test("a WIDER context does not entail a NARROWER requirement (containment, not overlap)", () => {
-    const ctx = buildContext([{ regime: [{ gap: ["inv-poly", "const"] }] }]);
-    expect(ctx.unmet(profile, { pre: [], regime: [{ gap: "const" }] })).toHaveLength(1);
+    const ctx = buildContext([{ regime: [{ gap: ["inv-poly", "const"] }] }], profile);
+    expect(ctx.unmet({ pre: [], regime: [{ gap: "const" }] })).toHaveLength(1);
   });
 
   test("an unbounded CONTEXT endpoint is only entailed by an equally unbounded requirement", () => {
-    const ctx = buildContext([{ regime: [{ gap: [null, "const"] }] }]);
-    expect(ctx.unmet(profile, { pre: [], regime: [{ gap: ["inv-poly", "const"] }] })).toHaveLength(1);
-    expect(ctx.unmet(profile, { pre: [], regime: [{ gap: [null, "const"] }] })).toEqual([]);
+    const ctx = buildContext([{ regime: [{ gap: [null, "const"] }] }], profile);
+    expect(ctx.unmet({ pre: [], regime: [{ gap: ["inv-poly", "const"] }] })).toHaveLength(1);
+    expect(ctx.unmet({ pre: [], regime: [{ gap: [null, "const"] }] })).toEqual([]);
   });
 
   test("POSET: incomparable values do not entail each other in either direction", () => {
-    const quasi = buildContext([{ regime: [{ reduction: "quasi-poly" }] }]);
-    expect(quasi.unmet(profile, { pre: [], regime: [{ reduction: "turing" }] })).toHaveLength(1);
-    const turing = buildContext([{ regime: [{ reduction: "turing" }] }]);
-    expect(turing.unmet(profile, { pre: [], regime: [{ reduction: "quasi-poly" }] })).toHaveLength(1);
+    const quasi = buildContext([{ regime: [{ reduction: "quasi-poly" }] }], profile);
+    expect(quasi.unmet({ pre: [], regime: [{ reduction: "turing" }] })).toHaveLength(1);
+    const turing = buildContext([{ regime: [{ reduction: "turing" }] }], profile);
+    expect(turing.unmet({ pre: [], regime: [{ reduction: "quasi-poly" }] })).toHaveLength(1);
     // ...but the poset's bottom entails everything above it.
-    const karp = buildContext([{ regime: [{ reduction: "karp" }] }]);
-    expect(karp.unmet(profile, { pre: [], regime: [{ reduction: [null, "turing"] }] })).toEqual([]);
+    const karp = buildContext([{ regime: [{ reduction: "karp" }] }], profile);
+    expect(karp.unmet({ pre: [], regime: [{ reduction: [null, "turing"] }] })).toEqual([]);
   });
 
   test("a key the context never mentions is unmet, reported with an empty available list", () => {
-    const fails = buildContext([]).unmet(profile, { pre: [], regime: [{ qdim: "poly" }] });
+    const fails = buildContext([], profile).unmet({ pre: [], regime: [{ qdim: "poly" }] });
     expect(fails).toHaveLength(1);
     expect(fails[0]!.scope).toBe(AMBIENT_SCOPE);
     expect(fails[0]!.available).toEqual([]);
+  });
+
+  test("contradictory chain points entail nothing, even when one point matches the demand", () => {
+    const ctx = buildContext([{ regime: [{ qdim: "const" }, { qdim: "poly" }] }], profile);
+    expect(ctx.unmet({ pre: [], regime: [{ qdim: "poly" }] })).toHaveLength(1);
+  });
+
+  test("incomparable poset lower bounds are unrepresentable and entail nothing", () => {
+    const ctx = buildContext([{ regime: [{ reduction: "quasi-poly" }, { reduction: "turing" }] }], profile);
+    expect(ctx.unmet({ pre: [], regime: [{ reduction: "turing" }] })).toHaveLength(1);
   });
 });
 
@@ -308,5 +318,43 @@ describe("route entailment — the review's exact pair, and the fixed point", ()
     const r = checkRoute({ shardId: "thm", signature: sig({}), route: ["lem-x", "lem-y"], signatureOf: mutual, profile });
     expect(r.available).toEqual([]);
     expect(r.failures.map((f) => f.memberId)).toEqual(["lem-x", "lem-y"]);
+  });
+
+  test("a contradictory parent context never unlocks a matching dependency or receives its post", () => {
+    const parent = sig({
+      regime: [{ qdim: "const" }, { qdim: "poly" }],
+      post: [{ obj: "def-promise-gap", keys: { gap: "const" } }],
+    });
+    const dep = sig({
+      regime: [{ qdim: "poly" }],
+      post: [{ obj: "def-promise-gap", keys: { gap: "const" } }],
+    });
+    const r = checkRoute({
+      shardId: "thm-contradictory",
+      signature: parent,
+      route: ["lem-poly"],
+      signatureOf: new Map([["lem-poly", dep]]),
+      profile,
+    });
+    expect(r.available).toEqual([]);
+    expect(r.failures.map((f) => f.memberId)).toEqual(["lem-poly"]);
+    expect(r.postUnsupported.map((f) => f.key)).toEqual(["gap"]);
+  });
+
+  test("a dependency whose post contradicts the context is refused transactionally", () => {
+    const parent = sig({ pre: [{ obj: "def-promise-gap", keys: { gap: "inv-poly" } }] });
+    const dep = sig({ post: [{ obj: "def-promise-gap", keys: { gap: "const" } }] });
+    const r = checkRoute({
+      shardId: "thm-parent",
+      signature: parent,
+      route: ["lem-conflicting-post"],
+      signatureOf: new Map([["lem-conflicting-post", dep]]),
+      profile,
+    });
+    expect(r.available).toEqual([]);
+    expect(r.postContradictions).toMatchObject([{
+      memberId: "lem-conflicting-post",
+      issue: { scope: "def-promise-gap", key: "gap", reason: "empty", source: "post" },
+    }]);
   });
 });
