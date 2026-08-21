@@ -57,3 +57,21 @@ Direct false greens remain, including clean `1/1` record and shard joins for cla
 6. Current fixture behavior is exact: refs-23 through refs-31 emit only their expected codes; refs-29 emits its intended two codes for its two records; refs-32 is the green control. `timeout 120 bun run selftest` passes `186/186`. The affected pure suites pass `176/176`. Full `timeout 300 bun test` could not be validated in this read-only sandbox: `2599 pass, 1 skip, 484 fail, 2 errors`, with all 484 failures reporting `EROFS` while creating temporary repositories.
 
 **Verdict: REJECT.**
+## Repair-wave verification (orchestrator, 2026-08-21)
+
+Single repair wave, implemented by codex gpt-5.6-sol xhigh lane on branch `worktree-agent-a9f0e64703ddb02bd` (998725a..cb41ae1). Verified mechanically by the orchestrator on the branch and again on master after merge; no re-review (anti-Zeno rule).
+
+| Finding | Commit | Code | Fixture / test | Orchestrator check |
+|---|---|---|---|---|
+| BL1 source binding | c5a8f58 | `src/gates/refs-records-verify.ts:259` | refs-33 | lane mutation report |
+| BL2 statement envelope | 83870b2 | `src/gates/refs-records-verify.ts:213` | refs-34..36 | lane mutation report |
+| BL3 join required at promotion | d69bc7c | `src/gates/refs-card-join.ts:93` | refs-37..40 | lane mutation report |
+| BL4 cards-v1 structural + bijection | 883c9b6 | `src/gates/freshness.ts:292,367,421` | freshness-12..15 | lane mutation report |
+| BL5 lossless canonical JSON | 9b45653 | `src/gates/refs-records.ts:66` | refs-41 | orchestrator: disabled `scan.ok` branch -> refs-41 RED (false `2/2` joins); restored |
+| BL6 exact schema enforcement | 269c951 | `src/gates/refs-records-schema.ts:102,193,227` | refs-42, refs-43 | orchestrator: replaced `exactL1Problems(o)` with `[]` -> refs-42 RED; restored |
+| FU2 render only usable records | 044924d | `src/render/cards.ts:157` | test/render/cards.test.ts | unit tests green |
+| FU4 nonzero exit on unrendered | cb41ae1 | `src/cli/render-cards.ts:84` | cli test | unit tests green |
+| FU1 reviewer independence | — | — | — | filed as bead (rk-nsex FU1) |
+| FU3 exact multiset corpus matching | — | — | — | filed as bead (rk-nsex FU3) |
+
+Gates: branch `bun test` 3162 pass / 0 fail, selftest 201/201; master after merge 3190 pass / 0 fail, selftest 201/201, compile OK. Corpus 176 -> 201 on master.
