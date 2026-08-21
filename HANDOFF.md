@@ -45,7 +45,7 @@ Campaign E (`../rk-campaign-E/HANDOFF.md` is authoritative). Done this session, 
 there and bundled in `vendor/`: profile BLESSED (`.rk/conventions/qpcp.v1.json`, 18 classes);
 notation register 18/18 with 31/31 byte-verified translations, `macros.tex` adopted; phase 0b
 PILOT record (ABN 2206.13228 Theorem 1) VALID after 3 codex review rounds (5+2+0 findings), card
-adopted, `records: "required"`; depth-1 closure 41 -> 66/149 cached (stopped at close, resumable).
+adopted, `records: "required"`; depth-1 closure COMPLETE with the S2 key: 6436 papers, 6287 untriaged depth-1 rows (campaign HANDOFF step 1 = triage).
 Gap surfaced: rk-0sj6 — convention-profile schema v1 admits ONE blessed macro per class; the
 draft's other ~55 macros cannot be registered or enforced, and the pilot record had to paraphrase
 `\Theta`/`\Omega`/`\psi`. TJO decision (recommend `blessed: string[]`, schema v2, Tier A).
@@ -59,13 +59,13 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
 3. rk side: rk-wv3h / rk-vy2v at the next milestone review; pre-existing 280-cap debt.
 4. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — hard prerequisite for
    campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (re-filed).
-5. Bundles refreshed at close (campaign E @ 22f3405).
+5. Bundles refreshed at close (campaign E @ 09f733f).
 
 ## TJO decision queue
 
 1. Campaign E D1: north-star reduction class — Karp (in force) vs AAV's quantum poly-time.
 2. Campaign E D7: Gate 9 exemption for settled `contract:` lines (likely moot as built).
-3. Semantic Scholar API key for the closure crawl.
+3. (done) Semantic Scholar API key received 2026-08-21, stored in `~/.config/rk/env` (600).
 4. Roster: with opus/sonnet excluded, extraction records are Fable-authored / codex-reviewed
    (cross-vendor holds; "zero Fable workers" from the 2026-08-20 roster does not).
 5. Carried: rk-cz1h memo §6.1; rk-23pr ratification; rk-mief; window-5 waiver; campaign codas;
