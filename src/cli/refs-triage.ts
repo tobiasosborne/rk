@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { countTableLines, formatTriageDocument, parseTriageTable } from "../refs/snowball-triage";
-import { autoTriage, parseKeywordsFile, type AutoTriageOptions } from "../refs/triage-auto";
+import { applyTriage, autoTriage, parseApplyTsv, parseKeywordsFile, type AutoTriageOptions } from "../refs/triage-auto";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
 
@@ -15,6 +15,7 @@ const DEFAULT_LEDGER = "refs/triage.md";
 
 function usage(out: Out): number {
   out.log("usage: rk refs triage --auto [--redo-auto] [--keywords <file>] [--in-links N] [--out-links N] [--triage <path>] [--root <path>]");
+  out.log("       rk refs triage --apply <tsv> [--triage <path>] [--root <path>]");
   out.log("  Mechanical pre-triage of the snowball ledger: rows with EMPTY triage and reason are banded by");
   out.log("  seed-link count (the `via` column) and title keyword hits. candidate (>= --in-links, default 3,");
   out.log("  or >= 2 with a keyword) and review rows get an `auto:` reason and an EMPTY triage for the");
@@ -22,6 +23,9 @@ function usage(out: Out): number {
   out.log("  Seed rows and anything already triaged or reasoned are never touched; reruns are idempotent.");
   out.log("  --redo-auto re-bands rows this command banded before (reason 'auto:'), e.g. after tuning keywords;");
   out.log("  a row whose triage a human changed since is still left alone.");
+  out.log("  --apply <tsv>: apply external verdicts (`id<TAB>in|context|out<TAB>reason` per line, e.g. a model");
+  out.log("  lane's two-vote output) onto rows that are empty or auto-banded ONLY; seed rows, human values and");
+  out.log("  earlier external verdicts are never overwritten. Counts are printed per outcome.");
   return 2;
 }
 
@@ -43,8 +47,9 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
   const { rest: r3, value: keywordsPath } = extractFlag(r2, "--keywords");
   const { rest: r4, value: inLinksRaw } = extractFlag(r3, "--in-links");
   const { rest: r5, value: outLinksRaw } = extractFlag(r4, "--out-links");
-  const { value: ledgerFlag } = extractFlag(r5, "--triage");
-  if (!auto) return usage(out);
+  const { rest: r6, value: ledgerFlag } = extractFlag(r5, "--triage");
+  const { value: applyPath } = extractFlag(r6, "--apply");
+  if (!auto && applyPath === undefined) return usage(out);
 
   const inLinks = parseCount(inLinksRaw, "--in-links", out);
   if (inLinks === null) return 2;
@@ -83,6 +88,23 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
   if (rows.length === 0) {
     out.log(`rk refs triage: ${ledgerRel} has no triage table (0 rows) — nothing to band.`);
     return 2;
+  }
+  if (applyPath !== undefined) {
+    const p = isAbsolute(applyPath) ? applyPath : join(root, applyPath);
+    if (!existsSync(p)) {
+      out.log(`rk refs triage: --apply file not found: ${applyPath}`);
+      return 2;
+    }
+    const updates = parseApplyTsv(readFileSync(p, "utf8"));
+    const applied = applyTriage(rows, updates);
+    writeFileSync(ledgerPath, formatTriageDocument(applied.rows));
+    const c = applied.counts;
+    out.log(
+      `apply-triage: ${updates.length} updates; applied ${c.applied}, skipped-human ${c.skippedHuman}, skipped-seed ${c.skippedSeed}, ` +
+        `unknown-id ${c.unknownId}, invalid-label ${c.invalidLabel}`,
+    );
+    out.log(`  wrote ${ledgerRel}.`);
+    return 0;
   }
   const { rows: banded, counts } = autoTriage(rows, opts);
   writeFileSync(ledgerPath, formatTriageDocument(banded));

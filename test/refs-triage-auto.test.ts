@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { TriageRow } from "../src/refs/snowball-triage";
-import { autoTriage, parseKeywordsFile } from "../src/refs/triage-auto";
+import { applyTriage, autoTriage, parseApplyTsv, parseKeywordsFile } from "../src/refs/triage-auto";
 
 function row(p: Partial<TriageRow> & { id: string }): TriageRow {
   return { title: "", year: "", depth: "1", via: "", triage: "", reason: "", ...p };
@@ -112,5 +112,41 @@ describe("redoAuto: re-banding after tuning keywords/thresholds", () => {
     const r = autoTriage([edited], { redoAuto: true });
     expect(r.rows[0]).toEqual(edited);
     expect(r.counts.untouched).toBe(1);
+  });
+});
+
+describe("applyTriage: guarded application of external (model/human) verdicts", () => {
+  const updates = [
+    { id: "a", triage: "in", reason: "llm: ox-alpha 2/2 — qLDPC hardness" },
+    { id: "h", triage: "out", reason: "llm: ox-alpha 2/2 — junk" },
+    { id: "s", triage: "out", reason: "llm: nonsense" },
+    { id: "zzz", triage: "in", reason: "llm: unknown id" },
+    { id: "b", triage: "maybe", reason: "llm: bad label" },
+  ];
+  const rows = [
+    row({ id: "s", depth: "0", triage: "seed" }),
+    row({ id: "a", via: "s", reason: "auto: review (links=1, kw=1: PCP)" }),
+    row({ id: "h", via: "s", triage: "in", reason: "human: core lemma" }),
+    row({ id: "b", via: "s", triage: "out", reason: "auto: out (links=1, kw=0)" }),
+  ];
+  test("applies onto empty/auto rows only; never over a seed or a human value; rejects unknown ids and labels", () => {
+    const r = applyTriage(rows, updates);
+    expect(r.rows.map((x) => [x.id, x.triage])).toEqual([["s", "seed"], ["a", "in"], ["h", "in"], ["b", "out"]]);
+    expect(r.rows[1]!.reason).toBe("llm: ox-alpha 2/2 — qLDPC hardness");
+    expect(r.counts).toEqual({ applied: 1, skippedHuman: 1, skippedSeed: 1, unknownId: 1, invalidLabel: 1 });
+  });
+  test("an auto 'out' row CAN be overridden by an external verdict (auto is not authored)", () => {
+    const r = applyTriage(rows, [{ id: "b", triage: "context", reason: "llm: background" }]);
+    expect(r.rows[3]!.triage).toBe("context");
+    expect(r.counts.applied).toBe(1);
+  });
+  test("a row already holding an external (non-auto, non-empty) verdict is treated as authored", () => {
+    const once = applyTriage(rows, [{ id: "a", triage: "in", reason: "llm: first" }]).rows;
+    const twice = applyTriage(once, [{ id: "a", triage: "out", reason: "llm: second" }]);
+    expect(twice.rows[1]!.triage).toBe("in");
+    expect(twice.counts.skippedHuman).toBe(1);
+  });
+  test("parseApplyTsv: id<TAB>label<TAB>reason per line, blank/# lines ignored", () => {
+    expect(parseApplyTsv("# c\na\tin\tr1\n\nb\tout\t\n")).toEqual([{ id: "a", triage: "in", reason: "r1" }, { id: "b", triage: "out", reason: "" }]);
   });
 });

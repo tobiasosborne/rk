@@ -78,3 +78,30 @@ describe("partial-parse refusal (2026-08-21 incident)", () => {
     expect(readFileSync(join(root, "refs", "triage.md"), "utf8")).toBe(broken);
   });
 });
+
+describe("rk refs triage --apply <tsv>", () => {
+  test("applies guarded verdicts, prints counts, exits 0; unknown ids / bad labels counted not fatal", async () => {
+    const root = tmpRoot();
+    writeFileSync(
+      join(root, "refs", "triage.md"),
+      formatTriageDocument([
+        row({ id: "s", depth: "0", triage: "seed" }),
+        row({ id: "a", via: "s", reason: "auto: review (links=1, kw=1: PCP)" }),
+        row({ id: "h", via: "s", triage: "in", reason: "human" }),
+      ]),
+    );
+    writeFileSync(join(root, "refs", "votes.tsv"), "a\tin\tllm: 2/2\nh\tout\tllm: 2/2\nq\tin\tllm\ns\tout\tllm\na\tbogus\tx\n");
+    const { out, lines } = capture();
+    expect(await refsTriage(["--apply", "refs/votes.tsv", "--root", root], out)).toBe(0);
+    const rows = parseTriageTable(readFileSync(join(root, "refs", "triage.md"), "utf8"));
+    expect(rows.map((r) => [r.id, r.triage])).toEqual([["s", "seed"], ["a", "in"], ["h", "in"]]);
+    expect(lines.join("\n")).toMatch(/apply-triage: 5 updates; applied 1, skipped-human 1, skipped-seed 1, unknown-id 1, invalid-label 1/);
+  });
+  test("--apply with a missing file is exit 2", async () => {
+    const root = tmpRoot();
+    writeFileSync(join(root, "refs", "triage.md"), formatTriageDocument([row({ id: "a", via: "s" })]));
+    const { out, lines } = capture();
+    expect(await refsTriage(["--apply", "refs/nope.tsv", "--root", root], out)).toBe(2);
+    expect(lines.join("\n")).toMatch(/not found/);
+  });
+});

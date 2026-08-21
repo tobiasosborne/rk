@@ -125,3 +125,76 @@ export function parseKeywordsFile(text: string): string[] {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------------------
+// applyTriage — guarded application of EXTERNAL verdicts (a model lane's two-vote output, a
+// human's batch edits) onto the ledger. The ledger's triage/reason columns are authored; this is
+// the one path by which a non-human writer may set them, and it may do so ONLY where nothing
+// authored stands yet: an empty row, or a row this module banded (`auto:` reason). A seed row, a
+// human value, or an earlier external verdict is never overwritten — re-running a model over a
+// triaged ledger must be a no-op, not a second opinion that silently wins.
+// ---------------------------------------------------------------------------------------
+
+export const TRIAGE_LABELS = ["in", "context", "out"] as const;
+export type TriageLabel = (typeof TRIAGE_LABELS)[number];
+
+export interface TriageUpdate {
+  id: string;
+  triage: string;
+  reason: string;
+}
+
+export interface ApplyCounts {
+  applied: number;
+  skippedHuman: number;
+  skippedSeed: number;
+  unknownId: number;
+  invalidLabel: number;
+}
+
+function isWritable(row: TriageRow): boolean {
+  return (row.triage === "" && row.reason === "") || row.reason.startsWith(AUTO_PREFIX);
+}
+
+export function applyTriage(rows: readonly TriageRow[], updates: readonly TriageUpdate[]): { rows: TriageRow[]; counts: ApplyCounts } {
+  const counts: ApplyCounts = { applied: 0, skippedHuman: 0, skippedSeed: 0, unknownId: 0, invalidLabel: 0 };
+  const byId = new Map<string, TriageRow>();
+  const out = rows.map((r) => ({ ...r }));
+  for (const r of out) byId.set(r.id, r);
+  for (const u of updates) {
+    const row = byId.get(u.id);
+    if (row === undefined) {
+      counts.unknownId++;
+      continue;
+    }
+    if (!(TRIAGE_LABELS as readonly string[]).includes(u.triage)) {
+      counts.invalidLabel++;
+      continue;
+    }
+    if (row.triage === "seed" || row.depth === "0") {
+      counts.skippedSeed++;
+      continue;
+    }
+    if (!isWritable(row)) {
+      counts.skippedHuman++;
+      continue;
+    }
+    row.triage = u.triage;
+    row.reason = u.reason;
+    counts.applied++;
+  }
+  return { rows: out, counts };
+}
+
+/** `id<TAB>label<TAB>reason` per line; blank lines and `#` comment lines ignored; a line with
+ * fewer than two tab-separated fields is a malformed update and is returned with an empty
+ * label so the caller counts it under `invalidLabel` rather than dropping it silently. */
+export function parseApplyTsv(text: string): TriageUpdate[] {
+  const out: TriageUpdate[] = [];
+  for (const raw of text.split("\n")) {
+    if (raw.trim() === "" || raw.startsWith("#")) continue;
+    const [id = "", triage = "", ...rest] = raw.split("\t");
+    out.push({ id: id.trim(), triage: triage.trim(), reason: rest.join("\t").trim() });
+  }
+  return out;
+}
