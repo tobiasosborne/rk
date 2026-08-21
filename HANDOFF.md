@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-21 — the three campaign-E Tier A items LANDED; profile blessing in progress)
+## State (2026-08-21 session close — three campaign-E Tier A items LANDED; profile blessed; register complete; first reviewed record)
 
 TJO directive this session (in-conversation): orchestrate campaign E; lanes are codex
 gpt-5.6-sol xhigh ONLY, otherwise the orchestrator works serially itself. No opus, no sonnet.
@@ -41,31 +41,25 @@ Tier C beads filed for the refs payload `.gitignore` stamp and `arXiv:` locator 
 
 ## Current work
 
-Campaign E (`../rk-campaign-E`), in this order, all unblocked now:
-1. **Profile blessing** — codex lane running at cut: `.rk/conventions/qpcp.v1.json` from the
-   draft's section 10 JSON, `conventionProfile: "qpcp.v1"`, `rk check` green, reconciliation note
-   `docs/conventions-qpcp-v1-blessing.md`. If the lane did not finish, its brief is reproducible
-   from this paragraph; check `git -C ../rk-campaign-E log` first.
-2. **Depth-1 citation closure** — `rk refs snowball` resumed this session as a bounded
-   background task (51/149 cached at last look; unauthenticated S2 backoff dominates). Resume
-   command in `../rk-campaign-E/HANDOFF.md`; an `S2_API_KEY` (TJO queue) is the real fix.
-3. **Notation register** — one `definitions/notation/<id>.md` shard per tracked class with
-   per-source translation rows byte-anchored via `rk refs quote`; `rk render macros`; flip
-   `notation: complete` only when Gate 9 reports N/N.
-4. **Phase 0b extraction records** — `refs/records/<source-id>/L1-<n>.json` + review records.
-   Under this session's roster the orchestrator authors and codex reviews (reviewer != author,
-   cross-vendor); set `records: "required"` once the first reviewed record exists.
-5. Phase 1 signatures: `signatures: "optional"` while filling in, then `"required"`.
+Campaign E (`../rk-campaign-E/HANDOFF.md` is authoritative). Done this session, all committed
+there and bundled in `vendor/`: profile BLESSED (`.rk/conventions/qpcp.v1.json`, 18 classes);
+notation register 18/18 with 31/31 byte-verified translations, `macros.tex` adopted; phase 0b
+PILOT record (ABN 2206.13228 Theorem 1) VALID after 3 codex review rounds (5+2+0 findings), card
+adopted, `records: "required"`; depth-1 closure 41 -> 66/149 cached (stopped at close, resumable).
+Gap surfaced: rk-0sj6 — convention-profile schema v1 admits ONE blessed macro per class; the
+draft's other ~55 macros cannot be registered or enforced, and the pilot record had to paraphrase
+`\Theta`/`\Omega`/`\psi`. TJO decision (recommend `blessed: string[]`, schema v2, Tier A).
 
 ## Next steps
 
-1. Read the blessing lane's report (`docs/conventions-qpcp-v1-blessing.md` in the campaign);
-   surface its "TJO decision needed" rows in the campaign HANDOFF.
-2. Steps 3-4 above; each batch ends with `rk check` green in the campaign and a campaign commit.
+1. rk-0sj6 ruling, then (if (a)) schema v2 `blessed: string[]` + predecessor-chain fixture + Gate 9
+   canonical-shard rule per macro — Tier A, codex xhigh review.
+2. Campaign E next steps per its HANDOFF: resume closure; records at scale (author -> codex
+   review -> repair -> card); Layer 0 shards; then `signatures: optional`.
 3. rk side: rk-tmzl split; rk-wv3h / rk-vy2v at the next milestone review.
 4. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — hard prerequisite for
    campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (re-filed).
-5. Session close: `make refresh-bundles` (campaign E changed) and commit `vendor/`.
+5. Bundles refreshed at close (campaign E @ 22f3405).
 
 ## TJO decision queue
 
@@ -85,6 +79,7 @@ Campaign E (`../rk-campaign-E`), in this order, all unblocked now:
   "<brief>" < /dev/null`, tracked background task, `timeout 7200`. A lane in a git WORKTREE
   cannot commit (its `.git` file points outside the sandbox) — either commit its verified tree
   yourself or run the lane on a branch in the main checkout. Lanes in a campaign repo commit fine.
+- `bd dolt push` has no remote configured here (prints help); beads travel with git.
 - Merged worktrees removed; branches `worktree-agent-a9f0…/a541…/a642…` remain (merged).
 - `rk` on PATH is a symlink to `dist/rk`; rebuilt at 3dfc961.
 - Campaign-D bd is EMPTY on this device (dolt state never bundled). `make refresh-bundles`
