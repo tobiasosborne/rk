@@ -45,7 +45,7 @@ Campaign E (`../rk-campaign-E/HANDOFF.md` is authoritative). Done this session, 
 there and bundled in `vendor/`: profile BLESSED (`.rk/conventions/qpcp.v1.json`, 18 classes);
 notation register 18/18 with 31/31 byte-verified translations, `macros.tex` adopted; phase 0b
 PILOT record (ABN 2206.13228 Theorem 1) VALID after 3 codex review rounds (5+2+0 findings), card
-adopted, `records: "required"`; depth-1 closure COMPLETE with the S2 key: 6436 papers, 6287 untriaged depth-1 rows (campaign HANDOFF step 1 = triage).
+adopted, `records: "required"`; depth-1 closure COMPLETE with the S2 key: 6436 papers, 6287 depth-1 rows mechanically banded by `rk refs triage --auto` (out 4020 / review 970 / candidate 1297); next = abstracts + embedding rank (campaign HANDOFF step 2).
 Gap surfaced: rk-0sj6 — convention-profile schema v1 admits ONE blessed macro per class; the
 draft's other ~55 macros cannot be registered or enforced, and the pilot record had to paraphrase
 `\Theta`/`\Omega`/`\psi`. TJO decision (recommend `blessed: string[]`, schema v2, Tier A).
@@ -59,7 +59,7 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
 3. rk side: rk-wv3h / rk-vy2v at the next milestone review; pre-existing 280-cap debt.
 4. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — hard prerequisite for
    campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (re-filed).
-5. Bundles refreshed at close (campaign E @ 09f733f).
+5. Bundles refreshed at close (campaign E @ a48b1d5).
 
 ## TJO decision queue
 
