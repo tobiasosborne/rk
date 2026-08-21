@@ -107,6 +107,15 @@ describe("scanCanonicalJson — the pre-hash lossless check", () => {
     if (!r.ok) expect(r.reason).toContain("signature.pre[0].obj");
   });
 
+  test("duplicate keys are compared after JSON escape decoding", () => {
+    expect(scanCanonicalJson('{"line\\nkey": 1, "line\\u000akey": 2}').ok).toBe(false);
+    expect(scanCanonicalJson('{"quote\\\"key": 1, "quote\\u0022key": 2}').ok).toBe(false);
+  });
+
+  test("escape spellings that decode to different keys are not false duplicates", () => {
+    expect(scanCanonicalJson('{"n": 1, "\\n": 2}')).toEqual({ ok: true });
+  });
+
   test("the same key in SIBLING objects is not a duplicate", () => {
     expect(scanCanonicalJson('{"a": {"k": 1}, "b": {"k": 2}}')).toEqual({ ok: true });
   });

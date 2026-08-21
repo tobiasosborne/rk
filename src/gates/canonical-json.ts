@@ -76,6 +76,16 @@ export type JsonScanResult = { ok: true } | { ok: false; reason: string };
 const WS = new Set([" ", "\t", "\n", "\r"]);
 const NUMBER_RE = /-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/y;
 const INTEGER_LITERAL_RE = /^-?[0-9]+$/;
+const SIMPLE_ESCAPES: Record<string, string> = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+};
 
 /** Scans `raw` as JSON, rejecting anything that cannot be canonicalized losslessly (duplicate
  * keys; numbers whose value does not survive `JSON.parse`). Never throws. */
@@ -108,8 +118,9 @@ export function scanCanonicalJson(raw: string): JsonScanResult {
           i += 6;
           continue;
         }
-        if (!'"\\/bfnrt'.includes(esc)) return null;
-        out += esc;
+        const decoded = SIMPLE_ESCAPES[esc];
+        if (decoded === undefined) return null;
+        out += decoded;
         i += 2;
         continue;
       }

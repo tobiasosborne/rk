@@ -1338,6 +1338,13 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   to exactly one thing — whether a VALUE changed since the review — so that a formatter run cannot
   invalidate an honest review (which would train a campaign to re-stamp digests mechanically, the
   very habit under which a real edit slips through) while a one-character edit always does.
+  **Pre-hash losslessness.** Raw record and review JSON must be losslessly representable by that
+  canonical form before `JSON.parse` output is trusted: duplicate object keys and numeric literals
+  that are not safe integers or do not round-trip through `JSON.stringify` unchanged are structural
+  **ERROR `[record-malformed]` / `[review-malformed]`**. In particular, neither
+  `9007199254740992` nor `9007199254740993` may enter the hash domain: JavaScript parses them to the
+  same double, so changing one to the other would otherwise preserve an old review and shard hash.
+  The raw-text scanner compares object keys after JSON escape decoding, at every nesting depth.
 - **Hash authority for BOTH halves** (rk-r0j3). `refs/manifest/sources.lock.json` pins every
   citable payload, whatever its kind: a `refs/<path>` a quote is matched against must resolve to
   exactly one lock entry, refs-relative, whose `sha256` is a full 64-hex digest equal to the
@@ -1851,6 +1858,7 @@ changed across AISM's history at time of reading.
 | `refs-38` | **proved-mod-audit with no origin, records: required** [rk-nsex, Tier A review BL3] ⇒ ERROR `[origin-required]`. Pre-repair such a shard produced no finding at all: 'campaign' was inferred from silence |
 | `refs-39` | **origin: literature with no record** [rk-nsex, Tier A review BL3] ⇒ ERROR `[record-required]` — the declaration has consequences, or it is a label worth nothing |
 | `refs-40` | **the legacy control** [rk-nsex, Tier A review BL3] — the byte-identical tree to `refs-37` with no `.rk/config.json` ⇒ WARN `[record-absent]`, exit 0, and still `0/1 shard-record joins` so the backlog is visible; a second `origin: campaign` PMA shard proves that half stays silent |
+| `refs-41` | **lossy canonical JSON refused** [rk-nsex, Tier A review BL5] — one record changes a reviewed signature integer from `9007199254740992` to `9007199254740993` while retaining the old digest; another repeats `statement_blessed` while retaining the digest of the last-key-wins parse ⇒ both `[record-malformed]`, neither review nor shard hash carries forward, `0/2 shard-record joins` |
 
 ---
 

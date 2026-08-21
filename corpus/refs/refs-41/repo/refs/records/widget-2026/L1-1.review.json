@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "card_sha256": "eb41a13265c81266234b196ba2bbabc9baa04e05ad95803a6212f325b853e056",
+  "verdict": "VALID",
+  "reviewer": {
+    "family": "gpt",
+    "backend": "codex",
+    "model": "gpt-5.6-sol",
+    "session": "bl5-unsafe-number"
+  },
+  "checked": {
+    "statement_complete": { "value": true, "note": "read the complete printed range" },
+    "hypotheses_complete": { "value": true, "note": "the printed hypothesis is present" },
+    "translation_faithful": { "value": true, "note": "the restatement is faithful" },
+    "signature_faithful": { "value": true, "note": "reviewed the pre-edit safe-integer spelling" }
+  },
+  "findings": []
+}

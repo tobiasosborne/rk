@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "record_kind": "L1",
+  "source": "widget-2026",
+  "payload_sha256": "5eb8349700edfa04ca501a15536bcab9aaf069be182f387669a3343edfe58392",
+  "result_label": "Theorem 1.1",
+  "statement_range": "refs/sources/widget.txt:3-4",
+  "statement_verbatim": "Theorem 1.1. Every widget is round,\nwhere the widget graph is d-regular.",
+  "statement_blessed": "Every widget is round when its widget graph is d-regular.",
+  "hypotheses": [
+    {
+      "text": "where the widget graph is d-regular",
+      "anchor": "refs/sources/widget.txt:4"
+    }
+  ],
+  "conclusion": "The widget is round.",
+  "signature": {
+    "schema_version": "1",
+    "profile": "qpcp.v1",
+    "pre": [],
+    "post": [],
+    "dimension": 9007199254740993
+  },
+  "profile": "qpcp.v1",
+  "proof_locus": "refs/sources/widget.txt:6-6"
+}

@@ -1,0 +1,38 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "outside the safe integer range"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-2.json",
+      "message_pattern": "duplicate key statement_blessed"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-unsafe-number.md",
+      "message_pattern": "[record-review-unusable]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-duplicate-key.md",
+      "message_pattern": "[record-review-unusable]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked 2/2 shard citations",
+      "checked records: 2 L1 records / 0 reviewed-VALID / 0 anchors verified",
+      "0/2 shard-record joins"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, landing-blocker BL5 — the reviewer's exact unsafe-number collision plus the second lossy JSON parse class. L1-1 changes a reviewed signature integer from 9007199254740992 to 9007199254740993; JSON.parse rounds both to the same double, so the committed review and shard retain the OLD canonical digest. L1-2 declares statement_blessed twice; JSON.parse silently keeps only the last value, so its review and shard bind to a single-key object that is not the document a reviewer reads. Before the pre-hash scanner, both records passed Check 11 and both shards passed Check 12 at 2/2 joins. The gate now rejects both raw documents as [record-malformed] before canonical hashing; neither old hash carries forward. Mutation-proof: bypassing scanCanonicalJson restores zero findings and 2/2 joins; observed and reverted."
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "card_sha256": "80167558f74b9480682f87e997db2dbe0a503f9d26c677cebfd8a5ee8db66537",
+  "verdict": "VALID",
+  "reviewer": {
+    "family": "gpt",
+    "backend": "codex",
+    "model": "gpt-5.6-sol",
+    "session": "bl5-duplicate-key"
+  },
+  "checked": {
+    "statement_complete": { "value": true, "note": "read the complete printed range" },
+    "hypotheses_complete": { "value": true, "note": "the printed hypothesis is present" },
+    "translation_faithful": { "value": true, "note": "reviewed the last parsed restatement" },
+    "signature_faithful": { "value": true, "note": "the signature matches the statement" }
+  },
+  "findings": []
+}
