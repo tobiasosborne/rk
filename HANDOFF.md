@@ -59,7 +59,7 @@ draft's other ~55 macros cannot be registered or enforced, and the pilot record 
 3. rk side: rk-wv3h / rk-vy2v at the next milestone review; pre-existing 280-cap debt.
 4. Unchanged queue: rk-t69x, rk-yic3, rk-ptx0/rk-lmtr (Gates C/D — hard prerequisite for
    campaign-E phase 3), rk-23pr, rk-cz1h, rk-4w2y wave, rk-rz74 (re-filed).
-5. Bundles refreshed at close (campaign E @ 86f4897).
+5. Bundles refreshed at close (campaign E @ 8b95b14).
 
 ## TJO decision queue
 
