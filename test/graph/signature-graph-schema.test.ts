@@ -19,13 +19,30 @@ import { canonicalSignature } from "../../src/gates/signature";
 import { parseRegistry } from "../../src/gates/linker-parse";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import { assembleGraphDocument } from "../../src/graph/assemble";
+import { validateJsonSchema } from "../helpers/json-schema-subset";
 
 const CORPUS = join(import.meta.dir, "..", "..", "corpus", "graph");
 const LEGACY_V2 = join(CORPUS, "signature-legacy-v2", "graph.json");
 const GOLDEN_V3 = join(CORPUS, "signature-v3", "graph.json");
+const GRAPH_SCHEMA = readRaw(join(import.meta.dir, "..", "..", "schemas", "graph.v1.json"));
 
 function readRaw(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function authoredRoundTrip() {
+  const signature = {
+    post: [{ gap: "const", obj: "def-gap" }],
+    pre: [{ gap: ["inv-poly", "const"], obj: "def-gap" }],
+    profile: "test.v1",
+    regime: [{ qdim: "const" }],
+    schema_version: "1",
+  };
+  const shard = `---\nid: lem-signed\nkind: lemma\nstatus: stated\naf: none\ncontract: Signed claim.\n---\n\n` +
+    "```signature\n" + JSON.stringify(signature, null, 2) + "\n```\n";
+  const parsed = parseRegistry(snapshotFromFiles({ "argument/lem-signed.md": shard }));
+  const assembled = assembleGraphDocument({ lemmas: parsed.lemmas, afRecords: [], frRecords: [], bdRecords: [] });
+  return { parsed, doc: assembled.doc };
 }
 
 describe("the version bump itself (rule 10)", () => {
@@ -40,6 +57,14 @@ describe("the version bump itself (rule 10)", () => {
     };
     expect(schema.properties.schema_version.const).toBe("3");
     expect(Object.keys(schema.$defs.registryNode.properties)).toContain("signature");
+  });
+
+  test("graph v3 reuses signature.v1's predicateValue union exactly", () => {
+    const graph = GRAPH_SCHEMA as { $defs: { predicateValue: { oneOf: unknown[] } } };
+    const signature = readRaw(join(import.meta.dir, "..", "..", "schemas", "signature.v1.json")) as {
+      $defs: { predicateValue: { oneOf: unknown[] } };
+    };
+    expect(graph.$defs.predicateValue.oneOf).toEqual(signature.$defs.predicateValue.oneOf);
   });
 });
 
@@ -109,20 +134,8 @@ describe("the v3 GOLDEN", () => {
 
 describe("authored shard -> registry -> graph v3 production seam", () => {
   test("an authored canonical signature survives parseRegistry and assembleGraphDocument", () => {
-    const signature = {
-      post: [{ gap: "const", obj: "def-gap" }],
-      pre: [{ gap: ["inv-poly", "const"], obj: "def-gap" }],
-      profile: "test.v1",
-      regime: [{ qdim: "const" }],
-      schema_version: "1",
-    };
-    const shard = `---\nid: lem-signed\nkind: lemma\nstatus: stated\naf: none\ncontract: Signed claim.\n---\n\n` +
-      "```signature\n" + JSON.stringify(signature, null, 2) + "\n```\n";
-    const parsed = parseRegistry(snapshotFromFiles({ "argument/lem-signed.md": shard }));
+    const { parsed, doc } = authoredRoundTrip();
     expect(parsed.errors).toEqual([]);
-    const { doc } = assembleGraphDocument({
-      lemmas: parsed.lemmas, afRecords: [], frRecords: [], bdRecords: [],
-    });
     expect(doc.schema_version).toBe("3");
     expect(doc.nodes[0]!.signature).toEqual(canonicalSignature({
       schema_version: "1",
@@ -131,6 +144,17 @@ describe("authored shard -> registry -> graph v3 production seam", () => {
       post: [{ obj: "def-gap", keys: { gap: "const" } }],
       regime: [{ qdim: "const" }],
     }));
+  });
+});
+
+describe("schemas/graph.v1.json validates real v3 documents", () => {
+  test("the interval-bearing v3 golden validates against the actual JSON Schema", () => {
+    expect(validateJsonSchema(GRAPH_SCHEMA, readRaw(GOLDEN_V3))).toEqual([]);
+  });
+
+  test("B4's authored-shard round-trip output validates against the actual JSON Schema", () => {
+    const jsonDocument = JSON.parse(serializeGraphDocument(authoredRoundTrip().doc));
+    expect(validateJsonSchema(GRAPH_SCHEMA, jsonDocument)).toEqual([]);
   });
 });
 

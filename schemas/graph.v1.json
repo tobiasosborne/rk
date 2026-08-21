@@ -146,7 +146,7 @@
         "regime": {
           "type": "array",
           "description": "AMBIENT (object-free) predicates. They live in their own scope and never satisfy an object-scoped predicate — that conflation is the unsoundness the 2026-08-20 Tier A review (LB2) broke the v1 check with.",
-          "items": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } }
+          "items": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/predicateValue" } }
         },
         "hardness": { "type": "string", "minLength": 1 }
       }
@@ -158,8 +158,20 @@
       "description": "A predicate on ONE Layer 0 object, in parsed form. `obj` is a `definitions/*.md` id — objects are compared by ID, never by name, which is what makes bite's canonical identity immune to renaming (src/graph/bite.ts).",
       "properties": {
         "obj": { "type": "string", "minLength": 1 },
-        "keys": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } }
+        "keys": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/predicateValue" } }
       }
+    },
+    "predicateValue": {
+      "description": "The schemas/signature.v1.json predicateValue union, reused verbatim in graph v3's parsed signature shape: a non-empty bare string point interval, or a two-element [lo, hi] interval whose endpoints are non-empty strings or null for unbounded.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+        }
+      ]
     },
     "afEdge": {
       "description": "A discriminated union on `workspaceResolved` (Tier A review blocker 1: 'unresolved workspace requires a bucket entry; resolved workspace requires af schema version, root-node identity, contract-match verdict, enumerated epistemic/taint states, and node count' — a partial 'resolved' record cannot validate against either branch below).",
