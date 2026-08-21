@@ -1,0 +1,22 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [
+    {
+      "severity": "WARN",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[record-absent]"
+    }
+  ],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked 2/2 shard citations",
+      "0/1 shard-record joins"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL3, THE LEGACY CONTROL — and the fixture that keeps the migration path honest in both directions. No `.rk/config.json` at all, so `records` resolves to its default `\"legacy\"`: the byte-identical tree that ERRORs in `refs-37` here draws WARN `[record-absent]` and the run exits 0. That is deliberate and it is a MIGRATION setting, not a resting state: every rk campaign predates extraction records, and turning every existing cited shard red on the day the check lands is how a gate gets switched off. What legacy does NOT do any more is hide the population — the coverage line reads `0/1 shard-record joins`, so the backlog is a number a campaign can watch go to zero before it flips `records: \"required\"`. The second shard (`lem-campaign`, `status: proved-mod-audit`, `origin: campaign`) proves the origin discriminator stays silent for a campaign's own proof in legacy mode and contributes nothing to the join denominator. `aism_behavior: n/a`. Mutation-proof: making the legacy branch ERROR turns this fixture red (verdict pass -> fail), which is the guard against a future change quietly removing the migration path; observed and reverted."
+}

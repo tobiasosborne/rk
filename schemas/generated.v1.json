@@ -27,7 +27,7 @@
           "generator": {
             "type": "string",
             "minLength": 1,
-            "description": "Generator id this rk binary must recognize to regenerate `path`. Known ids as of M2.6: \"linker-index\" (argument/INDEX.md's render), \"linker-dag\" (argument/DAG.md's render) — src/gates/freshness.ts's GENERATORS map. An id this binary does not recognize is reported as 'not adopted' on the gate's coverage line, never silently dropped and never an ERROR by itself (see docs/gate-contracts.md's Gate 7 section)."
+            "description": "Generator id this rk binary must recognize to regenerate `path`. Known ids: \"linker-index\" (argument/INDEX.md's render) and \"linker-dag\" (argument/DAG.md's render), both pure entries of src/gates/freshness.ts's GENERATORS map; \"cards-v1\" (rk-nsex — refs/cards/<source-id>/L1-<n>.md, rendered from the extraction record and its review record by src/render/cards.ts, written by `rk render cards`), also pure but ONE generator over many artifacts, so it is passed the declared path and may report that it cannot produce bytes for it; and \"render-site-v1\" (M2.4 `rk render`'s HTML output), which is EDGE-SUPPLIED — the gate never regenerates it itself and diffs bytes prepared by src/cli/check.ts. An id this binary recognizes as none of these is a BLOCKING ERROR, not the 'not adopted' state this field's description claimed before the M2 boundary review (blocker #3a): a typo'd id is indistinguishable from a forward-declaration of a not-yet-landed generator, so both must fail rather than green-light an unchecked artifact. See docs/gate-contracts.md's Gate 7 section."
           }
         }
       }

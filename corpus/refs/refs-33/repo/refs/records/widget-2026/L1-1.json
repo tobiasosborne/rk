@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "record_kind": "L1",
+  "source": "widget-2026",
+  "payload_sha256": "a11078720fedd1eaee6c06db1db5635cd1cb44644531d074e1332438932c554a",
+  "result_label": "Theorem 9.9",
+  "statement_range": "refs/sources/other.txt:3-4",
+  "statement_verbatim": "Theorem 9.9. Every gadget is square,\nwhere the gadget is bipartite.",
+  "statement_blessed": "Every gadget is square when the gadget is bipartite.",
+  "hypotheses": [
+    {
+      "text": "where the gadget is bipartite",
+      "anchor": "refs/sources/other.txt:4"
+    }
+  ],
+  "conclusion": "The gadget is square.",
+  "signature": {
+    "schema_version": "1",
+    "profile": "qpcp.v1",
+    "pre": [
+      {
+        "obj": "def-widget",
+        "degree": "bounded"
+      }
+    ],
+    "post": [
+      {
+        "obj": "def-round"
+      }
+    ]
+  },
+  "profile": "qpcp.v1",
+  "proof_locus": "refs/sources/other.txt:6-6"
+}

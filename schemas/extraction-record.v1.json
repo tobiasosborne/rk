@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/extraction-record.v1.json",
+  "title": "rk extraction record (v1) — one AUTHORED refs/records/<source-id>/{L0,L1-<n>}.json extraction of a source",
+  "description": "THE AUTHORED GROUND TRUTH BEHIND A CITED CLAIM. A record states, for one result printed in one acquired source, (a) exactly which bytes of that source the result IS (`statement_range` + `statement_verbatim`), (b) how the campaign restates it in register notation (`statement_blessed`), and (c) every hypothesis it carries, each anchored inside the statement's own bytes. The human-readable card at `refs/cards/<source-id>/L1-<n>.md` is GENERATED from this record plus its review record (`rk render cards`, generator `cards-v1`, Gate 7 byte-diffs it); the record is the truth, the card is a view.\n\nTHE FAILURE CLASS (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 4, repairing landing-blocker LB1 of docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md): requiring an anchor on every hypothesis a card HAPPENS TO LIST cannot detect a hypothesis the card OMITS, and an exact quote occurring somewhere in a paper establishes nothing about whether the restatement is faithful. Both holes close the same way: the record anchors a RANGE covering the complete statement as printed — including its 'where'/'assume' clauses — `statement_verbatim` must equal those bytes exactly, and every hypothesis anchor must lie INSIDE that range (or inside the L0 record's `standing_assumptions_range`). An omitted hypothesis is then a translation error a reviewer reading the full range can see, not a silent gap; a hypothesis anchored outside the statement is a mechanical ERROR.\n\nENFORCEMENT: docs/gate-contracts.md Gate 3 Check 11 (record verification) and Check 12 (the card->shard hash join). Runtime validators: src/gates/refs-records.ts (shape) and src/gates/refs-records-verify.ts (anchors, range, review binding). Canonical bytes for hashing: src/gates/canonical-json.ts's `canonicalRecordBytes` — JSON with recursively sorted keys, 2-space indent, one trailing newline. Every hash of a record (the review record's `card_sha256`, a shard's `record_sha256:`) is the sha256 of THOSE bytes, never of the file as formatted on disk, so reformatting a record does not invalidate its review while editing one word does.\n\nTWO RECORD KINDS, ONE SCHEMA. `record_kind: \"L1\"` is the per-result record (one per result the campaign may cite). `record_kind: \"L0\"` is the per-paper record (regime, objects, results-as-listed, and the optional `standing_assumptions_range` a hypothesis may legitimately anchor into). They share this file because they share their identity, hashing and provenance fields; the discriminator is `record_kind` and the branch is the top-level `oneOf`.",
+  "type": "object",
+  "oneOf": [{ "$ref": "#/$defs/l1Record" }, { "$ref": "#/$defs/l0Record" }],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "Full 64-hex sha256, compared case-insensitively by every consumer."
+    },
+    "lineAnchor": {
+      "type": "string",
+      "pattern": "^refs/[A-Za-z0-9_./-]+:[1-9][0-9]*$",
+      "description": "`refs/<path>:<line>` — the exact two-part anchor `rk refs quote` emits and Gate 3 Check 8 byte-verifies (1-indexed line of the payload's QUOTABLE text: the payload itself for a text source, its chained extraction layer for a PDF). The quote that must occur on that line is the sibling `text` field."
+    },
+    "rangeAnchor": {
+      "type": "string",
+      "pattern": "^refs/[A-Za-z0-9_./-]+:[1-9][0-9]*-[1-9][0-9]*$",
+      "description": "`refs/<path>:<from>-<to>`, both 1-indexed and inclusive, `from <= to`. A single-line statement is written `12-12`; the collapsed `refs/<path>:12` form is deliberately NOT accepted here, so a range and a line anchor can never be confused by a reader or a parser."
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "anchor"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The hypothesis AS PRINTED, byte-verbatim: it must occur as an exact substring of the anchored source line (Gate 3 Check 8 semantics, `grep -F`, no normalization, no tolerance). Restatement belongs in `statement_blessed`, never here."
+        },
+        "anchor": { "$ref": "#/$defs/lineAnchor" }
+      }
+    },
+    "l1Record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_kind",
+        "source",
+        "payload_sha256",
+        "result_label",
+        "statement_range",
+        "statement_verbatim",
+        "statement_blessed",
+        "hypotheses",
+        "conclusion",
+        "signature",
+        "profile",
+        "proof_locus"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "description": "The STRING \"1\", never the number 1. A version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture."
+        },
+        "record_kind": { "const": "L1" },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The `refs/manifest/` source-id this record extracts, e.g. `aharonov-arad-vidick-1309.7495`. Must equal the `<source-id>` directory component of the record's own path — a record filed under another paper's directory is an ERROR, not a naming preference."
+        },
+        "payload_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "The ADOPTED payload hash the extraction was performed against, i.e. the `sha256` of this source's `refs/manifest/sources.lock.json` entry at authoring time. Gate 3 Check 11 compares it against the lock's current pin: a difference means the paper was re-acquired or re-adopted after this record was written, and every anchor in the record is suspect (`stale-record`). This is the record-level analogue of the extraction chain's own `payload_sha256`."
+        },
+        "extraction_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "OPTIONAL, and required exactly when the source's lock entry declares an `extraction` layer (i.e. the payload is a PDF whose quotable text is a sidecar): the `extraction.sha256` the anchors were taken against. A record whose `extraction_sha256` differs from the lock's current extraction digest was written against text the sidecar no longer contains (`stale-extraction`) — re-extraction silently renumbers every line, which is the exact failure this field exists to catch. Omitted for a text payload, where the payload IS the quotable text and `payload_sha256` already pins it."
+        },
+        "result_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The result's label AS PRINTED in the source (`Theorem 1.3`, `Lemma 4.2(b)`). Human identification only; nothing joins on it."
+        },
+        "statement_range": {
+          "$ref": "#/$defs/rangeAnchor",
+          "description": "The range covering the COMPLETE statement as printed: its hypotheses clause and any trailing 'where'/'assume'/'such that' sentences included. Gate 3 Check 11 verifies the bytes, that `statement_verbatim` equals them, that every hypothesis anchor lies inside them, and — heuristically — that the range does not stop mid-statement (the range-extent check; see the Gate 3 contract for its exact rule and its honest limits)."
+        },
+        "statement_verbatim": {
+          "type": "string",
+          "description": "The bytes of `statement_range`, exactly: the range's lines joined with a single `\\n`, no normalization, no re-wrapping, no trailing newline. A mismatch is an ERROR (`statement-verbatim-mismatch`) — this field is what makes the record self-checking against the source rather than a restatement anyone must take on trust."
+        },
+        "statement_blessed": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The statement restated in the campaign's register notation (`profile` below). THE JOIN KEY: a Layer 1 shard may hold `status: cited` only if its `contract:` byte-equals this field under Gate 2 Check 9's whitespace normalization (whitespace runs collapsed to one space, ends stripped). That join is what stops a shard from carrying one genuine quote and an arbitrary contract."
+        },
+        "hypotheses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hypothesis" },
+          "description": "Every hypothesis the printed statement carries, each anchored INSIDE `statement_range` or inside the L0 record's `standing_assumptions_range`. May be empty only for a genuinely hypothesis-free statement; a record with neither a `statement_range` nor a hypothesis anchors nothing to the source at all and is rejected as `zero-anchor-record`."
+        },
+        "conclusion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the result concludes, in register notation — the `statement_blessed` minus its hypotheses. Read by the reviewer, not joined on."
+        },
+        "signature": {
+          "type": "object",
+          "description": "The typed signature (pre/post/regime/hardness) of docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6. NOT validated here beyond 'is an object': its own versioned schema (`schemas/signature.v1.json`) and the entailment check are bead rk-8805's deliverable, and inventing a second, weaker shape here would be the drift rule 10 exists to prevent. Until that schema lands, a record's signature is checked by its reviewer's `signature_faithful` clause only — stated plainly rather than implied to be mechanical."
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The convention-profile id every notation claim in this record is relative to (`qpcp.v1`). The profile itself (`.rk/conventions/<id>.json`, `schemas/convention-profile.v1.json`) is bead rk-5lzf's deliverable; this field is recorded and carried now so records authored before Gate 9 exists are already addressable by it."
+        },
+        "proof_locus": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the proof of this result lives — a `refs/<path>:<from>-<to>` range in the same source, or a free-text pointer ('proved in [BMVZ25, Thm 4.1]') when the source only cites it. Free text is deliberate: an unproved-here result must be sayable, and saying it is better than an anchor that pretends the proof is in this paper."
+        }
+      }
+    },
+    "l0Record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_kind", "source", "payload_sha256", "regime", "objects", "results", "profile"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "record_kind": { "const": "L0" },
+        "source": { "type": "string", "minLength": 1 },
+        "payload_sha256": { "$ref": "#/$defs/sha256" },
+        "extraction_sha256": { "$ref": "#/$defs/sha256" },
+        "regime": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The paper's ambient regime in register notation (locality, qudit dimension, degree, gap normalization, computational model) — the context every L1 record of this source inherits."
+        },
+        "objects": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The objects the paper defines or assumes, as blessed ids where they exist. Orientation for the reviewer and the notation register; nothing joins on it yet."
+        },
+        "results": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The results this paper states, as printed labels. A `context`-triaged paper has an L0 record and no L1 records at all, so this list is where its content is visible."
+        },
+        "standing_assumptions_range": {
+          "$ref": "#/$defs/rangeAnchor",
+          "description": "OPTIONAL: the range of the paper's standing-assumptions passage (a 'Throughout this paper, ...' paragraph). The ONLY place outside its own `statement_range` an L1 hypothesis anchor may legitimately point — real papers do hoist hypotheses out of the theorem environment, and pretending otherwise would force authors to either lie about the anchor or drop the hypothesis. Must name the same source path the L1 record's anchors do."
+        },
+        "ends_at_eof": {
+          "type": "object",
+          "additionalProperties": { "const": true },
+          "description": "OPTIONAL: maps each result_label whose complete printed statement genuinely ends at the end of the quotable text to true. Gate 3 Check 11 clause (f) otherwise fails closed at EOF, because a truncated extraction is indistinguishable from a complete source. Keys are result labels and every value must be the literal true; false is represented by absence."
+        },
+        "profile": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

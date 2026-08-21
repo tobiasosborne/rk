@@ -8,13 +8,12 @@
 // PURITY: pure — no fs/network/clock (L3). Payload text and raw-byte hashes come from RepoSnapshot.
 
 import type { Finding } from "./framework";
-import { fileSha256, parseFrontmatter, type RepoSnapshot } from "./snapshot";
-import { normalizeQuoteText } from "../refs/quote";
-import { LOCK_PATH, readLockFacts, resolveQuotableText, type LockFacts } from "./refs-extraction";
+import { parseFrontmatter, type RepoSnapshot } from "./snapshot";
+import { verifyAnchor } from "./refs-anchor";
+import { readLockFacts, type LockFacts } from "./refs-extraction";
 
 const NON_SHARD_NAMES = new Set(["README.md", "INDEX.md", "DAG.md"]);
 const POINTER_RE = /^\s*(refs\/[A-Za-z0-9_./-]+)(?::([^\s]+))?\s*$/;
-const FULL_SHA256_RE = /^[0-9a-fA-F]{64}$/;
 
 interface CitationClaim {
   shardPath: string;
@@ -31,7 +30,10 @@ export interface ShardCitationResult {
   total: number;
 }
 
-function shardPaths(snapshot: RepoSnapshot): string[] {
+/** The Gate 2/Gate 3 shard-discovery boundary: every `.md` under `argument/`, recursively, minus the three
+ * generated/index names. Exported for the card->shard join (rk-nsex), which must see exactly the
+ * same shard population this check does. */
+export function shardPaths(snapshot: RepoSnapshot): string[] {
   return [...snapshot.keys()]
     .filter((path) => {
       if (!path.startsWith("argument/") || !path.endsWith(".md")) return false;
@@ -89,15 +91,15 @@ function claimsInShard(shardPath: string, content: string): CitationClaim[] {
   return claims;
 }
 
-function safeSourcePath(path: string): boolean {
-  const parts = path.split("/");
-  return path.startsWith("refs/") && parts.every((part) => part !== "" && part !== "." && part !== "..");
-}
-
 function claimError(claim: CitationClaim, message: string): Finding {
   return { severity: "ERROR", path: claim.shardPath, line: claim.line, message };
 }
 
+/** rk-nsex: the anchor rule itself now lives in ./refs-anchor.ts — one implementation, two callers
+ * (this check and Gate 3 Check 11's extraction-record anchors), so "what makes an anchor verified"
+ * cannot have two answers. Behavior is unchanged: every message below is byte-identical to the
+ * one this function emitted when it inlined the rule. What stays HERE is the part that is about a
+ * SHARD rather than about an anchor: the decorated-pointer rejection (repair R7). */
 function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFacts): Finding | undefined {
   const label = `shard citation ${claim.sourcePath}${claim.locusText ? `:${claim.locusText}` : ""}`;
   if (claim.decorated) {
@@ -106,51 +108,8 @@ function verifyClaim(claim: CitationClaim, snapshot: RepoSnapshot, lock: LockFac
       `${label} is a citation-shaped refs pointer outside the strict standalone path:line grammar and cannot be byte-verified; use the two-line output of rk refs quote without Markdown or ./ decoration`,
     );
   }
-  if (!safeSourcePath(claim.sourcePath)) return claimError(claim, `${label} has an unsafe/unresolvable refs source path`);
-  if (claim.locusText === undefined || !/^[1-9]\d*$/.test(claim.locusText)) {
-    return claimError(claim, `${label} has no resolvable positive line locus (rk refs quote emits path:line)`);
-  }
-  const recordedLine = Number(claim.locusText);
-  if (!Number.isSafeInteger(recordedLine)) return claimError(claim, `${label} has an unresolvable line locus`);
-  if (claim.quote === undefined || normalizeQuoteText(claim.quote) === "") {
-    return claimError(claim, `${label} is not followed by a recognizable double-quoted byte-verbatim line`);
-  }
-
-  const sourceText = snapshot.get(claim.sourcePath);
-  if (sourceText === undefined) return claimError(claim, `source payload ${claim.sourcePath} ABSENT — ${label} cannot be byte-verified`);
-  if (lock.error !== undefined) return claimError(claim, `${label} is not hash-pinned: ${lock.error}`);
-
-  const refsRelative = claim.sourcePath.slice("refs/".length);
-  const pins = lock.entries.filter((pin) => pin.path === refsRelative);
-  if (pins.length !== 1) {
-    const reason = pins.length === 0 ? "has no entry" : `has ${pins.length} ambiguous entries`;
-    return claimError(claim, `${label} is not hash-pinned: ${LOCK_PATH} ${reason} for ${refsRelative}`);
-  }
-  const pin = pins[0]!;
-  if (!FULL_SHA256_RE.test(pin.sha256)) return claimError(claim, `${label} is not hash-pinned by a valid full sha256`);
-  const actualSha = fileSha256(snapshot, claim.sourcePath);
-  if (actualSha === undefined) return claimError(claim, `${label} payload is present but has no raw-byte sha256 fact`);
-  if (actualSha.toLowerCase() !== pin.sha256.toLowerCase()) {
-    return claimError(claim, `${label} sha256 ${actualSha} does not match adopted pin ${pin.sha256}`);
-  }
-
-  // rk-we5i: WHICH bytes the recorded line locus indexes. For an ordinary text payload, the payload
-  // itself (unchanged). For a PDF payload, the chained extraction layer — the payload's own bytes
-  // are compressed streams containing none of the document's sentences, so `includes` there can
-  // only ever produce a false NOT-FOUND. Any break in the extraction chain resolves to `ok: false`
-  // and lands here as one counted ERROR: the claim is in the denominator, never the numerator.
-  const resolved = resolveQuotableText(snapshot, lock, claim.sourcePath);
-  if (!resolved.ok) return claimError(claim, `${label} cannot be byte-verified: ${resolved.reason}`);
-
-  const sourceLine = resolved.text.split(/\r?\n/)[recordedLine - 1];
-  if (sourceLine === undefined || !sourceLine.includes(claim.quote)) {
-    const where = resolved.layer === "extraction" ? ` of extraction layer ${resolved.path}` : "";
-    return claimError(
-      claim,
-      `${label} quote NOT found byte-for-byte at recorded locus line ${recordedLine}${where} (exact substring / grep -F semantics)`,
-    );
-  }
-  return undefined;
+  const message = verifyAnchor(snapshot, lock, claim, label);
+  return message === undefined ? undefined : claimError(claim, message);
 }
 
 /** Checks every recognized quote pair, regardless of shard status. A `status: cited` shard with no

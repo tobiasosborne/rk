@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[zero-anchor-record]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 0 reviewed-VALID / 0 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, THE ZERO-ANCHOR RECORD (named in the campaign memo's red-fixture list, section 4). The record carries a plausible `statement_blessed`, `conclusion`, `signature` and `proof_locus`, and a perfectly valid hash-bound review record sits beside it — but it has no `statement_range` and an empty `hypotheses` list, so not one byte of it is bound to the paper. It is prose wearing a record's filename, and a reviewer reading it is reviewing the author's memory of the source. Reported under its own code rather than as a missing required field because that is what it IS: the record's whole function is anchoring, and the coverage line tells the same story from the other side (`1 L1 records / 0 reviewed-VALID / 0 anchors verified` — the record is in the denominator and contributes nothing to any numerator, never a silent skip, L2). `aism_behavior: n/a`. Mutation-proof, and stated exactly as observed rather than more strongly: disabling the zero-anchor branch does NOT make this tree green — it falls through to `[record-malformed] ... statement_verbatim; statement_range` (observed), and disabling the required-field checks for those two fields as well still leaves `[record-malformed] ... statement_range (must be refs/<path>:<from>-<to>, got undefined)` (observed). Both mutations turn THIS FIXTURE red, because expected.json asserts the `[zero-anchor-record]` code, not merely a nonzero exit. So the verdict here is redundantly guarded and what the check adds is the NAME, the reason, and the coverage story (`0 anchors verified` against a record the campaign believes it filed); that redundancy is a property worth recording, not a weakness to paper over. Reverted after each observation."
+}

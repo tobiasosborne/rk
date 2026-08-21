@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-widget.md",
+      "message_pattern": "[contract-mismatch]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked 1/1 shard citations", "0/1 shard-record joins"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, THE IRRELEVANT-QUOTE SHARD (review finding LB1's second sentence, verbatim: 'A status: cited shard can carry one genuine but irrelevant quote and an arbitrary contract'). Everything the pre-record gate checks passes here: the shard's citation pair is byte-verbatim at its recorded locus (`checked 1/1 shard citations`), the payload satisfies its adopted pin, and the record it names exists, hashes to the declared `record_sha256`, and carries a hash-bound VALID review. The one thing wrong is the only thing that matters downstream: the shard's `contract:` says `Every widget is round.` while the record's `statement_blessed` says `Every widget is round when its widget graph is d-regular.` — the quoted line really is in the paper, and the contract the linker propagates rigour through is a strictly stronger claim than the paper makes. Check 12 compares the two under Gate 2 Check 9's whitespace normalization (src/gates/linker-graph.ts's `normalizeContract`, imported, not re-derived). `aism_behavior: n/a` — no records exist in AISM, and check-refs.py has no notion of a contract at all. Mutation-proof: removing the contract comparison from checkCardJoin returns this fixture to zero findings, exit 0, `1/1 shard-record joins` — a cited theorem stating more than its source; observed and reverted. Green control: refs-32, byte-identical except that its contract IS the record's blessed statement."
+}

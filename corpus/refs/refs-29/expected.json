@@ -1,0 +1,26 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[review-invalid]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-2.json",
+      "message_pattern": "[review-inconsistent]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "checked records: 2 L1 records / 0 reviewed-VALID / 4 anchors verified"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, THE TWO WAYS A REVIEW FAILS TO SAY VALID — one fixture, because they are one rule ('the verdict must be honestly VALID') and each is separately breakable. L1-1 carries a review whose `verdict` is INVALID, with a finding explaining why (the restatement drops the d-regularity hypothesis): the record still verifies mechanically, and is still not cite-able. L1-2 carries a review that says VALID while answering `hypotheses_complete: false` — the shape a rubber-stamp takes when the reviewer does the work, records the defect, and then ticks the box anyway. A verdict may not be more generous than the reviewer's own clauses, so the second is `[review-inconsistent]` rather than a pass. Both records' anchors verify (`4 anchors verified`) and neither is reviewed-VALID: mechanical anchoring and human judgement are separate coordinates and the coverage line reports them separately. `aism_behavior: n/a`. Mutation-proof: accepting any parseable review (dropping both the verdict test and the false-clause test) returns this fixture to zero findings, exit 0; dropping only the false-clause test leaves L1-1 red and L1-2 green, which is why both live here; observed and reverted. ENVELOPE ADDENDUM (Tier A repair wave, BL2): the fixture's paper now prints TWO theorems (1.1 and 1.2) and the two records extract one each, because the new START rule requires each record's range to begin at its own `result_label` line — two records over one theorem, which is what this fixture used to carry, is no longer expressible and was never realistic."
+}

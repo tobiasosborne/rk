@@ -1,0 +1,16 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[statement-verbatim-mismatch]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 1 reviewed-VALID / 1 anchors verified"] },
+  "config_override": { "phase": "exploration" },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, STRUCTURAL IN EXPLORATION. The repo declares `phase: exploration` in .rk/config.json (declared here as `config_override`, per the rk-6vw rule that a fixture's config must be visible in its expectation file). The record's `statement_verbatim` is a sentence the paper does not contain — `Theorem 1.1. Every widget is round in every regime.` where lines 3-4 read `Every widget is round,` / `where the widget graph is d-regular.` — i.e. a fabricated statement behind a hash-bound VALID review. Under the phase matrix every other Gate 3 ERROR demotes to an advisory WARN in exploration (a quote's attribution is PRD's named 'L5 soft verification' allowance); Checks 11 and 12 do not, because admission of a cited result is a phase-independent transaction (campaign memo section 2a, repairing review finding LB4: 'the validity barrier becomes advisory exactly when admission begins'). SCOPE OF WHAT THIS FIXTURE PROVES, precisely: the corpus harness calls `gate.run()` directly and never passes findings through `src/gates/phase.ts`'s `applyPhase` (docs/gate-contracts.md 'Phase matrix', Mechanism), so what is proven HERE is that the ERROR is raised, and carried with `structural: true`, on a tree whose declared phase is exploration. That the ERROR then SURVIVES `applyPhase(findings, \"exploration\")` unchanged — severity still ERROR, no `[advisory in exploration phase]` clause appended — is proven directly in test/gates/refs-records.test.ts ('Phase matrix — Check 11 is STRUCTURAL') and test/gates/refs-card-join.test.ts, and the classification itself is pinned in test/gates/phase-classification.test.ts. Stated rather than implied: one fixture tree cannot carry both halves. `aism_behavior: n/a`. Mutation-proof: flipping `structural` off in src/gates/refs-records-schema.ts's `recordError` leaves this fixture GREEN-LOOKING (still one ERROR here, because the harness never demotes) and turns the two phase tests red — which is the honest reason the unit tests, not this directory, are the survival proof; observed and reverted."
+}

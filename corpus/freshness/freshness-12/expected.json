@@ -1,0 +1,27 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[card-unadopted]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/cards/widget-2026/L1-1.md",
+      "message_pattern": "[card-undeclared]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "manifest not adopted",
+      "2 card(s) unadopted/undeclared"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL4 — 'a valid record with no manifest … yields clean 0/0'. The repo holds a complete extraction record with a hash-bound VALID review and a rendered card sitting right beside it, and there is no `.rk/generated.json` at all. Pre-repair Gate 7 returned at its whole-mechanism presence-conditional early exit — zero findings, `checked 0/0`, exit 0 — which is the correct answer to 'has this repo adopted the freshness mechanism?' and the wrong answer to 'is the card an agent will read checked by anything?'. Regenerate-and-diff only ever verifies what the manifest DECLARES, so an undeclared card is outside the mechanism entirely: hand-edit it and nothing anywhere notices. The bijection now runs BEFORE the early return, and fires in both directions at once here — the record is not adopted (`[card-unadopted]`) and the file is not declared (`[card-undeclared]`) — with the count named on the coverage line so the non-adoption is still visible rather than silent (L2). The remedy is one command: `rk render cards`. `aism_behavior: n/a`. Mutation-proof: moving the bijection call after the early return returns this tree to zero findings, exit 0; observed and reverted. Sibling: `freshness-13` (an EMPTY manifest rather than an absent one — a different code path with the same false green)."
+}

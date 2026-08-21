@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[range-start-unlabelled]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 1 reviewed-VALID / 1 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, LANDING-BLOCKER BL2, the START half — the reviewer's first envelope exploit, transcribed: 'a source with `Theorem 1. Assume d-regular` on line 1 and the conclusion on line 2 passes when the range starts at line 2; the heuristic only looks after the range.' Here the paper prints `Theorem 1.2. Assume the widget graph is d-regular.` on line 3 and `Then every widget is round.` on line 4, and the record ranges 4-4. Pre-repair EVERY clause passed: the verbatim equals line 4 exactly, there are no hypothesis anchors to fall outside the range, the payload is current, the review is hash-bound and VALID, and the old extent check looked only at what FOLLOWS the range — which here is a blank line and `Proof.`, a perfectly well-formed terminator. The hypothesis was simply never in the window, so `statement_blessed: Every widget is round.` is an unconditional theorem extracted from a conditional one. The START rule is mechanical, not heuristic: a statement begins at its label, so the range's first line must contain the record's own `result_label`. `aism_behavior: n/a`. Mutation-proof: disabling the START clause returns this tree to zero findings, exit 0, `1 reviewed-VALID` — the exact pre-repair false green; observed and reverted. Siblings: `refs-35` (the END rule's capitalised-continuation case), `refs-36` (the EOF case), `refs-23` (the original lowercase-continuation case)."
+}

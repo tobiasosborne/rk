@@ -175,6 +175,12 @@ global constants — the first two ported from AISM's hardcoded defaults, the th
 - **Report-shard PREFIX** (no default — amended 2026-07-18, R12; was "AISM" in the AISM source)
   and **MAX_LINES** (280, already an env-var override in AISM) — see the report-shards gate
   section.
+- **Records mode** (`records`, refs gate Check 12): `"legacy"` (default) or `"required"`. Legacy
+  keeps the pre-record behavior — a `status: cited` shard naming no extraction record draws a WARN
+  and the run stays green — and exists ONLY as a migration path for campaigns that predate
+  records; `required` makes the join mandatory for every cited shard and every
+  `origin: literature` proved-mod-audit shard. An invalid value falls back to the default with one
+  loud config ERROR: a typo must never silently switch off a requirement a campaign opted into.
 - **Refs quote-at-locus tolerance** (`refsLocusToleranceLines`, refs gate): default **50** lines,
   added by P2/rk-wkzh (2026-08-03) with Gate 3 check 6. The claimed `refs/<path>:<lines>` window is
   widened by this many lines in each direction before the matched quote's position is tested
@@ -320,11 +326,11 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 |---|---|---|---|
 | **Gate 1 — defs** | Check 1 (frontmatter parse), Check 2 (malformed line), Check 3's `id` sub-check + Check 4 (`id`==stem — a shard's own cross-referenceable identity), Check 7 (DRIFT: duplicate term/alias) | Check 3's `term`/`kind`/`status` sub-checks, Checks 5-6 (enum validity), Checks 8-9 (cited source/sha256 required+valid), Check 12 (consensus/original missing `consensus:`) | id/parse/dedup keep the term namespace addressable; field completeness and cited-provenance are exactly PRD's "lazy convention-fixing" / "L5 soft verification" exploration allowances |
 | **Gate 2 — argument/linker** | Check 1 (frontmatter parse), the missing-`id:` crash-to-finding [F12], Check 2 (`id`==stem), Check 2a (duplicate id [rk-sj6]), Check 2b (malformed frontmatter line [rk-wc3]), Check 6 (cycle), Check 7 (unknown dep/route-member/def id), **Check 14's STORE-INTEGRITY half** (a corrupt `.rk/l5-verdicts.jsonl`) and **Check 16's STORE-INTEGRITY half** (a corrupt `.rk/retractions.jsonl`) — including the `proved-mod-audit`-unconfirmable ERROR that exists only as a consequence of either [LB5] | Checks 3-5 (kind/status/af enum + the missing-`kind:` fix [rk-aft]), Check 8 (status propagation / rigour ladder), Check 9 (contract match), Check 10 (orphans), Check 11 (generated freshness), Check 13 (critical-path provenance, M3.8), **Check 14's PROMOTION semantics** (promotable WARN, promoted-but-unsupported ERROR over a READABLE store), **Check 16's RETRACTION-STATUS semantics** (the unconditional veto itself, over a READABLE ledger) | id/parse/cycle/broken-ref keep the DAG itself coherent; the rigour ladder and contract-drift are explicitly consolidation-phase concerns (PRD: "af hard tier", "contract-shaped claims"); freshness is the named freshness class; critical-path provenance and the two ledger checks' STATUS semantics are likewise consolidation-weight validity concerns over a claim. **The split inside Checks 14/16 [LB5]**: a ledger that cannot be PARSED is the same class as a shard that cannot be parsed — the Phase matrix's own "parse errors" bullet — and demoting it would let `rk check` print OK on a corrupt validity ledger in exploration while `rk render` refuses the same tree, with the stamped pre-commit hook running the permissive surface. What a READABLE ledger MEANS for a declared status is a different question, and stays demotable |
-| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class) | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all". Checks 8-9 (rk-uqxh: argument-shard source/hash/locus/quote verification and its zero-coverage guard) join the same non-structural column |
+| **Gate 3 — refs** | Check 5 (unparseable JSON), the non-object-JSON crash-to-finding (`refs-08` class), **Check 11 (extraction records) and Check 12 (the card→shard join) in their ENTIRETY** [rk-nsex] | Check 2 (payload existence), Checks 3-4 (normalization + whole-quote match), Check 6 (quote at locus), Check 7 (refs locus named, no extractable quote) | a corrupt external cannot be reasoned about at all in either phase; byte-verifying a claimed quote is PRD's named "L5 soft verification only" exploration allowance — the anti-fabrication gate is deliberately soft during exploration and hard again at consolidation, never removed. Checks 6-7 (P2/rk-wkzh) join that same column, not the structural one: both are claims about a quote's attribution/verifiability, exactly the subject matter Checks 2-4 already carry, and neither says "this file cannot be reasoned about at all". Checks 8-9 (rk-uqxh: argument-shard source/hash/locus/quote verification and its zero-coverage guard) join the same non-structural column. **Checks 11-12 [rk-nsex] are the first Gate 3 checks in the STRUCTURAL column, and the classification is the point of them**: `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md` section 2a makes ADMISSION a phase-independent transaction over one candidate — "its card records, review records, notation, signature, and source closure must all be ERROR-free at admission regardless of phase" — repairing the 2026-08-20 Tier A review's finding LB4 ("the validity barrier becomes advisory exactly when admission begins"). The distinction against Checks 2-9 is real, not a preference: those ask whether a quote is attributed correctly (soft during exploration by PRD's own allowance), while Checks 11-12 ask whether a record may become the basis of a `cited` claim at all. Ordinary exploratory files are untouched by either check — a repo with no `refs/records/` and no `record:` frontmatter sees nothing from them |
 | **Gate 4 — provenance** | (none) | all checks (1-9) | the entire gate cross-references a generated report — PRD names "generated report" as a Consolidation-phase artifact only; during exploration there is typically no report yet to cross-reference against |
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
-| **Gate 7 — freshness** (M2.6) | (none) | manifest-malformation findings, per-entry STALE, per-entry declared-but-missing | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. Classified WHOLE-GATE non-structural for the same reason Gates 4-6 are: the subject matter (a repo's own adopted generated-output convention) is consolidation-shaped by construction, not a per-check carve-out |
+| **Gate 7 — freshness** (M2.6) | **every `cards-v1` finding** — per-entry STALE, declared-but-missing, cannot-be-regenerated, and both halves of the card bijection (`[card-unadopted]`, `[card-undeclared]`) [rk-nsex / BL4] | manifest-malformation findings, and per-entry STALE / declared-but-missing for every OTHER generator (`linker-index`, `linker-dag`, `render-site-v1`) | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. That reasoning held while every generated artifact was a VIEW of data checked elsewhere (`INDEX.md`, `DAG.md`, the site). **`cards-v1` is the exception and gets a carve-out** [rk-nsex / BL4]: a card is the artifact AGENTS ANSWER FROM, so its freshness is the only thing standing between a hand-edited card and a claim about the literature entering the DAG — and admission is phase-independent (campaign memo section 2a). Demoting it would mean `rk check` exits green on an edited card during the exact phase in which admission happens, which is landing-blocker BL4 of the 2026-08-20 Tier A review verbatim. This is a per-generator carve-out, deliberately narrow: nothing about `linker-index`/`linker-dag`/`render-site-v1` changes |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
 ids/aliases" class, and Gate 2's Check 12 (brittleness) and Check 15 (mandatory review, M3 review
@@ -1198,7 +1204,13 @@ trees), recurring at the gate-output level instead of the brittleness-check leve
 embedded in an `argument/**/*.md` shard against its hash-pinned local `refs/` source, so
 neither an af prover nor a shard author can retain cited status after the source, locus, or
 quoted bytes drift (check-refs.py:6-9 for the externals half; Checks 8-9, rk-uqxh, for the
-shard half).
+shard half). Since rk-nsex the gate covers two further populations that ask the same question
+one level up: the AUTHORED **extraction records** under `refs/records/` (Check 11) — does the
+record say what the source says, and did an independent reviewer, bound by hash to these exact
+bytes, say so? — and the **card→shard join** (Check 12) that lets a `cited` shard's contract be
+exactly the record's blessed statement and nothing else. All four populations share one payload
+resolver (`src/gates/refs-extraction.ts`) and one anchor rule (`src/gates/refs-anchor.ts`), so
+they cannot disagree about which bytes are authoritative or about what makes an anchor verified.
 
 **Failure mode guarded — THE 19/19 false-green.** Before the `aism-dbq` "UN-VACUUM" fix,
 an external whose claimed `refs/` payload was absent locally (e.g. gitignored, not yet fetched
@@ -1289,6 +1301,50 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   payload does not make the replacement quotable (check 10's violated-pin clause, review P1-1).
   Implementation: `src/gates/refs-extraction.ts` (`resolveQuotableText`), called by both Gate 3
   halves.
+- **Extraction-record inputs** (rk-nsex; `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md`
+  section 4). Glob: everything under `refs/records/`. Exactly three filenames are recognized, and
+  a fourth is an ERROR rather than a skip:
+  - `refs/records/<source-id>/L1-<n>.json` — an AUTHORED **extraction record** for one result,
+    schema `schemas/extraction-record.v1.json` with `record_kind: "L1"`. Fields: `schema_version`
+    (the string `"1"`), `source` (which must equal the `<source-id>` directory component),
+    `payload_sha256`, optional `extraction_sha256`, `result_label`, `statement_range` (the RANGE
+    anchor `refs/<path>:<from>-<to>`, both bounds 1-indexed and inclusive — the collapsed
+    `refs/<path>:12` form is deliberately not accepted, so a range and a line anchor can never be
+    confused), `statement_verbatim`, `statement_blessed`, `hypotheses` (each `{text, anchor}` with
+    `anchor` a LINE anchor `refs/<path>:<line>`), `conclusion`, `signature` (an object; its own
+    shape is `schemas/signature.v1.json`, bead rk-8805, and is NOT validated here — stated plainly
+    rather than implied to be checked), `profile`, `proof_locus`.
+  - `refs/records/<source-id>/L0.json` — the per-paper analogue (`record_kind: "L0"`): `regime`,
+    `objects`, `results`, `profile`, the optional `standing_assumptions_range` (the only place
+    outside its own statement range an L1 hypothesis anchor may legitimately point), and the
+    optional `ends_at_eof` — an object mapping a `result_label` to `true`, declaring that that
+    result's statement genuinely runs to the end of the quotable text (clause (f), terminator 3).
+  - `refs/records/<source-id>/L1-<n>.review.json` — the **review record**, schema
+    `schemas/card-review.v1.json`: `card_sha256`, `verdict: VALID|INVALID`, `reviewer`
+    (`{family, backend, model, session}`), `checked` (the four clauses `statement_complete`,
+    `hypotheses_complete`, `translation_faithful`, `signature_faithful`, each `{value, note}`),
+    and `findings`. The record it reviews is its own sibling by name.
+  - Anything else under `refs/records/` (a typo'd name, a scratch file, `L1-2.reviewed.json`) is
+    an ERROR `[record-unrecognized]`: an unclassified file is indistinguishable from a review
+    record the gate failed to read.
+  **Source attribution.** `refs/manifest/sources.lock.json`'s per-entry `source_id` is retained by
+  `readLockFacts` (`LockEntryFacts.sourceId`) for exactly one consumer: Check 11 clause (g). It is
+  the only fact in the repo that attributes BYTES to a PAPER, and without it a record can quote any
+  acquired paper under any other paper's name.
+  **Canonical bytes.** Every hash OF a record — the review's `card_sha256`, a shard's
+  `record_sha256:` — is the sha256 of `canonicalRecordBytes(record)`: the PARSED JSON re-serialized
+  with recursively sorted keys, two-space indent and one trailing newline (`src/gates/
+  canonical-json.ts`). Never the file's bytes as formatted on disk. The binding must be sensitive
+  to exactly one thing — whether a VALUE changed since the review — so that a formatter run cannot
+  invalidate an honest review (which would train a campaign to re-stamp digests mechanically, the
+  very habit under which a real edit slips through) while a one-character edit always does.
+  **Pre-hash losslessness.** Raw record and review JSON must be losslessly representable by that
+  canonical form before `JSON.parse` output is trusted: duplicate object keys and numeric literals
+  that are not safe integers or do not round-trip through `JSON.stringify` unchanged are structural
+  **ERROR `[record-malformed]` / `[review-malformed]`**. In particular, neither
+  `9007199254740992` nor `9007199254740993` may enter the hash domain: JavaScript parses them to the
+  same double, so changing one to the other would otherwise preserve an old review and shard hash.
+  The raw-text scanner compares object keys after JSON escape decoding, at every nesting depth.
 - **Hash authority for BOTH halves** (rk-r0j3). `refs/manifest/sources.lock.json` pins every
   citable payload, whatever its kind: a `refs/<path>` a quote is matched against must resolve to
   exactly one lock entry, refs-relative, whose `sha256` is a full 64-hex digest equal to the
@@ -1439,6 +1495,181 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
     `refs-07`, `refs-09`, `refs-11` (externals half) and `refs-12`, `refs-14`..`refs-17` (shard
     half) all carry locks adopting their sources at the digests on disk.
 
+11. **Extraction-record verification** (rk-nsex; campaign memo section 4, repairing the 2026-08-20
+    Tier A review's finding LB1). Every `refs/records/<source-id>/L1-<n>.json` is verified against
+    its source and its review. Each clause is a distinct ERROR code, and every finding of Checks 11
+    and 12 is **structural** (see the Phase matrix).
+
+    **The failure class, precisely.** Requiring an anchor on every hypothesis a record *lists*
+    cannot detect a hypothesis it *omits*, and an exact quote occurring somewhere in a paper
+    establishes nothing about whether the restatement is faithful. Both holes close the same way:
+    the record anchors a RANGE covering the complete statement as printed, `statement_verbatim`
+    must equal those bytes, every hypothesis anchor must lie inside that range, and an independent
+    reviewer — whose verdict is itself an artifact, hash-bound to the record's bytes — reads the
+    full range rather than the author's selection from it.
+
+    - (a) **Anchors.** Each hypothesis `{text, anchor}` is verified under **Check 8's exact rule**:
+      the payload must be present, satisfy its adopted pin, resolve through Check 10 to its
+      quotable layer, and `text` must occur as an exact case-sensitive substring of the anchored
+      line (`grep -F`; no normalization, no locus tolerance). This is not a re-derivation — Check 8
+      and Check 11 call the same function, `src/gates/refs-anchor.ts`'s `verifyAnchor`, so "what
+      makes an anchor verified" cannot have two answers. Failure ⇒ **ERROR `[anchor-unverified]`**.
+    - (b) **The statement range and its bytes.** `statement_range` must parse, resolve through
+      Check 10, and lie within the resolved text ⇒ otherwise **ERROR
+      `[statement-range-unverified]`**. `statement_verbatim` must equal the range's lines joined
+      with a single `\n`, byte for byte ⇒ otherwise **ERROR `[statement-verbatim-mismatch]`**.
+    - (c) **Hypotheses inside the statement.** Every hypothesis anchor must name the same payload
+      as `statement_range` and fall within `[from, to]`, OR fall within the L0 record's declared
+      `standing_assumptions_range` ⇒ otherwise **ERROR `[hypothesis-outside-statement]`**. The L0
+      allowance is not a loophole: real papers hoist standing hypotheses out of the theorem
+      environment, and without it an author must either mis-anchor the hypothesis or drop it.
+    - (d) **The review binding.** A review record must exist ⇒ else **ERROR `[review-absent]`**;
+      its `card_sha256` must equal the record's canonical digest ⇒ else **ERROR `[review-stale]`**
+      (the record was edited after it was reviewed — the same staleness class as Gate 8's
+      `claimSha256` and the L5 store's `contentHash`, applied to the artifact agents read); its
+      `verdict` must be `VALID` ⇒ else **ERROR `[review-invalid]`**; and a `VALID` verdict
+      alongside any `checked.*.value: false` ⇒ **ERROR `[review-inconsistent]`**, because a verdict
+      may not be more generous than the reviewer's own clauses.
+    - (e) **Staleness against the lock.** The payload a record's staleness is measured against is
+      the payload its own `statement_range` names (the record's `source` is a source-id and the
+      lock is keyed by path; the anchor is the only honest join between them). `payload_sha256` ≠
+      the lock's current pin ⇒ **ERROR `[stale-record]`**. `extraction_sha256` ≠ the lock entry's
+      `extraction.sha256` ⇒ **ERROR `[stale-extraction]`**, in all three directions: record names
+      one and the lock declares none, the lock declares one and the record names none, or the two
+      disagree. Neither error says the record is WRONG; each says nothing in it can be trusted
+      until it is re-checked, because re-acquisition and re-extraction both silently renumber a
+      document while every anchor may still appear to verify (`refs-26`, `refs-27`).
+    - (f) **The statement ENVELOPE — fail-closed at both ends** (Tier A review 2026-08-20,
+      landing-blocker BL2, replacing the extent-only heuristic that shipped first). A short
+      `statement_range` satisfies (a)-(c) perfectly — every anchor is real, the verbatim matches,
+      and an omitted hypothesis is simply outside the window no anchor points into — so the range
+      itself must be bounded mechanically.
+      **START (mechanical, not a heuristic).** The range's FIRST line must contain the record's own
+      `result_label` ⇒ otherwise **ERROR `[range-start-unlabelled]`**. A statement begins at its
+      label; a range beginning below the label has by construction dropped whatever the label line
+      carried, and in real papers that is exactly where the hypotheses are printed (`Theorem 1.2.
+      Assume the widget graph is d-regular.` / `Then every widget is round.`, ranged from the
+      second line — the reviewer's own example, `refs-34`).
+      **END.** Exactly three terminators are accepted: (1) the next non-empty line begins a new
+      labelled block — `Proof|Theorem|Lemma|Proposition|Corollary|Definition|Remark|…`, a LaTeX
+      `\section`/`\begin`-style command, or a numbered heading — with or without a blank line
+      before it; (2) a BLANK line followed by a capitalised sentence that is not one of the
+      continuation words (`where`, `assume`, `assuming`, `suppose`, `such that`, `provided`,
+      `here`, `with the`, `moreover`, `further`, `in addition`, …); (3) the end of the quotable
+      text, and ONLY when the source's L0 record declares `ends_at_eof` for this exact
+      `result_label`. Anything else is an ERROR: a lowercase continuation or a continuation word ⇒
+      **`[statement-range-truncated]`** (`refs-23`), a capitalised continuation not separated by a
+      blank line ⇒ the same code (`refs-35`), an undeclared EOF ⇒ **`[range-ends-at-eof]`**
+      (`refs-36`). The EOF rule matters because a truncated extraction of a longer document is
+      indistinguishable from a complete one at EOF; `ends_at_eof` makes the difference an author
+      statement a reviewer can check rather than an assumption this gate makes (`refs-27` is the
+      positive control).
+      **REMAINING HEURISTIC RESIDUE, stated plainly rather than implied away.** Terminator (2) is
+      the soft one: a genuine continuation that is capitalised, absent from the word list, and
+      separated by a blank line still passes — a display equation set off by blank lines followed
+      by `Then the conclusion holds` is the realistic shape. Terminator (1) can likewise be spoofed
+      by a truncation that happens to be followed by the next block's label. The START rule and the
+      EOF rule are mechanical and not heuristic at all, so what remains heuristic is strictly less
+      than what shipped first — and clause (d)'s reviewer, who is shown the whole range, remains
+      the semantic backstop. Sufficiency against a deliberately truncated range stays an open
+      residual on bead rk-nsex.
+    - (g) **The source binding** (Tier A review 2026-08-20, landing-blocker BL1). Every payload the
+      record anchors — its `statement_range`, every hypothesis anchor, and the L0
+      `standing_assumptions_range` it leans on — must be attributed by
+      `refs/manifest/sources.lock.json` to the record's OWN `source` ⇒ otherwise **ERROR
+      `[source-mismatch]`**. A lock entry that records no `source_id` at all also fails: a manifest
+      that does not say which paper a file is cannot be used to prove which paper it is. **The hole
+      this closes**: the reviewer filed a record as paper-A whose range, payload hash, quotation,
+      hypotheses and theorem all came from paper-B, and every other clause passed — anchors verify
+      (against the wrong paper), verbatim matches (the wrong paper's bytes), the payload satisfies
+      its own pin (the wrong paper's pin), the review is hash-bound and VALID — for zero findings
+      and `1/1 shard-record joins`. Internal consistency is exactly what a wholesale substitution
+      preserves, so the only thing that can catch it is an EXTERNAL attribution of bytes to papers,
+      which is what the manifest's `source_id` is. Fixture: `refs-33`.
+    - **Shape and discovery** (`src/gates/refs-records.ts` / `refs-records-schema.ts`):
+      unparseable or non-object JSON ⇒ **ERROR `[record-unparseable]`**; a violation of
+      `schemas/extraction-record.v1.json` ⇒ **ERROR `[record-malformed]`** naming every offending
+      field at once; a record whose `source` differs from its directory ⇒ **ERROR
+      `[record-misfiled]`** (a record filed under another paper's directory would let one source's
+      review vouch for another's bytes); a record with NEITHER a `statement_range` NOR a single
+      hypothesis anchor ⇒ **ERROR `[zero-anchor-record]`** — nothing in it is bound to the source,
+      so it is prose wearing a record's filename; a violation of `schemas/card-review.v1.json` ⇒
+      **ERROR `[review-malformed]`**; an unclassifiable file under `refs/records/` ⇒ **ERROR
+      `[record-unrecognized]`**.
+      **Exact means exact at runtime.** The validators enforce `additionalProperties: false` at
+      every schema level that declares it — L1, hypothesis, L0, review, reviewer, `checked`, and
+      each checked clause — while `signature` remains the schema's deliberate open object until
+      `schemas/signature.v1.json` lands. They also enforce full 64-hex shape on both L0 digests,
+      string item types in L0 `objects`/`results`, optional-field types, and `source` equality with
+      the enclosing directory for BOTH L0 and L1. All violations in one document are named in its
+      single malformed finding; no schema-invalid subset is returned for later verification.
+      `ends_at_eof` is an optional L0 v1 property mapping arbitrary result-label keys to literal
+      `true`; it was already normative in clause (f), and is included in the schema's closed key
+      set rather than treated as an exception to exact validation.
+    - **Presence-conditional**: a repo with no `refs/records/` reports `0 L1 records` on the
+      coverage line and produces no finding — the mechanism simply has not been adopted, which is
+      named, never silently skipped (L2).
+    - **A note on the check number.** The campaign memo and bead rk-nsex both call this "Check 10".
+      Gate 3's Check 10 was already taken by payload resolution (rk-we5i), so the record check
+      lands as Check 11 and the join as Check 12 — the same collision class the 2026-08-20 review's
+      follow-up FU1 named for the linker. The memo is an append-only design record and is not
+      edited here; this document is normative for check numbers (Authority, above).
+    - Fixtures: `refs-23` (omitted hypothesis / range-extent), `refs-25` (zero anchors), `refs-26`
+      (stale record), `refs-27` (stale extraction), `refs-28` (review absent), `refs-29`
+      (INVALID and self-contradicting VALID), `refs-30` (review bound to pre-edit bytes), `refs-31`
+      (structural in exploration), `refs-32` (green control).
+12. **Card → shard hash join** (rk-nsex; campaign memo section 4, "Card -> shard hash join").
+    Reported against the SHARD, structural, and deliberately placed in Gate 3 rather than the
+    linker: it asks whether a claim about the literature is backed by verified source bytes, and
+    Gate 2 has no access to `refs/` payloads, the lock, or the records — putting it there would
+    mean a second, weaker copy of "is this record usable".
+
+    For every `argument/**/*.md` shard (Check 8's discovery boundary) whose `status` is `cited` or
+    `proved-mod-audit` — and, for the PMA half, whose declared `origin` says it is a literature
+    claim (see "The origin discriminator" below):
+    - `record:` names an extraction record and `record_sha256:` its canonical digest. A `record:`
+      with no valid 64-hex `record_sha256:` ⇒ **ERROR `[record-sha-absent]`**; a `record_sha256:`
+      with no `record:` ⇒ **ERROR `[record-missing]`**; a `record:` naming a path that does not
+      exist ⇒ **ERROR `[record-missing]`**.
+    - the named record must have passed EVERY Check 11 clause ⇒ otherwise **ERROR
+      `[record-review-unusable]`**. A record with any defect is not a weaker record here; it is no
+      record at all.
+    - `record_sha256:` must equal the record's canonical digest ⇒ otherwise **ERROR
+      `[record-sha-mismatch]`** (the shard is pinned to a version of the record that is not the one
+      on disk).
+    - the shard's `contract:` must equal the record's `statement_blessed` under **Gate 2 Check 9's
+      own normalization** (whitespace runs collapsed to one space, ends stripped —
+      `src/gates/linker-graph.ts`'s `normalizeContract`, imported, never re-derived) ⇒ otherwise
+      **ERROR `[contract-mismatch]`**. This is the clause that rejects the review's own exploit: "a
+      `status: cited` shard can carry one genuine but irrelevant quote and an arbitrary contract."
+    - **TWO MODES** (`.rk/config.json`'s `records`, Tier A review 2026-08-20 landing-blocker BL3 —
+      "Check 12 remains optional at the exact promotion boundary it is meant to protect"):
+      - **`"legacy"` (the default)** — a `status: cited` shard with NO `record:` keeps its
+        pre-rk-nsex behavior (Checks 8-9 alone) and draws a **WARN `[record-absent]`**. Every
+        existing rk campaign predates records; making their absence an ERROR on day one is how a
+        gate gets switched off. This is a MIGRATION setting and the WARN is the campaign's visible
+        backlog — **not a resting state**. Fixture: `refs-40`.
+      - **`"required"`** — the state a campaign that has adopted records runs in. A shard that must
+        join and names no record is a structural **ERROR `[record-required]`** (`refs-37`).
+    - **The origin discriminator** (BL3). rk cannot mechanically tell a literature
+      `proved-mod-audit` claim — which the campaign memo requires to join, "it is a literature
+      claim, not a campaign proof" — from the campaign's own proof-mod-audit, which has no record
+      to join to. The pre-repair gate resolved that by checking neither, i.e. by inferring
+      "campaign" from silence, and a PMA shard with no record and no citation produced no finding
+      at all. The repair does not invent a proxy: under `records: "required"` every
+      `proved-mod-audit` shard must declare `origin: literature | campaign` in its frontmatter ⇒
+      otherwise **ERROR `[origin-required]`** (`refs-38`), an unrecognized value included; and
+      `origin: literature` is then held to the full join on exactly the same terms as `cited`
+      (`refs-39`), while `origin: campaign` needs no record and draws no finding. In `legacy` mode
+      the declaration is not demanded and an undeclared PMA shard stays silent.
+    - **The denominator counts the population, not the opt-ins** (BL3). `D` counts every `cited`
+      shard and every `origin: literature` PMA shard, whether or not it names a record — in BOTH
+      modes. Before this repair a cited shard with no `record:` was excluded, so a repo whose every
+      cited shard was unrecorded reported `0/0 shard-record joins`: full coverage of a population
+      the check had defined to be empty. `refs-40` (legacy) therefore reads `0/1`, which is the
+      number a campaign watches go to zero before flipping to `required`.
+    - Fixtures: `refs-24` (irrelevant-quote shard), `refs-32` (green control).
+
 **Known limitations / incident history.**
 - **The 19/19 false-green (aism-dbq)**: documented above; the mandatory regression fixture.
 - **AISM's own `MIN_RUN=40` embeds a tuning asymmetry** (the thing rk's Divergences entry below
@@ -1564,9 +1795,19 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
   payload's file format. Fixtures: `refs-21` (payload replaced after adoption), `refs-22` (no lock
   at all).
 - **[message-only]** The single Gate 3 coverage line retains the four-way external breakdown
-  and appends `; checked <C>/<K> shard citations` (rk-uqxh), rendering: `checked refs: <P>/<T>
-  externals byte-verified, <F> failed, <I> import-skipped, <Q> no-quote-skipped; checked
-  <C>/<K> shard citations`. `K` is the number of strict pointer hits, plus permissive
+  and appends `; checked <C>/<K> shard citations` (rk-uqxh) and, since rk-nsex,
+  `; checked records: <R> L1 records / <V> reviewed-VALID / <A> anchors verified; <J>/<D>
+  shard-record joins`, rendering in full: `checked refs: <P>/<T> externals byte-verified, <F>
+  failed, <I> import-skipped, <Q> no-quote-skipped; checked <C>/<K> shard citations; checked
+  records: <R> L1 records / <V> reviewed-VALID / <A> anchors verified; <J>/<D> shard-record
+  joins`. `R` counts every discovered `L1-<n>.json`, INCLUDING ones too malformed to verify (a
+  record the campaign wrote is a record in the denominator); `V` counts those carrying a
+  hash-matching VALID review; `A` counts anchors byte-verified — one per verified statement range
+  plus one per verified hypothesis; `D` counts shards that declared a record and `J` those whose
+  join completed. The three record numbers are deliberately not collapsed into one ratio: `2
+  anchors verified / 0 reviewed-VALID` (`refs-28`) is a different state from `0 anchors verified /
+  0 reviewed-VALID` (`refs-25`), and mechanical anchoring and human judgement are separate
+  coordinates. `K` is the number of strict pointer hits, plus permissive
   citation-shaped hits not already counted by the strict scan, plus one for every
   `status: cited` shard carrying neither kind of hit; `C` is the number of strict claims
   passing source, hash, locus, non-degenerate-quote, and exact-byte verification. A
@@ -1609,6 +1850,27 @@ changed across AISM's history at time of reading.
 | `refs-20` | **payload swapped, sidecar re-chained, adopted pin violated** [2026-08-14 Tier A review, P1-1] — the payload on disk is a revision that was never adopted, and the extraction is chained to THOSE bytes, so the whole chain is internally consistent; an `externals` quote byte-verifies against it ⇒ check 10 ERROR, `checked 0/1 externals byte-verified, 1 failed` (PASSed at `checked 1/1` before this repair: the externals half performs no pin check of its own, so the resolver's chain test was the only thing standing between a swapped payload and a green Gate 3) |
 | `refs-21` | **TEXT payload swapped after adoption** [rk-r0j3] — a non-PDF source replaced by a later revision that was never re-adopted; the external quotes the replacement byte-verbatim at its recorded locus ⇒ check 10 stage-1 ERROR, `checked 0/1 externals byte-verified, 1 failed` (PASSed at `checked 1/1` before this bead: the resolver returned raw bytes for every non-PDF payload before consulting the lock, and the externals half performs no pin check of its own — `refs-20` cannot detect this, because its payload is a PDF) |
 | `refs-22` | **cited payload that no adoption ever pinned** [rk-r0j3] — text payload present, quote byte-verbatim at its locus, and NO `refs/manifest/sources.lock.json` in the tree ⇒ check 10 stage-1 ERROR, `checked 0/1 externals byte-verified, 1 failed`. The discriminator for the weaker rule "pin-check only when a lock entry happens to exist", under which `refs-21` still ERRORs and this tree silently returns to `checked 1/1`, exit 0 |
+| `refs-23` | **omitted hypothesis** [rk-nsex, review finding LB1] — extraction record whose `statement_range` stops one line before the printed statement's `where` clause; every other clause passes and the review is hash-bound and VALID ⇒ Check 11 clause (f) ERROR `[statement-range-truncated]`. The heuristic's limits are stated at clause (f); its sufficiency is an open residual on rk-nsex |
+| `refs-24` | **irrelevant-quote shard** [rk-nsex, review finding LB1 verbatim] — `status: cited` shard whose citation quote is genuine and byte-verified at its locus and whose `contract:` states more than the joined record's `statement_blessed` ⇒ Check 12 ERROR `[contract-mismatch]`, `checked 1/1 shard citations`, `0/1 shard-record joins` |
+| `refs-25` | **zero-anchor record** [rk-nsex] — record with no `statement_range` and no hypothesis anchors, beside a valid hash-bound review ⇒ Check 11 ERROR `[zero-anchor-record]`, `1 L1 records / 0 reviewed-VALID / 0 anchors verified` |
+| `refs-26` | **stale record** [rk-nsex] — `payload_sha256` names revision 1 while the lock adopts revision 2 ⇒ Check 11 clause (e) ERROR `[stale-record]`, with both anchors still verifying and the review still VALID (which is the point: agreement with today's bytes is luck, not evidence) |
+| `refs-27` | **stale extraction** [rk-nsex] — PDF payload and lock chain both intact; the record names the digest of an EARLIER extraction of the same payload ⇒ Check 11 clause (e) ERROR `[stale-extraction]`. Check 10 is fully satisfied here, so `refs-18`/`refs-19`/`refs-20` cannot detect it: they test the lock's chain to the payload, this tests the record's chain to the lock |
+| `refs-28` | **review absent** [rk-nsex] — mechanically perfect record with no review record ⇒ Check 11 clause (d) ERROR `[review-absent]`, `2 anchors verified` but `0 reviewed-VALID`. The card rendered for it is the NOT ADMISSIBLE stub |
+| `refs-29` | **the verdict is not honestly VALID** [rk-nsex] — one record whose review says `INVALID`, one whose review says `VALID` while answering `hypotheses_complete: false` ⇒ ERRORs `[review-invalid]` and `[review-inconsistent]`. Two separately breakable halves of one rule, in one tree |
+| `refs-30` | **review bound to the pre-edit bytes** [rk-nsex] — complete VALID review whose `card_sha256` is the record's digest from before its `statement_blessed` was edited ⇒ Check 11 clause (d) ERROR `[review-stale]`. The digest is over CANONICAL bytes, so a reformat does not fire it and a one-word edit always does |
+| `refs-31` | **structural in exploration** [rk-nsex, review finding LB4] — fabricated `statement_verbatim` behind a hash-bound VALID review, in a repo declaring `phase: exploration` ⇒ ERROR, verdict fail. Proves the ERROR is RAISED (and carried `structural: true`) under exploration; survival through `applyPhase` is proven in `test/gates/refs-records.test.ts` / `test/gates/refs-card-join.test.ts`, since the corpus harness never applies the phase matrix |
+| `refs-32` | **records golden case** [rk-nsex] — complete record + hash-bound VALID review + `cited` shard joined by canonical `record_sha256` with a matching contract ⇒ PASS, `checked 1/1 shard citations`, `1 L1 records / 1 reviewed-VALID / 2 anchors verified`, `1/1 shard-record joins`. Every red sibling above is this tree with exactly one thing changed |
+| `refs-33` | **wholesale source substitution** [rk-nsex, Tier A review BL1] — record filed under `refs/records/widget-2026/` declaring `source: widget-2026`, every anchor and byte taken from a second acquired paper the manifest attributes to `other-2026` ⇒ Check 11 clause (g) ERROR `[source-mismatch]`, plus the join's consequent `[record-review-unusable]`. Passed at zero findings and `1/1 shard-record joins` before the repair |
+| `refs-34` | **leading-clause omission** [rk-nsex, Tier A review BL2] — the hypothesis is printed on the result's label line and the range starts on the line below it ⇒ Check 11 clause (f) START ERROR `[range-start-unlabelled]`. Passed cleanly before the repair: the verbatim matched, no anchor fell outside the range, and the terminator after the range was well-formed |
+| `refs-35` | **capitalised continuation** [rk-nsex, Tier A review BL2] — the statement continues on the next line as `Consequently …`, capitalised and outside the continuation word list ⇒ `[statement-range-truncated]` via the structural rule (no blank separation, no new labelled block), not via the word list |
+| `refs-36` | **EOF-truncated range** [rk-nsex, Tier A review BL2] — the quotable text ends exactly where the range ends and no L0 record declares `ends_at_eof` for the label ⇒ `[range-ends-at-eof]`. `refs-27` is the positive control for the declaration |
+| `refs-37` | **cited shard with no record, records: required** [rk-nsex, Tier A review BL3] — a complete reviewed record for the theorem exists and the shard does not name it ⇒ structural ERROR `[record-required]`, and the join denominator now counts it (`0/1`, where the pre-repair gate reported `0/0`) |
+| `refs-38` | **proved-mod-audit with no origin, records: required** [rk-nsex, Tier A review BL3] ⇒ ERROR `[origin-required]`. Pre-repair such a shard produced no finding at all: 'campaign' was inferred from silence |
+| `refs-39` | **origin: literature with no record** [rk-nsex, Tier A review BL3] ⇒ ERROR `[record-required]` — the declaration has consequences, or it is a label worth nothing |
+| `refs-40` | **the legacy control** [rk-nsex, Tier A review BL3] — the byte-identical tree to `refs-37` with no `.rk/config.json` ⇒ WARN `[record-absent]`, exit 0, and still `0/1 shard-record joins` so the backlog is visible; a second `origin: campaign` PMA shard proves that half stays silent |
+| `refs-41` | **lossy canonical JSON refused** [rk-nsex, Tier A review BL5] — one record changes a reviewed signature integer from `9007199254740992` to `9007199254740993` while retaining the old digest; another repeats `statement_blessed` while retaining the digest of the last-key-wins parse ⇒ both `[record-malformed]`, neither review nor shard hash carries forward, `0/2 shard-record joins` |
+| `refs-42` | **extra properties rejected at every closed level** [rk-nsex, Tier A review BL6] — extras on L1/hypothesis and review/reviewer/checked/clause ⇒ `[record-malformed]` + `[review-malformed]`; before repair the record was `reviewed-VALID` |
+| `refs-43` | **malformed and misfiled L0 records** [rk-nsex, Tier A review BL6] — bad L0 digest shapes, non-string array items, extra property, and a separate source-directory mismatch ⇒ `[record-malformed]` + `[record-misfiled]` |
 
 ---
 
@@ -2423,10 +2685,30 @@ that rule for any artifact a repo opts into declaring.
   `.rk/` include rule for exactly this; `.rk/config.json` keeps its own separate edge path,
   `src/store/config-load.ts`, unaffected).
 - **Recognized generators.** Two SHAPES: (a) `src/gates/freshness.ts`'s `GENERATORS` map — pure
-  `(snapshot) => string` functions this gate calls itself: `linker-index` (renders
+  `(snapshot, path) => PureRegenResult` functions this gate calls itself: `linker-index` (renders
   `argument/INDEX.md` via `src/gates/linker-render.ts`'s `renderIndex`, over the same
   `parseRegistry` every Gate 2 run computes independently), `linker-dag` (`DAG.md` /
-  `renderDag`, same source). (b) `RENDER_SITE_GENERATOR` — `render-site-v1`, EDGE-SUPPLIED (see
+  `renderDag`, same source), and `cards-v1` (rk-nsex — renders
+  `refs/cards/<source-id>/L1-<n>.md` from the extraction record at
+  `refs/records/<source-id>/L1-<n>.json` plus its review record, via `src/render/cards.ts`'s
+  `renderCardForPath`, THE same function `rk render cards` writes with, so generator and verifier
+  cannot drift). Two properties of the `cards-v1` entry are new and are the reason the pure
+  signature takes a `path` and returns a result rather than a string: it is ONE generator over MANY
+  artifacts (one card per record, so it must see which card is being asked for), and it can
+  legitimately fail to produce bytes at all (a declared card whose record is absent, unparseable or
+  malformed) — which is an ERROR `<path> cannot be regenerated for verification (generator
+  'cards-v1'): <reason>`, never a pass, exactly as for an edge-supplied generator.
+  **How a campaign adopts cards**: run `rk render cards`, which writes every card and upserts one
+  `{"path": "refs/cards/<source-id>/L1-<n>.md", "generator": "cards-v1"}` entry per card into
+  `.rk/generated.json` (creating it if absent, preserving every other entry). From that point a
+  hand-edited card is a STALE ERROR under Check 3, which is the whole mechanism by which "the
+  records are the truth, the cards are the view agents read" is enforced rather than merely
+  asserted (campaign memo section 4). A record absent from Gate 3 Check 11's `usable` map still
+  renders — as an empty NOT ADMISSIBLE card carrying no statement, hypothesis or restatement —
+  whether it failed source, anchor, staleness, envelope, or review verification. Thus an agent
+  reading a card can never quote an extraction the complete record check refused. (b)
+  `RENDER_SITE_GENERATOR` —
+  `render-site-v1`, EDGE-SUPPLIED (see
   "Edge-supplied generators" above): recognized, but this gate never regenerates it itself. A
   manifest entry naming any OTHER generator id (neither (a) nor (b)) is now a BLOCKING ERROR —
   see Check 4, below (M2 boundary review blocker #3a; flipped from the pre-repair "not an error
@@ -2461,7 +2743,9 @@ that rule for any artifact a repo opts into declaring.
    recognized (either shape): if `path` is absent from the repo ⇒ ERROR `<path> is declared in
    .rk/generated.json (generator '<gen>') but is absent from the repo — regenerate it or remove
    the manifest entry`. If present, regenerate (a `GENERATORS` entry computes this itself; a
-   `render-site-v1` entry reads the edge-supplied bytes) and byte-compare; a mismatch ⇒ ERROR
+   `render-site-v1` entry reads the edge-supplied bytes; a `GENERATORS` entry may also return a
+   structured failure, which is reported exactly like the edge-supplied one below) and
+   byte-compare; a mismatch ⇒ ERROR
    `<path> is STALE (regenerate via '<gen>') — first difference at line <n>: have "...", want
    "..."` — naming both the file and the first differing line (line-based diff, 1-indexed; when
    one render is a strict prefix of the other, the divergence is reported at the line immediately
@@ -2481,6 +2765,27 @@ that rule for any artifact a repo opts into declaring.
    binary) is no longer accepted: a typo'd or genuinely-unregistered id is indistinguishable from
    that forward-declaration case either way, so the safe direction is to ERROR both, never to
    green-light either.
+
+5. **The card bijection** (rk-nsex / BL4 — `cards-v1` only). Regenerate-and-diff verifies only what
+   the manifest DECLARES, which left three states unchecked: a reviewed extraction record with no
+   manifest at all, an empty manifest with records present, and an undeclared file sitting under
+   `refs/cards/`. Each is a card an agent can read that nothing regenerates. So, independently of
+   checks 1-4 and **before** check 2's presence-conditional early return:
+   - every `refs/records/<source-id>/L1-<n>.json` carrying a hash-bound VALID review must have a
+     `cards-v1` manifest entry for its card path ⇒ otherwise **ERROR `[card-unadopted]`**
+     (`freshness-12` with no manifest, `freshness-13` with an empty one);
+   - every `*.md` under `refs/cards/` must be declared by a `cards-v1` entry ⇒ otherwise **ERROR
+     `[card-undeclared]`** (`freshness-14`);
+   - the third direction — a declared entry with no record behind it — is check 3's
+     "cannot be regenerated for verification" (`freshness-15`).
+   Review validity is decided by the SAME function Gate 3 Check 11 clause (d) uses
+   (`src/gates/refs-records-binding.ts`'s `checkReview`), never a second copy of the rule: a record
+   whose review is absent, stale or not VALID renders only a refusal stub and is not required to be
+   adopted. For a review-valid record the card remains required, but any OTHER Check 11 defect
+   makes that required card a refusal stub rather than a content-bearing artifact.
+   Presence-conditional: a repo with no records and no `refs/cards/` files gets nothing
+   from this check, and the manifest-absent coverage line names any bijection findings rather than
+   reporting a bare non-adoption.
 
 **Coverage line.** `checked freshness: <checked>/<total> generated artifacts[ (<K> unrecognized
 generator: <path> (generator '<id>'), ...)]`. `total` is every well-formed manifest entry;

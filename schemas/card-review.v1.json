@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rk.tools/schemas/card-review.v1.json",
+  "title": "rk card review record (v1) — one refs/records/<source-id>/L1-<n>.review.json independent review of an extraction record",
+  "description": "THE INDEPENDENT SECOND READ, BOUND TO BYTES. An extraction record (schemas/extraction-record.v1.json) is authored by one lane; this record is a DIFFERENT lane's verdict on it, hash-bound to the exact record bytes reviewed. Gate 3 Check 11 requires every L1 record to have one, requires `card_sha256` to equal the sha256 of the record's canonical bytes (src/gates/canonical-json.ts's `canonicalRecordBytes`), and requires `verdict: \"VALID\"`; the card->shard join (Check 12) refuses `status: cited` to any shard whose record fails any of those.\n\nWHY THE HASH BINDING IS THE POINT. Without it a review is a claim about a file that has since changed: the reviewer approves a faithful record, the author then edits the statement, and the approval silently transfers to bytes nobody read. That is the same staleness class Gate 8's `claimSha256` and the L5 verdict store's `contentHash` already close, applied to the artifact agents actually read. A record edited after review is `review-stale` — not silently re-approved, and not quietly downgraded either: it is an ERROR until it is re-reviewed.\n\nWHY THE FOUR `checked` CLAUSES ARE STRUCTURED, NOT PROSE. The review must answer the four questions the mechanical checks cannot: is the statement COMPLETE (nothing dropped from the printed statement), are the hypotheses complete, is the register restatement faithful, is the signature faithful. Each is an explicit boolean with a one-line note. A `verdict: \"VALID\"` alongside any `false` clause is self-contradictory and is rejected (`review-inconsistent`) — the verdict may not be more generous than the reviewer's own answers.\n\nREVIEWER IDENTITY IS RECORDED, NOT AUTHENTICATED (the same honesty stance as schemas/provenance-record.v1.json): nothing here proves which model wrote the review. What the record makes possible is that a false seam is an explicit, falsifiable lie in a committed file. Cross-family independence (reviewer family != author family) is a campaign policy checked where the roster is known, not by this gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "card_sha256", "verdict", "reviewer", "checked", "findings"],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "The STRING \"1\", never the number 1. A version bump accompanies any incompatible shape change (CLAUDE.md rule 10), with a fixture."
+    },
+    "card_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "sha256 of the CANONICAL bytes of the extraction record this review is about — `canonicalRecordBytes(record)`: the parsed JSON re-serialized with recursively sorted keys, 2-space indent and one trailing newline. Canonical rather than on-disk bytes so that reformatting a record (key order, indentation) does not invalidate an honest review, while changing one character of any value does. The record reviewed is the sibling file named by this file's own name: `L1-<n>.review.json` reviews `L1-<n>.json`."
+    },
+    "verdict": {
+      "enum": ["VALID", "INVALID"],
+      "description": "VALID iff the record may back a cited claim. Anything other than VALID (including INVALID) blocks the record at Check 11 and blocks any shard joined to it at Check 12. There is deliberately no third, softer value: a record a reviewer cannot pass is not cite-able, and 'VALID with reservations' is what `findings` is for on a record whose four clauses are all genuinely true."
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "backend", "model", "session"],
+      "description": "The reviewing lane's identity seam, split into its four components (the same decomposition src/drive/identity.ts encodes as `family|backend|model|session`). `family` is the model LINEAGE (`claude`, `gpt`, `gemini`) — `codex` is a backend, not a lineage. Populate from the worker's own transcript header, never from the identity of whatever process wrote the file.",
+      "properties": {
+        "family": { "type": "string", "minLength": 1 },
+        "backend": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "session": { "type": "string", "minLength": 1 }
+      }
+    },
+    "checked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement_complete", "hypotheses_complete", "translation_faithful", "signature_faithful"],
+      "description": "The four clauses the reviewer must answer explicitly. Every clause is `{value, note}`; the note is one line saying what was compared, and exists so a `true` costs the reviewer an assertion rather than a keystroke.",
+      "properties": {
+        "statement_complete": { "$ref": "#/$defs/clause" },
+        "hypotheses_complete": { "$ref": "#/$defs/clause" },
+        "translation_faithful": { "$ref": "#/$defs/clause" },
+        "signature_faithful": { "$ref": "#/$defs/clause" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-text findings, one per entry. Empty is legitimate on a clean VALID review; it is never a substitute for a `false` clause."
+    }
+  },
+  "$defs": {
+    "clause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "note"],
+      "properties": {
+        "value": { "type": "boolean" },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One line stating what was compared and against what. Required on `true` as well as on `false`: an unexplained `true` is the shape a rubber-stamp takes."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[record-malformed]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.review.json",
+      "message_pattern": "[review-malformed]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": ["checked records: 1 L1 records / 0 reviewed-VALID / 0 anchors verified"]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, landing-blocker BL6 — additionalProperties:false enforced at every closed level of both record schemas. The L1 record carries an extra top-level reviewer_note and an extra hypothesis.confidence. Its review carries an extra top-level review_note, reviewer.author, checked.scope_complete, and checked.statement_complete.evidence. Before the repair, all six properties were silently accepted and the record became usable. The runtime validator now names every extra field in [record-malformed] / [review-malformed] and drops both documents rather than half-trusting them."
+}

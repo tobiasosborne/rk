@@ -45,6 +45,9 @@ import { DEFAULT_PHASE } from "./phase";
 // layer. Same rk-xbm discipline as every other field below: malformed input drops the WHOLE field.
 import { validateWorkersConfig, type WorkersConfig } from "../drive/backend-registry";
 
+/** Gate 3 Check 12's two records modes — see `GateConfig.records`. */
+export type RecordsMode = "legacy" | "required";
+
 export interface GateConfig {
   /** M1.3 (`rk phase exploration|consolidation`). Missing field = `"consolidation"` (the
    * strictest default — see src/gates/phase.ts's `DEFAULT_PHASE` doc comment). Selects between
@@ -87,6 +90,16 @@ export interface GateConfig {
    * different passage. Default 50. This is a VERDICT threshold, unlike `refsMinRunReportingLength`
    * above (message-only): the two must never be conflated or repurposed for each other. */
   refsLocusToleranceLines: number;
+  /** Gate 3 Check 12's records mode (bead rk-nsex, Tier A review BL3). `"legacy"` (the DEFAULT)
+   * keeps the pre-record behavior: a `status: cited` shard naming no extraction record draws a
+   * WARN and the run stays green — a MIGRATION setting, and nothing else. `"required"` is the
+   * state a campaign that has adopted records must run in: a cited shard with no valid record
+   * join is a structural ERROR, and every `proved-mod-audit` shard must declare
+   * `origin: literature|campaign`, with `literature` requiring the join too. The default is
+   * legacy because every rk campaign predates records and making their absence an ERROR on day
+   * one is how a gate gets switched off — but legacy is a promise to migrate, not a resting
+   * state, and the WARN is the visible backlog. */
+  records: RecordsMode;
   /** M2.5 (`rk graph --critical-path`/`--blocks`, src/cli/graph.ts): the campaign's north-star
    * contract's registry id — PRD C1's constitution slot, made mechanically readable here rather
    * than only living in stamped prose. Optional, same "no default" stance as `shardsPrefix`: a
@@ -133,6 +146,8 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
   shardsMaxLines: 280,
   refsMinRunReportingLength: 40,
   refsLocusToleranceLines: 50,
+  // Migration default (rk-nsex / BL3): every existing rk campaign predates extraction records.
+  records: "legacy",
 };
 
 /** Merges a partial config over the defaults — every key independently optional. Pure: takes and
@@ -162,6 +177,7 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "shardsMaxLines",
   "refsMinRunReportingLength",
   "refsLocusToleranceLines",
+  "records",
   "northStarId",
   "workers",
 ]);
@@ -258,6 +274,23 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
           `phase: invalid value ${JSON.stringify(v)} -- must be "exploration" or "consolidation"; ` +
             `falling back to the strict default "${DEFAULT_PHASE}" rather than silently demoting ` +
             `gate severities (a typo must never weaken validity checking, CLAUDE.md L2/L6)`,
+        ),
+      );
+    }
+  }
+
+  if ("records" in raw) {
+    total++;
+    const v = raw.records;
+    if (v === "legacy" || v === "required") {
+      overrides.records = v;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `records: invalid value ${JSON.stringify(v)} -- must be "legacy" or "required"; falling back to ` +
+            `the default "${DEFAULT_GATE_CONFIG.records}". A typo must never silently turn OFF the ` +
+            "record requirement a campaign opted into (CLAUDE.md L2/L6)",
         ),
       );
     }

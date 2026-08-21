@@ -303,4 +303,29 @@ describe("Gate 3 (refs) structural classification", () => {
     expectPresent(findings, "zero byte-verified shard citations");
     expect(structuralOf(findings, "zero byte-verified shard citations")).toBeFalsy();
   });
+
+  // rk-nsex: Checks 11-12 are the FIRST Gate 3 checks in the STRUCTURAL column, and deliberately
+  // so — campaign memo section 2a: "Admission of a conjecture or a cited result is a transaction
+  // over one candidate: its card records, review records, notation, signature, and source closure
+  // must all be ERROR-free at admission REGARDLESS OF PHASE." The rest of Gate 3 stays demotable
+  // (a quote's attribution is exactly PRD's "L5 soft verification" exploration allowance); a
+  // record that does not match its source is not a soft claim about a quote, it is the admission
+  // transaction itself failing. Full survival-through-applyPhase proof: test/gates/refs-records.test.ts.
+  test("check 11 (record does not match its source) is STRUCTURAL", () => {
+    const snap = linkerSnap({ "refs/records/paper-2026/L1-1.json": "{ not json" });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expectPresent(findings, "[record-unparseable]");
+    expect(structuralOf(findings, "[record-unparseable]")).toBe(true);
+  });
+
+  test("check 12 (card->shard join) is STRUCTURAL", () => {
+    const snap = linkerSnap({
+      "argument/thm-x.md":
+        "---\nid: thm-x\nkind: theorem\nstatus: cited\naf: none\ncontract: c\n" +
+        "record: refs/records/paper-2026/L1-1.json\nrecord_sha256: " + "a".repeat(64) + "\n---\n\nbody\n",
+    });
+    const { findings } = refsGate.run(snap, DEFAULT_GATE_CONFIG);
+    expectPresent(findings, "[record-missing]");
+    expect(structuralOf(findings, "[record-missing]")).toBe(true);
+  });
 });

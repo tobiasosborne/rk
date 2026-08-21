@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[stale-record]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 1 reviewed-VALID / 2 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, STALE RECORD — the paper was re-acquired after the extraction. The record declares `payload_sha256` d1fa2a12... (revision 1 of the preprint, whose Theorem 1.1 read 'Every widget is round-ish'); `refs/manifest/sources.lock.json` now adopts the payload on disk, revision 2. Note what still passes: both anchors verify (`2 anchors verified`) and the review is hash-bound and VALID (`1 reviewed-VALID`) — the record is internally impeccable and agrees with the bytes that are there NOW, purely by luck of which lines survived the revision. That is exactly why the check is a comparison against the LOCK rather than against the text: a v2 that renumbered lines or sharpened a hypothesis would leave every anchor still 'verifying' against a statement the reviewer never read. The remedy is re-extraction and re-review, never repinning the record's digest by hand. Sibling: refs-27 (same staleness one layer down — the sidecar, not the payload). Nearest existing neighbours: refs-18/refs-21 (the same idea for a citation's own bytes). `aism_behavior: n/a`. Mutation-proof: dropping the payload comparison in checkStaleness returns this fixture to zero findings, exit 0; observed and reverted."
+}

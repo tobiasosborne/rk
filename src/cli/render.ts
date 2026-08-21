@@ -64,6 +64,7 @@ import { buildGraphDocument } from "../store/build-graph";
 import { loadGateConfig } from "../store/config-load";
 import type { Out } from "./args";
 import { extractFlag, extractRoot } from "./args";
+import { renderCardsCommand } from "./render-cards";
 
 export interface RenderCommandDeps {
   afCommand?: readonly string[];
@@ -264,14 +265,16 @@ function loadManifestForUpsert(root: string): ManifestLoad {
   };
 }
 
-/** Upserts `rk render`'s own entry into `.rk/generated.json` — creating the file if absent,
- * replacing an existing entry for the same `path` in place, appending otherwise. Returns an error
- * message (and writes nothing) when the existing manifest could not be understood. */
-function adoptGeneratedEntry(root: string, entryPath: string): string | undefined {
+/** Upserts ONE `.rk/generated.json` entry — creating the file if absent, replacing an existing
+ * entry for the same `path` in place, appending otherwise. Returns an error message (and writes
+ * nothing) when the existing manifest could not be understood. `generator` defaults to
+ * `render-site-v1` (`rk render`'s own artifact); `rk render cards` passes `cards-v1` (rk-nsex), so
+ * the codebase keeps exactly one manifest writer. */
+export function adoptGeneratedEntry(root: string, entryPath: string, generator: string = RENDER_SITE_GENERATOR): string | undefined {
   const loaded = loadManifestForUpsert(root);
   if ("error" in loaded) return loaded.error;
   const { manifest, manifestPath } = loaded;
-  const newEntry = { path: entryPath, generator: RENDER_SITE_GENERATOR };
+  const newEntry = { path: entryPath, generator };
   const idx = manifest.entries.findIndex((e) => e.path === entryPath);
   if (idx >= 0) manifest.entries[idx] = newEntry;
   else manifest.entries.push(newEntry);
@@ -281,6 +284,13 @@ function adoptGeneratedEntry(root: string, entryPath: string): string | undefine
 }
 
 export async function renderCommand(args: string[], out: Out, deps: RenderCommandDeps = {}): Promise<number> {
+  // rk-nsex: `rk render cards` is a SUBCOMMAND, not a flag — it renders a different artifact class
+  // (refs/cards/**, from the extraction records) with no GraphDocument, no af/fr subprocess and no
+  // --out. Dispatched before `extractRoot` consumes anything so `rk render cards --root X` parses
+  // exactly like `rk render --root X`.
+  if (args[0] === "cards") {
+    return renderCardsCommand(args.slice(1), out, adoptGeneratedEntry);
+  }
   const { rest, root } = extractRoot(args);
   const { rest: r1, value: outFlag } = extractFlag(rest, "--out");
   const { rest: r2, value: northStarFlag } = extractFlag(r1, "--north-star");

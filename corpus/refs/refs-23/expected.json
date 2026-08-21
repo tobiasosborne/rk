@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[statement-range-truncated]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 1 reviewed-VALID / 1 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, THE OMITTED-HYPOTHESIS FIXTURE (docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 4; review finding LB1, docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md: 'requiring an anchor on every PRESENT hypothesis cannot detect an OMITTED hypothesis'). The record is impeccable by every other clause: `statement_range` refs/sources/widget.txt:3-3 resolves, `statement_verbatim` equals those bytes exactly, there are no hypothesis anchors to fall outside it, the payload matches its adopted pin, and the review record is hash-bound and VALID. What it does is stop one line short: the printed statement is `Theorem 1.1. Every widget is round,` / `where the widget graph is d-regular.` and the record's blessed restatement is `Every widget is round.` — the d-regularity hypothesis is simply outside the range, so nothing anchors it and nothing misses it. Only the RANGE-EXTENT check sees it: the first non-empty line after the range begins lowercase (`where the widget graph is d-regular.`), and a statement that ended does not continue like that. This is a HEURISTIC and is documented as one (docs/gate-contracts.md Gate 3 Check 11, clause (f), and src/gates/refs-records-verify.ts's `extentProblem`): it does not see a truncation at a sentence boundary, and it fires on a complete statement whose next line happens to start lowercase. Its sufficiency against a deliberately truncated range is the residual the Tier A review recorded on rk-nsex for the next milestone review. `aism_behavior: n/a` — AISM has no records, no cards and no notion of a statement range. Mutation-proof: deleting the `extentProblem` call in verifyRecords returns this fixture to zero findings, exit 0, with `1 reviewed-VALID` — an omitted hypothesis behind a VALID review, which is exactly LB1's false green; observed and reverted. Green control: refs-32 (same paper, range 3-4, no finding)."
+}

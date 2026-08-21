@@ -1,0 +1,15 @@
+{
+  "gate": "refs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[review-stale]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 0, "total": 0, "unit_patterns": ["checked records: 1 L1 records / 0 reviewed-VALID / 2 anchors verified"] },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex, THE RECORD WAS EDITED AFTER IT WAS REVIEWED (the memo's 'stale record (card_sha256 mismatch)'). The review record is real, complete, VALID, and answers all four clauses true — about a record whose `statement_blessed` read `Every widget is round when its widget graph is d-regular.` The record on disk now says `Every widget is round.`, and its canonical digest no longer matches the review's `card_sha256`. Nothing else changed: the anchors still verify against the paper (`2 anchors verified`), because the hypothesis is still quoted correctly — it is the RESTATEMENT, the part only a human read can check, that moved. This is the exact staleness class Gate 8's `claimSha256` (reward-23) and the L5 store's `contentHash` (linker-36) already close for other artifacts, applied to the one agents read. The hash is over CANONICAL bytes (sorted keys, 2-space indent), so a reformat does not fire this and a one-word edit always does — both directions pinned in test/gates/canonical-json.test.ts and test/gates/refs-records.test.ts. The remedy is re-review; restamping `card_sha256` is forging one. `aism_behavior: n/a`. Mutation-proof: dropping the digest comparison in checkReview returns this fixture to zero findings, `1 reviewed-VALID`, exit 0 — an approval transferred to bytes nobody read; observed and reverted."
+}

@@ -1,0 +1,26 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/records/widget-2026/L1-1.json",
+      "message_pattern": "[card-unadopted]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/cards/widget-2026/L1-1.md",
+      "message_pattern": "[card-undeclared]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": [
+      "generated artifacts"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, BL4 — the EMPTY-manifest half of `freshness-12`, and a genuinely different code path: `.rk/generated.json` exists and parses, so Gate 7 never reaches its presence-conditional early return, walks a zero-length entry list, and reports `checked 0/0` with no findings. A reviewer looking at that line sees a freshness gate that ran and found everything fine. The bijection makes the empty manifest say what it actually means: one reviewed record whose card nothing regenerates, and one card file nothing declares. Kept as its own fixture because a repair that only guarded the absent-manifest branch would leave this tree green — the two branches are separately breakable. `aism_behavior: n/a`."
+}

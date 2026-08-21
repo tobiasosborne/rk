@@ -1,0 +1,21 @@
+{
+  "gate": "freshness",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "refs/cards/widget-2026/L1-9.md",
+      "message_pattern": "[card-undeclared]"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": [
+      "generated artifacts"
+    ]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex Tier A repair wave, BL4 — 'as does an undeclared stale card', the inverse direction of the bijection. One card is correctly adopted and byte-identical to its record's rendering (so `checked 1/1` is truthful), and beside it sits `L1-9.md`: a card-shaped document no generator produced, no record backs, and no manifest entry declares — stating a strictly stronger theorem than the paper proves ('with no hypotheses whatsoever'). Pre-repair Gate 7 reported `checked 1/1`, zero findings, exit 0: the file was invisible because the gate only ever looks at what the manifest names, and an agent reading `refs/cards/` cannot tell the two apart. The remedy is stated in the finding: adopt it with `rk render cards` (which overwrites it with the record's own rendering) or delete it. `aism_behavior: n/a`. Mutation-proof: dropping the undeclared-file half of the bijection returns this tree to `checked 1/1`, zero findings, exit 0; observed and reverted."
+}

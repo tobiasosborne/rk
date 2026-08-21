@@ -1,0 +1,6 @@
+Section 2. Preliminaries
+
+Theorem 1.2. Assume the widget graph is d-regular.
+Then every widget is round.
+
+Proof. Omitted.

@@ -20,8 +20,12 @@ export type { WorkspaceFacts } from "./linker-workspace";
 export { checkStatus, isAvailable } from "./linker-status";
 
 /** `" ".join(s.split())` — collapse any whitespace run to one space, strip ends
- * (argument.py:64-65, `normalize`). Used only for the contract-drift comparison (check 9). */
-function normalizeContract(s: string): string {
+ * (argument.py:64-65, `normalize`). THE contract-comparison rule, used twice: check 9's
+ * registry/af-root drift test, and (rk-nsex) Gate 3 Check 12's join of a shard's `contract:`
+ * against its record's `statement_blessed`, which the campaign memo specifies as "Check 9
+ * contract-match semantics extended to the record". Exported so the join applies this rule rather
+ * than a second, subtly different one. */
+export function normalizeContract(s: string): string {
   return s.split(/\s+/).filter((x) => x.length > 0).join(" ");
 }
 

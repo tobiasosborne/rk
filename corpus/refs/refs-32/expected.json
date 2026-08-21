@@ -1,0 +1,13 @@
+{
+  "gate": "refs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 0,
+    "total": 0,
+    "unit_patterns": ["checked 1/1 shard citations", "checked records: 1 L1 records / 1 reviewed-VALID / 2 anchors verified", "1/1 shard-record joins"]
+  },
+  "aism_behavior": "n/a",
+  "notes": "rk-nsex GREEN CONTROL — the whole rk-nsex mechanism on a clean tree, and the fixture that proves Checks 11-12 do not false-positive on the case they exist to let through. One paper (`sources/widget.txt`, adopted at its on-disk digest), one L1 extraction record covering the COMPLETE printed statement (`refs/sources/widget.txt:3-4`, verbatim byte-equal, the d-regularity hypothesis anchored at line 4, inside the range), one hash-bound review record answering all four clauses true, and one `status: cited` theorem shard joined to it by canonical `record_sha256:` whose `contract:` byte-equals the record's `statement_blessed`. Every counter is non-vacuous: `1/1 shard citations` (Check 8 still runs), `1 L1 records / 1 reviewed-VALID / 2 anchors verified` (the statement range plus one hypothesis), `1/1 shard-record joins`. Each red sibling is this tree with exactly one thing changed: refs-23 shortens the range, refs-24 rewrites the contract, refs-25 removes the anchors, refs-26/27 age the source, refs-28/29/30 break the review binding three ways, refs-31 fabricates the verbatim. Deliberately NOT included: the generated card and its `.rk/generated.json` entry. A committed card would be a second copy of the render's output that no gate in THIS directory checks (the corpus runner runs one gate per fixture), so it could rot silently; Gate 7's byte-diff of a `cards-v1` artifact is proven in test/render/cards.test.ts and test/cli-render-cards.test.ts instead. `aism_behavior: n/a` — AISM has no records; this is an rk-only positive assertion."
+}

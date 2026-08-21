@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "record_kind": "L1",
+  "source": "widget-2026",
+  "payload_sha256": "e3159bda8c4680c98ae300f24095be732304978c4936c0e8976d538d11120f56",
+  "result_label": "Theorem 1.2",
+  "statement_range": "refs/sources/widget.txt:6-7",
+  "statement_verbatim": "Theorem 1.2. Every widget is convex,\nwhere the widget graph is connected.",
+  "statement_blessed": "Every widget is convex when its widget graph is connected.",
+  "hypotheses": [
+    {
+      "text": "where the widget graph is connected",
+      "anchor": "refs/sources/widget.txt:7"
+    }
+  ],
+  "conclusion": "The widget is convex.",
+  "signature": {
+    "schema_version": "1",
+    "profile": "qpcp.v1",
+    "pre": [
+      {
+        "obj": "def-widget",
+        "degree": "bounded"
+      }
+    ],
+    "post": [
+      {
+        "obj": "def-round"
+      }
+    ]
+  },
+  "profile": "qpcp.v1",
+  "proof_locus": "refs/sources/widget.txt:9-9"
+}

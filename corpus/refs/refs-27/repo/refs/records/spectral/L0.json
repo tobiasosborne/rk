@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "record_kind": "L0",
+  "source": "spectral",
+  "payload_sha256": "2e5f8c74c832a7a0cd54fe1225475798755d431c990922a56ce4549529579b86",
+  "extraction_sha256": "6626e1f1be925338daba1afffd0476a764a1774b2ee5e4bfcb8df7a0f608da18",
+  "regime": "transfer operators on finite-dimensional spin chains, system size to infinity",
+  "objects": [
+    "def-transfer-operator",
+    "def-spectral-gap"
+  ],
+  "results": [
+    "Lemma 4.2"
+  ],
+  "ends_at_eof": {
+    "Lemma 4.2": true
+  },
+  "profile": "qpcp.v1"
+}
