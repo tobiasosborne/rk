@@ -23,10 +23,7 @@ import { extractSignatureBlock, type Signature } from "./signature";
 import { conventionProfilePath, parseConventionProfile, type ConventionProfile } from "./signature-profile";
 import { checkRoute, scopeLabel, validateSignatureVocabulary } from "./signature-entail";
 import { conjoinSignature, type ConjunctionIssue } from "./signature-context";
-
-/** The kinds a signature is REQUIRED for once a repo adopts them (memo section 6). `open-problem`
- * and `obstruction` are deliberately outside: neither claims a result to apply. */
-const SIGNED_KINDS = new Set(["lemma", "proposition", "theorem", "corollary"]);
+import { kindStatusIncoherent, signatureDemanded } from "./linker-signature-policy";
 
 function err(path: string, line: number | undefined, code: string, message: string): Finding {
   return { severity: "ERROR", path, line, message: `[${code}] ${message}`, structural: true };
@@ -145,9 +142,17 @@ export function checkSignatures(
   // reported as missing: one fault, one finding.
   if (mode !== undefined) {
     for (const l of lemmas) {
-      if (!l.kind || !SIGNED_KINDS.has(l.kind) || blockPresent.has(l.id)) continue;
+      if (kindStatusIncoherent(l, true)) {
+        findings.push(err(
+          l.path, 1, "kind-status-incoherent",
+          `${l.id}: kind '${l.kind}' cannot carry signed-result status '${l.status}' once signatures are adopted — ` +
+            `an open problem or obstruction is not simultaneously a proved/cited/consensus result`,
+        ));
+      }
+      if (!signatureDemanded(l, mode) || blockPresent.has(l.id)) continue;
       const message =
-        `${l.id}: a '${l.kind}' shard carries no \`\`\`signature block, and .rk/config.json sets ` +
+        `${l.id}: a '${l.kind ?? "unknown"}' shard (status '${l.status ?? "absent"}', af '${l.af}') carries no ` +
+        `\`\`\`signature block, and .rk/config.json sets ` +
         `signatures: "${mode}"` +
         (mode === "required"
           ? " — a result with no declared regime cannot be checked against the regime it is applied in"

@@ -1,0 +1,20 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/op-proved.md",
+      "message_pattern": "[signature-missing]"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/op-proved.md",
+      "message_pattern": "[kind-status-incoherent]"
+    }
+  ],
+  "exit_code": 1,
+  "config_override": { "signatures": "required" },
+  "aism_behavior": "class-driven (AISM has no signature adoption policy; its kind and status enum checks are independent and permit this pair).",
+  "notes": "Tier A review B3's direct evasion: `kind: open-problem` was outside SIGNED_KINDS, so `status: proved` plus no block produced zero Check 17 findings under `signatures: required`. The repair demands a block for signed kinds OR signed statuses OR signed af states under required adoption, and separately rejects the incoherent open-problem/proved pair whenever signatures are adopted."
+}

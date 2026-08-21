@@ -1039,14 +1039,21 @@ is stale against the code and must not be treated as ground truth).
       not checking it, because it reports green. A signature naming a different profile from the
       repo's is `profile-mismatch`.
     - **Required-ness is per-repo, and has THREE states** (`.rk/config.json`'s `signatures`):
-      `"required"` ⇒ a `lemma`/`proposition`/`theorem`/`corollary` with no block is a structural
-      ERROR (`signature-missing`, `linker-54`); `"optional"` ⇒ the same shard is a WARN (adopted,
-      still being filled in); ABSENT ⇒ the repo has NOT adopted signatures, no missing-signature
+      `"required"` ⇒ a block is demanded when the shard's kind is `lemma`/`proposition`/`theorem`/
+      `corollary`, OR status is `proved`/`cited`/`consensus`/`proved-mod-audit`, OR af is `seeded`/
+      `validated`; absence is structural ERROR `signature-missing` (`linker-54`, `linker-62`). This
+      OR rule prevents a result from evading the barrier through an exempt kind. `"optional"` ⇒ a
+      signed-kind shard without a block is a WARN (adopted, still being filled in); ABSENT ⇒ the
+      repo has NOT adopted signatures, no missing-signature
       finding is produced at all, and the coverage line says `signatures: absent (not adopted)` out
       loud. The third state is not a spelling of the second: rk is a general tool, and a WARN on
       every result shard of every existing repo is the aism-s64 noise failure. A signature that IS
       present is always checked in all three states — adoption governs whether one is DEMANDED,
-      never whether a present one is validated.
+      never whether a present one is validated. Separately, once signatures are ADOPTED (optional
+      or required), `open-problem`/`obstruction` paired with any signed-result status above is
+      structural ERROR `kind-status-incoherent`; before adoption that new coherence policy is not
+      imposed. This adoption gate is a compatibility ruling, not an inference from the old
+      independent kind/status enums.
     - **`post-unsupported` is a WARN, deliberately** (`linker-55`). A shard's own `post` may
       legitimately be supplied by its PROOF rather than by any dependency — that is what proving
       something means. The signal still ships, because the same shape is what a shard claiming more

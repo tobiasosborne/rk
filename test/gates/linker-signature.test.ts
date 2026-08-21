@@ -284,6 +284,26 @@ describe("Check 17 — required-ness is config-driven, and never a silent skip",
     expect(withCode(findings, "signature-missing")).toEqual([]);
     expect(withCode(findings, "signature-malformed")).toHaveLength(1);
   });
+
+  test("required cannot be evaded by pairing open-problem with a proved status", () => {
+    const files = { "argument/op-proved.md": shard("op-proved", { kind: "open-problem", status: "proved" }) };
+    const { findings } = run(files, REQUIRED);
+    expect(withCode(findings, "signature-missing")).toHaveLength(1);
+    expect(withCode(findings, "kind-status-incoherent")).toHaveLength(1);
+  });
+
+  test("the kind/status coherence ERROR applies under optional adoption, but missing stays kind-scoped", () => {
+    const files = { "argument/op-proved.md": shard("op-proved", { kind: "open-problem", status: "proved" }) };
+    const { findings } = run(files, ADOPTED);
+    expect(withCode(findings, "signature-missing")).toEqual([]);
+    expect(withCode(findings, "kind-status-incoherent")).toHaveLength(1);
+  });
+
+  test("an unadopted repo gets no new kind/status coherence policy", () => {
+    const files = { "argument/op-proved.md": shard("op-proved", { kind: "open-problem", status: "proved" }) };
+    const { findings } = run(files, {});
+    expect(withCode(findings, "kind-status-incoherent")).toEqual([]);
+  });
 });
 
 describe("Check 17 — a repo that never adopted signatures is untouched", () => {
