@@ -43,6 +43,26 @@ describe("loadDefIds", () => {
     expect(loadDefIds(snapshot)).toEqual(new Set());
   });
 
+  // rk-5lzf: discovery is RECURSIVE (`definitions/**/*.md`) — a notation shard at
+  // `definitions/notation/<symbol-id>.md` must resolve a `defs:` reference like any other, or
+  // Gate 2 check 7 reports "unknown def id" for a shard that plainly exists.
+  test("collects ids from NESTED definitions shards (definitions/**/*.md, rk-5lzf)", () => {
+    const snapshot = snapshotFromFiles({
+      "definitions/def-x.md": "---\nid: def-x\nterm: X\n---\nBody.\n",
+      "definitions/notation/sym-eps.md": "---\nid: sym-eps\nterm: eps\n---\nBody.\n",
+      "definitions/notation/deep/sym-gam.md": "---\nid: sym-gam\nterm: gam\n---\nBody.\n",
+    });
+    expect(loadDefIds(snapshot)).toEqual(new Set(["def-x", "sym-eps", "sym-gam"]));
+  });
+
+  test("README.md/INDEX.md are excluded at ANY depth (rk-5lzf)", () => {
+    const snapshot = snapshotFromFiles({
+      "definitions/notation/README.md": "---\nid: readme-should-not-count\n---\nBody.\n",
+      "definitions/notation/sym-eps.md": "---\nid: sym-eps\n---\nBody.\n",
+    });
+    expect(loadDefIds(snapshot)).toEqual(new Set(["sym-eps"]));
+  });
+
   test("an empty definitions/ directory yields an empty set, not an error", () => {
     const snapshot = snapshotFromFiles({});
     expect(loadDefIds(snapshot)).toEqual(new Set());

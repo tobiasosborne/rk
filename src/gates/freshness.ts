@@ -46,6 +46,7 @@ import { renderDag, renderIndex } from "./linker-render";
 import { CARD_GENERATOR, CARDS_PREFIX, cardPathForRecord, renderCardForPath } from "../render/cards";
 import { collectRecords } from "./refs-records";
 import { checkReview } from "./refs-records-binding";
+import { MACROS_GENERATOR, renderMacros } from "../render/macros-tex";
 
 export const MANIFEST_PATH = ".rk/generated.json";
 export const MANIFEST_SCHEMA_VERSION = "1";
@@ -100,6 +101,10 @@ const GENERATORS: Record<string, (snapshot: RepoSnapshot, path: string) => PureR
   "linker-index": (snapshot) => ({ ok: true, bytes: renderIndex(parseRegistry(snapshot).lemmas) }),
   "linker-dag": (snapshot) => ({ ok: true, bytes: renderDag(parseRegistry(snapshot).lemmas) }),
   [CARD_GENERATOR]: (snapshot, path) => renderCardForPath(snapshot, path),
+  // rk-5lzf (LB5): `definitions/notation/macros.tex`, one \newcommand per notation-register shard,
+  // PURE (src/render/macros-tex.ts reads the snapshot and nothing else), so a hand-edited macro
+  // file is a blocking ERROR, not a silent divergence between the register and the LaTeX.
+  [MACROS_GENERATOR]: (snapshot) => ({ ok: true, bytes: renderMacros(snapshot) }),
 };
 
 interface ParsedManifest {

@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "translation-source-path-mismatch"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1 notation shard", "0/1 translations verified"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation translation register.",
+  "notes": "rk-5lzf repair B1: the quote and claimed source symbol are genuine, but the lock says the anchored payload belongs to aav while the row attributes it to bmvz. Source-id owns the path; genuine bytes from paper A cannot prove an attribution to paper B."
+}

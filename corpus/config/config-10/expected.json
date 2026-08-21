@@ -1,0 +1,16 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/renamed.v2.json",
+      "message_pattern": "predecessor-missing: required .rk/conventions/renamed.v1.json"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["convention profile \"renamed.v2\" 0/1 valid"] },
+  "config_override": { "conventionProfile": "renamed.v2" },
+  "aism_behavior": "n/a: AISM has no convention-profile history chain.",
+  "notes": "rk-5lzf repair B5, renamed family: qpcp.v1 cannot serve as renamed.v2's predecessor. The family name is part of the chain identity, so renaming cannot launder a coverage shrink."
+}

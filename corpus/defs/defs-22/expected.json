@@ -1,0 +1,9 @@
+{
+  "gate": "defs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["shards"] },
+  "aism_behavior": "differs: check-defs.py's SKIP is {README.md, INDEX.md} over a one-level glob (check-defs.py:27,80), so a nested DAG.md/notes.md never arose. Triage: rk-stricter-intended on scope, rk-bug-avoiding on behaviour — parsing a lab notebook as a shard produces ERRORs about a file nobody claimed was a definition.",
+  "notes": "rk-5lzf repair wave, blocker B6 follow-up (Tier A review 2026-08-20, third follow-up): ONE shared non-shard policy. Before this, recursive Gate 1 skipped only README.md/INDEX.md and therefore parsed `DAG.md`, `notes-*.md` and any nested Markdown as shards — each producing a structural missing-frontmatter ERROR — while Gate 9 skipped README/INDEX/DAG, so the SAME tree gave two different answers to 'is this a shard'. `src/gates/definitions-scan.ts`'s `isNonShardBasename` is now the single answer for both gates and every other consumer: README.md, INDEX.md, DAG.md, and any basename starting with `_` or `notes` (case-insensitive), at ANY depth. `def-notes-on-gaps.md` is the discriminator that keeps the rule a PREFIX rule and not a substring one — it is a real shard and is checked. A green fixture on purpose: the defect it guards is false ERRORs, so the red-before state was three spurious findings and `checked 4/4` where the truth is 1/1."
+}

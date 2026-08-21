@@ -31,14 +31,7 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RepoSnapshot, SnapshotFacts } from "../gates/snapshot";
 import { sha256Bytes } from "../refs/hash";
-
-interface IncludeRule {
-  /** repo-relative dir, POSIX-style ("argument/lemmas"). */
-  dir: string;
-  recursive: boolean;
-  /** File extensions (with leading dot) to include; omit/empty to include every file. */
-  extensions?: string[];
-}
+import { SNAPSHOT_INCLUDE_RULES } from "./snapshot-rules";
 
 /** A git placeholder for an otherwise-empty directory: recorded as directory existence (its
  * parent dir is added to `dirs`), NEVER as bundle/shard content (excluded from the text map and
@@ -122,15 +115,7 @@ const ROOT_SKIP_DIR = ".git";
  * verifiability. `walkTree` below hashes every file present on disk (tracked or not, inside these
  * rules or not), so a provenance source row naming ANY present path is verified (present+stale ⇒
  * ERROR), never silently WARNed as "absent". */
-const INCLUDE_RULES: IncludeRule[] = [
-  { dir: "definitions", recursive: false },
-  { dir: "argument", recursive: true },
-  { dir: "proofs", recursive: true },
-  { dir: "refs", recursive: true },
-  { dir: "runs", recursive: true },
-  { dir: "report", recursive: true, extensions: [".tex", ".md"] },
-  { dir: ".rk", recursive: false },
-];
+const INCLUDE_RULES = SNAPSHOT_INCLUDE_RULES;
 
 interface Accum {
   text: Map<string, string>;

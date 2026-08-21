@@ -122,6 +122,11 @@ function renderHelp(out: Out): number {
   out.log("  its review record, and adopts each card in .rk/generated.json (generator 'cards-v1') so");
   out.log("  Gate 7 byte-diffs it. A record that fails Gate 3 Check 11 renders an empty NOT ADMISSIBLE");
   out.log("  card. The records are the truth; the cards are the view agents read.");
+  out.log("rk render macros — regenerate definitions/notation/macros.tex from the notation register");
+  out.log("  usage: rk render macros [--root <dir>]");
+  out.log("  One \\newcommand per shard_type: notation shard, sorted by id, no timestamps. Adopts the");
+  out.log("  file in .rk/generated.json (generator 'notation-macros') so Gate 7 byte-diffs it.");
+  out.log("  next: \\input the file from the campaign preamble; never hand-edit it (rule 9).");
   return 0;
 }
 
@@ -161,6 +166,7 @@ function topHelp(out: Out): number {
   out.log("  rk graph --focus <id>|--critical-path|--blocks|--taint [id]  terminal graph views (M2.5, PRD C5)");
   out.log("  rk render [--out <dir>] [--north-star <id>]  generate the self-contained HTML site (M2.4, PRD C6)");
   out.log("  rk render cards [--root <dir>]  regenerate refs/cards/** from the extraction records (rk-nsex)");
+  out.log("  rk render macros [--root <dir>]  regenerate definitions/notation/macros.tex from the register (rk-5lzf)");
   out.log("  rk verify --af <id> [--dry-run]  hard-tier verification driver over an af workspace (M3.6, PRD C9)");
   out.log("  rk frontier <goal-id>      the GOAL frontier: obligations, dead-ends, prospecting pool (S0)");
   out.log("  rk reward report [--strict]  fold .rk/reward-ledger.jsonl into shadow payouts (S0, prereg v1)");

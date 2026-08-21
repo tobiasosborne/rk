@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/legacy/sym-gapfrac.md",
+      "message_pattern": "def-id-collision: id 'sym-gapfrac' is claimed by 2 shards"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "resolve arbitrarily"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2 },
+  "aism_behavior": "n/a: AISM globs definitions/*.md one level, where two files cannot share a filename stem at all — this failure mode is reachable only because rk recurses.",
+  "notes": "rk-5lzf repair wave, blocker B6 (Tier A review 2026-08-20, finding 6). RECURSION MADE THIS REACHABLE: in a flat directory two shards cannot share a stem, so nothing ever needed to check. Recursively they can, and every consumer keys a definition by flat id ALONE — Gate 2 check 7's `defs:` resolution collapses both into one Set entry, the live verifier's context reader returns whichever it saw last, the rendered view shows one and hides the other. The two shards here deliberately define the gap OPPOSITE ways (relative vs absolute) with DIFFERENT `term`s, so the pre-existing term/alias DRIFT check sees nothing: only the id collides. Structural, so it blocks in exploration too. Reported on BOTH paths — a finding on one file alone would leave a reader with no way to find the other."
+}

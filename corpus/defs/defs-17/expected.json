@@ -1,0 +1,15 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "translation-collision: source 'aav-1309.7495' symbol '\\epsilon'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 2, "total": 2, "unit_patterns": ["2 notation shards", "0/2 translations verified"] },
+  "aism_behavior": "n/a: AISM has no notation register and no `shard_type` field; check-defs.py's dedup namespace covers `term` + `aliases` only.",
+  "notes": "rk-5lzf (Tier A, LB5): Gate 1's DRIFT/alias namespace extends to each (source-id, their-symbol) pair. Two register entries claiming the same SOURCE symbol contradict each other about what that paper's token means, and downstream nothing can tell which reading a `status: cited` shard inherited. The pair is scoped BY SOURCE deliberately: two campaign symbols may cite the same paper, and one source symbol may recur across papers — only the pair is a claim about a specific paper's specific token. Structural, so it blocks in exploration too. Reported on the SECOND claimant in path order (`sym-gapfrac.md` sorts after `sym-edens.md`), naming both files. Both rows also fail byte-verification (no payload in this fixture) — that is the shared refs verifier doing its job and is why `translations verified` reads 0/2; the collision is the fixture's point and fires independently of it."
+}

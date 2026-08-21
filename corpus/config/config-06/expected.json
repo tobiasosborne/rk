@@ -1,0 +1,25 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": ".rk/conventions/qpcp.v2.json"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/config.json",
+      "message_pattern": "never treated as \"no profile configured\""
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 2,
+    "unit_patterns": ["convention profile \"qpcp.v2\" 0/1 valid"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v2" },
+  "aism_behavior": "n/a -- the convention profile (.rk/conventions/<name>.v<n>.json, schemas/convention-profile.v1.json) is an rk-only concept introduced by rk-5lzf; no AISM script reads or validates one.",
+  "notes": "rk-5lzf (Tier A, LB5): a conventionProfile naming a file that is not present is a STRUCTURAL ERROR, never silently degraded to the 'no profile configured' state. The two are different facts: the second means Gate 9 has nothing to check against and says so; the first means the campaign believes it IS being checked and is not. The fixture repo deliberately holds a well-formed qpcp.v1.json so the failure is unambiguously the REFERENCE, not the profile's contents (the finding names what is present). The config field itself is well-formed, so the field-level pair stays 1/1 and only the profile unit goes 0/1."
+}

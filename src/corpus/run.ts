@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { GATES } from "../gates/index";
 import { loadSnapshot } from "../store/snapshot-load";
 import { mergeGateConfig } from "../gates/config";
+import { applyPhase } from "../gates/phase";
 import type { GateConfig } from "../gates/config";
 import { loadGateConfig } from "../store/config-load";
 import { unmatchedExpectations } from "../gates/subset-match";
@@ -154,10 +155,19 @@ export async function runFixture(corpusRoot: string, gate: GateDir, fixtureId: s
       );
     }
 
-    const result = gateImpl.run(snapshot, config);
-    if (result.notImplemented) {
+    const rawResult = gateImpl.run(snapshot, config);
+    if (rawResult.notImplemented) {
       return { gate, fixtureId, notImplemented: true, errors };
     }
+
+    // rk-5lzf: the PHASE MATRIX is applied here, exactly as `src/cli/check.ts` applies it — once
+    // per gate result, after the gate computed its findings and before anything reads their
+    // severity. Before this the corpus ran gates raw, so a fixture could not express "this ERROR
+    // survives exploration" at all: `structural: true` was only ever unit-tested, which per L2
+    // means the phase classification of every check had no red fixture behind it. In consolidation
+    // (every pre-rk-5lzf fixture, and the default) `applyPhase` is the identity function, so this
+    // is byte-identical for them by construction. Fixture: `notation-02`.
+    const result = { ...rawResult, findings: applyPhase(rawResult.findings, config.phase) };
 
     const missing = unmatchedExpectations(result.findings, expected.findings);
     if (missing.length > 0) {

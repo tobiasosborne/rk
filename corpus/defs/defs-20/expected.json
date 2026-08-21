@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-locality.md",
+      "message_pattern": "translations-in-frontmatter"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-locality.md",
+      "message_pattern": "rows written there are silently dropped"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["1 notation shard", "0/0 translations verified"] },
+  "aism_behavior": "n/a: AISM has no notation register and no translation rows.",
+  "notes": "rk-5lzf (Tier A, LB5): the ZERO-ROWS false-green. A `translations:` key written in the frontmatter is swallowed by `parseFrontmatter`'s block-list handling (rk-wc3), which joins `- item` lines into one ';'-separated string — so the body scan finds no rows, every translation check passes vacuously, and the coverage line reads a perfectly clean `0/0 translations verified`. This is the same shape as dogfood-2's silent-empty-`deps:` incident (`linker-29`), and the same remedy: the vacuous state is made loud instead of being inferred as compliance. Note the coverage line in this fixture is honestly 0/0 — the fixture's whole point is that the DENOMINATOR is the thing that went missing, which is why the finding, not the count, has to carry it."
+}

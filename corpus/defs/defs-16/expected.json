@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-invisible.md",
+      "message_pattern": "missing required 'source:'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-invisible.md",
+      "message_pattern": "missing required 'sha256:'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 1, "unit_patterns": ["0/1 cited shards hash-verified"] },
+  "aism_behavior": "n/a: AISM's check-defs.py globs definitions/*.md one level only (check-defs.py:27,80); a nested shard is invisible there too, and AISM has no notation register at all.",
+  "notes": "rk-5lzf, LB5 of docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md: RECURSIVE definitions discovery. Red against the pre-fix source on BOTH halves — zero findings AND coverage 0/0 instead of 1/1 — because neither src/store/snapshot-load.ts's INCLUDE_RULES (definitions was recursive:false) nor src/gates/defs.ts's listDir scan reached one level down. Mutation-proven: flipping the include rule back to recursive:false fails this fixture on the missing findings and the coverage pair; restored immediately. The violation carried is defs-15's (cited shard with neither source: nor sha256:), chosen deliberately so this fixture tests DISCOVERY and nothing else."
+}

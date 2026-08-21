@@ -1,0 +1,35 @@
+{
+  "gate": "notation",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-amplified.md",
+      "message_pattern": "unblessed-source-symbol: '\\epsilon'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-amplified.md",
+      "message_pattern": "unblessed-source-symbol: '\\Delta'"
+    },
+    {
+      "severity": "ERROR",
+      "path_pattern": "argument/thm-amplified.md",
+      "message_pattern": "use that class's blessed macro"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 0,
+    "total": 2,
+    "unit_patterns": [
+      "notation draft",
+      "promise-gap: registered 0/1, enforceable 4, encountered 1, skipped 1 [c]",
+      "spectral: registered 0/1, enforceable 3, encountered 1, skipped 0 []",
+      "over 1 file"
+    ]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation register, no convention profile, and no lexical symbol check.",
+  "notes": "rk-5lzf (Tier A, LB5/LB8): the UNREGISTERED TRACKED SYMBOL. `\\epsilon` and `\\Delta` are tracked by the qpcp.v1 profile and no notation shard blesses either, so nothing in the repo says which quantity the conjecture is about — LB8's exact complaint (promise gap vs spectral gap is one of the traps the profile exists to fix). Both findings are STRUCTURAL (campaign plan section 2a: admission is phase-independent), which `notation-02` proves survives exploration. The coverage line carries the honest denominator on BOTH axes: 0/2 tracked macro tokens registered, AND the count of tracked tokens (`c`) that are not macro-shaped and therefore cannot be scanned for lexically at all — a reach this gate states rather than implies."
+}

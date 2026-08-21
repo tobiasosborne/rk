@@ -17,8 +17,10 @@ import { join } from "node:path";
 /** The gate directory names under corpus/ — matches each gate's `name` in src/gates/index.ts
  * and the fixture-id prefix (corpus/README.md: "<gate> is one of defs, linker, refs, provenance,
  * runs, shards"). `freshness` (M2.6, Gate 7, src/gates/freshness.ts) is the second synthetic
- * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. */
-export const GATE_DIRS = ["config", "defs", "linker", "refs", "provenance", "runs", "shards", "freshness", "reward"] as const;
+ * entry alongside `config` — no AISM check-all.sh counterpart, added at the end. `notation`
+ * (rk-5lzf, Gate 9, src/gates/notation.ts) is the fourth synthetic entry, placed after `defs`
+ * to match src/gates/index.ts's own GATES order. */
+export const GATE_DIRS = ["config", "defs", "notation", "linker", "refs", "provenance", "runs", "shards", "freshness", "reward"] as const;
 export type GateDir = (typeof GATE_DIRS)[number];
 
 export function discoverFixtures(corpusRoot: string, gateDir: string): string[] {
@@ -188,5 +190,63 @@ export function totalFixtureCount(corpusRoot: string): number {
  * proved-mod-audit through a hand-written `.rk/` record. `reward-27` is the live-retraction case;
  * `reward-28` is the poisoned-ledger case, which is SEPARATELY breakable because
  * `readRetractionFacts` empties both live maps on an unhealthy store — reward-27 cannot see the
- * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition. */
-export const EXPECTED_FIXTURE_COUNT = 201;
+ * health clause disappear. See docs/gate-contracts.md Gate 8 check 4b's withdrawal precondition.
+ * 177 (+1 over the then-pinned 176): rk-5lzf (Tier A, LB5 of docs/reviews/
+ * 2026-08-20-qpcp-plan-tierA-codex.md) — `defs-16`: a definitions shard one level down
+ * (`definitions/notation/<symbol-id>.md`) was invisible to BOTH the snapshot loader's
+ * non-recursive `definitions` include rule and Gate 1's one-level `listDir` scan, so it could
+ * carry any violation at all at `checked defs: 0/0 shards`, exit 0. Discovery is now recursive on
+ * both sides.
+ * 179 (+2 over the then-pinned 177): rk-5lzf, the convention profile
+ * (`.rk/conventions/<name>.v<n>.json`, schemas/convention-profile.v1.json) — `config-06`: a
+ * `conventionProfile` naming a file that is not present is a structural ERROR, never degraded to
+ * the "no profile configured" state; `config-07`: a profile that drops a tracked class relative to
+ * its predecessor without bumping its own `version` field is `class-removed-without-bump`, the
+ * coverage-shrink LB5 names ("letting the register itself declare tracked classes also lets
+ * deletion of a class shrink coverage").
+ * 183 (+4 over the then-pinned 179): rk-5lzf, the notation register itself — `defs-17`
+ * (translation-collision: two shards claiming the same (source-id, their-symbol) pair), `defs-18`
+ * (a translation row with no byte-verbatim quote anchor), `defs-19` (the GOLDEN PASS: nested
+ * notation shard, `shard_type` orthogonal to `kind: cited`, class in the configured profile, one
+ * translation byte-verified through Gate 3's own verifier), `defs-20` (`translations:` written in
+ * the FRONTMATTER, where the flat grammar silently drops every row — the zero-rows false-green,
+ * same shape as dogfood-2's silent-empty-`deps:`).
+ * 184 (+1 over the then-pinned 183): rk-5lzf — `freshness-16` (numbered `freshness-12` on its branch): `definitions/notation/macros.tex`
+ * adopted under the new pure generator `notation-macros` and hand-edited so `\gapfrac` expands to
+ * `\Delta` instead of the register's `\epsilon`. Without adoption this is invisible: the .tex
+ * compiles, every shard writes the blessed macro, and the printed mathematics silently says
+ * something else.
+ * 188 (+4 over the then-pinned 184): rk-5lzf, GATE 9 itself — `notation-01` (two tracked symbols
+ * used in a conjecture shard, neither registered), `notation-02` (the same under
+ * `phase: exploration`, byte-identical expectation: structural survives demotion — and the first
+ * fixture in the corpus able to make a PHASE claim at all, since `src/corpus/run.ts` now applies
+ * `applyPhase` the way `rk check` does), `notation-03` (no profile configured ⇒ visible WARN and
+ * failed `0/1` profile prerequisite, never a silent/pass-shaped `0/0`), `notation-04` (golden pass, with the quoted-source exemption
+ * pinned). "notation" also added to GATE_DIRS as the fourth synthetic gate's corpus directory.
+ * 190 (+2 over the then-pinned 188): the rk-5lzf Tier A repair wave, blocker B6 — `defs-21`
+ * (`def-id-collision`: two shards at different depths claiming one flat id, which recursion made
+ * reachable and which every id-keyed consumer resolves arbitrarily) and `defs-22` (the ONE shared
+ * non-shard policy: nested `DAG.md`/`notes-*.md`/`_scratch.md` drew spurious ERRORs from Gate 1
+ * while Gate 9 skipped `DAG.md` — one tree, two answers to "is this a shard").
+ * 194 (+4 over the then-pinned 190): rk-5lzf Tier A repair B1 — `defs-23` (meaning declaration
+ * absent), `defs-24` (translation quote omits its source symbol), `defs-25` (source-id does not own
+ * the anchored path), and `defs-26` (missing meaning anchor remains ERROR in exploration).
+ * 196 (+2 over the then-pinned 194): repair B2 — `defs-27` binds each class to its profile-blessed
+ * macro and `notation-05` rejects an overlapping raw source token from campaign prose even when a
+ * shard registered that token in one of its possible classes.
+ * 197 (+1 over the then-pinned 196): repair B3 — `notation-06` scans a fully quoted but unpaired
+ * campaign sentence; quotation marks alone are not verified source evidence.
+ * 198 (+1 over the then-pinned 197): repair B4 — `notation-07` declares `notation: complete` but
+ * omits one class's canonical shard; per-class coverage reports the missing class and every skipped
+ * token instead of a vacuous symbol-level N/N.
+ * 202 (+4 over the then-pinned 198): repair B5 — `config-08` deleted predecessor, `config-09`
+ * skipped filename version, `config-10` renamed family, and `config-11` in-place v1 mutation all
+ * fail the predecessor_sha256 history chain structurally.
+ * 205 (+3 over the then-pinned 202): review follow-ups — `config-12` enforces runtime uniqueness
+ * of allowed_translations; `defs-28` and `defs-29` require and constrain generated LaTeX expansion.
+ * 230 (integration, 2026-08-21): rk-nsex (+25 over 176: refs-23..43, freshness-12..15) and
+ * rk-5lzf (+29 over 176) were developed on sibling branches from the same 176 base; the totals are
+ * additive. The two lanes both numbered a new fixture `freshness-12`; rk-5lzf's macros.tex
+ * fixture is `freshness-16` on master, rk-nsex's card fixtures keep 12..15.
+ */
+export const EXPECTED_FIXTURE_COUNT = 230;

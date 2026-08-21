@@ -216,7 +216,87 @@ optional per-assignment model override added so a `--live` run can pin the claud
 explicit model while the codex side stays on its own default; validated with the same
 non-blank-string discipline as `backend`; see `docs/worker-contract.md`'s isolation-tuple
 section and `src/drive/backend-registry.ts`'s `RoleTierAssignment`), `config-05` (rk-k0m1: zero
-`workers.assignments.<role>.<tier>.turnTimeoutMs` — see the timeout paragraph immediately below).
+`workers.assignments.<role>.<tier>.turnTimeoutMs` — see the timeout paragraph immediately below),
+`config-06`/`config-07` (rk-5lzf: an unknown `conventionProfile`, and a profile that drops a
+tracked class without bumping its `version` — see "Convention profile" below).
+
+**Convention profile (rk-5lzf, Tier A, LB5).** `.rk/config.json`'s OPTIONAL `conventionProfile`
+names the campaign's normalisation contract by reference key `<name>.v<n>`, resolving to
+`.rk/conventions/<name>.v<n>.json` and validated against `schemas/convention-profile.v1.json`
+(`src/gates/profile.ts`, surfaced by the `config` gate). It fixes what Gate 9 enforces
+(`tracked_classes`, with EXPLICIT token lists per class — never patterns), the campaign's value
+`lattices`, its normalisation `choices` (canonical convention + allowed translations, plus optional
+`notes`), and its closed `enums`. OPTIONAL `notation` is `draft|complete`, defaulting to `draft`:
+`complete` is the phase-0c assertion that every tracked class now has exactly one canonical shard.
+
+*`tracked_classes`.* Each entry is `{class, description, symbols, blessed}` (plus an OPTIONAL
+`symbols_must_be_registered: true`, which is the rule whether or not it is written). `symbols` are
+raw tokens verbatim as the literature writes them — `\epsilon`, `\lambda_{\min}`, `c`, `QMA`;
+whitespace is the only forbidden character, because a source's notation is not rk's to constrain.
+`blessed` is the campaign's ONE canonical macro for the class and is always a plain macro token.
+**A raw token may be claimed by several classes** — `\Delta` is a promise gap in one source and a
+spectral gap in another, `d` is a code distance and a qudit dimension — and that overlap is exactly
+what the register exists to resolve, so the profile admits it. Raw tokens are SOURCE notation: they
+may appear only inside source-scoped translation evidence, whose owning notation shard supplies the
+intended class and whose `(source-id, token)` pair is unique. Campaign prose must use the class's
+`blessed` macro; lexical context cannot determine which sense an overlapping raw token intended.
+`blessed` macros are unique across classes: two classes cannot bless the same macro, or the campaign
+has no canonical form for either.
+
+*`lattices`.* Each entry is a TAGGED object, never a bare array: `{kind: "chain", values}` — a
+total order written WEAKEST FIRST — or `{kind: "poset", values, edges}`, where `edges` are
+`[weaker, stronger]` covering pairs. An untagged list cannot say whether its middle is honestly
+comparable, and linearising an incomparable middle silently over-accepts (the reduction-class key
+is the standing example: `quasi-poly` and `quantum-poly` are not ordered, so a chain would let one
+discharge a requirement for the other). Poset edges must name declared `values` and must form a
+DAG — a cycle would make two distinct values mutually entailing, which is not an order at all; a
+zero-edge poset is a legitimate antichain. There is NO polarity field: direction lives on the
+signature side, where a parameter is an interval over these values (rk-8805). Gate 9 does not read
+lattices; the signature entailment check (Check 17) does.
+
+*`choices`.* Keys are free-form and deliberately ORTHOGONAL: a term convention is not one enum but
+several independent axes (positivity, weighting, total-normalisation, shift), and collapsing them
+into a single value makes two unrelated choices look like alternatives. An unordered value set with
+no comparison at all is an `enums` entry, not a lattice.
+
+*Why it lives outside the register it validates.* LB5 of
+`docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`: "letting the register itself declare tracked
+classes also lets deletion of a class shrink coverage." A register that declares its own tracked
+classes can silently delete one and keep reporting green on every symbol that remains. The profile
+is therefore a separate, versioned, committed artifact, and shrinking it is a compat event.
+
+*Rules, all blocking (`structural: true` — a fault in the checking apparatus is never phase-demoted,
+same class as an unparseable `.rk/config.json`):*
+- Reference key must match `<name>.v<n>` — lowercase name, positive integer `n`, no path
+  separators, no `.json` suffix. Anything else is an ERROR, never a guessed path.
+- **An unknown profile is an ERROR**, never degraded to the unconfigured state. "The profile you
+  configured does not exist" and "you configured no profile" are different facts: the second means
+  Gate 9 has nothing to check against and says so in its own coverage line; the first means the
+  campaign believes it is being checked and is not. Fixture `config-06`.
+- Schema enforcement is total and fail-closed: wrong/missing `schema_version`, an unrecognized key
+  at any level, a `name` disagreeing with the filename, an empty `tracked_classes`, a symbol
+  containing whitespace, a missing or non-macro `blessed`, a `symbols_must_be_registered` present
+  and not `true`, a duplicate class id, one BLESSED macro claimed by two classes, a bare-array or
+  untagged lattice, a lattice with fewer than two values, a poset edge naming an undeclared value
+  or closing a cycle, a choice missing `canonical`, duplicate `allowed_translations`, `notation`
+  outside `draft|complete`, or a
+  present `predecessor_sha256` not exactly 64 lowercase hex characters. ANY malformation drops the
+  WHOLE profile
+  (never a partially applied one — a
+  half-read tracked-class list is a silently shrunk one).
+- **Immutable predecessor chain and `class-removed-without-bump`.** A `.v1` profile is the chain
+  root and must omit `predecessor_sha256`. Every `.v<n>` for `n>1` must retain the immediate
+  same-family `.v<n-1>` file and set `predecessor_sha256` to the SHA-256 of that predecessor's exact
+  raw bytes. Validation walks every link to v1 before returning the current profile for enforcement.
+  A missing hash/file, skipped filename version, renamed family, hash mismatch, or unusable
+  predecessor is a structural ERROR; current enforcement is blocked, never run on unverifiable
+  history. At every verified link, every predecessor tracked class must remain unless the current
+  profile's `version` FIELD is strictly greater. The filename's `v<n>` is only the reference key;
+  `version` is the rule-10 compat counter. Fixtures `config-07` through `config-11`.
+
+The `config` gate's coverage line carries the profile as its own clause — `; convention profile
+"<ref>" <checked>/<total> valid`, or `; no convention profile configured` — so the unconfigured
+state is stated, never merely absent.
 
 **Worker timeouts (rk-k0m1, P2, live-fire RUN-REPORT-12).** `workers` carries two OPTIONAL
 positive-integer-millisecond fields, `turnTimeoutMs` (the per-turn wall-clock ceiling) and
@@ -331,6 +411,7 @@ is not itself "the consolidation-ward transition" and is not logged to the workl
 | **Gate 5 — runs** | (none) | all checks (1-6) | run-bundle lab-notebook discipline is PRD's "lightly logged" exploration allowance verbatim; still computed/reported as WARN so the discipline stays visible, just not blocking |
 | **Gate 6 — report-shards** | (none) | all checks (1-20) | the sharded LaTeX report is, like Gate 4, a Consolidation-phase-only artifact per PRD; this includes the M1 `shardsPrefix` config-missing ERROR (below) — during exploration there is no report to shard yet, so an unset prefix is not yet a blocking concern either |
 | **Gate 7 — freshness** (M2.6) | **every `cards-v1` finding** — per-entry STALE, declared-but-missing, cannot-be-regenerated, and both halves of the card bijection (`[card-unadopted]`, `[card-undeclared]`) [rk-nsex / BL4] | manifest-malformation findings, and per-entry STALE / declared-but-missing for every OTHER generator (`linker-index`, `linker-dag`, `render-site-v1`) | mirrors Gate 2 Check 11's own reasoning exactly, generalized from one hardcoded pair of files to any declared generator: a stale or missing generated artifact is a build-output/completeness-class defect — the underlying registry itself is still fully coherent — never a break in DAG structure. That reasoning held while every generated artifact was a VIEW of data checked elsewhere (`INDEX.md`, `DAG.md`, the site). **`cards-v1` is the exception and gets a carve-out** [rk-nsex / BL4]: a card is the artifact AGENTS ANSWER FROM, so its freshness is the only thing standing between a hand-edited card and a claim about the literature entering the DAG — and admission is phase-independent (campaign memo section 2a). Demoting it would mean `rk check` exits green on an edited card during the exact phase in which admission happens, which is landing-blocker BL4 of the 2026-08-20 Tier A review verbatim. This is a per-generator carve-out, deliberately narrow: nothing about `linker-index`/`linker-dag`/`render-site-v1` changes |
+| **Gate 9 — notation** (rk-5lzf) | Check 1 (`unregistered-symbol`) — the WHOLE blocking surface of the gate | (none; Check 2's profile-presence findings are WARN in both phases, nothing to demote) | the FIRST whole-gate STRUCTURAL classification, and the reason is admission, not registry coherence. Campaign plan section 2a: admission of a conjecture or a cited result is a transaction over one candidate whose notation must be ERROR-free regardless of phase. LB4 of the 2026-08-20 Tier A review named the failure exactly — "the validity barrier becomes advisory exactly when admission begins" — and phase 3's conjecture lanes run in `exploration`, so a demotable notation check would be unenforced precisely where conjectures are admitted. Fixture `notation-02` |
 
 Gate 6's own `Check 11` (duplicate `SHARD-ID`) formally resembles the structural "duplicate
 ids/aliases" class, and Gate 2's Check 12 (brittleness) and Check 15 (mandatory review, M3 review
@@ -339,6 +420,14 @@ already WARN-only in both phases (nothing to demote) — noted here so their abs
 above reads as a deliberate, considered call, not an oversight: the WHOLE-GATE non-structural
 classification for Gates 4-6 (and now Gate 7) is a deliberate policy choice (their subject matter
 is inherently consolidation-shaped), not a per-check omission.
+
+**Corpus enforcement of this table (rk-5lzf).** The corpus runner (`src/corpus/run.ts`) applies
+`applyPhase` to every gate result, exactly as `src/cli/check.ts` does, so a fixture can assert a
+phase claim directly (`notation-02`). Before this it ran gates RAW, which meant no fixture could
+express "this ERROR survives exploration" at all and every `structural: true` flag was unit-tested
+only — under L2 that is a classification with no red fixture behind it. In `consolidation` (every
+pre-rk-5lzf fixture, and the default) `applyPhase` is the identity function, so the change is
+byte-identical for them by construction.
 
 The synthetic `config` gate (M1, rk-xbm) is deliberately absent from this table: its one finding
 class (a malformed/unknown `.rk/config.json` field) is unconditionally `structural: true` — see
@@ -407,7 +496,7 @@ first production fence supplier must satisfy (rk-tracked productionization bead)
 
 ---
 
-## Gate 1 — defs (`definitions/*.md`)
+## Gate 1 — defs (`definitions/**/*.md`, recursive)
 
 **Purpose.** Guard the project's vocabulary against drift: no two shards may define the same
 term, or silently annex each other's alias, and every `cited` definition must be traceable to a
@@ -423,7 +512,30 @@ class-driven, not incident-driven — record this honestly rather than inventing
 incident.
 
 **Inputs.**
-- Glob: `definitions/*.md`, excluding `README.md`, `INDEX.md` (check-defs.py:27,80).
+- Glob: `definitions/**/*.md` — **RECURSIVE** (rk-5lzf, 2026-08-20), read through THE canonical
+  reader `src/gates/definitions-scan.ts`. That module is the single implementation of discovery,
+  the non-shard policy, and the id-collision rule, and it is reused by Gate 1, Gate 2's `defs:`
+  lookup, Gate 9, the notation-register parser, the live verifier's definition context
+  (`src/cli/verify-live-io.ts`) and the rendered definitions view (`src/render/defs-edge.ts`).
+  Two readers with different reach over one directory is a false-green generator — the gate
+  resolves a reference and the artifact built from it does not contain the definition — so there
+  is exactly one (repair-wave blocker B6).
+- **The non-shard policy, stated once and shared.** Never a shard, at ANY depth, by BASENAME:
+  `README.md`, `INDEX.md`, `DAG.md`, any basename starting with `_` (the scratch/partial
+  convention), any basename starting with `notes` (case-insensitive; lab-notebook files).
+  Everything else ending in `.md` IS a shard — a closed list, never a guess about what looks
+  authored, and the prefix rule is a PREFIX rule (`def-notes-on-gaps.md` is a shard). Gate 9 asks
+  the same function. Before the repair wave Gate 1 skipped only README/INDEX while Gate 9 also
+  skipped DAG, so one tree gave two answers to "is this a shard", and `DAG.md`/`notes.md` drew
+  spurious missing-frontmatter ERRORs. Fixture: `defs-22`. (check-defs.py:27,80 globs one level
+  with `SKIP = {README.md, INDEX.md}`; the widen is triaged **rk-stricter-intended**.) The notation register (below) lives at
+  `definitions/notation/<symbol-id>.md`, and under the former one-level rule those shards reached
+  neither the snapshot (`src/store/snapshot-load.ts`'s `definitions` include rule was
+  `recursive: false`) nor this gate's own scan — so a nested shard carried any violation at all
+  while the coverage line reported a denominator that excluded it. Same shape, same fix, as the
+  rk-9pk widen of Gate 2's `argument/` glob. Ids stay FLAT: `id` must equal the filename STEM, never
+  the nested path, so a nested shard is addressed by other gates exactly as a root-level one is.
+  Fixture: `defs-16`.
 - Frontmatter: flat `key: value` per line, terminated by a second `---` line (check-defs.py:30-50).
   Amendment (rk-wc3, dogfood-2): a list-valued field may equivalently be written as a natural
   multi-line YAML block list — a `key:` line with an empty value followed by `- item`
@@ -442,6 +554,86 @@ incident.
 | `locus` | freeform string | documented, **not machine-checked** | where in the source (informational only) |
 | `sha256` | 16-hex string or `-` | **REQUIRED for `kind=cited`** (ERROR when absent or `-` — F5 reversed, M0.7) | prefix must exist in the manifest |
 | `consensus` | freeform string | for `kind∈{consensus,original}` | who agreed / where transcribed |
+
+**Notation shards (rk-5lzf, Tier A, LB5).** A `definitions/**/*.md` shard carrying
+`shard_type: notation` is a NOTATION REGISTER entry: it blesses one LaTeX macro for one tracked
+class of the convention profile, and records how each source writes the same object.
+
+*`shard_type` is ORTHOGONAL to `kind`.* This is the whole of LB5's second half. A `kind: notation`
+would have REPLACED the provenance enum `cited|consensus|original`, so an anchored source-symbol
+occurrence would not have had to anchor the shard's claimed MEANING. On a notation shard `kind`
+keeps its full meaning and its full rules — a `kind: cited` notation shard still needs
+`source:`/`sha256:`, checks 8-9 unchanged — because **the meaning is what is provenanced, not the
+symbol's occurrence**. `shard_type` says only what shape of shard this is. v1 admits exactly one
+value; any other is an ERROR, since a typo would silently exempt the shard from every check below.
+
+| field | type | required | notes |
+|---|---|---|---|
+| `shard_type` | enum | no | `notation` is the only value in v1 |
+| `symbol` | LaTeX macro token | yes, on a notation shard | `\name`, letters only — the blessed form Gate 9 scans for and `macros.tex` declares |
+| `class` | string | yes, on a notation shard | must be a `tracked_classes` entry of the configured profile |
+| `meaning` | non-empty string | yes when `kind: cited` | the meaning attributed to the cited source; the shard-level `source:`/`sha256:` pair alone does not bind this claim to a passage |
+| `expansion` | LaTeX replacement body | yes, on a notation shard | exactly one non-empty balanced `\ensuremath{...}` body; definition, file-I/O, write/read, catcode, and parameter-marker primitives are forbidden |
+
+*Translation rows live in the shard BODY, never the frontmatter.* A row is
+`- <source-id>: <their symbol> @ refs/<path>:<line>`, strict and standalone, immediately followed
+by a `"<quote>"` anchor line. That two-line pair is the output of `rk refs quote` and a body
+construct everywhere else in rk (Gate 3 Checks 8-9), and the flat `key: value` frontmatter grammar
+cannot carry it: a bare quote line has no `:`, and `parseFrontmatter`'s block-list handling (rk-wc3)
+joins `- item` lines into one `;`-separated string, destroying the row/anchor pairing outright. So
+a `translations:` key IN the frontmatter is an ERROR (`translations-in-frontmatter`, fixture
+`defs-20`) — otherwise every row vanishes and the checks below pass vacuously at `0/0`.
+
+*Checks (all inside Gate 1, all counted in its coverage line).*
+- Unknown `shard_type` value ⇒ ERROR.
+- Missing `symbol:` or `class:` on a notation shard ⇒ ERROR (it registers nothing / belongs to no
+  class). A `symbol` that is not a plain macro token ⇒ ERROR.
+- `class` naming no `tracked_classes` entry of the configured profile ⇒ **structural** ERROR: this
+  is a BROKEN CROSS-REFERENCE, the phase matrix's own structural class — the shard registers into a
+  bucket Gate 9 never checks, so every symbol it was meant to bless goes unenforced while the
+  register looks complete. With NO profile configured the class cannot be checked at all; the
+  coverage line says so rather than passing silently.
+- `symbol` must equal the configured class's `blessed` macro exactly. A shard cannot bless a raw
+  source spelling, or a second campaign macro, merely by declaring the class: raw spellings belong
+  only in source-scoped translation rows. A mismatch is structural ERROR
+  `symbol-not-blessed-for-class`. Fixture `defs-27`.
+- `expansion` is the reviewed typographical implementation of that blessed macro and is embedded
+  verbatim by the generated `definitions/notation/macros.tex`. It is required and restricted to one
+  balanced non-empty `\ensuremath{...}` replacement body; TeX definition, file-I/O, write/read,
+  catcode, and `#` parameter primitives are structural ERROR `expansion-unsafe`. `expansion` does
+  not establish semantic identity: `meaning` plus its kind-specific provenance does. Editing the
+  expansion changes the authored shard bytes and Gate 7 regenerates/diffs the macro file, so the
+  visible rendering and reviewed register cannot drift silently. Fixtures `defs-28`, `defs-29`.
+- **DRIFT namespace extension.** Gate 1's one dedup map gains two keyspaces beside `term`:
+  `symbol` (two shards blessing the same macro ⇒ `DRIFT: symbol ...`) and `(source-id,
+  their-symbol)` (two shards claiming one source token ⇒ `translation-collision`, fixture
+  `defs-17`). Both **structural**, same class as the pre-existing term/alias collision. The
+  translation pair is scoped BY SOURCE deliberately: two campaign symbols may cite the same paper,
+  and one source symbol may recur across papers — only the pair is a claim about a specific paper's
+  specific token. There is no self-exemption: the same pair twice inside ONE shard is the same
+  contradiction.
+- A row with no anchor ⇒ ERROR `translation-anchor-missing` (fixture `defs-18`); the row is still
+  counted, so an unanchored claim is visible rather than absent.
+- An anchored row is byte-verified by **Gate 3's own `verifyCitationClaim`**
+  (`src/gates/refs-shard-citations.ts`), called directly — not reimplemented. There is exactly one
+  quote semantics in the codebase: strict grammar, adopted-pin check, and the quote found
+  byte-for-byte at the recorded locus in whichever layer that locus indexes.
+- A `kind: cited` notation shard must carry a non-empty `meaning:` and an explicit
+  `meaning-anchor:` body block: the marker, then a standalone `refs/<path>:<line>` pointer, then
+  its `"<quote>"`. The anchor is byte-verified through that same Gate 3 verifier. This binds the
+  declared meaning to reviewable source bytes; whether the passage semantically supports the
+  prose remains adversarial-review work, never a lexical gate's claim. Missing, malformed, stale,
+  or unverified meaning provenance is a structural ERROR. Fixtures `defs-23` and `defs-26`.
+- A byte-verified translation row is counted verified only when its quote contains `their-symbol`
+  verbatim and the row's `source-id` owns the anchored payload path through
+  `refs/manifest/sources.lock.json`'s `files[].source_id`. Missing ownership fails closed; genuine
+  bytes from one source cannot prove another source's notation. Both failures are structural
+  ERRORs. Fixtures `defs-24` and `defs-25`.
+- Every notation-admission provenance failure in this section is **structural**, including findings
+  returned by the shared citation verifier, and therefore remains ERROR in exploration.
+
+Coverage clause: `, <N> notation shard(s), <V>/<R> translations verified`, plus
+`— no convention profile configured, classes unchecked` when there is no profile.
 
 **`status` enum, precisely** (bead rk-cvy — undocumented before this entry, discovered dogfood-1:
 a newcomer had no way to know a definition shard's `status:` uses a DIFFERENT vocabulary from
@@ -469,6 +661,14 @@ Config: `manifest_path = refs/manifest/checksums.sha256` (check-defs.py:149); `S
 4. `id == filename stem` ⇒ ERROR otherwise (check-defs.py:91-92).
 5. `kind ∈ {cited, consensus, original}` ⇒ ERROR otherwise (check-defs.py:93-94).
 6. `status ∈ {draft, locked}` ⇒ ERROR otherwise (check-defs.py:95-96).
+15. **`def-id-collision`** (rk-5lzf B6): a flat `id` claimed by more than one shard is a
+   **structural** ERROR on EVERY claiming path, naming all of them. `id` is the cross-reference
+   key every consumer addresses a definition by — Gate 2 check 7's `defs:`, the verifier's context
+   reader, the rendered view — and each keys by id alone, so two files answering to one id resolve
+   arbitrarily. Recursion is what made this reachable: in a flat directory two shards cannot share
+   a filename stem. A finding on one path only would leave a reader unable to find the other.
+   Fixture: `defs-21`.
+
 7. **DEDUP/DRIFT**: `term` + every `alias` (lower-cased) forms one global name namespace across
    all shards; a name claimed by two different shards ⇒ ERROR `DRIFT: name '<nm>' claimed by
    both <a> and <b>` (check-defs.py:98-107).
@@ -568,6 +768,20 @@ N/A for this gate; nothing to tolerate.
 | `defs-13` | `status: draft` baseline (WARN, golden non-error case) |
 | `defs-14` | manifest file entirely absent (WARN, and checks 8–9 coverage count reads `0/K`) |
 | `defs-15` | **F5 reversed** [M0.7] — `cited` shard, `source:` and `sha256:` BOTH entirely absent ⇒ ERROR (AISM's script passes this silently, check-defs.py:112-118) |
+| `defs-16` | **nested shard invisible** [rk-5lzf] — a shard at `definitions/notation/<id>.md` carrying `defs-15`'s violation ⇒ ERROR + `checked 1/1`; pre-fix it produced zero findings at `checked 0/0` |
+| `defs-17` | **translation-collision** [rk-5lzf] — two notation shards claim the same `(source-id, their-symbol)` pair ⇒ structural ERROR |
+| `defs-18` | **translation-anchor-missing** [rk-5lzf] — a translation row with no `"<quote>"` anchor line ⇒ ERROR, row still counted |
+| `defs-19` | **notation golden pass** [rk-5lzf] — `shard_type: notation` + `kind: cited`, class in the profile, translation byte-verified ⇒ zero findings |
+| `defs-20` | **translations-in-frontmatter** [rk-5lzf] — rows written in the frontmatter are destroyed by the flat grammar ⇒ ERROR, never a vacuous `0/0` pass |
+| `defs-21` | **def-id-collision** [rk-5lzf B6] — two shards at different depths claiming one flat `id` ⇒ structural ERROR on BOTH paths |
+| `defs-22` | **shared non-shard policy** [rk-5lzf B6] — nested `DAG.md`, `notes-*.md`, `_scratch.md` are not shards; `def-notes-on-gaps.md` is ⇒ zero findings, `checked 1/1` |
+| `defs-23` | **meaning-missing** [rk-5lzf B1] — cited notation shard has an anchored passage but no `meaning:` ⇒ structural ERROR |
+| `defs-24` | **translation-symbol-not-in-quote** [rk-5lzf B1] — a byte-verified translation quote omits `their-symbol` ⇒ structural ERROR |
+| `defs-25` | **translation-source-path-mismatch** [rk-5lzf B1] — source-id does not own the anchored payload path ⇒ structural ERROR |
+| `defs-26` | **meaning-anchor-missing in exploration** [rk-5lzf B1] — cited meaning has no anchor under `phase: exploration` ⇒ ERROR/fail |
+| `defs-27` | **symbol-not-blessed-for-class** [rk-5lzf B2] — a notation shard declares a raw source token instead of its class's blessed macro ⇒ structural ERROR |
+| `defs-28` | **expansion-missing** [rk-5lzf follow-up] — notation shard has no generated LaTeX replacement body ⇒ structural ERROR |
+| `defs-29` | **expansion-unsafe** [rk-5lzf follow-up] — expansion contains a forbidden TeX file-input primitive ⇒ structural ERROR |
 
 ---
 
@@ -2706,8 +2920,12 @@ that rule for any artifact a repo opts into declaring.
   asserted (campaign memo section 4). A record absent from Gate 3 Check 11's `usable` map still
   renders — as an empty NOT ADMISSIBLE card carrying no statement, hypothesis or restatement —
   whether it failed source, anchor, staleness, envelope, or review verification. Thus an agent
-  reading a card can never quote an extraction the complete record check refused. (b)
-  `RENDER_SITE_GENERATOR` —
+  reading a card can never quote an extraction the complete record check refused. The fourth pure
+  generator is `notation-macros` (rk-5lzf: `definitions/notation/macros.tex` via
+  `src/render/macros-tex.ts`'s `renderMacros`, one `\newcommand` per `shard_type: notation` shard,
+  sorted by id, no timestamps — written by `rk render macros`, which calls the SAME pure function,
+  so producer and verifier cannot drift; fixture `freshness-16`); it is a function of the snapshot
+  alone and wraps its bytes in the `PureRegenResult` `ok` case. (b) `RENDER_SITE_GENERATOR` —
   `render-site-v1`, EDGE-SUPPLIED (see
   "Edge-supplied generators" above): recognized, but this gate never regenerates it itself. A
   manifest entry naming any OTHER generator id (neither (a) nor (b)) is now a BLOCKING ERROR —
@@ -2932,6 +3150,7 @@ yet applied here since both files are out of this repair wave's scope):
 | `freshness-09` | **blocker #4** — manifest `schema_version: "2"` (wrong version) ⇒ ERROR naming both the actual and expected value |
 | `freshness-10` | **blocker #4** — manifest carries an extra top-level property ⇒ ERROR (`additionalProperties:false`) |
 | `freshness-11` | **blocker #4** — a manifest entry carries an extra property beyond `path`/`generator` ⇒ per-entry ERROR, entry dropped entirely (`checked=0/0`) |
+| `freshness-16` | **rk-5lzf** — `definitions/notation/macros.tex` (generator `notation-macros`) hand-edited so a blessed macro expands to a different symbol than the register blesses ⇒ ERROR naming file, generator and first differing line |
 
 ## Gate 8 — reward (`.rk/reward-ledger.jsonl`)
 
@@ -3143,3 +3362,99 @@ absent or `"1"` and accept v2 records; writers emit only `"2"`. A `demote` witho
 as an unknown no-op. The current schema-v2 demote shape additionally requires `nodeId`,
 `priorStatus`, and `priorAf` (2026-08-10 review R1). This is an in-session amendment of the
 unpushed v2 demote compatibility event, not a new record version.
+
+---
+
+## Gate 9 — notation (`definitions/**/*.md`, `argument/**/*.md`, `refs/records/**/*.json`)
+
+NEW in rk-5lzf (Tier A; LB5/LB8 of `docs/reviews/2026-08-20-qpcp-plan-tierA-codex.md`; campaign
+plan `docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md` section 5) — no AISM counterpart. A
+LEXICAL check, deliberately: it does not read mathematics, it reads tokens.
+
+**Purpose.** Make one failure class impossible: a symbol whose meaning nobody wrote down. The
+qPCP literature writes `\Delta` for a promise gap in one paper and a spectral gap in another, `d`
+for a code distance and a qudit dimension, `\epsilon` for a gap and an energy density. A campaign
+that lets those tokens into its own prose unregistered is building on sentences that cannot be
+read back — LB8's "the trap list is mathematically incomplete", made mechanical.
+
+**Failure mode guarded.** Unregistered canonical notation, or raw source notation used as campaign
+notation: a token the convention profile says is load-bearing appears in a shard body or blessed
+statement without the unique class meaning the profile fixes. Class-driven (the campaign is new);
+the source incident is the literature itself, enumerated in the profile draft's checked divergences.
+
+**Inputs.**
+- The convention profile named by `.rk/config.json`'s `conventionProfile` — see "Convention
+  profile" above. It is the ONLY source of what is tracked.
+- `definitions/**/*.md` and `argument/**/*.md` shard BODIES (frontmatter excluded — a `symbol:`
+  line is a declaration, not a usage), excluding `README.md`/`INDEX.md`/`DAG.md` at any depth.
+  Conjecture shards need no special case: they are argument shards.
+- `refs/records/**/*.json`, field `statement_blessed` (the extraction records of rk-nsex). The
+  directory may not exist yet — it is DISCOVERED, never required. A record whose JSON does not
+  parse is a WARN naming it, never a silent skip.
+
+**Reach, stated rather than implied.** The profile's tracked tokens are raw literature notation:
+some are plain macro tokens (`\epsilon`), some are bare identifiers (`c`, `k`) or brace/subscript
+forms (`\lambda_{\min}`). Only the macro-token subset can be scanned for reliably — searching prose
+for a bare `c` produces noise, not signal. Gate 9 enforces that subset and COUNTS the rest per class
+in its coverage line, listing every skipped token deterministically and without truncation. A gate
+that quietly claimed the wider reach would be the more dangerous artifact.
+
+**Verified quote syntax is exempt; quotation marks are not.** A strict translation row and its
+immediately following `"<quote>"`, or a strict standalone `refs/<path>:<positive-line>` pointer and
+its immediately following `"<quote>"`, are the SOURCE's notation. Recording a foreign convention
+is the register's whole job; flagging those adjacent pairs would make it unwritable. A fully quoted
+line with no immediately preceding strict row/pointer is campaign prose and is scanned, including
+inside `statement_blessed`; otherwise adding two quotation marks bypasses Gate 9. Fixtures
+`notation-04` and `notation-06`.
+
+**Checks.**
+1. **Canonical and raw tracked symbols.** A class's `blessed` macro appearing in a scanned artifact
+   must be the `symbol:` of a notation shard whose `class:` is that exact class; otherwise ERROR
+   `unregistered-symbol`. A raw profile `symbols` token appearing in campaign prose is always ERROR
+   `unblessed-source-symbol`, even if a shard tries to register it in one claiming class. Raw tokens
+   are legal only in source-scoped translation evidence: the row names the source, its owning shard
+   names the intended class, and Gate 1 requires the pair to be unique and byte-bound. This closes
+   the overlapping-token false green: lexical context cannot decide whether `\Delta` meant promise
+   gap or spectral gap, so registration in either class cannot clear campaign prose. Both errors are
+   **STRUCTURAL**. One finding per (file, symbol): ten usages in one file are one defect, reported at
+   the first. Fixture `notation-05`.
+2. **Profile presence.** No `conventionProfile` configured ⇒ one WARN and a failed `0/1 profile
+   prerequisite (no profile configured; zero classes tracked)`, never a pass-shaped `0/0`. A profile
+   configured but UNUSABLE ⇒ a different WARN naming it and a failed `0/1` prerequisite. The two
+   are never collapsed: a campaign that
+   believes it is being checked must not read the same output as one that knows it is not. The
+   config gate's own ERROR is what blocks the run in the second case. Fixture `notation-03`.
+3. **Register completeness.** `notation: draft` (including an absent `notation`) reports missing
+   canonical shards in coverage without claiming phase 0c is done. `notation: complete` asserts
+   exactly one notation shard per tracked class whose `class:` is that class and whose `symbol:` is
+   its profile `blessed` macro. Zero gives structural ERROR `canonical-shard-missing`; more than one
+   gives structural ERROR `canonical-shard-duplicate`. Fixture `notation-07`.
+
+**Phase classification. STRUCTURAL, never demoted.** Campaign plan section 2a: admission of a
+conjecture or a cited result is a transaction over one candidate, and its notation must be
+ERROR-free at admission regardless of phase. LB4's finding was that the validity barrier becomes
+advisory exactly when admission begins — phase 3's conjecture lanes run in `exploration`, so a
+notation check that demoted there would be unenforced precisely where conjectures are admitted.
+Fixture `notation-02` is `notation-01` under `phase: exploration` with a byte-identical
+expectation.
+
+**Coverage line.** The numeric pair is `<classes with exactly one canonical shard>/<profile tracked
+classes>`, never encountered-symbols/encountered-symbols. Its unit names `notation draft|complete`
+and emits one deterministic class clause in class-id order:
+`<class>: registered <R>/1, enforceable <E>, encountered <U>, skipped <S> [<all skipped tokens>]`.
+`enforceable` is the distinct plain-macro subset of that class's raw symbols plus its blessed macro;
+`encountered` is the distinct enforceable subset present in scanned artifacts; `skipped` lists every
+non-macro raw token in lexical order, without truncation. Thus an untouched or wholly unenforceable
+class remains visible, and zero tracked classes never renders as a successful `N/N`.
+
+**Corpus fixtures required.**
+
+| id | violation |
+|---|---|
+| `notation-01` | two raw tracked symbols (`\epsilon`, `\Delta`) used in a conjecture shard ⇒ 2 structural `unblessed-source-symbol` ERRORs, `checked 0/2` |
+| `notation-02` | `notation-01` under `phase: exploration` ⇒ byte-identical ERROR/fail/exit 1 (structural survives demotion) |
+| `notation-03` | no `conventionProfile` configured ⇒ WARN + failed `0/1` profile prerequisite, never a silent/pass-shaped `0/0` |
+| `notation-04` | golden pass: blessed macros registered in their classes, `2/2`; a translation row and its quote anchor carry an unregistered source token and are NOT flagged |
+| `notation-05` | **source-scoped overlap** [rk-5lzf B2] — overlapping raw `\Delta` in campaign prose remains ERROR even when registered in one claiming class |
+| `notation-06` | **quoted-line bypass** [rk-5lzf B3] — a fully quoted but unpaired campaign sentence carrying raw `\epsilon` ⇒ structural ERROR |
+| `notation-07` | **vacuous class coverage** [rk-5lzf B4] — `notation: complete` with one of two canonical class shards absent ⇒ structural ERROR + per-class `1/2` coverage |

@@ -1,0 +1,20 @@
+{
+  "gate": "defs",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": "definitions/notation/sym-gapfrac.md",
+      "message_pattern": "meaning-missing"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1/1 cited shards hash-verified", "1 notation shard", "0/0 translations verified"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation register or meaning anchor.",
+  "notes": "rk-5lzf repair B1: a byte-verified passage does not repair an absent meaning declaration. The notation shard must say what its canonical macro means and separately anchor that meaning to source bytes. Structural because notation admission is phase-independent."
+}

@@ -1,0 +1,24 @@
+{
+  "gate": "notation",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v1.json",
+      "message_pattern": "canonical-shard-missing: class 'spectral'"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": {
+    "checked": 1,
+    "total": 2,
+    "unit_patterns": [
+      "notation complete",
+      "promise-gap: registered 1/1, enforceable 2, encountered 0, skipped 1 [c]",
+      "spectral: registered 0/1, enforceable 2, encountered 0, skipped 2 [\\lambda_{\\min}, d]"
+    ]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no convention profile or notation-completeness barrier.",
+  "notes": "rk-5lzf repair B4: phase 0c is declared complete only by notation: complete. Then every tracked class must have exactly one canonical shard, and coverage is registered classes / profile classes rather than vacuous encountered symbols / encountered symbols. The per-class clauses list every lexically skipped token deterministically, without truncation."
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 1,
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "Thresholds and the gap between them, for a promise problem. Canonical normalisation is relative (fraction of m).",
+      "symbols": ["\\epsilon", "\\varepsilon", "\\gamma", "c"],
+      "blessed": "\\gapfrac",
+      "symbols_must_be_registered": true
+    },
+    {
+      "class": "locality",
+      "description": "Number of qudits a term or check touches, and the interaction degree.",
+      "symbols": ["k", "q", "\\kloc"],
+      "blessed": "\\locality",
+      "symbols_must_be_registered": true
+    }
+  ],
+  "lattices": {
+    "gap": { "kind": "chain", "values": ["inv-poly", "inv-log", "const"] }
+  },
+  "choices": {
+    "promise_gap_normalisation": {
+      "canonical": "relative",
+      "allowed_translations": ["absolute", "energy-density-term"]
+    }
+  },
+  "enums": {
+    "hardness": ["QMA-hard", "QMA-complete", "open", "no-go"]
+  }
+}

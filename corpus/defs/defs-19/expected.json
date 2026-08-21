@@ -1,0 +1,14 @@
+{
+  "gate": "defs",
+  "verdict": "pass",
+  "findings": [],
+  "exit_code": 0,
+  "coverage": {
+    "checked": 1,
+    "total": 1,
+    "unit_patterns": ["1/1 cited shards hash-verified", "1 notation shard", "1/1 translations verified"]
+  },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no notation register, no `shard_type`, and no body-level translation rows.",
+  "notes": "rk-5lzf (Tier A, LB5): the GOLDEN PASS for the whole notation path — a nested shard at definitions/notation/, `shard_type: notation` ORTHOGONAL to `kind: cited` (so source:/sha256: still bind the MEANING to hashed bytes, which is LB5's actual complaint: an anchored source-symbol occurrence must not stand in for the shard's claimed meaning), a `class:` naming a tracked class of the configured qpcp.v1 profile, and one translation row byte-verified at its recorded locus through Gate 3's own verifier. Every clause is load-bearing: editing refs/aav-1309.7495/paper.tex invalidates both the lock pin and the checksums prefix and turns this fixture red for the wrong reason — recompute both. This is the control against which defs-17 (collision), defs-18 (missing anchor) and defs-20 (frontmatter rows) are read."
+}

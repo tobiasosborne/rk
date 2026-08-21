@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 1,
+  "predecessor_sha256": "2d95deae2c628eb5d905a93a5dbbbe47dcc5c89cd4f0670de0503da43d95c7ad",
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "Thresholds and the gap between them, for a promise problem. Canonical normalisation is relative (fraction of m).",
+      "symbols": ["\\epsilon", "\\varepsilon", "\\gamma", "c"],
+      "blessed": "\\gapfrac",
+      "symbols_must_be_registered": true
+    }
+  ],
+  "lattices": {
+    "gap": { "kind": "chain", "values": ["inv-poly", "inv-log", "const"] }
+  },
+  "choices": {
+    "promise_gap_normalisation": {
+      "canonical": "relative",
+      "allowed_translations": ["absolute", "energy-density-term"]
+    }
+  },
+  "enums": {
+    "hardness": ["QMA-hard", "QMA-complete", "open", "no-go"]
+  }
+}

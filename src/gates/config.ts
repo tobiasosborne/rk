@@ -44,6 +44,9 @@ import { DEFAULT_PHASE } from "./phase";
 // subprocess-spawning adapters), so importing it here does not drag edge code into the gates
 // layer. Same rk-xbm discipline as every other field below: malformed input drops the WHOLE field.
 import { validateWorkersConfig, type WorkersConfig } from "../drive/backend-registry";
+// rk-5lzf: the convention profile's own validation (schemas/convention-profile.v1.json) — pure,
+// snapshot-only, no fs; see src/gates/profile.ts.
+import { validateConventionProfile } from "./profile";
 
 /** Gate 3 Check 12's two records modes — see `GateConfig.records`. */
 export type RecordsMode = "legacy" | "required";
@@ -122,6 +125,16 @@ export interface GateConfig {
    * driver-live.ts's `DEFAULT_*`. Present-but-invalid drops the whole field like any other
    * malformation (fixture `config-05`) — see docs/gate-contracts.md's "Worker timeouts". */
   workers?: WorkersConfig;
+  /** rk-5lzf (Tier A, LB5): the CONVENTION PROFILE reference — `<name>.v<n>`, naming
+   * `.rk/conventions/<name>.v<n>.json` (schemas/convention-profile.v1.json). Optional, same "no
+   * default" stance as `shardsPrefix`/`northStarId`: a general tool must never guess which
+   * normalisation contract a campaign runs under. Absent means Gate 9 (notation) has nothing to
+   * check against and says so in its coverage line — a visible failed 0/1 prerequisite, never a
+   * silent or pass-shaped 0/0. A
+   * present-but-unknown or malformed profile is an ERROR (`src/gates/profile.ts`), never degraded
+   * to the absent state: "the profile you configured does not exist" and "you configured no
+   * profile" are different facts and must never print the same. */
+  conventionProfile?: string;
   /** INTERNAL — not a per-repo parameter, never set in `.rk/config.json`, never read by any of
    * the six M0 gates. rk-xbm: the side channel `src/store/config-load.ts` uses to carry
    * `validateConfigOverrides`'s findings (plus a checked/total pair) from the point they're
@@ -180,6 +193,7 @@ const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "records",
   "northStarId",
   "workers",
+  "conventionProfile",
 ]);
 
 /** Exported so `src/store/config-load.ts` (the impure edge that actually reads the file) can
@@ -414,6 +428,23 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
     }
   }
 
+  if ("conventionProfile" in raw) {
+    total++;
+    const v = raw.conventionProfile;
+    if (isNonEmptyString(v)) {
+      overrides.conventionProfile = v;
+      checked++;
+    } else {
+      findings.push(
+        configError(
+          `conventionProfile: invalid value ${JSON.stringify(v)} -- must be a non-empty string ` +
+            `(<name>.v<n>, naming .rk/conventions/<name>.v<n>.json) when set; treating as ` +
+            `unconfigured (rk-5lzf's own "no default" contract, never a malformed sentinel)`,
+        ),
+      );
+    }
+  }
+
   if ("workers" in raw) {
     total++;
     const v = validateWorkersConfig(raw.workers);
@@ -442,16 +473,27 @@ export function validateConfigOverrides(raw: Record<string, unknown>): ConfigVal
  * other gate's "absent input is a legitimate state" convention. */
 export const configGate: Gate = {
   name: "config",
-  run(_snapshot: RepoSnapshot, config: GateConfig): GateResult {
+  run(snapshot: RepoSnapshot, config: GateConfig): GateResult {
     const summary = config._configValidation ?? { findings: [], checked: 0, total: 0 };
+    // rk-5lzf: the CONVENTION PROFILE is the one config value whose validity depends on repo
+    // CONTENT (the file it names, and that file's own predecessor), so it cannot be checked at the
+    // `.rk/config.json`-parsing edge the way every field above is — it is checked here, against the
+    // snapshot, exactly as any other gate checks its declared Inputs. `checked`/`total` above stay
+    // the CONFIG-FIELD pair; the profile's own units are added to them so the coverage line's
+    // denominator counts everything this gate actually attempted (L2: never a silent skip).
+    const profile = validateConventionProfile(snapshot, config.conventionProfile);
+    const profileClause =
+      config.conventionProfile === undefined
+        ? "; no convention profile configured"
+        : `; convention profile "${config.conventionProfile}" ${profile.checked}/${profile.total} valid`;
     return {
-      findings: summary.findings,
+      findings: [...summary.findings, ...profile.findings],
       coverage: [
         {
           gate: "config",
-          unit: "config field(s) in .rk/config.json valid (enum/type/range, no unknown keys)",
-          checked: summary.checked,
-          total: summary.total,
+          unit: `config field(s) in .rk/config.json valid (enum/type/range, no unknown keys)${profileClause}`,
+          checked: summary.checked + profile.checked,
+          total: summary.total + profile.total,
         },
       ],
     };

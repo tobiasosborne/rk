@@ -1,0 +1,16 @@
+{
+  "gate": "config",
+  "verdict": "fail",
+  "findings": [
+    {
+      "severity": "ERROR",
+      "path_pattern": ".rk/conventions/qpcp.v1.json",
+      "message_pattern": "allowed_translations must contain distinct values"
+    }
+  ],
+  "exit_code": 1,
+  "coverage": { "checked": 1, "total": 2, "unit_patterns": ["convention profile \"qpcp.v1\" 0/1 valid"] },
+  "config_override": { "conventionProfile": "qpcp.v1" },
+  "aism_behavior": "n/a: AISM has no convention profile.",
+  "notes": "rk-5lzf review follow-up: schemas/convention-profile.v1.json has uniqueItems:true for allowed_translations; runtime validation must enforce the same contract rather than accepting duplicate alternatives the schema rejects."
+}

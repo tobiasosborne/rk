@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "name": "qpcp",
+  "version": 1,
+  "tracked_classes": [
+    {
+      "class": "promise-gap",
+      "description": "The promise gap, normalised by the number of terms.",
+      "symbols": ["\\epsilon", "\\Delta"],
+      "blessed": "\\gapfrac"
+    }
+  ],
+  "lattices": {},
+  "choices": {},
+  "enums": {}
+}
