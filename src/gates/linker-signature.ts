@@ -1,19 +1,6 @@
-// PURITY: pure — no fs/network/clock (L3). Gate 2 CHECK 17 — signature + route-scoped entailment
-// (rk-8805). Ground truth: docs/gate-contracts.md Gate 2 Check 17,
-// docs/design/NOTES-2026-08-20-qpcp-campaign-plan.md section 6, schemas/signature.v1.json.
-// Check NUMBER: 17, not 12 — 12 is brittleness (review follow-up FU1).
-//
-// This module is the WIRING: it reads each shard's signature block (src/gates/signature.ts),
-// resolves the convention profile (src/gates/signature-profile.ts), and runs the entailment walk
-// (src/gates/signature-entail.ts) over each route, turning the results into `Finding`s and the
-// coverage triple. The validity rules themselves live in those three pure modules; nothing here
-// decides an entailment.
-//
-// EVERY Check 17 ERROR IS STRUCTURAL. Memo section 2a: the checks this plan introduces are never
-// phase-demoted, because admission is phase-independent — the exploration phase is exactly when
-// conjecture admission happens, so demoting them would make the barrier advisory at the only
-// moment it matters (review LB4). `post-unsupported` is the one WARN: a shard's own post may
-// legitimately be supplied by its PROOF rather than by its route.
+// PURITY: pure — no fs/network/clock (L3). Gate 2 Check 17 wiring: parsed signatures, convention
+// profile, route-scoped entailment, structural findings, and coverage. Ground truth:
+// docs/gate-contracts.md Check 17 and NOTES-2026-08-20-qpcp-campaign-plan.md section 6.
 
 import type { Finding } from "./framework";
 import type { GateConfig } from "./config";
@@ -166,13 +153,13 @@ export function checkSignatures(
   }
 
   if (signatures.size === 0) {
-    return { findings, note: signatureNote(mode, undefined, 0, 0, 0) };
+    return { findings, note: signatureNote(mode, undefined, 0, 0, 0, 0) };
   }
 
   const { profile, finding: profileFinding, note: profileNote } = resolveProfile(snapshot, config);
   if (profileFinding) findings.push(profileFinding);
   if (!profile) {
-    return { findings, note: signatureNote(mode, profileNote, signatures.size, 0, 0) };
+    return { findings, note: signatureNote(mode, profileNote, signatures.size, 0, 0, 0) };
   }
 
   // (a) object resolution, (c) closed vocabulary, and the profile join — per shard.
@@ -205,6 +192,7 @@ export function checkSignatures(
   // (b) entailment on every route.
   let routesChecked = 0;
   let entailmentsChecked = 0;
+  let unsignedRouteMembers = 0;
   for (const l of lemmas) {
     const sig = signatures.get(l.id);
     if (!sig || sig.profile !== profile.name) continue;
@@ -213,6 +201,7 @@ export function checkSignatures(
       routesChecked++;
       const r = checkRoute({ shardId: l.id, signature: sig, route, signatureOf: signatures, profile });
       entailmentsChecked += r.entailmentsChecked;
+      unsignedRouteMembers += r.membersWithoutSignature.length;
       const routeLabel = route.length === 0 ? "(no dependencies)" : `[${route.join("; ")}]`;
       for (const { memberId, failure } of r.failures) {
         findings.push(
@@ -252,7 +241,7 @@ export function checkSignatures(
     }
   }
 
-  return { findings, note: signatureNote(mode, profileNote, signatures.size, routesChecked, entailmentsChecked) };
+  return { findings, note: signatureNote(mode, profileNote, signatures.size, routesChecked, entailmentsChecked, unsignedRouteMembers) };
 }
 
 function plural(n: number, word: string): string {
@@ -270,11 +259,13 @@ function signatureNote(
   shards: number,
   routes: number,
   entailments: number,
+  unsignedRouteMembers: number,
 ): string {
+  const unsigned = `; unsigned route members: ${unsignedRouteMembers}`;
   if (shards === 0) {
-    return mode === undefined ? "signatures: absent (not adopted)" : `signatures: ${mode}, 0 shards carry one`;
+    return (mode === undefined ? "signatures: absent (not adopted)" : `signatures: ${mode}, 0 shards carry one`) + unsigned;
   }
   const counts = `${plural(shards, "shard")} / ${plural(routes, "route")} / ${plural(entailments, "entailment")}`;
   const adoption = mode ?? "not adopted; a present block is still checked";
-  return `signatures: ${counts} (${adoption}${profileNote ? `, ${profileNote}` : ""})`;
+  return `signatures: ${counts} (${adoption}${profileNote ? `, ${profileNote}` : ""})${unsigned}`;
 }

@@ -1068,10 +1068,14 @@ is stale against the code and must not be treated as ground truth).
       DAG.
     - Coverage line: `signatures: <S> shards / <R> routes / <E> entailments (<mode>, profile
       '<name>': ok)`, or `signatures: absent (not adopted)`, or `signatures: <mode>, 0 shards carry
-      one` — four distinguishable states, never one that could be mistaken for another.
+      one`; every form ends with `unsigned route members: <U>`. The count is explicit under absent,
+      optional and required adoption: a present signed parent is checked even before adoption, and
+      an unsigned member on one of its routes must never disappear from coverage merely because it
+      cannot contribute a signature (`membersWithoutSignature`). These are four distinguishable
+      states, never one that could be mistaken for another.
     - `aism_behavior: differs` — AISM has no signature vocabulary, no convention profile and no
       regime reasoning of any kind, so this is an rk-only mechanism the review argues for, not a
-      stricter reading of an existing check. Fixtures `linker-47` through `linker-58`.
+      stricter reading of an existing check. Fixtures `linker-47` through `linker-62`.
 
 Not part of the pass/fail contract, but present in AISM's `argument.py` surface and worth
 noting so M0.3 doesn't accidentally scope it in as a *check*: the ready-frontier/blocked-set

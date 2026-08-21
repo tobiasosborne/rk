@@ -11,6 +11,8 @@ import { DEFAULT_GATE_CONFIG, mergeGateConfig } from "../../src/gates/config";
 import type { GateConfig } from "../../src/gates/config";
 import { snapshotFromFiles } from "../../src/gates/snapshot";
 import type { Finding } from "../../src/gates/framework";
+import { parseRegistry } from "../../src/gates/linker-parse";
+import { routesOf } from "../../src/gates/linker-signature";
 
 const PROFILE_PATH = ".rk/conventions/rk-test.v1.json";
 const PROFILE = JSON.stringify({
@@ -133,6 +135,33 @@ describe("Check 17 — the same chain with the amplifier available in context", 
   test("zero signature findings", () => {
     const { findings } = run(green);
     expect(findings.filter((f) => f.message.includes("[signature") || f.message.includes("[regime-unentailed"))).toEqual([]);
+  });
+});
+
+describe("Check 17 route/object mutation probes", () => {
+  test("routesOf unions unconditional deps into EVERY declared route", () => {
+    const parsed = parseRegistry(snapshotFromFiles({
+      "argument/thm-routes.md": shard("thm-routes", {
+        kind: "theorem", deps: "lem-base", routes: "[lem-left] | [lem-right]",
+      }),
+    }));
+    expect(routesOf(parsed.lemmas[0]!)).toEqual([
+      ["lem-base", "lem-left"],
+      ["lem-base", "lem-right"],
+    ]);
+  });
+
+  test("object resolution checks post-only objects, not only pre", () => {
+    const { findings } = run({
+      ...DEFS,
+      [PROFILE_PATH]: PROFILE,
+      "argument/lem-a.md": shard("lem-a", {}, signatureBody({
+        post: [{ gap: "const", obj: "def-post-only-ghost" }],
+      })),
+    });
+    const hits = withCode(findings, "dangling-object");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.message).toContain("def-post-only-ghost");
   });
 });
 
@@ -314,5 +343,23 @@ describe("Check 17 — a repo that never adopted signatures is untouched", () =>
     );
     expect(findings).toEqual([]);
     expect(coverage[0]!.unit).toContain("signatures: absent (not adopted)");
+  });
+});
+
+describe("unsigned route-member coverage is visible in every adoption state", () => {
+  const files = {
+    ...DEFS,
+    [PROFILE_PATH]: PROFILE,
+    "argument/lem-unsigned.md": shard("lem-unsigned", {}),
+    "argument/thm-signed.md": shard("thm-signed", { kind: "theorem", deps: "lem-unsigned" }, signatureBody({})),
+  };
+
+  test.each([
+    ["absent", { conventionProfile: "rk-test.v1" }],
+    ["optional", ADOPTED],
+    ["required", REQUIRED],
+  ] as const)("%s adoption reports the count", (_label, mode) => {
+    const { coverage } = run(files, mode);
+    expect(coverage[0]!.unit).toContain("unsigned route members: 1");
   });
 });

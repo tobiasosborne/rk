@@ -198,6 +198,10 @@ export function totalFixtureCount(corpusRoot: string): number {
  * `linker-58` an interval that runs backwards. Eleven of the twelve go red the moment Check 17 is unwired from src/gates/linker.ts;
  * `linker-49`, the green one, is exactly the fixture that cannot detect that — which is why it
  * exists.
+ * 192 (+4 over the then-pinned 188): rk-8805 Tier A repair fixtures. `linker-59` rejects an empty
+ * conjunction and keeps its dependency locked; `linker-60` deduplicates canonical predicates;
+ * `linker-61` canonicalizes split and grouped per-scope keys identically; `linker-62` closes the
+ * signed-status kind evasion. All four are ledgered in corpus/README.md.
  * 176 (+2 over the then-pinned 174): bead rk-yic3 (P1, Tier A) — Check 4b's two backing routes were
  * asymmetric about WITHDRAWAL. `l5Decision` refused backing on a live retraction or an unhealthy
  * retraction ledger; `provenanceDecision` read neither, and `pmaBackingDecision` tried the

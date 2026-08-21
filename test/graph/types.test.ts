@@ -15,7 +15,7 @@ import {
 } from "../../src/graph/types";
 
 describe("src/graph/types.ts — shared constants", () => {
-  test("GRAPH_SCHEMA_VERSION is the string \"2\", matching schemas/graph.v1.json's schema_version const", () => {
+  test("GRAPH_SCHEMA_VERSION is the string \"3\", matching schemas/graph.v1.json's schema_version const", () => {
     // Bumped by rk-0ehr / P1: the closed conflictKind enum gained `retraction-vs-status` and
     // `edges` gained a fifth array — a compat event under CLAUDE.md rule 10, not a silent widening.
     expect(GRAPH_SCHEMA_VERSION).toBe("3");
