@@ -3,7 +3,7 @@
 
 # HANDOFF
 
-## State (2026-08-21 session close — three Tier A items landed; campaign-E phase 0a triage complete; rk-0sj6 ruled)
+## State (2026-08-21, second session — rk-light skill shipped; rk-0sj6 (a) still the next rk task)
 
 TJO directive this session (in-conversation): orchestrate campaign E; lanes are codex
 gpt-5.6-sol xhigh ONLY, otherwise the orchestrator works serially itself. No opus, no sonnet.
@@ -29,6 +29,21 @@ lexical spectator test; rk-wv3h / rk-vy2v (nsex follow-ups). Beads filed: rk-rz7
 Incident this session: `rk refs triage --auto`'s first run parsed 1478 of 6437 ledger rows (a title
 containing `|`) and wrote the ledger back truncated; recovered from git; writer/parser fixed and
 both writers now refuse partial-parse rewrites (fixtures in test/refs-snowball-triage.test.ts).
+
+## rk-light (NEW this session, rk-7xok CLOSED)
+
+TJO directive: an "rk light" as a Claude Code skill for low-stakes mini-campaigns (light
+formalisation of a paper / exploring an idea -> 10-30 page pdflatex report), for Opus-class
+orchestrators; lanes codex xhigh + pi only. Shipped at `skills/rk-light/` (symlink
+`~/.claude/skills/rk-light`; `/rk-light`). Shape: 12 incident-backed rules, six ledger files,
+one stdlib-python gate (`scripts/check.py`, 41 red/green tests), three saved Workflows
+(`/rkl-extract /rkl-attack /rkl-audit`), `/goal` + `/loop` prompts, codex as read-only second
+family with hash-bound receipts (`RECEIPT`/`PREMISES`/`VERDICT`), derived statuses
+(`unsupported`, `-conditional`, OR-deps), `make guard` (git), `make release` (audit hash-bound).
+Two codex xhigh reviews + one repair wave each: `docs/reviews/2026-08-21-rk-light-codex.md`.
+Smoke-tested end to end on arXiv:2206.13228 (real TeX source). Residual beads (P3): page-target
+reason, settings.json merge, reviewer-identity verification, a real non-stub acceptance campaign.
+No rk TS code touched; 246/246 + 3575 + selftest unchanged.
 
 ## Campaign E (authoritative: `../rk-campaign-E/HANDOFF.md`; bundled in `vendor/`)
 
@@ -59,7 +74,9 @@ the draft's ~55 further macros, `notation: draft` until their shards exist.
 
 ## Next steps
 
-1. rk-0sj6 (a) as above.
+1. rk-0sj6 (a) as above (unchanged; not started).
+0. First real use of `/rk-light` on a small paper is the acceptance test the reviewer asked for
+   (bead filed); expect protocol friction notes -> SKILL.md edits, Tier C.
 2. Campaign E: acquire the 628 `in` papers (`rk refs add arxiv:<id>`; S2-only ids need DOI/title
    resolution); records for the ~40 most-linked `in` papers (author -> `rk check` -> codex review
    -> repair -> `rk render cards`), Layer 0 shards for the objects they name; then phase 1

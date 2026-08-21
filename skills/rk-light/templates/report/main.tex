@@ -1,0 +1,52 @@
+% ROLE: report master. Preamble, the status machinery, the generated banner, and \input of
+% the sections. Body prose lives in sections/NN_<slug>.tex only.
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{xcolor}
+\usepackage{marginnote}
+
+% ---- claim status tags (parsed by scripts/check.py; one per theorem-like environment) ----
+% \claimstatus{<label>}{<status>} prints the status in the margin and in-line. It must equal
+% the EFFECTIVE status derived from CLAIMS.md (check.py fails otherwise). Printable vocabulary:
+% proved proved-conditional sketched sketched-conditional numerical conjectured open refuted
+% unsupported assumed cited. Definitions carry a label and no tag.
+\newcommand{\claimstatus}[2]{\marginnote{\scriptsize\textcolor{gray}{[#2]}}\textcolor{gray}{\textsf{\scriptsize[#2]}}\ }
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{observation}[theorem]{Observation}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% ---- notation macros: every recurring symbol gets a macro here, fixed in CONVENTIONS.md ----
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+
+\title{TITLE}
+\author{AUTHOR\thanks{Prepared with an LLM orchestrator under the rk-light protocol; every claim carries a machine-checked status tag; see the status table on page~1.}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{Status of every claim}\label{sec:status}
+\input{generated/status}   % GENERATED from CLAIMS.md by scripts/check.py --regen; never hand-edit.
+
+\tableofcontents
+
+\input{sections/01_summary}
+\input{sections/02_setup}
+% add sections here in numeric order; keep each under ~250 lines
+
+\bibliographystyle{alpha}
+\bibliography{refs}
+\end{document}

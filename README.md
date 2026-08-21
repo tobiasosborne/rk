@@ -141,10 +141,23 @@ src/drive/      workers, batch, verdicts  src/refs/     fetch/hash/quote
 src/scaffold/   init/upgrade templates    src/corpus/   fixture discovery
 corpus/         red fixtures (123)        schemas/      versioned JSON schemas
 docs/           gate contracts, memos, reviews, worklog
+skills/rk-light the "rk light" Claude Code skill (see below)
 ```
 
 Pure cores (`src/gates`, `src/graph`, render cores) perform no IO and read no
 clock — enforced by grep in the selftest. All IO lives at the edges.
+
+## rk-light (the skill)
+
+`skills/rk-light/` is a self-contained Claude Code skill for low-stakes research
+mini-campaigns — a light formalisation of one paper, or an exploration of one idea — run by
+an Opus-class-or-better orchestrator with subagents, three saved Workflows, `/goal` or
+`/loop` waves and codex as a second model family, ending in a 10-30 page pdflatex report.
+It shares no code with the rk binary; it carries the two cheapest rk guards (byte-verified
+quotes, reviewer != author with hash-bound receipts) and a derived-status ledger, enforced
+by one stdlib-python gate (`scripts/check.py`, 29 red/green tests). Install:
+`ln -s $PWD/skills/rk-light ~/.claude/skills/rk-light`; then `/rk-light` in any directory.
+Design and review record: `docs/reviews/2026-08-21-rk-light-codex.md`.
 
 ## How this repo is run
 

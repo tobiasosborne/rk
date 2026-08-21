@@ -1,0 +1,9 @@
+{
+  "rk_light": 1,
+  "mode": "formalise",
+  "stakes": "report",
+  "main": "thm-main",
+  "page_target": [10, 30],
+  "budget": {"waves": 6, "agents_per_wave": 6, "hours": 8},
+  "families": {"author": "claude", "verifier": "codex"}
+}
