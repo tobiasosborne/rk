@@ -9,6 +9,12 @@
 // schema files themselves, so the two cannot drift.
 
 import type { Finding } from "./framework";
+import {
+  exactL0Problems,
+  exactL1Problems,
+  exactReviewProblems,
+  sourceDirectoryProblem,
+} from "./refs-records-exact";
 
 export const RECORDS_PREFIX = "refs/records/";
 export const RANGE_ANCHOR_RE = /^(refs\/[A-Za-z0-9_./-]+):([1-9][0-9]*)-([1-9][0-9]*)$/;
@@ -93,7 +99,7 @@ function str(o: Record<string, unknown>, key: string): string | undefined {
 export const REVIEW_CLAUSES = ["statement_complete", "hypotheses_complete", "translation_faithful", "signature_faithful"] as const;
 
 export function validateL1(path: string, sourceId: string, label: string, o: Record<string, unknown>): L1Record | Finding {
-  const missing: string[] = [];
+  const missing = exactL1Problems(o);
   if (o.schema_version !== "1") missing.push('schema_version (must be the string "1")');
   if (o.record_kind !== "L1") missing.push('record_kind (must be "L1")');
   const source = str(o, "source");
@@ -148,7 +154,6 @@ export function validateL1(path: string, sourceId: string, label: string, o: Rec
   }
 
   const extractionSha256 = str(o, "extraction_sha256");
-  if (extractionSha256 !== undefined && !SHA256_RE.test(extractionSha256)) missing.push("extraction_sha256 (64-hex)");
 
   if (missing.length > 0) {
     return recordError(
@@ -185,30 +190,30 @@ export function validateL1(path: string, sourceId: string, label: string, o: Rec
 }
 
 export function validateL0(path: string, sourceId: string, o: Record<string, unknown>): L0Record | Finding {
-  const missing: string[] = [];
+  const missing = exactL0Problems(o);
   if (o.schema_version !== "1") missing.push('schema_version (must be the string "1")');
   if (o.record_kind !== "L0") missing.push('record_kind (must be "L0")');
-  if (!str(o, "source")) missing.push("source");
-  if (!str(o, "payload_sha256")) missing.push("payload_sha256");
+  const source = str(o, "source");
+  if (!source) missing.push("source");
   if (!str(o, "regime")) missing.push("regime");
   if (!Array.isArray(o.objects)) missing.push("objects (an array)");
   if (!Array.isArray(o.results)) missing.push("results (an array)");
   if (!str(o, "profile")) missing.push("profile");
   const range = str(o, "standing_assumptions_range");
-  if (range !== undefined && !RANGE_ANCHOR_RE.test(range)) {
-    missing.push(`standing_assumptions_range (must be refs/<path>:<from>-<to>, got ${JSON.stringify(range)})`);
-  }
   let endsAtEof: Record<string, boolean> | undefined;
-  if (o.ends_at_eof !== undefined) {
-    const raw = o.ends_at_eof;
-    if (!isObject(raw) || Object.values(raw).some((v) => v !== true)) {
-      missing.push('ends_at_eof (an object mapping result_label -> true, e.g. {"Lemma 4.2": true})');
-    } else {
-      endsAtEof = raw as Record<string, boolean>;
-    }
+  if (isObject(o.ends_at_eof) && Object.values(o.ends_at_eof).every((v) => v === true)) {
+    endsAtEof = o.ends_at_eof as Record<string, boolean>;
   }
   if (missing.length > 0) {
     return recordError(path, "record-malformed", `L0 record violates schemas/extraction-record.v1.json: ${missing.join("; ")}`);
+  }
+  const filingProblem = sourceDirectoryProblem(source!, sourceId);
+  if (filingProblem !== undefined) {
+    return recordError(
+      path,
+      "record-misfiled",
+      `${filingProblem} — a record filed under another paper's directory would let one source's context vouch for another's bytes`,
+    );
   }
   return {
     path,
@@ -219,7 +224,7 @@ export function validateL0(path: string, sourceId: string, o: Record<string, unk
 }
 
 export function validateReview(path: string, recordPath: string, o: Record<string, unknown>): ReviewRecord | Finding {
-  const missing: string[] = [];
+  const missing = exactReviewProblems(o);
   if (o.schema_version !== "1") missing.push('schema_version (must be the string "1")');
   const cardSha256 = str(o, "card_sha256");
   if (!cardSha256 || !SHA256_RE.test(cardSha256)) missing.push("card_sha256 (64-hex)");
@@ -260,4 +265,3 @@ export function validateReview(path: string, recordPath: string, o: Record<strin
     findings: o.findings as string[],
   };
 }
-

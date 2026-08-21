@@ -1596,6 +1596,16 @@ checks' only exercise; treat them accordingly, not as a "regression on live data
       so it is prose wearing a record's filename; a violation of `schemas/card-review.v1.json` ⇒
       **ERROR `[review-malformed]`**; an unclassifiable file under `refs/records/` ⇒ **ERROR
       `[record-unrecognized]`**.
+      **Exact means exact at runtime.** The validators enforce `additionalProperties: false` at
+      every schema level that declares it — L1, hypothesis, L0, review, reviewer, `checked`, and
+      each checked clause — while `signature` remains the schema's deliberate open object until
+      `schemas/signature.v1.json` lands. They also enforce full 64-hex shape on both L0 digests,
+      string item types in L0 `objects`/`results`, optional-field types, and `source` equality with
+      the enclosing directory for BOTH L0 and L1. All violations in one document are named in its
+      single malformed finding; no schema-invalid subset is returned for later verification.
+      `ends_at_eof` is an optional L0 v1 property mapping arbitrary result-label keys to literal
+      `true`; it was already normative in clause (f), and is included in the schema's closed key
+      set rather than treated as an exception to exact validation.
     - **Presence-conditional**: a repo with no `refs/records/` reports `0 L1 records` on the
       coverage line and produces no finding — the mechanism simply has not been adopted, which is
       named, never silently skipped (L2).
@@ -1859,6 +1869,8 @@ changed across AISM's history at time of reading.
 | `refs-39` | **origin: literature with no record** [rk-nsex, Tier A review BL3] ⇒ ERROR `[record-required]` — the declaration has consequences, or it is a label worth nothing |
 | `refs-40` | **the legacy control** [rk-nsex, Tier A review BL3] — the byte-identical tree to `refs-37` with no `.rk/config.json` ⇒ WARN `[record-absent]`, exit 0, and still `0/1 shard-record joins` so the backlog is visible; a second `origin: campaign` PMA shard proves that half stays silent |
 | `refs-41` | **lossy canonical JSON refused** [rk-nsex, Tier A review BL5] — one record changes a reviewed signature integer from `9007199254740992` to `9007199254740993` while retaining the old digest; another repeats `statement_blessed` while retaining the digest of the last-key-wins parse ⇒ both `[record-malformed]`, neither review nor shard hash carries forward, `0/2 shard-record joins` |
+| `refs-42` | **extra properties rejected at every closed level** [rk-nsex, Tier A review BL6] — extras on L1/hypothesis and review/reviewer/checked/clause ⇒ `[record-malformed]` + `[review-malformed]`; before repair the record was `reviewed-VALID` |
+| `refs-43` | **malformed and misfiled L0 records** [rk-nsex, Tier A review BL6] — bad L0 digest shapes, non-string array items, extra property, and a separate source-directory mismatch ⇒ `[record-malformed]` + `[record-misfiled]` |
 
 ---
 

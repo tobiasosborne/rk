@@ -144,6 +144,11 @@
           "$ref": "#/$defs/rangeAnchor",
           "description": "OPTIONAL: the range of the paper's standing-assumptions passage (a 'Throughout this paper, ...' paragraph). The ONLY place outside its own `statement_range` an L1 hypothesis anchor may legitimately point — real papers do hoist hypotheses out of the theorem environment, and pretending otherwise would force authors to either lie about the anchor or drop the hypothesis. Must name the same source path the L1 record's anchors do."
         },
+        "ends_at_eof": {
+          "type": "object",
+          "additionalProperties": { "const": true },
+          "description": "OPTIONAL: maps each result_label whose complete printed statement genuinely ends at the end of the quotable text to true. Gate 3 Check 11 clause (f) otherwise fails closed at EOF, because a truncated extraction is indistinguishable from a complete source. Keys are result labels and every value must be the literal true; false is represented by absence."
+        },
         "profile": { "type": "string", "minLength": 1 }
       }
     }

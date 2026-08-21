@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "card_sha256": "5c7518e83d13d22b42af1d039b3d40782e228e77717de15bc7f46326af78d2b3",
+  "verdict": "VALID",
+  "reviewer": {
+    "family": "gpt",
+    "backend": "codex",
+    "model": "gpt-5.6-sol",
+    "session": "bl6-extra-properties",
+    "author": "not permitted by the schema"
+  },
+  "checked": {
+    "statement_complete": {
+      "value": true,
+      "note": "read the complete range",
+      "evidence": "not permitted by the clause schema"
+    },
+    "hypotheses_complete": { "value": true, "note": "one hypothesis" },
+    "translation_faithful": { "value": true, "note": "faithful" },
+    "signature_faithful": { "value": true, "note": "faithful" },
+    "scope_complete": { "value": true, "note": "not a recognized review clause" }
+  },
+  "findings": [],
+  "review_note": "not permitted at top level"
+}

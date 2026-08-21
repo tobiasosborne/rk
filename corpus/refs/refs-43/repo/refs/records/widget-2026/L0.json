@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "record_kind": "L0",
+  "source": "widget-2026",
+  "payload_sha256": "not-a-sha256",
+  "extraction_sha256": "also-not-a-sha256",
+  "regime": "bounded-degree widgets",
+  "objects": ["def-widget", 7],
+  "results": ["Theorem 1.1", null],
+  "profile": "qpcp.v1",
+  "unexpected_l0": true
+}
