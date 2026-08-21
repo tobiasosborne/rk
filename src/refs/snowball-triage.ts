@@ -37,8 +37,11 @@ function splitRow(line: string): string[] {
     .slice(1, -1);
 }
 
+/** A cell is ONE line of ONE table row: pipes are escaped and any CR/LF run (S2 titles carry
+ * them) collapses to a single space — the second 2026-08-21 ledger break was a title with an
+ * embedded newline splitting its row in two. */
 function escapeCell(s: string): string {
-  return s.replace(/\|/g, "\\|");
+  return s.replace(/\s*[\r\n]+\s*/g, " ").trim().replace(/\|/g, "\\|");
 }
 
 /** Parses the triage table out of an existing refs/triage.md. Returns `[]` if the file has no

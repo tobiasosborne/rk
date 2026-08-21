@@ -128,3 +128,18 @@ describe("pipe characters in generated cells (2026-08-21 truncation incident)", 
     expect(parseTriageTable(doc)).toEqual([]);
   });
 });
+
+describe("newlines in generated cells (2026-08-21, second ledger break)", () => {
+  test("formatTriageDocument collapses CR/LF inside a cell to one space so a row is always one line", () => {
+    const rows: TriageRow[] = [
+      { id: "a", title: "Classification of \nthings\r\nhere", year: "2017", depth: "1", via: "s", triage: "", reason: "" },
+      { id: "b", title: "next", year: "2018", depth: "1", via: "s", triage: "in", reason: "multi\nline" },
+    ];
+    const doc = formatTriageDocument(rows);
+    expect(doc.split("\n").filter((l) => l.startsWith("| ")).length).toBe(3); // header + 2 rows
+    const back = parseTriageTable(doc);
+    expect(back.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(back[0]!.title).toBe("Classification of things here");
+    expect(back[1]!.reason).toBe("multi line");
+  });
+});
