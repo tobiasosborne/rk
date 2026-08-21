@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "name": "rk-corpus.v1",
+  "lattices": { "gap": ["inv-poly", "const"] },
+  "enums": { "norm": ["relative", "absolute"] }
+}

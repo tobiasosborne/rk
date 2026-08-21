@@ -1,0 +1,13 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": "argument/lem-duplicate.md",
+    "message_pattern": "[signature-noncanonical]"
+  }],
+  "exit_code": 1,
+  "config_override": { "signatures": "required", "conventionProfile": "rk-corpus.v1" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary or canonical signature identity).",
+  "notes": "Tier A review B2's duplicate-predicate false green: the pre-repair canonicalizer sorted entries but retained duplicates, so one predicate and two identical copies were distinct canonical bytes even though they state the same (scope,key)->value set. The repaired canonical form deduplicates within each scope, making this authored duplicate noncanonical."
+}

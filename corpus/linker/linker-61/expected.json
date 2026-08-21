@@ -1,0 +1,13 @@
+{
+  "gate": "linker",
+  "verdict": "fail",
+  "findings": [{
+    "severity": "ERROR",
+    "path_pattern": "argument/lem-regrouped.md",
+    "message_pattern": "[signature-noncanonical]"
+  }],
+  "exit_code": 1,
+  "config_override": { "signatures": "required", "conventionProfile": "rk-corpus.v1" },
+  "aism_behavior": "class-driven (no AISM counterpart -- AISM's argument.py has no signature vocabulary or canonical signature identity).",
+  "notes": "Tier A review B2's regrouping false green: splitting one object's gap and norm keys across two predicate entries was mutually stronger with the one-entry form but serialized to different canonical bytes. The repaired canonical form groups by scope and key, making one predicate per object in the normal case and refusing this split encoding as noncanonical."
+}

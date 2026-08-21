@@ -106,18 +106,16 @@ function findFences(content: string): RawFence[] {
   return out;
 }
 
-/** The signature's canonical JSON VALUE: every object's keys sorted, every array's elements
- * sorted by their own canonical rendering. Two signatures making the same claim canonicalise to
- * byte-identical text — that is what makes bite's "same claim" test (src/graph/bite.ts) immune to
- * reordering and re-nesting. */
+/** The signature's canonical JSON VALUE. Predicate identity is per SCOPE and KEY, not per authored
+ * object literal: values are collected and deduplicated for each `(scope,key)`, sorted by rendered
+ * text, then emitted as rows. Row i carries every key having an ith value. Thus the normal case is
+ * one predicate per scope; extra rows survive only for conflicting values of one key. */
 function canonicalValue(sig: Signature): Record<string, unknown> {
-  const predicate = (p: SignaturePredicate): Record<string, unknown> =>
-    sortKeys({ obj: p.obj, ...normaliseValues(p.keys) } as Record<string, unknown>);
   const value: Record<string, unknown> = {
-    post: sortByText(sig.post.map(predicate)),
-    pre: sortByText(sig.pre.map(predicate)),
+    post: canonicalPredicates(sig.post),
+    pre: canonicalPredicates(sig.pre),
     profile: sig.profile,
-    regime: sortByText(sig.regime.map((r) => sortKeys(normaliseValues(r)))),
+    regime: canonicalRows(sig.regime),
     schema_version: sig.schema_version,
   };
   if (sig.hardness !== undefined) value.hardness = sig.hardness;
@@ -134,6 +132,48 @@ function normaliseValues(keys: Record<string, PredicateValue>): Record<string, P
     out[k] = Array.isArray(v) && v[0] !== null && v[0] === v[1] ? v[0] : v;
   }
   return out;
+}
+
+/** Canonical rows for one scope. Authored map boundaries carry no meaning: only the distinct
+ * values attached to each key survive. */
+function canonicalRows(maps: readonly Record<string, PredicateValue>[]): Record<string, PredicateValue>[] {
+  const perKey = new Map<string, PredicateValue[]>();
+  for (const map of maps) {
+    for (const [key, value] of Object.entries(normaliseValues(map))) {
+      const values = perKey.get(key) ?? [];
+      const rendered = JSON.stringify(value);
+      if (!values.some((v) => JSON.stringify(v) === rendered)) values.push(value);
+      perKey.set(key, values);
+    }
+  }
+  for (const values of perKey.values()) {
+    values.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  }
+  const rows = Math.max(0, ...[...perKey.values()].map((values) => values.length));
+  const out: Record<string, PredicateValue>[] = [];
+  for (let i = 0; i < rows; i++) {
+    const row: Record<string, PredicateValue> = {};
+    for (const key of [...perKey.keys()].sort()) {
+      const value = perKey.get(key)![i];
+      if (value !== undefined) row[key] = value;
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+function canonicalPredicates(predicates: readonly SignaturePredicate[]): Record<string, unknown>[] {
+  const byObject = new Map<string, Record<string, PredicateValue>[]>();
+  for (const predicate of predicates) {
+    const maps = byObject.get(predicate.obj) ?? [];
+    maps.push(predicate.keys);
+    byObject.set(predicate.obj, maps);
+  }
+  const out: Record<string, unknown>[] = [];
+  for (const obj of [...byObject.keys()].sort()) {
+    for (const row of canonicalRows(byObject.get(obj)!)) out.push(sortKeys({ obj, ...row }));
+  }
+  return sortByText(out);
 }
 
 function sortKeys<T extends Record<string, unknown>>(o: T): T {

@@ -137,6 +137,38 @@ describe("canonical form", () => {
     });
     expect(canonicalSignatureText(a)).toBe(canonicalSignatureText(b));
   });
+
+  test("canonicalisation deduplicates identical predicates within one scope", () => {
+    const one = canonicalSignatureText({
+      schema_version: "1", profile: "p",
+      pre: [{ obj: "def-gap", keys: { gap: "const" } }], post: [], regime: [],
+    });
+    const duplicated = canonicalSignatureText({
+      schema_version: "1", profile: "p",
+      pre: [
+        { obj: "def-gap", keys: { gap: "const" } },
+        { obj: "def-gap", keys: { gap: "const" } },
+      ],
+      post: [], regime: [],
+    });
+    expect(duplicated).toBe(one);
+  });
+
+  test("canonicalisation regroups equal per-scope key/value sets into identical bytes", () => {
+    const grouped = canonicalSignatureText({
+      schema_version: "1", profile: "p",
+      pre: [{ obj: "def-gap", keys: { gap: "const", norm: "relative" } }], post: [], regime: [],
+    });
+    const split = canonicalSignatureText({
+      schema_version: "1", profile: "p",
+      pre: [
+        { obj: "def-gap", keys: { gap: "const" } },
+        { obj: "def-gap", keys: { norm: "relative" } },
+      ],
+      post: [], regime: [],
+    });
+    expect(split).toBe(grouped);
+  });
 });
 
 describe("schemas/signature.v1.json pins the implementation (rule 10)", () => {
