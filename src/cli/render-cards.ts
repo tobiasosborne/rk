@@ -81,5 +81,5 @@ export function renderCardsCommand(args: string[], out: Out, adopt: CardsAdopter
   for (const failure of failures) out.log(`  could not render ${failure}`);
   out.log(`  adopted ${written} entr(y/ies) in .rk/generated.json (generator '${CARD_GENERATOR}') for Gate 7.`);
   out.log("  next: 'rk check' — a hand-edited card is now a freshness ERROR, and the record is the truth.");
-  return failures.length > 0 ? 1 : 0;
+  return failures.length > 0 || unrendered > 0 ? 1 : 0;
 }

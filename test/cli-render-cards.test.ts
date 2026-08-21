@@ -116,6 +116,18 @@ describe("rk render cards — CLI edge", () => {
     expect(lines.join("\n")).toContain("1 not admissible");
   });
 
+  test("returns nonzero when a shape-invalid record is left unrendered", async () => {
+    const root = repo();
+    const recordPath = join(root, "refs", "records", "widget-2026", "L1-1.json");
+    const malformed = JSON.parse(readFileSync(recordPath, "utf8"));
+    delete malformed.proof_locus;
+    writeFileSync(recordPath, JSON.stringify(malformed, null, 2));
+    const { out, lines } = capture();
+    expect(await renderCommand(["cards", "--root", root], out)).toBe(1);
+    expect(existsSync(join(root, "refs", "cards", "widget-2026", "L1-1.md"))).toBe(false);
+    expect(lines.join("\n")).toContain("1 record(s) are not shape-valid and were NOT rendered");
+  });
+
   test("a repo with no records writes nothing and says so, exit 0", async () => {
     const root = mkdtempSync(join(tmpdir(), "rk-cards-empty-"));
     dirs.push(root);
