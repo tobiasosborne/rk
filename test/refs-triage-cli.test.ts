@@ -105,3 +105,19 @@ describe("rk refs triage --apply <tsv>", () => {
     expect(lines.join("\n")).toMatch(/not found/);
   });
 });
+
+describe("rk refs triage --apply --redo-prefix", () => {
+  test("re-applies over same-mechanism verdicts only", async () => {
+    const root = tmpRoot();
+    writeFileSync(join(root, "refs", "triage.md"), formatTriageDocument([
+      row({ id: "a", via: "s", triage: "context", reason: "llm: ox-alpha 1/2 in|context -> context" }),
+      row({ id: "h", via: "s", triage: "in", reason: "human" }),
+    ]));
+    writeFileSync(join(root, "refs", "v.tsv"), "a\tin\tllm: ox-alpha 1/2 in|context -> in (links=14)\nh\tout\tllm: ox-alpha x\n");
+    const { out, lines } = capture();
+    expect(await refsTriage(["--apply", "refs/v.tsv", "--redo-prefix", "llm: ox-alpha", "--root", root], out)).toBe(0);
+    const rows = parseTriageTable(readFileSync(join(root, "refs", "triage.md"), "utf8"));
+    expect(rows.map((r) => r.triage)).toEqual(["in", "in"]);
+    expect(lines.join("\n")).toMatch(/applied 1, skipped-human 1/);
+  });
+});

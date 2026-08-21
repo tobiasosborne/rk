@@ -150,3 +150,24 @@ describe("applyTriage: guarded application of external (model/human) verdicts", 
     expect(parseApplyTsv("# c\na\tin\tr1\n\nb\tout\t\n")).toEqual([{ id: "a", triage: "in", reason: "r1" }, { id: "b", triage: "out", reason: "" }]);
   });
 });
+
+describe("applyTriage redoPrefix: a mechanism may revise ITS OWN earlier verdicts", () => {
+  const base = [
+    row({ id: "a", via: "s", triage: "context", reason: "llm: ox-alpha 1/2 in|context -> context — x" }),
+    row({ id: "h", via: "s", triage: "in", reason: "human: core" }),
+    row({ id: "o", via: "s", triage: "out", reason: "other-tool: v1" }),
+  ];
+  test("rows whose reason starts with the prefix are rewritable; human and other-mechanism rows are not", () => {
+    const r = applyTriage(base, [{ id: "a", triage: "in", reason: "llm: ox-alpha 1/2 in|context -> in (links=14)" }, { id: "h", triage: "out", reason: "llm: x" }, { id: "o", triage: "in", reason: "llm: y" }], { redoPrefix: "llm: ox-alpha" });
+    expect(r.rows.map((x) => x.triage)).toEqual(["in", "in", "out"]);
+    expect(r.counts).toEqual({ applied: 1, skippedHuman: 2, skippedSeed: 0, unknownId: 0, invalidLabel: 0 });
+  });
+  test("without redoPrefix the earlier verdict stands", () => {
+    const r = applyTriage(base, [{ id: "a", triage: "in", reason: "llm: again" }]);
+    expect(r.rows[0]!.triage).toBe("context");
+  });
+  test("an empty redoPrefix never matches (it would otherwise match every row)", () => {
+    const r = applyTriage(base, [{ id: "h", triage: "out", reason: "llm: x" }], { redoPrefix: "" });
+    expect(r.rows[1]!.triage).toBe("in");
+  });
+});

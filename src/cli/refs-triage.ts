@@ -15,7 +15,7 @@ const DEFAULT_LEDGER = "refs/triage.md";
 
 function usage(out: Out): number {
   out.log("usage: rk refs triage --auto [--redo-auto] [--keywords <file>] [--in-links N] [--out-links N] [--triage <path>] [--root <path>]");
-  out.log("       rk refs triage --apply <tsv> [--triage <path>] [--root <path>]");
+  out.log("       rk refs triage --apply <tsv> [--redo-prefix <reason-prefix>] [--triage <path>] [--root <path>]");
   out.log("  Mechanical pre-triage of the snowball ledger: rows with EMPTY triage and reason are banded by");
   out.log("  seed-link count (the `via` column) and title keyword hits. candidate (>= --in-links, default 3,");
   out.log("  or >= 2 with a keyword) and review rows get an `auto:` reason and an EMPTY triage for the");
@@ -25,7 +25,8 @@ function usage(out: Out): number {
   out.log("  a row whose triage a human changed since is still left alone.");
   out.log("  --apply <tsv>: apply external verdicts (`id<TAB>in|context|out<TAB>reason` per line, e.g. a model");
   out.log("  lane's two-vote output) onto rows that are empty or auto-banded ONLY; seed rows, human values and");
-  out.log("  earlier external verdicts are never overwritten. Counts are printed per outcome.");
+  out.log("  earlier external verdicts are never overwritten. Counts are printed per outcome. --redo-prefix lets a");
+  out.log("  mechanism revise ITS OWN earlier verdicts (rows whose reason starts with the prefix), nothing else.");
   return 2;
 }
 
@@ -48,7 +49,8 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
   const { rest: r4, value: inLinksRaw } = extractFlag(r3, "--in-links");
   const { rest: r5, value: outLinksRaw } = extractFlag(r4, "--out-links");
   const { rest: r6, value: ledgerFlag } = extractFlag(r5, "--triage");
-  const { value: applyPath } = extractFlag(r6, "--apply");
+  const { rest: r7, value: applyPath } = extractFlag(r6, "--apply");
+  const { value: redoPrefix } = extractFlag(r7, "--redo-prefix");
   if (!auto && applyPath === undefined) return usage(out);
 
   const inLinks = parseCount(inLinksRaw, "--in-links", out);
@@ -96,7 +98,7 @@ export async function refsTriage(args: string[], out: Out): Promise<number> {
       return 2;
     }
     const updates = parseApplyTsv(readFileSync(p, "utf8"));
-    const applied = applyTriage(rows, updates);
+    const applied = applyTriage(rows, updates, redoPrefix !== undefined ? { redoPrefix } : {});
     writeFileSync(ledgerPath, formatTriageDocument(applied.rows));
     const c = applied.counts;
     out.log(

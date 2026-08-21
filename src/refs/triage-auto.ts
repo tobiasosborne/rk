@@ -152,11 +152,23 @@ export interface ApplyCounts {
   invalidLabel: number;
 }
 
-function isWritable(row: TriageRow): boolean {
-  return (row.triage === "" && row.reason === "") || row.reason.startsWith(AUTO_PREFIX);
+export interface ApplyOptions {
+  /** A mechanism may revise its OWN earlier verdicts: rows whose reason starts with this prefix
+   * (e.g. `llm: ox-alpha`) become rewritable. Empty/absent never matches. Human rows and other
+   * mechanisms' rows stay authored. */
+  redoPrefix?: string;
 }
 
-export function applyTriage(rows: readonly TriageRow[], updates: readonly TriageUpdate[]): { rows: TriageRow[]; counts: ApplyCounts } {
+function isWritable(row: TriageRow, redoPrefix: string | undefined): boolean {
+  if ((row.triage === "" && row.reason === "") || row.reason.startsWith(AUTO_PREFIX)) return true;
+  return redoPrefix !== undefined && redoPrefix.length > 0 && row.reason.startsWith(redoPrefix);
+}
+
+export function applyTriage(
+  rows: readonly TriageRow[],
+  updates: readonly TriageUpdate[],
+  options: ApplyOptions = {},
+): { rows: TriageRow[]; counts: ApplyCounts } {
   const counts: ApplyCounts = { applied: 0, skippedHuman: 0, skippedSeed: 0, unknownId: 0, invalidLabel: 0 };
   const byId = new Map<string, TriageRow>();
   const out = rows.map((r) => ({ ...r }));
@@ -175,7 +187,7 @@ export function applyTriage(rows: readonly TriageRow[], updates: readonly Triage
       counts.skippedSeed++;
       continue;
     }
-    if (!isWritable(row)) {
+    if (!isWritable(row, options.redoPrefix)) {
       counts.skippedHuman++;
       continue;
     }
