@@ -202,6 +202,7 @@ async function refsQuote(args: string[], out: Out): Promise<number> {
 // Rule 4's 280-line shard cap — see that file's header), re-exported here so the public import
 // path `../src/cli/refs` is unchanged, the same way check.ts re-exports from check-regen.ts.
 export { refsSnowball } from "./refs-snowball";
+import { refsTriage } from "./refs-triage";
 
 const REFS_COMMANDS: Record<string, SubHandler> = {
   status: refsStatus,
@@ -209,6 +210,7 @@ const REFS_COMMANDS: Record<string, SubHandler> = {
   adopt: refsAdopt,
   quote: refsQuote,
   snowball: refsSnowball,
+  triage: refsTriage,
 };
 
 export function refsHelp(out: Out): number {
@@ -225,6 +227,10 @@ export function refsHelp(out: Out): number {
   out.log("                              refs/snowball/cache/ so reruns are offline. Optional");
   out.log("                              S2_API_KEY env var lifts the rate limit above the ~100");
   out.log("                              req/5min unauthenticated default (sent as x-api-key).");
+  out.log("  rk refs triage --auto [--keywords <file>] [--in-links N] [--out-links N]");
+  out.log("                              mechanical pre-triage of refs/triage.md by seed-link count +");
+  out.log("                              title keywords; only untouched rows are banded, only the");
+  out.log("                              'out' band writes the triage column (reason starts 'auto:').");
   out.log("  next: run 'rk refs status' first on a fresh checkout.");
   return 0;
 }
